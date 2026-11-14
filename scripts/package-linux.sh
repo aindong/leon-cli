@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Linux release packages, built in the pinned Rust image (scripts/linux-image.sh): a tarball
-# (leon, README.md, LICENSE, docs/) and a .deb, both in target/linux/. Then each is installed in a
-# clean container and must answer `leon --version`. Needs Docker.
+# (leon, README.md, LICENSE, docs/) and a .deb, both in target/linux/<arch>/. Then each is installed
+# in a clean container and must answer `leon --version`. Needs Docker.
 #   scripts/package-linux.sh [--arch arm64|amd64]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/linux-image.sh
-out="$PWD/target/linux"
+[ ${#ARGS[@]} -eq 0 ] || { echo "usage: scripts/package-linux.sh [--arch arm64|amd64]" >&2; exit 2; }
+out="$PWD/target/linux/$ARCH"
 mkdir -p "$out"
-DOCKER_ARGS=(-v "$out":/out -e "MAINTAINER=$(git log -1 --format='%an <%ae>')")
+rm -f "$out"/leon[-_]* # only this run's packages, so the checks below can't pick up an old one
+DOCKER_ARGS=(-v "$out":/out)
 
 in_image bash -c '
     set -euo pipefail
@@ -36,8 +38,8 @@ in_image bash -c '
 Package: leon
 Version: $version
 Architecture: $arch
-Maintainer: $MAINTAINER
-Depends: libc6 (>= $glibc)
+Maintainer: leon <noreply@leon.invalid>
+Depends: libc6 (>= $glibc), libgcc-s1
 Section: utils
 Priority: optional
 Description: fast, scriptable terminal multiplexer (server and CLI)
@@ -51,14 +53,15 @@ CONTROL
 '
 
 # Install each package where no Rust and no leon have ever been, and ask it its version.
-deb=$(ls -t "$out"/leon_*_"$ARCH".deb | head -1)
-tarball=$(ls -t "$out"/leon-*-"$( [ "$ARCH" = amd64 ] && echo x86_64 || echo aarch64)"-linux.tar.gz | head -1)
-want="leon $(basename "$deb" | cut -d_ -f2)"
-got=$(docker run --rm --platform "$PLATFORM" -v "$out":/out:ro debian:bookworm-slim \
-    sh -c "dpkg -i /out/$(basename "$deb") >/dev/null && leon --version")
+debs=("$out"/leon_*.deb) tarballs=("$out"/leon-*-linux.tar.gz)
+[ ${#debs[@]} -eq 1 ] && [ ${#tarballs[@]} -eq 1 ] || { echo "FAIL: expected one .deb and one tarball in $out" >&2; exit 1; }
+deb=$(basename "${debs[0]}") tarball=$(basename "${tarballs[0]}")
+want="leon $(echo "$deb" | cut -d_ -f2)"
+got=$(docker run --rm --platform "$PLATFORM" -v "$out":/out:ro "$DEBIAN_IMAGE" \
+    sh -c 'dpkg -i "/out/$1" >/dev/null && leon --version' sh "$deb")
 [ "$got" = "$want" ] || { echo "FAIL: the .deb's leon --version printed '$got', not '$want'" >&2; exit 1; }
-echo "ok: $(basename "$deb") installs on debian:bookworm-slim: $got"
-got=$(docker run --rm --platform "$PLATFORM" -v "$out":/out:ro ubuntu:24.04 \
-    sh -c "cd /tmp && tar xzf /out/$(basename "$tarball") && ./leon-*/leon --version && ls leon-*/LICENSE leon-*/README.md leon-*/docs/cli.md >/dev/null")
+echo "ok: $deb installs on ${DEBIAN_IMAGE%@*}: $got"
+got=$(docker run --rm --platform "$PLATFORM" -v "$out":/out:ro "$UBUNTU_IMAGE" \
+    sh -c 'cd /tmp && tar xzf "/out/$1" && d=${1%.tar.gz} && "$d/leon" --version && ls "$d/LICENSE" "$d/README.md" "$d/docs/cli.md" >/dev/null' sh "$tarball")
 [ "$got" = "$want" ] || { echo "FAIL: the tarball's leon --version printed '$got', not '$want'" >&2; exit 1; }
-echo "ok: $(basename "$tarball") runs on ubuntu:24.04: $got"
+echo "ok: $tarball runs on ${UBUNTU_IMAGE%@*}: $got"
