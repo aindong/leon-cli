@@ -84,12 +84,12 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
                 }),
             )?
         }
-        Cmd::Swap { block, other } => {
+        Cmd::Swap { target: block, other } => {
             let (sid, bid) = pick_block(c, cli, Some(block))?;
             let other = resolve(c, "block", other, Some(&sid))?;
             c.call("session.swap_blocks", json!({ "session_id": sid, "block_id": bid, "other_block_id": other }))?
         }
-        Cmd::Zoom { block, on, off } => {
+        Cmd::Zoom { target: block, on, off } => {
             let (sid, bid) = pick_block(c, cli, block.as_deref())?;
             let zoom = if *on {
                 json!(true)
@@ -100,7 +100,7 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
             };
             c.call("session.zoom_block", json!({ "session_id": sid, "block_id": bid, "zoom": zoom }))?
         }
-        Cmd::Resize { block, ratio: pct } => {
+        Cmd::Resize { target: block, ratio: pct } => {
             let (sid, bid) = pick_block(c, cli, block.as_deref())?;
             let view = c.call("session.view", json!({ "session_id": sid }))?;
             let windows = view["windows"].as_array().cloned().unwrap_or_default();

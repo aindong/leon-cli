@@ -102,13 +102,30 @@ pub(crate) fn spawn(
     command: Vec<String>,
     cwd: Option<PathBuf>,
 ) -> Result<Terminal, ApiError> {
-    let env = [
+    let mut env: Vec<(String, String)> = [
         ("LEON_SESSION", session_id),
         ("LEON_BLOCK", block_id),
         ("LEON_SERVER", ctx.info.socket.as_str()),
         ("TERM", "xterm-256color"),
-    ];
-    let spec = Spec { command, cwd, env: env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect() };
+    ]
+    .iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect();
+    // `leon` resolves in every terminal, even when the user's PATH lacks where it was installed
+    if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(PathBuf::from)) {
+        let path = std::env::var_os("PATH")
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin".into());
+        // no empty entries: one would mean the current directory
+        let entries =
+            std::iter::once(dir.clone()).chain(std::env::split_paths(&path).filter(|p| !p.as_os_str().is_empty()));
+        // join_paths refuses a dir with ':' in it; then the terminal keeps the server's PATH
+        let joined = std::env::join_paths(entries).ok().and_then(|p| p.into_string().ok());
+        if let (Some(dir), Some(path)) = (dir.to_str(), joined) {
+            env.extend([("LEON_BIN_DIR".to_string(), dir.to_string()), ("PATH".to_string(), path)]);
+        }
+    }
+    let spec = Spec { command, cwd, env };
     let weak = Arc::downgrade(ctx);
     let block_id = block_id.to_string();
     Terminal::spawn(spec, move |notice| {

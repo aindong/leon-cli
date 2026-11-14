@@ -1,0 +1,154 @@
+//! M7b criterion 8 (.agent/plans/2026-11-14-m7b-ship.md): every `leon …` in the docs' sh blocks
+//! parses. Each block runs in `/bin/sh` with PATH holding only a `leon` shim: the shim runs the real
+//! binary with no server to reach (so commands stop after parsing, exit 4) and logs any exit but
+//! 0, 1, 3 and 4: 2 is a bad command line, anything else a crash. Other programs in a block aren't found, and the cwd is a temp dir, so a
+//! block can't build, install or delete anything. The README must also list the app's shortcuts.
+
+mod help_walk;
+
+use std::os::unix::fs::PermissionsExt;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+
+/// (file, the fewest `leon` calls its sh blocks must make)
+const DOCS: [(&str, usize); 4] = [("README.md", 8), ("docs/agents.md", 5), ("docs/lua.md", 2), ("docs/cli.md", 5)];
+
+/// The text of each fenced block tagged `sh`.
+fn sh_blocks(doc: &str) -> Vec<String> {
+    let mut out = vec![];
+    let mut cur: Option<(bool, String)> = None; // (is sh, text) inside a fence
+    for line in doc.lines() {
+        if let Some(info) = line.trim_start().strip_prefix("```") {
+            match cur.take() {
+                Some((true, text)) => out.push(text),
+                Some(_) => {}
+                None => cur = Some((info.trim() == "sh", String::new())),
+            }
+        } else if let Some((_, text)) = cur.as_mut() {
+            text.push_str(line);
+            text.push('\n');
+        }
+    }
+    out
+}
+
+// `leon` and `leon app` open the GUI, `server run|start` would serve: skip them. A failed call
+// prints a stand-in ID so `id=$(leon run …)` gives later lines something to pass.
+const SHIM: &str = r#"#!/bin/sh
+printf '%s\n' "$*" >> "$DOC_CALLS"
+case "$1" in ''|app) exit 0 ;; server) case "$2" in run|start) exit 0 ;; esac ;; esac
+"$DOC_LEON" "$@" < /dev/null > /dev/null 2> "$DOC_ERR"
+rc=$?
+case $rc in 0|1|3|4) ;; *) { printf 'leon %s (exit %s)\n' "$*" $rc; while IFS= read -r l; do printf '  %s\n' "$l"; done < "$DOC_ERR"; } >> "$DOC_BAD" ;; esac
+echo block:0000
+exit 0
+"#;
+
+#[test]
+fn doc_shell_lines_parse() {
+    let tmp = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
+    let bin = tmp.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    std::fs::write(bin.join("leon"), SHIM).unwrap();
+    std::fs::set_permissions(bin.join("leon"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let (calls, bad) = (tmp.path().join("calls"), tmp.path().join("bad"));
+    let mut problems = vec![];
+    for (name, fewest) in DOCS {
+        let doc = std::fs::read_to_string(help_walk::repo().join(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let _ = std::fs::remove_file(&calls);
+        for block in sh_blocks(&doc) {
+            let mut child = Command::new("/bin/sh")
+                .args(["-c", &block])
+                .current_dir(tmp.path())
+                .env_clear()
+                .env("PATH", &bin)
+                .env("HOME", tmp.path())
+                .env("LEON_RUNTIME_DIR", tmp.path().join("run"))
+                .env("LEON_AUTOSTART", "0")
+                .env("LEON_CONFIG", tmp.path().join("none.lua"))
+                .env("DOC_LEON", env!("CARGO_BIN_EXE_leon"))
+                .env("DOC_CALLS", &calls)
+                .env("DOC_BAD", &bad)
+                .env("DOC_ERR", tmp.path().join("err"))
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let end = Instant::now() + Duration::from_secs(20);
+            while child.try_wait().unwrap().is_none() {
+                if Instant::now() > end {
+                    let _ = child.kill();
+                    panic!("{name}: a sh block ran over 20 s:\n{block}");
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
+        let n = std::fs::read_to_string(&calls).map_or(0, |c| c.lines().count());
+        if n < fewest {
+            problems.push(format!("{name}: its sh blocks call leon {n} times, expected at least {fewest}"));
+        }
+        if let Ok(b) = std::fs::read_to_string(&bad) {
+            problems.push(format!("{name}: bad command lines:\n{b}"));
+            std::fs::remove_file(&bad).unwrap();
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// GPUI's "cmd-shift-d" as the README writes it: ⌘⇧D.
+fn glyphs(binding: &str) -> String {
+    binding
+        .split('-')
+        .map(|w| match w {
+            "cmd" => "⌘".to_string(),
+            "shift" => "⇧".to_string(),
+            "alt" => "⌥".to_string(),
+            "ctrl" => "⌃".to_string(),
+            "left" => "←".to_string(),
+            "right" => "→".to_string(),
+            "up" => "↑".to_string(),
+            "down" => "↓".to_string(),
+            "enter" => "↩".to_string(),
+            k => k.to_uppercase(),
+        })
+        .collect()
+}
+
+#[test]
+fn readme_lists_the_app_shortcuts() {
+    let readme = std::fs::read_to_string(help_walk::repo().join("README.md")).unwrap();
+    let view = std::fs::read_to_string(help_walk::repo().join("crates/leon-app/src/view.rs")).unwrap();
+    let bindings: Vec<&str> = view.split("KeyBinding::new(\"").skip(1).filter_map(|s| s.split('"').next()).collect();
+    assert!(bindings.len() >= 10, "found the app's bindings: {bindings:?}");
+    for b in bindings {
+        // cmd-{ and cmd-} are the same keys as cmd-shift-[ and cmd-shift-]
+        if b.ends_with('{') || b.ends_with('}') {
+            continue;
+        }
+        assert!(readme.contains(&glyphs(b)), "README should list the shortcut {b} as {}", glyphs(b));
+    }
+    assert!(readme.contains("⌘1"), "README should list ⌘1–⌘9");
+}
+
+#[test]
+fn readme_and_agents_guide_cover_their_topics() {
+    let readme = std::fs::read_to_string(help_walk::repo().join("README.md")).unwrap();
+    let intro = readme.split("\n## ").next().unwrap();
+    assert!(intro.contains("terminal multiplexer") && intro.lines().count() > 5, "README opens by saying what leon is");
+    assert!(intro.to_lowercase().contains("screenshot"), "README has a screenshot placeholder up top");
+    for heading in
+        ["## Install", "## The first five commands", "## Split it", "## Let an agent drive it", "## App shortcuts"]
+    {
+        assert!(readme.lines().any(|l| l == heading), "README should have the section {heading:?}");
+    }
+    for topic in ["scripts/install.sh", "leon skill setup"] {
+        assert!(readme.contains(topic), "README should cover {topic:?}");
+    }
+    let agents = std::fs::read_to_string(help_walk::repo().join("docs/agents.md")).expect("docs/agents.md exists");
+    for topic in
+        ["leon skill setup", "leon skill status", "leon skill remove", "leon skill show", "LEON_SESSION", "LEON_BLOCK"]
+    {
+        assert!(agents.contains(topic), "docs/agents.md should cover {topic:?}");
+    }
+}

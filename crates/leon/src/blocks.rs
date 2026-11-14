@@ -49,7 +49,7 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
             let r = method(c, &sid, &bid, "format", json!({ "format": "text", "trim": trim }))?;
             println!("{}", r["text"].as_str().unwrap_or_default());
         }
-        Cmd::Wait { block, timeout } => {
+        Cmd::Wait { target: block, timeout } => {
             let query = block_query(cli, block.as_deref());
             let id = match pick_block(c, cli, block.as_deref()) {
                 Ok((_, bid)) => bid,
