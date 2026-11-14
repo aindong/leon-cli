@@ -231,11 +231,13 @@ async fn serve_lines(
                     Ok(result) => json!({ "id": id, "result": result }),
                     Err(e) => json!({ "id": id, "error": e }),
                 };
-                if !send(write, &line(&reply), sub).await? {
-                    return Ok(());
-                }
+                let sent = send(write, &line(&reply), sub).await;
                 if stop {
-                    shared.ctx.shutdown.notify_one(); // only after this connection's own stop reply is out
+                    // After this connection's own stop reply is out, or failed to go: it was accepted.
+                    shared.ctx.shutdown.notify_one();
+                }
+                if !sent? {
+                    return Ok(());
                 }
             }
             msg = lines.recv(), if pending.is_none() => {

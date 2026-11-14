@@ -106,6 +106,8 @@ impl Ctx {
         let mut exits = self.exited.subscribe();
         let terminals: Vec<_> = {
             let mut st = self.state();
+            // Under the lock: no session is created after this, by a connection still open or otherwise.
+            self.stopping.store(true, Ordering::SeqCst);
             let t = st.sessions.iter().flat_map(|s| s.blocks.iter().map(|b| b.terminal.clone())).collect();
             st.sessions.clear();
             t

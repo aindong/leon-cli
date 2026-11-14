@@ -8,7 +8,7 @@
 use std::time::{Duration, Instant};
 
 use leon_app::{render, theme};
-use leon_core::terminal::{Spec, Terminal};
+use leon_core::terminal::{Notice, Spec, Terminal};
 
 fn main() {
     let mut command: Vec<String> = std::env::args().skip(1).collect();
@@ -17,8 +17,10 @@ fn main() {
     }
     let (tx, rx) = std::sync::mpsc::channel();
     let spec = Spec { command: command.clone(), cwd: None, env: vec![] };
-    let t = Terminal::spawn(spec, move |code| {
-        let _ = tx.send(code);
+    let t = Terminal::spawn(spec, move |notice| {
+        if let Notice::Exited(code) = notice {
+            let _ = tx.send(code);
+        }
     })
     .expect("spawn");
     t.resize(40, 110).expect("resize"); // about the app's 1100×700 window in Menlo 13

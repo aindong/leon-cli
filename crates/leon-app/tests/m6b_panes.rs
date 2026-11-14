@@ -336,6 +336,19 @@ fn signature_follows_every_visible_pane_and_nothing_hidden(cx: &mut TestAppConte
     let sig = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.signature());
 
     let before = sig(cx);
+    cx.simulate_keystrokes("cmd-alt-left");
+    assert_ne!(sig(cx), before, "a focus change redraws");
+    cx.simulate_keystrokes("cmd-alt-right");
+    let before = sig(cx);
+    let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
+    let p = serde_json::json!({ "session_id": sid, "direction": "horizontal", "before_block_id": a, "after_block_id": b, "ratio": 0.3 });
+    s.app.call("session.resize_pane", p).unwrap();
+    assert_ne!(sig(cx), before, "a layout change redraws");
+    cx.run_until_parked();
+    settle(&ta);
+    settle(&tb);
+
+    let before = sig(cx);
     ta.write(b"echo unfocused\r").unwrap();
     wait_text(&ta, |x| has_line(x, "unfocused"));
     assert_ne!(sig(cx), before, "output in a visible, unfocused pane redraws");

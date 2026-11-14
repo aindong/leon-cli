@@ -205,6 +205,8 @@ type Panes = Vec<(String, Arc<Terminal>)>;
 struct Drag {
     divider: Divider,
     from: Pixels,
+    /// The ratio last sent, so a move that changes nothing sends nothing.
+    last: Option<f64>,
 }
 
 pub struct Workspace {
@@ -380,10 +382,11 @@ impl Workspace {
         self.call("session.new_split", p, cx);
     }
 
-    /// Move focus by direction; a zoom ends first so the focused pane shows.
+    /// Move focus by direction from the pane on screen; a zoom ends first so the result shows.
     fn focus_toward(&mut self, toward: &str, cx: &mut Context<Self>) {
         let Some((_, id, zoomed)) = self.target() else { return };
         if zoomed {
+            self.call("session.focus_block", json!({ "block_id": id }), cx);
             self.call("session.zoom_block", json!({ "block_id": id, "zoom": false }), cx);
         }
         self.call("session.focus_direction", json!({ "direction": toward }), cx);
@@ -432,13 +435,14 @@ impl Workspace {
 
     fn start_drag(&mut self, divider: Divider, at: gpui::Point<Pixels>, cx: &mut Context<Self>) {
         let from = if divider.direction == Direction::Horizontal { at.x } else { at.y };
-        self.drag = Some(Drag { divider, from });
+        self.drag = Some(Drag { divider, from, last: None });
+        cx.notify(); // the next frame installs the window-wide drag listeners
         cx.stop_propagation();
     }
 
     /// While dragging, the split's ratio follows the mouse: the start ratio plus the distance moved
     /// over the room the split shares out.
-    fn drag_to(&mut self, ev: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn drag_to(&mut self, ev: &MouseMoveEvent, cx: &mut Context<Self>) {
         let Some(drag) = &self.drag else { return };
         if ev.pressed_button != Some(MouseButton::Left) {
             self.drag = None;
@@ -450,14 +454,50 @@ impl Workspace {
             Direction::Vertical => (ev.position.y, d.split.h - DIVIDER),
         };
         let moved = f32::from(at - drag.from) as f64;
-        let ratio = (d.ratio + moved / room.max(1.) as f64).clamp(0.05, 0.95);
+        // Keep a ratio set elsewhere (say 0.01 from the CLI) where it is until the drag moves it.
+        let ratio = (d.ratio + moved / room.max(1.) as f64).clamp(d.ratio.min(0.05), d.ratio.max(0.95));
+        if drag.last == Some(ratio) {
+            return; // each call is a layout change with events for every subscriber
+        }
         let p =
             json!({ "direction": d.direction, "before_block_id": d.before, "after_block_id": d.after, "ratio": ratio });
+        if let Some(d) = self.drag.as_mut() {
+            d.last = Some(ratio);
+        }
         self.call("session.resize_pane", p, cx);
     }
 
-    fn end_drag(&mut self, _: &MouseUpEvent, _: &mut Window, _: &mut Context<Self>) {
+    fn end_drag(&mut self) {
         self.drag = None;
+    }
+
+    /// While a divider is dragged, follow the mouse anywhere in the window: element listeners only
+    /// hear the mouse over their own unblocked area, and the divider itself blocks it.
+    fn drag_listener(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let ws = cx.entity().downgrade();
+        let dragging = self.drag.is_some();
+        canvas(
+            |_, _, _| {},
+            move |_, _, window, _| {
+                if !dragging {
+                    return;
+                }
+                let moved = ws.clone();
+                window.on_mouse_event(move |ev: &MouseMoveEvent, phase, _, cx| {
+                    if phase == gpui::DispatchPhase::Capture {
+                        moved.update(cx, |ws, cx| ws.drag_to(ev, cx)).ok();
+                    }
+                });
+                let up = ws.clone();
+                window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
+                    if phase == gpui::DispatchPhase::Capture {
+                        up.update(cx, |ws, _| ws.end_drag()).ok();
+                    }
+                });
+            },
+        )
+        .absolute()
+        .size_0()
     }
 
     /// (session id, window id) of the selected session's window `index`, or of its active one.
@@ -868,8 +908,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::focus_up))
             .on_action(cx.listener(Self::focus_down))
             .on_action(cx.listener(Self::toggle_zoom))
-            .on_mouse_move(cx.listener(Self::drag_to))
-            .on_mouse_up(MouseButton::Left, cx.listener(Self::end_drag))
+            .child(self.drag_listener(cx))
             .on_action(cx.listener(Self::new_session))
             .on_action(cx.listener(Self::next_tab))
             .on_action(cx.listener(Self::previous_tab))
@@ -911,8 +950,9 @@ fn terminal_canvas(term: Arc<Terminal>, active: bool, stats: Rc<RefCell<Stats>>)
             let cell_w =
                 ts.advance(font_id, font_size, 'm').map(|s| s.width).ok().filter(|w| *w > px(0.)).unwrap_or(px(8.));
             let line_h = (font_size * LINE_HEIGHT).round();
-            let fit = |len: Pixels, unit: Pixels| ((len / unit).floor() as u16).max(1);
-            let (rows, cols) = (fit(bounds.size.height, line_h), fit(bounds.size.width, cell_w));
+            let fit = |len: Pixels, unit: Pixels, least: u16| ((len / unit).floor() as u16).max(least);
+            // At least what `Terminal::resize` clamps to, or every frame would resize again.
+            let (rows, cols) = (fit(bounds.size.height, line_h, 1), fit(bounds.size.width, cell_w, 2));
             if term.size() != (rows, cols) {
                 let _ = term.resize(rows, cols);
             }

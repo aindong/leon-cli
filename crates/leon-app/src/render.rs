@@ -103,7 +103,9 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
         // Bounded: a program can stack any number of marks on one cell, and each frame copies and shapes them.
         text.extend(cell.zerowidth().into_iter().flatten().copied().filter(|&c| !is_bidi_control(c)).take(MAX_MARKS));
         if let Some(c) = cursor.as_mut().filter(|_| cell.point == cursor_at) {
-            (c.line, c.wide, c.text) = (line, wide, text.clone());
+            // Concealed text stays concealed under a block cursor too.
+            let shown = if flags.contains(Flags::HIDDEN) { " ".to_string() } else { text.clone() };
+            (c.line, c.wide, c.text) = (line, wide, shown);
         }
         let span = Span {
             col,
