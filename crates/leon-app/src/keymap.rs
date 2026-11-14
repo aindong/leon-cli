@@ -33,11 +33,14 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+f", "client.find.open"),
     ("cmd+g", "client.find.next"),
     ("cmd+shift+g", "client.find.previous"),
-    ("shift+pageup", "client.scroll.page_up"),
-    ("shift+pagedown", "client.scroll.page_down"),
     ("cmd+up", "client.scroll.top"),
     ("cmd+down", "client.scroll.bottom"),
 ];
+
+/// Defaults only the app has: keys a terminal does send, which `leon attach` must pass to the
+/// pane (it has no scrollback of its own to page).
+pub const APP_DEFAULTS: &[(&str, &str)] =
+    &[("shift+pageup", "client.scroll.page_up"), ("shift+pagedown", "client.scroll.page_down")];
 
 /// US-layout shifted symbols and the key they are on: macOS reports cmd+shift+= as `+`.
 const SHIFTED: [(char, char); 21] = [
@@ -140,8 +143,17 @@ impl Keymap {
     /// The defaults with a `client.keymap` reply on top. Mode bindings are left out: the app has
     /// no modes yet (nor does `client.key`).
     pub fn new(km: &Value) -> Keymap {
+        Self::with_defaults(km, &[])
+    }
+
+    /// The app's keymap: `new`'s with `APP_DEFAULTS` too.
+    pub fn app(km: &Value) -> Keymap {
+        Self::with_defaults(km, APP_DEFAULTS)
+    }
+
+    fn with_defaults(km: &Value, extra: &[(&str, &str)]) -> Keymap {
         let goto = (1..=9).map(|i| (format!("cmd+{i}"), "client.tab.goto", Some(json!({ "index": i }))));
-        let defaults = DEFAULTS.iter().map(|(k, a)| (k.to_string(), *a, None)).chain(goto);
+        let defaults = DEFAULTS.iter().chain(extra).map(|(k, a)| (k.to_string(), *a, None)).chain(goto);
         let mut bindings: Vec<Bound> = defaults
             .map(|(k, a, args)| Bound {
                 seq: parse(&k).expect("a default key parses").seq,

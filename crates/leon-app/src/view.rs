@@ -389,7 +389,7 @@ impl Workspace {
             focus,
             stats: Rc::new(RefCell::new(stats)),
             seen: 0,
-            keymap: Keymap::new(&json!({})),
+            keymap: Keymap::app(&json!({})),
             inbox: Arc::default(),
             keymap_asked: None,
             pending: Vec::new(),

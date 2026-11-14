@@ -273,7 +273,7 @@ impl Workspace {
             inbox.reply.take()
         };
         if let Some(km) = reply.filter(|km| km["generation"].as_u64() != Some(self.keymap.generation)) {
-            self.keymap = Keymap::new(&km);
+            self.keymap = Keymap::app(&km);
             cx.notify();
         }
     }
@@ -281,7 +281,7 @@ impl Workspace {
     /// Fetch the keymap and apply it now, waiting for the server (tests, and nothing on a hot path).
     pub fn sync_keymap(&mut self) {
         if let Ok(km) = self.app.call("client.keymap", json!({})) {
-            self.keymap = Keymap::new(&km);
+            self.keymap = Keymap::app(&km);
         }
     }
 }
