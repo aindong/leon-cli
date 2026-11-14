@@ -22,6 +22,7 @@ fn check(args: &[&str], env: &[(&str, &Path)]) -> Run {
     let mut c = Command::new(env!("CARGO_BIN_EXE_leon"));
     c.args(["config", "check"]).args(args);
     c.env("LEON_RUNTIME_DIR", rt.path())
+        .env("LEON_STATE_DIR", std::path::Path::new(rt.path()).join("state"))
         .env("HOME", home.path())
         .env_remove("XDG_CONFIG_HOME")
         .env_remove("LEON_CONFIG")

@@ -25,6 +25,7 @@ fn force_over_a_foreign_skill_keeps_it_even_with_an_old_backup() {
         .env("CLAUDE_CONFIG_DIR", &claude)
         .env("CODEX_HOME", &codex)
         .env("LEON_RUNTIME_DIR", rt.path())
+        .env("LEON_STATE_DIR", std::path::Path::new(rt.path()).join("state"))
         .env("LEON_AUTOSTART", "0")
         .env_remove("LEON_SESSION")
         .env_remove("LEON_BLOCK")

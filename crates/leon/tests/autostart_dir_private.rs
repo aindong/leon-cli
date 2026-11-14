@@ -7,7 +7,9 @@ fn server_start_makes_its_runtime_dir_private() {
     let dir = parent.path().join("run");
     let leon = || {
         let mut c = Command::new(env!("CARGO_BIN_EXE_leon"));
-        c.env("LEON_RUNTIME_DIR", &dir).env_remove("LEON_AUTOSTART");
+        c.env("LEON_RUNTIME_DIR", &dir)
+            .env("LEON_STATE_DIR", std::path::Path::new(&dir).join("state"))
+            .env_remove("LEON_AUTOSTART");
         c
     };
     let out = leon().args(["server", "start"]).output().unwrap();

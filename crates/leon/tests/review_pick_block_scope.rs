@@ -8,7 +8,9 @@ impl Env {
     }
     fn run(&self, env: &[(&str, &str)], args: &[&str]) -> Output {
         let mut c = Command::new(env!("CARGO_BIN_EXE_leon"));
-        c.env("LEON_RUNTIME_DIR", self.0.path()).env("SHELL", "/bin/sh");
+        c.env("LEON_RUNTIME_DIR", self.0.path())
+            .env("LEON_STATE_DIR", std::path::Path::new(self.0.path()).join("state"))
+            .env("SHELL", "/bin/sh");
         for k in ["LEON_SESSION", "LEON_BLOCK", "LEON_SERVER", "LEON_AUTOSTART", "LEON_IDLE_EXIT_SECS"] {
             c.env_remove(k);
         }

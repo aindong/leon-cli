@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 fn leon(dir: &std::path::Path) -> Command {
     let mut c = Command::new(env!("CARGO_BIN_EXE_leon"));
     c.env("LEON_RUNTIME_DIR", dir)
+        .env("LEON_STATE_DIR", std::path::Path::new(dir).join("state"))
         .env_remove("LEON_AUTOSTART")
         .env_remove("LEON_SESSION")
         .stdout(Stdio::null())

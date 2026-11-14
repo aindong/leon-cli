@@ -59,6 +59,7 @@ impl Env {
             .env("CLAUDE_CONFIG_DIR", self.claude())
             .env("CODEX_HOME", self.codex())
             .env("LEON_RUNTIME_DIR", self.rt.path())
+            .env("LEON_STATE_DIR", std::path::Path::new(self.rt.path()).join("state"))
             .env("LEON_AUTOSTART", "0")
             .env_remove("LEON_SESSION")
             .env_remove("LEON_BLOCK")

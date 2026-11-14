@@ -12,6 +12,7 @@ impl Env {
     fn cmd(&self) -> Command {
         let mut c = Command::new(env!("CARGO_BIN_EXE_leon"));
         c.env("LEON_RUNTIME_DIR", self.dir.path())
+            .env("LEON_STATE_DIR", std::path::Path::new(self.dir.path()).join("state"))
             .env("LEON_IDLE_EXIT_SECS", "1")
             .env_remove("LEON_SESSION")
             .env_remove("LEON_AUTOSTART");

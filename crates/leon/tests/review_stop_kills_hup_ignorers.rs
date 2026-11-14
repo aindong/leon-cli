@@ -8,6 +8,7 @@ fn server_stop_ends_a_program_that_ignores_sighup() {
     let leon = |args: &[&str]| {
         let out = Command::new(env!("CARGO_BIN_EXE_leon"))
             .env("LEON_RUNTIME_DIR", dir.path())
+            .env("LEON_STATE_DIR", std::path::Path::new(dir.path()).join("state"))
             .env("SHELL", "/bin/sh")
             .env_remove("LEON_SESSION")
             .env_remove("LEON_BLOCK")
