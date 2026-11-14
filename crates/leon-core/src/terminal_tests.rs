@@ -128,3 +128,28 @@ fn dropping_hangs_up_the_program() {
     drop(t);
     assert_eq!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), 128 + libc::SIGHUP);
 }
+
+#[test]
+fn the_line_editor_wait_needs_the_shell_in_front() {
+    let soon = |t: &Terminal, wait: Duration| {
+        let end = std::time::Instant::now() + wait;
+        while !t.reads_a_line() && std::time::Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        t.reads_a_line()
+    };
+    let (shell, _rx) = spawn(&["sh"]);
+    assert!(soon(&shell, Duration::from_secs(10)), "an interactive shell reads a line");
+
+    // A job in front with canonical mode off (a picker an rc file started) isn't the shell.
+    let (picker, _rx) = spawn(&["sh", "-c", "set -m; sh -c 'stty -icanon; echo picker-up; sleep 300'"]);
+    screen_until(&picker, |s| s.contains("picker-up"));
+    assert!(!soon(&picker, Duration::from_millis(300)), "the job in front isn't the shell");
+}
+
+#[test]
+fn shown_text_is_on_the_screen_before_the_program() {
+    let spec = Spec { command: vec!["sleep".into(), "300".into()], cwd: None, env: vec![] };
+    let t = Terminal::spawn_showing(spec, b"before\r\nthe program", |_| {}).unwrap();
+    assert_eq!(t.text(true), "before\nthe program");
+}

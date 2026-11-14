@@ -90,6 +90,10 @@ fn block(c: &mut Client, cli: &Cli, cmd: &BlockCmd) -> Result<(), Fail> {
                 print_json(&b);
             } else {
                 println!("{}  {}\n  window {}  session {sid}", summary(&b), bid, b["window_id"].as_str().unwrap_or(""));
+                if let Some(r) = b["resume"].as_array() {
+                    let argv: Vec<String> = r.iter().filter_map(Value::as_str).map(str::to_string).collect();
+                    println!("  resume: {}", leon_core::keys::shell_line(&argv));
+                }
             }
         }
         BlockCmd::Close { target } => {

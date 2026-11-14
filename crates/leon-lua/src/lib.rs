@@ -32,6 +32,30 @@ pub struct Config {
     pub diagnostics: Vec<Diagnostic>,
     /// `leon.log` lines.
     pub logs: Vec<Diagnostic>,
+    /// `leon.set("resume", …)`; None leaves the default (`Resume::Ask`).
+    pub resume: Option<Resume>,
+}
+
+/// What a restored block does with the resume command a program registered for itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Resume {
+    /// Type it at the new prompt; Enter runs it.
+    #[default]
+    Ask,
+    Always,
+    Never,
+}
+
+impl Resume {
+    pub const ALL: [Resume; 3] = [Resume::Ask, Resume::Always, Resume::Never];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Resume::Ask => "ask",
+            Resume::Always => "always",
+            Resume::Never => "never",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -56,6 +80,9 @@ pub enum Target {
 pub struct Mode {
     pub name: String,
     pub exclusive: bool,
+    /// The one chord that enters the mode for the next key (`leon attach`'s `attach` mode), as
+    /// `KeySpec::sequence` writes it.
+    pub prefix: Option<String>,
     pub source: String,
 }
 

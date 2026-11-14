@@ -31,7 +31,7 @@ fn check_json(v: &Value) -> Result<(), String> {
 #[tokio::test]
 async fn a_snapshot_passes_its_own_checks() {
     let v = saved_json().await;
-    assert_eq!(v["version"], 1);
+    assert_eq!(v["version"], 2);
     assert_eq!(v["sessions"][0]["blocks"][1]["command"], json!(["sleep", "300"]), "saved for the record");
     check_json(&v).unwrap();
 }
@@ -52,6 +52,8 @@ async fn checks_refuse_what_the_model_would_trip_on() {
         ("label with a newline", |v| v["sessions"][0]["label"] = json!("a\nb")),
         ("block in no window", |v| v["sessions"][0]["blocks"][1]["window_id"] = json!("window:gone")),
         ("revision near the end", |v| v["sessions"][0]["revision"] = json!(u64::MAX)),
+        ("resume with a control", |v| v["sessions"][0]["blocks"][0]["resume"] = json!(["claude", "a\rb"])),
+        ("empty resume", |v| v["sessions"][0]["blocks"][0]["resume"] = json!([])),
     ];
     for (what, f) in broken {
         let mut v = good.clone();
@@ -79,7 +81,7 @@ fn newer_and_missing_versions_are_refused() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
     assert!(load(&file).unwrap().is_none(), "no file: nothing to restore");
-    fs::write(&file, br#"{"version":2,"sessions":[]}"#).unwrap();
+    fs::write(&file, br#"{"version":3,"sessions":[]}"#).unwrap();
     assert!(load(&file).err().unwrap().contains("newer"));
     fs::write(&file, br#"{"sessions":[]}"#).unwrap();
     assert!(load(&file).is_err());
@@ -130,7 +132,42 @@ fn a_bad_file_that_cant_be_moved_aside_turns_saving_off() {
     let dir = tempfile::Builder::new().permissions(fs::Permissions::from_mode(0o700)).tempdir().unwrap();
     let file = dir.path().join(FILE);
     fs::create_dir(&file).unwrap(); // not a regular file, and a hard link to a dir fails
-    let started = start(&ctx(), &Persist { file: file.clone(), restore: true });
+    let started = start(&ctx(), &Persist { file: file.clone(), restore: true, resume: Resume::Ask });
     assert!(started.is_none(), "saving would replace what couldn't be kept aside");
     assert!(file.is_dir());
+}
+
+#[test]
+fn the_total_cap_is_shared() {
+    assert_eq!(restore::cap(0), restore::PER_BLOCK);
+    assert_eq!(restore::cap(1), restore::PER_BLOCK);
+    let line = format!("{}\n", "x".repeat(999));
+    let big = line.repeat(3 << 10); // 3 MiB
+    for n in [1, 4, 5, 9, 1024] {
+        let saved = n * restore::inert(&big, restore::cap(n)).len(); // every block saves the same
+        assert!(saved <= restore::TOTAL, "{n} blocks saved {saved} bytes");
+        assert!(restore::cap(n) <= restore::PER_BLOCK);
+    }
+    assert!(restore::cap(5) < restore::PER_BLOCK, "5 blocks over the cap share the total");
+}
+
+#[test]
+fn inert_text_has_no_controls_and_keeps_whole_newest_lines() {
+    let evil = "a\u{1b}[31mb\u{7}\r\u{9b}c\u{7f}\td\né";
+    assert_eq!(restore::inert(evil, 100), "a[31mbcd\né");
+    assert_eq!(restore::inert("one\ntwo\nthree", 8), "three", "the partial line goes");
+    assert_eq!(restore::inert("one\ntwo\nthree", 9), "two\nthree", "a whole line at the cut stays");
+    assert_eq!(restore::inert("éééé", 3), "é", "a cut never splits a character");
+    for text in ["", "\n\n", "ab\ncd"] {
+        let out = restore::inert(text, 4);
+        assert!(out.len() <= 4 && !out.contains(|c: char| c != '\n' && c.is_control()));
+    }
+}
+
+#[test]
+fn a_version_1_file_still_loads() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    fs::write(&file, br#"{"version":1,"sessions":[]}"#).unwrap();
+    assert!(load(&file).unwrap().unwrap().sessions.is_empty());
 }

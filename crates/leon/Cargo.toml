@@ -15,6 +15,7 @@ leon-lua.workspace = true
 leon-app.workspace = true
 clap.workspace = true
 libc.workspace = true
+ratatui.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
@@ -25,4 +26,5 @@ name = "speed"
 harness = false
 
 [dev-dependencies]
+alacritty_terminal.workspace = true
 gpui = { workspace = true, features = ["test-support"] }

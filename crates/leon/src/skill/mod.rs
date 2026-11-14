@@ -3,6 +3,7 @@
 
 mod files;
 mod hooks;
+mod resume;
 
 use std::path::{Path, PathBuf};
 
@@ -34,6 +35,8 @@ pub enum Agent {
 }
 
 impl Agent {
+    const ALL: [Agent; 2] = [Agent::Claude, Agent::Codex];
+
     fn name(self) -> &'static str {
         match self {
             Agent::Claude => "claude",
@@ -99,7 +102,7 @@ fn targets(agent: Option<Agent>, for_setup: bool) -> Result<Vec<Target>, Fail> {
     if let Some(a) = agent {
         return Ok(vec![target(a, for_setup)?.1]);
     }
-    let all = [Agent::Claude, Agent::Codex].map(|a| target(a, false)).into_iter().collect::<Result<Vec<_>, _>>()?;
+    let all = Agent::ALL.map(|a| target(a, false)).into_iter().collect::<Result<Vec<_>, _>>()?;
     if !for_setup {
         return Ok(all.into_iter().map(|(_, t)| t).collect());
     }
@@ -120,11 +123,11 @@ fn skill_state(path: &Path) -> State {
     }
 }
 
-fn hook_state(read: &Result<Option<Value>, String>) -> State {
+fn hook_state(read: &Result<Option<Value>, String>, agent: Agent) -> State {
     match read {
         Err(_) => State::Unreadable,
         Ok(None) => State::Missing,
-        Ok(Some(v)) => hooks::state(v),
+        Ok(Some(v)) => hooks::state(v, agent),
     }
 }
 
@@ -147,7 +150,7 @@ fn overall(parts: &[State]) -> State {
 
 fn status_of(t: &Target) -> Value {
     let skill = skill_state(&t.skill);
-    let hook = t.hook.as_ref().map(|p| (p, hook_state(&hooks::read(p))));
+    let hook = t.hook.as_ref().map(|p| (p, hook_state(&hooks::read(p), t.agent)));
     let parts: Vec<State> = std::iter::once(skill).chain(hook.map(|(_, s)| s)).collect();
     json!({
         "agent": t.agent.name(),
@@ -214,13 +217,13 @@ fn setup_changes(t: &Target, force: bool) -> Result<Vec<Change>, String> {
     if let Some(p) = &t.hook {
         let read = hooks::read(p)?;
         changes.push(match &read {
-            Some(v) if hooks::state(v) == State::Current => Change::keep(p, "unchanged"),
+            Some(v) if hooks::state(v, t.agent) == State::Current => Change::keep(p, "unchanged"),
             _ => Change {
                 path: p.clone(),
                 action: if read.is_some() { "update" } else { "create" },
                 op: Op::Write {
                     backup: read.is_some().then_some(Backup::Once),
-                    bytes: json_bytes(&hooks::with_ours(read)),
+                    bytes: json_bytes(&hooks::with_ours(read, t.agent)),
                     follow: true,
                 },
             },
@@ -242,7 +245,7 @@ fn remove_changes(t: &Target) -> Result<Vec<Change>, String> {
     }];
     if let Some(p) = &t.hook {
         if let Some(v) = hooks::read(p)? {
-            changes.push(if hooks::state(&v) == State::Missing {
+            changes.push(if hooks::state(&v, t.agent) == State::Missing {
                 Change::keep(p, "unchanged")
             } else {
                 let rest = hooks::without_ours(v);
@@ -306,9 +309,12 @@ pub fn run(cli: &Cli, cmd: &SkillCmd) -> Result<(), Fail> {
             print!("{GUIDE}");
             Ok(())
         }
-        SkillCmd::Hook => {
+        SkillCmd::Hook { agent } => {
             if let Some(t) = hook_text() {
                 println!("{t}");
+            }
+            if let Some(agent) = agent {
+                resume::record(*agent);
             }
             Ok(())
         }

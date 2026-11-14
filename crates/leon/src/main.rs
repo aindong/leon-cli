@@ -1,5 +1,6 @@
 //! `leon`: the command-line client, and the server when run as `leon server run`.
 
+mod attach;
 mod blocks;
 mod client;
 mod commands;
@@ -49,6 +50,15 @@ impl Cli {
 pub enum Cmd {
     /// Open the leon app, attached to the server (started if none runs); also what `leon` alone does.
     App,
+    /// Use leon in this terminal: a picker of sessions, tabs and blocks, or TARGET's tab; the
+    /// prefix (ctrl+b) then d detaches and every program keeps running. Over ssh: `ssh -t`.
+    Attach {
+        /// A session, or a block (its tab opens with it focused) [default: -s, else a picker].
+        target: Option<String>,
+        /// The prefix key [default: the config's `leon.mode("attach", { prefix })`, else ctrl+b].
+        #[arg(long, value_name = "KEY")]
+        prefix: Option<String>,
+    },
     /// Run, start, stop or check the server.
     #[command(subcommand)]
     Server(ServerCmd),
@@ -245,9 +255,14 @@ pub enum SkillCmd {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Print the agent's leon session and block (run by the session-start hook).
+    /// Print the agent's leon session and block, and record how to resume the agent's session
+    /// (run by the session-start hook, with the agent's SessionStart JSON on stdin).
     #[command(hide = true)]
-    Hook,
+    Hook {
+        /// The agent whose resume command to record for this block.
+        #[arg(long, value_enum)]
+        agent: Option<skill::Agent>,
+    },
 }
 
 #[derive(Args)]

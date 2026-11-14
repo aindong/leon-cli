@@ -11,7 +11,7 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 | `leon-core` | The object model (server state, sessions, windows, layout tree, blocks), stable IDs and target resolution, terminal blocks (PTY via `portable-pty`, emulation via `alacritty_terminal`), the OSC 7501 program-status parser, and the event log with gapless `seq`. No I/O policy, no sockets. |
 | `leon-server` | The API: a method registry where every method carries a description and JSON Schemas (`help.all`), served over a Unix socket. Also runnable in-process. |
 | `leon-lua` | Lua 5.1 (`mlua`): `init.lua` config (bindings, sequences, modes, actions), the live config `Runtime`, and `leon do` scripts (`leon.on`, `wait`, timers, `exec`). |
-| `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart. With no arguments it opens the app. |
+| `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart, and `leon attach` (the terminal client). With no arguments it opens the app. |
 | `leon-app` | The GPUI client. It attaches to the server over the socket like any client and paints the screens the server pushes, so programs outlive the app. |
 
 ## Decisions
@@ -89,6 +89,35 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   bracketed-paste mode at that moment (the app's copy of the screen may be older). `block.watch`
   and `dev.leon.terminal.screen` are leon's own: the spec's screen stream is `data.connect` over a
   WebSocket, which leon doesn't serve. The app attaches only to a socket in a private dir.
+- **The terminal client.** `leon attach` (`crates/leon/src/attach/`) is the app's client code drawn
+  with ratatui 0.30 (crossterm 0.29 through `ratatui::crossterm`) instead of GPUI: it uses
+  `leon_app::remote::Remote` (the same connections, model refetches and `block.watch` screen
+  stream), the app's keymap, pane layout (in cells, one-cell dividers) and palette filter, without
+  code of its own on the server. It watches only the panes on screen (the picker: the previewed
+  block). Drawing is coalesced: one thread reads host input, the model's change hook wakes the loop
+  (one wake queued at most), the loop handles everything queued and then draws once, and redraws
+  for screen changes alone are at least 16 ms apart. Ratatui diffs each frame against the last, so
+  a keystroke's echo costs the host a few cells; over a slow link a write blocks, the model keeps
+  only the newest screens meanwhile, and the next frame shows those. Keys are decoded by crossterm
+  and re-encoded with `leon_core::keys::encode` using the focused pane's own cursor-key mode, so the
+  host's mode doesn't matter; pastes go through `block.event` paste. The **prefix** is
+  `--prefix`, else the `attach` mode's `prefix` (`leon.mode`, carried in `client.keymap`'s modes),
+  else ctrl+b; after it an `attach/KEY` binding, then a config sequence `prefix>KEY`, then the
+  built-in table decides. Other config bindings resolve through the app's keymap; anything unbound
+  goes to the pane. **Sizes:** the server has no `own_block` yet, so the rule is the client's own
+  size: the TUI resizes a pane only when its own layout of that pane changes (attach, host resize,
+  split, zoom, the pane coming back on screen), never because another client resized it, and clips or pads a screen of another
+  size. The app re-fits whenever a screen's size differs from its pane, so while both show the
+  same tab the app's size wins. **The host terminal** is put back (raw mode off, alt screen left,
+  cursor shown, bracketed paste off) on detach, errors, a panic (hook), and SIGHUP, SIGTERM,
+  SIGINT, SIGQUIT: those are blocked in every thread (after any server autostart, so the server
+  doesn't inherit the mask) and taken by a `sigwait` thread; the exit status is 128 + the signal.
+  For SIGKILL a watchdog, forked before any thread starts, sits in its own process group with the
+  saved termios and a close-on-exec pipe: `e` means the client entered the alt screen, `x` that it
+  restored; EOF without `x` means it died, and the watchdog restores (the escapes only after `e`).
+  While attached, stderr points at /dev/null, since the app's client code reports some failures
+  with `eprintln!` (which would scribble over the screen); restoring puts it back. No tty (`ssh host leon attach` without `-t`) exits 1 and
+  writes nothing to stdout.
 - **App keys go through the keymap.** The server loads `init.lua` (`leon server run`).
   The app has no GPUI key table (only ⌘Q): every keystroke becomes an unshifted chord
   (`keymap::chord`) and is resolved against its built-in defaults (`keymap::DEFAULTS`) with the
@@ -113,7 +142,8 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 - **Agent skill.** `leon skill show` prints a guide compiled into the binary. `skill setup` installs a
   SKILL.md stub (marked `<!-- leon-skill: … -->`) that tells the agent to run `leon skill show`, so
   upgrades reach agents without a reinstall, plus a matcher-less SessionStart hook running
-  `leon skill hook` (prints `LEON_SESSION`/`LEON_BLOCK`, nothing outside leon, no server call). Claude
+  `leon skill hook --agent claude|codex` (prints `LEON_SESSION`/`LEON_BLOCK`, and records the agent's
+  resume command, below; outside leon nothing and no server call). Claude
   Code: `$CLAUDE_CONFIG_DIR` (`~/.claude`) `skills/leon` + `settings.json`; Codex: `~/.agents/skills/leon`
   + `$CODEX_HOME` (`~/.codex`) `hooks.json`. Settings edits keep key order, back up once to
   `<file>.leon-backup`, write atomically through symlinks, and refuse files that aren't the expected
@@ -122,17 +152,46 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   `~/.local/state/leon`) on every exit through the socket loop (`server stop`, SIGTERM, SIGINT,
   SIGHUP, idle exit) and restores them after binding (`--restore`, default true; `server stop --discard`
   skips the save and deletes the file). Saved: sessions, windows, layout trees (split IDs and
-  ratios), labels, focus, zoom, the active tab, revisions, and per block its label, keep-open, cwd
-  and command. IDs come back unchanged. Programs don't survive: a restored block runs a fresh login
-  shell in its cwd (the shell process's cwd, else the last OSC 7 path, else where it started); the
-  saved command is never re-run, since repeating `make deploy` on a restart would be a surprise and
-  would make the file a place that runs code. The dir must be private (0700, ours) and not
+  ratios), labels, focus, zoom, the active tab, revisions, and per block its label, keep-open, cwd,
+  command, scrollback and resume command. IDs come back unchanged. Programs don't survive: a
+  restored block runs a fresh login shell in its cwd (the shell process's cwd, else the last OSC 7
+  path, else where it started); the saved command is never re-run, since repeating `make deploy` on
+  a restart would be a surprise and would make the file a place that runs code. The dir must be private (0700, ours) and not
   flocked by another server, or nothing is saved (`server status` shows `state_file: null`); the file is 0600, written via a temp file and
   a rename. A file that is corrupt, from a newer version, or inconsistent is moved to
   `sessions.json.bad-<secs>-<n>` with a warning in the log, never replaced.
   The app takes no part: the server it starts restores at start, before it accepts the app's
   connection, so the app's "open a session when there is none" sees the restored ones. Tests and
   benches use `embedded::start_at`, an in-process server that keeps nothing.
+- **Scrollback on restore.** Each block's scrollback and screen (`capture`'s text; for an alt-screen
+  app, its screen) is saved as text, capped at 2 MiB per block and 8 MiB over all blocks (each gets
+  `min(2 MiB, 8 MiB / blocks)`), newest whole lines kept. Every control character but `\n` (C0, DEL,
+  C1) is removed when it is saved and again when it is restored, since the file is outside the
+  server's hands in between; so a snapshot can't send an escape, a query or a carriage return. The
+  new terminal's emulator is fed the text, then a dim `— restored from <time> —` line, before the
+  shell's first output: the text is shown, never sent to the shell. Whatever a terminal showed (a
+  printed token too) is on disk in the private 0600 file until the next save replaces it;
+  `server stop --discard` forgets it.
+- **Resume commands.** A program registers the argv that resumes it with
+  `dev.leon.terminal.set_resume {command}` (1 to 64 args, at most 8 KiB of printable ASCII, no
+  backslash; null clears it). Under "ask" the user agrees to what they see typed, so it must be what
+  runs: no control key, no bidi or invisible character, no byte readline could read as Meta, no
+  backslash (fish reads `\'` inside single quotes). The skill hook records `claude --resume
+  <session_id>` or `codex resume <session_id>` from the agent's SessionStart JSON (an id of
+  `[A-Za-z0-9._-]`, no leading `-`), and only when the hook, its parent or its grandparent is its
+  terminal's foreground process group: the interactive agent, not a nested `claude -p` that an
+  agent's tool started without a terminal. Restored blocks follow the config's
+  `leon.set("resume", …)`, read once the start-up config has loaded and before restoring (the
+  restore waits at most 1 s for it, since nothing is served until the restore is done; past that
+  nothing is offered, as with `"never"`): `"ask"` (default) types Ctrl-U and the shell-quoted command
+  at the new prompt and shows a dim hint, so Enter runs it; `"always"` adds the Enter; `"never"`
+  types nothing. Typing waits (up to 60 s, then gives up) until the shell is the PTY's foreground
+  process group with canonical mode off, so neither an rc file's picker nor typeahead gets it; zsh
+  and fish must also have turned bracketed paste on, which their line editors do and a key an rc
+  file reads (oh-my-zsh's update question, compinit's `read -q`) doesn't. bash and sh are taken at
+  canonical mode alone. The command stays registered until replaced or cleared; with `"always"` the
+  private state file is a place that runs the commands programs registered, which is why `"ask"` is
+  the default.
 - **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of
   up to 16 KiB); the parser thread feeds what has queued, up to 64 KiB, to the OSC 7501 tracker and
   the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread

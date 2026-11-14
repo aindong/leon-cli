@@ -25,6 +25,9 @@ use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
 #[path = "terminal_cwd.rs"]
 mod cwd;
 use cwd::{process_cwd, pwd_path, pwd_url};
+#[path = "terminal_process.rs"]
+mod process;
+use process::{reap, wait_exit};
 #[path = "terminal_reading.rs"]
 mod reading;
 use reading::{Reading, Reported};
@@ -169,6 +172,8 @@ pub struct Terminal {
     /// Bytes of output parsed so far.
     output: Arc<AtomicU64>,
     notify: Notify,
+    /// The command a program registered to resume itself after a restart (`set_resume`).
+    resume: Mutex<Option<Vec<String>>>,
 }
 
 impl std::fmt::Debug for Terminal {
@@ -181,6 +186,17 @@ impl Terminal {
     /// Start `spec` on a new PTY. `notify` gets what the terminal reports, on its reader and waiter
     /// threads; `Notice::Exited` comes last, once the child has been reaped and its output read.
     pub fn spawn(spec: Spec, notify: impl Fn(Notice) + Send + Sync + 'static) -> io::Result<Terminal> {
+        Self::spawn_showing(spec, &[], notify)
+    }
+
+    /// Like `spawn`, with `shown` fed to the emulator before any of the program's output: on the
+    /// screen and in the scrollback, never sent to the program. Escapes in it act, so pass only
+    /// text you made inert yourself.
+    pub fn spawn_showing(
+        spec: Spec,
+        shown: &[u8],
+        notify: impl Fn(Notice) + Send + Sync + 'static,
+    ) -> io::Result<Terminal> {
         let notify: Notify = Arc::new(notify);
         let size = PtySize { rows: ROWS, cols: COLS, pixel_width: 0, pixel_height: 0 };
         let pair = native_pty_system().openpty(size).map_err(pty)?;
@@ -231,7 +247,10 @@ impl Terminal {
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
         let seen = Arc::new(Mutex::new(Seen::default()));
         let listener = Listener { writer: writer.clone(), seen: seen.clone() };
-        let term = Arc::new(Mutex::new(Term::new(config, &Size { rows: ROWS, cols: COLS }, listener)));
+        let mut emulator = Term::new(config, &Size { rows: ROWS, cols: COLS }, listener);
+        let mut parser: Processor = Processor::new();
+        parser.advance(&mut emulator, shown);
+        let term = Arc::new(Mutex::new(emulator));
         let tracker = Arc::new(Mutex::new(Tracker::default()));
 
         // Each disconnects when its end is done: the reads at the PTY's EOF, the parsing after the
@@ -286,6 +305,7 @@ impl Terminal {
             reported,
             output,
             notify: to_self,
+            resume: Mutex::new(None),
         })
     }
 
@@ -324,10 +344,14 @@ impl Terminal {
         gone.into_iter().for_each(|c| (self.notify)(Notice::ProgramStatus(c)));
     }
 
+    /// Whether the program asked for bracketed paste (a line editor does while it reads a line).
+    pub fn bracketed_paste(&self) -> bool {
+        lock(&self.term).mode().contains(TermMode::BRACKETED_PASTE)
+    }
+
     /// Paste `text` the way the program asked for it now (`keys::paste_bytes`).
     pub fn paste(&self, text: &str) -> io::Result<()> {
-        let bracketed = lock(&self.term).mode().contains(TermMode::BRACKETED_PASTE);
-        self.write(&crate::keys::paste_bytes(text, bracketed))
+        self.write(&crate::keys::paste_bytes(text, self.bracketed_paste()))
     }
 
     /// Press one key given in binding syntax (`enter`, `ctrl+c`, `up`).
@@ -397,60 +421,6 @@ impl Terminal {
     }
 }
 
-impl Terminal {
-    /// Hang up a still-running program: its process group (portable-pty makes the child a session
-    /// leader) and the terminal's foreground job (e.g. vim started from a shell). An exited
-    /// program's group was hung up when it exited, and its ID may belong to someone else by now,
-    /// so it gets nothing.
-    pub fn hang_up(&self) {
-        let fd = lock(&self.master).as_raw_fd();
-        let exited = lock(&self.exited);
-        if *exited || self.pid <= 0 {
-            return;
-        }
-        // SAFETY: only signals; the held lock keeps the leader unreaped, so both IDs are still ours.
-        unsafe {
-            let fg = fd.map_or(-1, |fd| libc::tcgetpgrp(fd));
-            if fg > 0 && fg != self.pid {
-                libc::kill(-fg, libc::SIGHUP);
-            }
-            libc::kill(-self.pid, libc::SIGHUP);
-        }
-    }
-
-    /// SIGKILL the program's process group if the program still runs.
-    pub fn kill(&self) {
-        kill_group(self.pid, &self.exited);
-    }
-
-    pub fn has_exited(&self) -> bool {
-        *lock(&self.exited)
-    }
-}
-
-fn kill_group(pid: i32, exited: &Mutex<bool>) {
-    let exited = lock(exited);
-    if !*exited && pid > 0 {
-        // SAFETY: only signals; the held lock keeps the group ID ours.
-        unsafe { libc::kill(-pid, libc::SIGKILL) };
-    }
-}
-
-impl Drop for Terminal {
-    /// Hang up the program, and kill it if it still runs after a grace period.
-    fn drop(&mut self) {
-        if self.has_exited() {
-            return;
-        }
-        self.hang_up();
-        let (pid, exited) = (self.pid, self.exited.clone());
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_secs(2));
-            kill_group(pid, &exited);
-        });
-    }
-}
-
 /// Program-supplied text for events: no control, bidi or invisible characters (they would reach
 /// whoever shows the event, docs/spec.md §5), at most `MAX_TEXT` bytes.
 fn clean(s: &str) -> String {
@@ -462,40 +432,6 @@ fn clean(s: &str) -> String {
         out.push(c);
     }
     out
-}
-
-/// Block until `pid` exits, leaving it unreaped (a zombie keeps its process group ID taken).
-fn wait_exit(pid: i32) {
-    loop {
-        // SAFETY: waitid on our own child, writing into a local; WNOWAIT leaves it waitable.
-        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
-        let r = unsafe { libc::waitid(libc::P_PID, pid as libc::id_t, &mut info, libc::WEXITED | libc::WNOWAIT) };
-        if r == 0 || io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
-            return;
-        }
-    }
-}
-
-/// Reap `pid` and turn its wait status into a shell-style exit status.
-fn reap(pid: i32) -> i32 {
-    let mut status = 0;
-    loop {
-        // SAFETY: waitpid on our own child, writing into a local.
-        let r = unsafe { libc::waitpid(pid, &mut status, 0) };
-        if r == pid {
-            break;
-        }
-        if r < 0 && io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
-            return 1;
-        }
-    }
-    if libc::WIFEXITED(status) {
-        libc::WEXITSTATUS(status)
-    } else if libc::WIFSIGNALED(status) {
-        128 + libc::WTERMSIG(status)
-    } else {
-        1
-    }
 }
 
 fn pty(e: impl std::fmt::Display) -> io::Error {

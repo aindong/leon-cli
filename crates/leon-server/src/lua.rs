@@ -156,6 +156,21 @@ impl Ctx {
     }
 }
 
+impl Ctx {
+    /// The config's resume setting, once the start-up load (`start_config`) has finished. Waits at
+    /// most a second: nothing is served until the restore that asks is done. Past it, "never": the
+    /// setting is unknown, so nothing is typed.
+    pub async fn resume_policy(&self) -> leon_lua::Resume {
+        match tokio::time::timeout(Duration::from_secs(1), self.lua.read()).await {
+            Ok(loaded) => loaded.cfg.resume.unwrap_or_default(),
+            Err(_) => {
+                eprintln!("leon: warning: the config is slow to load; restored blocks don't offer to resume");
+                leon_lua::Resume::Never
+            }
+        }
+    }
+}
+
 /// Ask the config's Lua thread to run a job; reply by `deadline` (plus a second for the reply).
 async fn ask<T: Send + 'static>(
     jobs: Option<mpsc::Sender<Job>>,
@@ -265,6 +280,8 @@ pub struct BindingView {
 pub struct ModeView {
     pub name: String,
     pub exclusive: bool,
+    /// The chord that enters the mode for one key (`leon attach`'s prefix), if set.
+    pub prefix: Option<String>,
     pub source: String,
 }
 
@@ -320,7 +337,12 @@ fn keymap(l: &Loaded) -> Keymap {
         modes: c
             .modes
             .iter()
-            .map(|m| ModeView { name: m.name.clone(), exclusive: m.exclusive, source: m.source.clone() })
+            .map(|m| ModeView {
+                name: m.name.clone(),
+                exclusive: m.exclusive,
+                prefix: m.prefix.clone(),
+                source: m.source.clone(),
+            })
             .collect(),
         server_actions: c
             .actions

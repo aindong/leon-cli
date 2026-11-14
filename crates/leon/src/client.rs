@@ -49,6 +49,13 @@ impl Client {
         Ok(Client { reader: BufReader::new(UnixStream::connect(socket)?), next_id: 1, events: VecDeque::new() })
     }
 
+    /// Give up on a reply (or a write) after `limit`, as an unreachable server.
+    pub fn set_timeout(&self, limit: Duration) -> std::io::Result<()> {
+        let stream = self.reader.get_ref();
+        stream.set_read_timeout(Some(limit))?;
+        stream.set_write_timeout(Some(limit))
+    }
+
     /// The next line the server sends, parsed; None when it closed the connection.
     fn read(&mut self) -> Result<Option<Value>, Fail> {
         let io = |e: std::io::Error| Fail::Unreachable(format!("lost the server connection: {e}"));

@@ -1,6 +1,7 @@
 //! Sessions saved when the server stops and restored when it starts (docs/spec.md §1). Programs
-//! don't survive a restart: a restored block runs a fresh login shell in its saved cwd, and the
-//! saved command is kept only for the record, so a restart never re-runs a command.
+//! don't survive a restart: a restored block runs a fresh login shell in its saved cwd, showing its
+//! saved text above it (restore.rs). The saved command is kept only for the record, so a restart
+//! never re-runs a command; only a resume command a program registered for itself is offered.
 //!
 //! The file lives in a private dir (0700, ours), is written 0600 through a temp file and a rename,
 //! and a file that can't be used is moved aside with a warning, never replaced.
@@ -20,12 +21,14 @@ use leon_core::{ApiError, Block, Session, State, Window};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::restore::{self, Resume};
 use crate::Ctx;
 
 pub const FILE: &str = "sessions.json";
-const VERSION: u64 = 1;
-/// A bigger file is taken as corrupt.
-const MAX_FILE: u64 = 16 << 20;
+/// Version 2 added `saved_at`, and per block `scrollback` and `resume`; version 1 files still load.
+const VERSION: u64 = 2;
+/// A bigger file is taken as corrupt: the saved text (`restore::TOTAL`) at most doubles in JSON.
+const MAX_FILE: u64 = 32 << 20;
 /// More blocks than this (the spec's server limit) is taken as corrupt: each would start a shell.
 const MAX_BLOCKS: usize = 1024;
 /// A revision past this is corrupt; the model only ever adds one.
@@ -36,12 +39,17 @@ const MAX_REVISION: u64 = 1 << 53;
 pub struct Persist {
     pub file: PathBuf,
     pub restore: bool,
+    /// What restored blocks do with their resume commands (the config's `resume` setting).
+    pub resume: Resume,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Saved {
     version: u64,
+    /// Seconds since the epoch.
+    #[serde(default)]
+    saved_at: Option<u64>,
     sessions: Vec<SavedSession>,
 }
 
@@ -78,6 +86,12 @@ struct SavedBlock {
     cwd: Option<PathBuf>,
     /// What ran; not run again.
     command: Vec<String>,
+    /// Scrollback and screen as text, made inert and capped (restore.rs).
+    #[serde(default)]
+    scrollback: Option<String>,
+    /// The command the program registered to resume itself (`set_resume`).
+    #[serde(default)]
+    resume: Option<Vec<String>>,
 }
 
 /// Check the state dir is private and no other server uses it, and restore from it if asked.
@@ -93,7 +107,7 @@ pub fn start(ctx: &Arc<Ctx>, p: &Persist) -> Option<(PathBuf, fs::File)> {
             return None;
         }
     };
-    if p.restore && !restore(ctx, &p.file) {
+    if p.restore && !restore(ctx, &p.file, p.resume) {
         eprintln!("leon: warning: sessions won't be saved, so {} stays as it is", p.file.display());
         return None;
     }
@@ -144,6 +158,7 @@ pub fn discard(file: &Path) -> io::Result<()> {
 }
 
 fn snapshot(st: &State) -> Saved {
+    let cap = restore::cap(st.sessions.iter().map(|s| s.blocks.len()).sum());
     let sessions = st.sessions.iter().map(|s| SavedSession {
         session_id: s.id.clone(),
         label: s.label.clone(),
@@ -172,10 +187,13 @@ fn snapshot(st: &State) -> Saved {
                 keep_open: b.keep_open,
                 cwd: saveable(b.terminal.cwd()),
                 command: b.terminal.command.clone(),
+                scrollback: Some(restore::inert(&b.terminal.text(true), cap)).filter(|t| !t.is_empty()),
+                resume: b.terminal.resume(),
             })
             .collect(),
     });
-    Saved { version: VERSION, sessions: sessions.collect() }
+    let saved_at = SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs());
+    Saved { version: VERSION, saved_at, sessions: sessions.collect() }
 }
 
 /// JSON holds only UTF-8 paths; a shell in any other dir restores in `$HOME`.
@@ -186,7 +204,7 @@ fn saveable(cwd: Option<PathBuf>) -> Option<PathBuf> {
 /// Bring back the saved sessions. A file that can't be used is moved aside; so is one with a
 /// session that couldn't be restored, so the next save can't lose that session. False if such a
 /// file couldn't be moved, so saving over it would lose it.
-fn restore(ctx: &Arc<Ctx>, file: &Path) -> bool {
+fn restore(ctx: &Arc<Ctx>, file: &Path, policy: Resume) -> bool {
     let saved = match load(file) {
         Ok(None) => return true,
         Ok(Some(saved)) => saved,
@@ -195,9 +213,11 @@ fn restore(ctx: &Arc<Ctx>, file: &Path) -> bool {
     // Held while spawning, so an instant exit can't be reported before its block is in the model.
     let mut st = ctx.state();
     let mut skipped = false;
+    let cap = restore::cap(saved.sessions.iter().map(|s| s.blocks.len()).sum());
+    let how = restore::Restoring { cap, saved_at: saved.saved_at, policy };
     for s in saved.sessions {
         let id = s.session_id.clone();
-        match restore_session(ctx, s) {
+        match restore_session(ctx, s, &how) {
             Ok(session) => st.sessions.push(session),
             Err(e) => {
                 eprintln!("leon: warning: can't restore {id}: {e}");
@@ -208,16 +228,21 @@ fn restore(ctx: &Arc<Ctx>, file: &Path) -> bool {
     !skipped || aside(file, "a session in it couldn't be restored")
 }
 
-fn restore_session(ctx: &Arc<Ctx>, s: SavedSession) -> Result<Session, ApiError> {
+fn restore_session(ctx: &Arc<Ctx>, s: SavedSession, how: &restore::Restoring) -> Result<Session, ApiError> {
     let SavedSession { session_id, label, revision, active, windows, blocks } = s;
     let blocks = blocks
         .into_iter()
         .map(|b| {
             // A dir that has gone starts the shell in $HOME instead.
-            let cwd = b.cwd.filter(|d| d.is_dir());
-            let terminal = crate::blocks::spawn(ctx, &session_id, &b.block_id, vec![], cwd)?;
+            let cwd = b.cwd.clone().filter(|d| d.is_dir());
+            let shown = restore::shown(b.scrollback.as_deref(), b.resume.is_some(), how);
+            let terminal = Arc::new(crate::blocks::spawn(ctx, &session_id, &b.block_id, vec![], cwd, &shown)?);
+            if let Some(command) = &b.resume {
+                restore::offer(&terminal, command, how.policy);
+            }
+            terminal.set_resume(b.resume);
             let (id, label, window_id, keep_open) = (b.block_id, b.label, b.window_id, b.keep_open);
-            Ok(Block { id, label, window_id, keep_open, exit_code: None, terminal: Arc::new(terminal) })
+            Ok(Block { id, label, window_id, keep_open, exit_code: None, terminal })
         })
         .collect::<Result<Vec<_>, ApiError>>()?;
     let windows = windows
@@ -245,7 +270,7 @@ fn load(file: &Path) -> Result<Option<Saved>, String> {
     }
     let v: Value = serde_json::from_slice(&bytes).map_err(|e| format!("it isn't JSON: {e}"))?;
     match v.get("version").and_then(Value::as_u64) {
-        Some(VERSION) => {}
+        Some(1..=VERSION) => {}
         Some(n) if n > VERSION => return Err(format!("it was saved by a newer leon (version {n})")),
         _ => return Err("it has no version this leon knows".into()),
     }
@@ -282,6 +307,9 @@ fn check(saved: &Saved) -> Result<(), String> {
         for b in &s.blocks {
             fresh(&b.block_id, "block")?;
             label(&b.label)?;
+            if let Some(c) = &b.resume {
+                restore::check_command(c).map_err(|e| format!("{}'s resume: {e}", b.block_id))?;
+            }
         }
         for w in &s.windows {
             fresh(&w.window_id, "window")?;

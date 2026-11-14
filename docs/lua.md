@@ -55,7 +55,8 @@ removed. `leon.bindings()` lists the bindings made so far.
 
 ## Modes
 
-Modes are read by the server, but neither the app nor `client.key` acts on them yet. A mode is a
+Modes are read by the server, but neither the app nor `client.key` acts on them yet (`leon attach`
+uses one, `attach`, below). A mode is a
 set of keys that only work while the mode is on. Enter it with `client.mode.enter`; Escape leaves
 it. An **exclusive** mode swallows keys it doesn't bind, so stray typing doesn't reach the
 terminal.
@@ -67,6 +68,21 @@ leon.bind("resize/left", "pane.resize", { direction = "left" })
 leon.bind("resize/right", "pane.resize", { direction = "right" })
 leon.bind("resize/up", "pane.resize", { direction = "up" })
 leon.bind("resize/down", "pane.resize", { direction = "down" })
+```
+
+### `leon attach`'s prefix
+
+`leon attach` (the terminal client) reads the mode named `attach`: its `prefix` is the key that
+starts a command (default `ctrl+b`; `leon attach --prefix KEY` overrides it), and its bindings are
+the keys after it. They replace or add to the built-in ones (`d` detach, arrows and `hjkl` focus,
+`%` and `"` split, `z` zoom, `c` new tab, `n`/`p` next and previous tab, `s` the picker);
+`leon.unbind("attach/KEY")` removes one. A sequence that starts with the prefix (`ctrl+b>c` above)
+comes before a built-in key, and an `attach/` binding before both. The app ignores the mode.
+
+```lua
+leon.mode("attach", { prefix = "ctrl+a" })
+leon.bind("attach/x", "pane.close")
+leon.bind("attach/t", "client.tab.new")
 ```
 
 ## Your own actions
@@ -114,6 +130,19 @@ leon.action{
 
 Arguments are declared as `name = "type"` with types `string number integer boolean object array
 any`, and a `?` suffix for optional ones.
+
+## Settings
+
+`leon.set(name, value)` sets one of the server's settings. The only one so far is `resume`: what a
+block restored after a server restart does with the resume command its program registered for
+itself (`set_resume`, which leon's agent hook calls for Claude Code and Codex). `"ask"` (the
+default) types the command at the new prompt and waits for Enter; `"always"` runs it; `"never"`
+leaves the prompt empty. The server reads it at start, before it restores (it waits at most a
+second for the config, and past that offers nothing, as with `"never"`); `leon config check` prints it.
+
+```lua
+leon.set("resume", "always")
+```
 
 ## Function bindings
 
@@ -209,8 +238,9 @@ print("timed out:", slow.timed_out)
 |---|---|---|
 | `leon.bind(key, action[, args])` / `leon.bind(key, fn)` | config | Bind a key, sequence (`a>b`) or mode key (`mode/key`). |
 | `leon.unbind(key)` | config | Remove a key's bindings; returns the count. |
-| `leon.mode(name[, {exclusive}])` | config | Declare a mode. |
+| `leon.mode(name[, {exclusive, prefix}])` | config | Declare a mode; `prefix` (one key) is `leon attach`'s for the `attach` mode. |
 | `leon.bindings([filter])`, `leon.modes()` | config | List bindings and modes made so far. |
+| `leon.set(name, value)` | config | A setting: `resume` = `"ask"`, `"always"` or `"never"`. |
 | `leon.action{name, title, run, description?, args?}` | both | Define an action. |
 | `leon.invoke(name[, args])` | both | Run an action (nested at most 16 deep). |
 | `leon.session.<method>(params)` | both | Call a session method; fills `session_id`. |

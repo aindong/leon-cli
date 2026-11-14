@@ -54,6 +54,40 @@ sessions you see. `leon` with no command does the same. Quitting the app (⌘Q, 
 window) detaches and every program keeps running; the app's "Quit and End All Sessions…" or
 `leon server stop` ends them. With `--autostart=false` and no server it exits 4.
 
+## In a terminal
+
+### `leon attach [TARGET]`
+
+Use leon inside any terminal, locally or over ssh (`ssh -t HOST leon attach`; without `-t` there is
+no terminal and it exits 1). With no TARGET (and no `-s`) it opens a picker of every session, its
+tabs and their blocks, with the selected block's screen previewed live: type to filter (letters in
+order, as the command palette matches), ↑ and ↓ (or ctrl+p, ctrl+n) move, Enter attaches, Esc goes
+back or quits. TARGET is a session, or a block, whose tab then opens with it focused. With no
+session at all, Enter starts one.
+
+Attached, it shows the session's active tab: every pane of the split layout with borders between
+them, and a status bar with the session and its tabs. Keys go to the focused pane, except the
+prefix key and your config's bindings (`init.lua`; a `cmd` key never arrives from a terminal).
+After the prefix (`--prefix KEY`, else the config's `leon.mode("attach", { prefix = … })`, else
+ctrl+b):
+
+| Key | Does |
+|---|---|
+| `d` | Detach: `leon attach` exits 0 and every program keeps running |
+| ←↑↓→ or `h` `j` `k` `l` | Focus the pane that way |
+| `%`, `"` | Split the pane right, down |
+| `z` | Zoom the pane (again to undo) |
+| `c` | New tab |
+| `n`, `p` | Next, previous tab |
+| `s` | Back to the picker |
+| the prefix again | Type the prefix key into the pane |
+
+Panes are sized to fit this terminal whenever its own layout of them changes (attaching, a resize,
+a split or zoom, a pane coming back on screen); a pane another client resized since is clipped or
+padded. On exit
+(detach, the server stopping, SIGHUP, SIGTERM, SIGINT, SIGQUIT) the terminal is given back as it was; a
+watchdog process does it even after SIGKILL. Killed by a signal, it exits 128 + the signal.
+
 ## Sessions
 
 ### `leon new [LABEL]`
@@ -238,7 +272,8 @@ List a session's blocks.
 
 ### `leon block inspect [BLOCK]`
 
-Show a block: its window, pid, command and exit status.
+Show a block: its window, pid, command and exit status, and its resume command if its program
+registered one (`set_resume`).
 
 ### `leon block close [BLOCK]`
 
@@ -248,6 +283,13 @@ Close a block and end its program.
 
 Call a block method, such as `size` or `program_status`, or a full name like
 `dev.leon.terminal.size`. `ARGS` is a JSON object, `@file`, or `-` for stdin.
+
+`set_resume` registers the command that resumes this block's program after a restart (`null`
+clears it); a restored block offers it by the config's `resume` setting (see [lua.md](lua.md)):
+
+```sh
+leon block call set_resume '{"command": ["claude", "--resume", "c7583d2c-3133-4d13-b5f0-45883f1cabcb"]}'
+```
 
 ## Automation
 
@@ -344,7 +386,9 @@ Run, start, stop or check the server.
 ### `leon server run`
 
 Run the server in the foreground. Sessions are saved in `$LEON_STATE_DIR` (default
-`~/.local/state/leon`) when it stops, and restored when it starts.
+`~/.local/state/leon`) when it stops, and restored when it starts. A restored block runs a fresh
+shell under the text it showed before, and offers its resume command if a program registered one;
+nothing else that ran is run again.
 
 - `--config PATH`: the Lua config (default as for `leon config check`).
 - `--restore[=BOOL]`: restore the sessions saved when the last server stopped (default true).
@@ -357,7 +401,8 @@ Start a server in the background. Does nothing if one runs (except make it persi
 
 ### `leon server stop`
 
-Stop the server. Every program in every session ends; the sessions are saved for the next start.
+Stop the server. Every program in every session ends; the sessions are saved for the next start,
+with the text each terminal shows (in the private state dir, 0600).
 
 - `--discard`: don't save, and forget the sessions saved before, so the next start is empty.
 
@@ -377,7 +422,9 @@ Print the guide for agents driving leon (a SKILL.md).
 
 ### `leon skill setup`
 
-Install the skill and a session-start hook for each agent found.
+Install the skill and a session-start hook for each agent found. The hook runs
+`leon skill hook --agent claude|codex`, which tells the agent where it is and records how to
+resume its session after a restart (see [agents.md](agents.md)).
 
 - `--agent claude|codex`: only this agent.
 - `--dry-run`: print what would change; write nothing.

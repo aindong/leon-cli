@@ -101,6 +101,22 @@ Most commands take `--json` for machine-readable output.
 - Don't type into or read the user's own terminals unless they ask: their screens can hold secrets,
   and keys you send run in their shell.
 
+## After a restart
+
+When the leon server restarts (a reboot, `leon server stop`), programs end; each block comes back
+as a fresh shell under its old text. leon's session-start hook already records how to resume
+Claude Code (`claude --resume <id>`) or Codex (`codex resume <id>`) for your own block, and the
+restored block offers that command. Another program that can pick up where it left off can
+register its own, for its own block only:
+
+```sh
+leon block call set_resume -b "$LEON_BLOCK" '{"command": ["my-tool", "--resume", "42"]}'
+```
+
+`{"command": null}` clears it; `leon block inspect` shows it. Never register a command for a block
+that isn't yours, and never one with side effects (a deploy, a migration): the user's `resume`
+setting may run it without asking.
+
 ## The API
 
 Every command is a call to the server's API, and the API describes itself:
