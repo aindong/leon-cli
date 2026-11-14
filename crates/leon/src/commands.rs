@@ -99,6 +99,7 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         | Cmd::SendKey { .. }
         | Cmd::Capture { .. }
         | Cmd::Wait { .. }
+        | Cmd::Notify { .. }
         | Cmd::Block(_) => crate::blocks::run(&mut c, cli)?,
         Cmd::Split { .. }
         | Cmd::Focus { .. }

@@ -17,7 +17,7 @@ fn worst() -> Frame {
                 cells: 1,
                 text,
                 fg: n & 0xff_ffff,
-                bold: n % 2 == 0,
+                bold: n.is_multiple_of(2),
                 italic: false,
                 underline: true,
                 strikeout: false,

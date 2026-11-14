@@ -23,7 +23,7 @@ same facts for the server you run.
 - [target](#target): 1
 - [block](#block): 5
 - [client](#client): 3
-- [Block methods: dev.leon.terminal](#block-methods-devleonterminal): 13
+- [Block methods: dev.leon.terminal](#block-methods-devleonterminal): 14
 
 ## help
 
@@ -4916,6 +4916,63 @@ the method's full name as `method` and its input as `args`. The output is `block
 
 </details>
 
+### `dev.leon.terminal.report_status`
+
+*experimental*. Set the block's root program-status record as if its program had sent the OSC 7501 report (`leon notify`), for tools that can't write one to the terminal. The spec's limits apply; text OSC 7501 would drop (controls, line breaks, invisible characters) is a 400.
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `state` | string | yes | `working`, `blocked`, `done` or `error` (also `idle`, or `clear` to remove the record). |
+| `title` | string \| null |  | One line of text, at most 192 bytes. |
+| `msg` | string \| null |  | One line of text, at most 2048 bytes. |
+
+**Output:** none
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "ReportStatus",
+    "type": "object",
+    "properties": {
+      "state": {
+        "description": "`working`, `blocked`, `done` or `error` (also `idle`, or `clear` to remove the record).",
+        "type": "string"
+      },
+      "title": {
+        "description": "One line of text, at most 192 bytes.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "msg": {
+        "description": "One line of text, at most 2048 bytes.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "state"
+    ]
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Empty",
+    "type": "object"
+  }
+}
+```
+
+</details>
+
 ### `dev.leon.terminal.program_status`
 
 *stable*. The OSC 7501 program-status records.
@@ -4960,7 +5017,7 @@ the method's full name as `method` and its input as `args`. The output is `block
 
 ### `dev.leon.terminal.lines`
 
-*experimental*. Rows by absolute line number, from the scrollback and the screen, as `block.watch` sends them; lines no longer kept are left out. With the numbering they were read under.
+*experimental*. Rows by absolute line number, from the scrollback and the screen, as `block.watch` sends them; lines no longer kept are left out, and so are the last ones past 4 MiB (ask again for them). With the numbering they were read under.
 
 **Input:** 
 

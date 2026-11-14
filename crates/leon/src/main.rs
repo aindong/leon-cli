@@ -129,6 +129,19 @@ pub enum Cmd {
         #[arg(long)]
         trim: bool,
     },
+    /// Report a status for your own block (-b, else $LEON_BLOCK), as an OSC 7501 report from its
+    /// program would: it shows on the tab, in Activity and as a notification.
+    Notify {
+        /// The state to report.
+        #[arg(long, value_enum, default_value = "done")]
+        state: NotifyState,
+        /// One line naming what it is about (at most 192 bytes).
+        #[arg(long, value_name = "T")]
+        title: Option<String>,
+        /// One line saying more (at most 2048 bytes).
+        #[arg(long, value_name = "B")]
+        body: Option<String>,
+    },
     /// Wait for a terminal's program to exit, and exit with its status.
     Wait {
         /// The block to wait for [default: -b, else $LEON_BLOCK].
@@ -443,6 +456,14 @@ pub enum SessionCmd {
         #[arg(required = true)]
         targets: Vec<String>,
     },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum NotifyState {
+    Working,
+    Blocked,
+    Done,
+    Error,
 }
 
 #[derive(Subcommand)]

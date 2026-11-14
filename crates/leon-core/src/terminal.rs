@@ -356,6 +356,36 @@ impl Terminal {
         gone.into_iter().for_each(|c| (self.notify)(Notice::ProgramStatus(c)));
     }
 
+    /// Set this terminal's root record as an OSC 7501 report from its program would (`leon notify`):
+    /// built into a report and run through the same parser, so the spec's limits and text rules
+    /// hold. A title or msg the parser would drop is refused instead, so the caller hears of it.
+    pub fn report_status(&self, state: &str, title: Option<&str>, msg: Option<&str>) -> Result<(), String> {
+        use base64::Engine as _;
+        let b64 = |t: &str| base64::engine::general_purpose::STANDARD.encode(t);
+        let mut payload = format!("state={state}");
+        for (key, text) in [("title", title), ("msg", msg)] {
+            if let Some(t) = text {
+                payload.push_str(&format!(":{key}={}", b64(t)));
+            }
+        }
+        use crate::program_status::Ignored;
+        let message = crate::program_status::parse(payload.as_bytes()).map_err(|e| match e {
+            Ignored::TooLong(key) => format!("the {key} is too long"),
+            _ => format!("{state:?} is not a state: working, blocked, done, error, idle or clear"),
+        })?;
+        if let crate::program_status::Message::Set { record, .. } = &message {
+            if title.is_some() && record.title.is_none() || msg.is_some() && record.msg.is_none() {
+                return Err("a title or body must be one line of visible text".into());
+            }
+        }
+        let changes = lock(&self.tracker).store.apply(message);
+        if !changes.is_empty() {
+            self.generation.send_modify(|g| *g += 1);
+        }
+        changes.into_iter().for_each(|c| (self.notify)(Notice::ProgramStatus(c)));
+        Ok(())
+    }
+
     /// Whether the program asked for bracketed paste (a line editor does while it reads a line).
     pub fn bracketed_paste(&self) -> bool {
         lock(&self.term).mode().contains(TermMode::BRACKETED_PASTE)
