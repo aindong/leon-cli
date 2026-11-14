@@ -134,6 +134,12 @@ impl Workspace {
                 )
                 .on_mouse_up(b, cx.listener(move |ws, ev: &MouseUpEvent, _, cx| ws.mouse_up(&up, ev, cx)));
         }
+        // a drag released outside the pane still ends its selection or report there
+        let out = id.to_string();
+        d = d.on_mouse_up_out(
+            MouseButton::Left,
+            cx.listener(move |ws, ev: &MouseUpEvent, _, cx| ws.mouse_up(&out, ev, cx)),
+        );
         let (moved, wheel) = (id.to_string(), id.to_string());
         d.on_mouse_move(cx.listener(move |ws, ev: &MouseMoveEvent, _, cx| ws.mouse_move(&moved, ev, cx)))
             .on_scroll_wheel(cx.listener(move |ws, ev: &gpui::ScrollWheelEvent, _, cx| ws.wheel(&wheel, ev, cx)))

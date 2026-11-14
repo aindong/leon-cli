@@ -89,8 +89,9 @@ impl Workspace {
         let Some(f) = self.term.find.as_ref() else { return };
         let (id, was) = (f.block.clone(), f.current.and_then(|i| f.matches.get(i)).copied());
         let args = json!({ "query": f.query, "regex": f.regex, "case_sensitive": f.case });
-        let got = self.term_call(&id, "find", args);
+        // read first: output arriving during the call brings another run
         let seen = self.app.model().screen_updates.get(&id).copied();
+        let got = self.term_call(&id, "find", args);
         let Some(f) = self.term.find.as_mut() else { return };
         (f.seen, f.ran) = (seen, Instant::now());
         match got {

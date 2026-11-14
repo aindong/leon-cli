@@ -209,8 +209,13 @@ impl X10Scanner {
                     Scan::Params
                 }
                 (Scan::Params, b'h' | b'l') => {
-                    if self.params.split(|&c| c == b';').any(|p| p == b"9") {
-                        self.on = b == b'h';
+                    // the mouse modes replace each other (xterm): setting or resetting another ends X10
+                    for p in self.params.split(|&c| c == b';') {
+                        match p {
+                            b"9" => self.on = b == b'h',
+                            b"1000" | b"1001" | b"1002" | b"1003" => self.on = false,
+                            _ => {}
+                        }
                     }
                     Scan::Text
                 }

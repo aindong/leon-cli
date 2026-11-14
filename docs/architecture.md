@@ -92,12 +92,14 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 - **Scrollback in the app.** Every terminal numbers its lines: `scrolled` counts the lines ever
   pushed into its scrollback, so the screen's top row is line `scrolled`, the oldest kept is
   `scrolled - history`, and appended output never renumbers a line. The count is taken per 4 KiB
-  slice of parsed output (a byte pushes at most one line, short of `CSI n S`): while the scrollback
-  isn't full, as its growth; once it is, the way alacritty's `clear_viewport` counts, by pinning the
-  primary grid's display offset at 1 before the slice and reading how far alacritty moved it (it is
-  set back to 0 under the same lock, so frames never see it). A slice whose count can't be known
-  (it overflowed the scrollback, or held a history clear) moves the count past anything a client
-  keeps, so no old number lands on a new line. Screen updates carry `scrolled`, `history`,
+  slice of parsed output as how far the newest history row moved: alacritty rotates rows rather
+  than copying them, so a kept row's cells stay at one address, and scrolls that never reach the
+  scrollback (a delete-line, a top margin) move no history row. A row pushed out of a full
+  scrollback is reused, so alacritty's display offset, pinned at 1 for the slice, says when a slice
+  may have pushed the whole scrollback's worth (it caps there); it is set back to 0 whenever the
+  primary screen shows, so frames never see it. A slice whose count can't be known (that
+  overflow, a history clear, an alt-screen switch) moves the count past anything a client keeps,
+  so no old number lands on a new line; a resize keeps `scrolled` at least `history`. Screen updates carry `scrolled`, `history`,
   `alt_screen`, `alternate_scroll` and `mouse`. History goes over in ranges, never streamed:
   `dev.leon.terminal.lines {from, count ≤ 1000}` returns rows by absolute number in the screen's row
   shape. The app keeps per pane the top line while scrolled back (None follows the output), a

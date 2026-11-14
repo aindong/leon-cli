@@ -117,7 +117,7 @@ pub fn decoded(uri: &str) -> String {
 
 /// alacritty's point for `pos` (line 0 is the screen's top), if that cell is in the grid.
 fn point<T>(term: &Term<T>, scrolled: usize, pos: Pos) -> Option<Point> {
-    let line = i32::try_from(pos.line as i64 - scrolled as i64).ok()?;
+    let line = i32::try_from(i64::try_from(pos.line).ok()?.checked_sub(i64::try_from(scrolled).ok()?)?).ok()?;
     let inside = (term.topmost_line().0..=term.bottommost_line().0).contains(&line) && pos.col < term.columns();
     inside.then_some(Point::new(Line(line), Column(pos.col)))
 }
@@ -197,9 +197,11 @@ pub fn select<T>(
     head: Pos,
     text: bool,
 ) -> Option<Selected> {
-    let a = point(term, scrolled, anchor)?;
     let last = Pos { line: scrolled + term.screen_lines() - 1, col: term.columns() - 1 };
     let oldest = scrolled.saturating_sub(term.grid().history_size());
+    // an anchor the scrollback dropped meanwhile (select-all while output streams) starts at the oldest
+    let anchor = if anchor.line < oldest { Pos { line: oldest, col: 0 } } else { anchor };
+    let a = point(term, scrolled, anchor)?;
     let head = Pos { line: head.line.clamp(oldest, last.line), col: head.col.min(last.col) };
     let b = point(term, scrolled, head)?;
     let (mut lo, mut hi) = if kind == Kind::Block {

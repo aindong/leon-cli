@@ -111,3 +111,12 @@ fn the_x10_scanner_follows_set_and_reset_even_split() {
     s.feed(b";9h");
     assert!(!s.on(), "an endless parameter is dropped, not buffered");
 }
+
+#[test]
+fn a_later_mouse_mode_replaces_x10() {
+    let mut s = X10Scanner::default();
+    s.feed(b"\x1b[?9h\x1b[?1000h\x1b[?1000l");
+    assert!(!s.on(), "1000 set then reset leaves no mouse mode, as in xterm");
+    s.feed(b"\x1b[?9h\x1b[?1003l");
+    assert!(!s.on(), "resetting any mouse mode ends X10 too");
+}

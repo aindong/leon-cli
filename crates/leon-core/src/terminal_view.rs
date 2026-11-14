@@ -2,6 +2,7 @@
 //! find, selections, links, and mouse reports (docs/architecture.md, "Scrollback in the app").
 
 use alacritty_terminal::grid::Scroll;
+use alacritty_terminal::index::{Column, Line};
 
 use super::*;
 use crate::mouse;
@@ -10,7 +11,8 @@ use crate::search::{self, Found, Kind, Link, Pos, Query, Selected};
 use crate::theme::Theme;
 
 /// Output is counted this many bytes at a time: a byte pushes at most one line into the
-/// scrollback (short of `CSI n S`), so a slice can't push the whole scrollback's worth.
+/// scrollback (short of `CSI n S`), so a slice rarely pushes the whole scrollback's worth, and
+/// finding the newest history row again takes at most a slice's pushes.
 const SLICE: usize = 4096;
 /// What the count moves by when a slice's pushes can't be known: past anything a client keeps,
 /// so no old number lands on a new line.
@@ -31,30 +33,40 @@ pub(super) fn feed(term: &mut Term<Listener>, parser: &mut Processor, bytes: &[u
     }
 }
 
-/// Run `f` and return how many lines it pushed into the primary screen's scrollback. While the
-/// scrollback isn't full that is its growth. Once it is, the count is alacritty's own (its
-/// `clear_viewport` counts this way): a display offset off the bottom grows by every line
-/// pushed, so it is set to 1 first and put back to 0 after. Nothing reads it in between.
+/// Run `f` and return how many lines it pushed into the primary screen's scrollback: how far
+/// the newest history row moved. Rows are rotated, never copied, so a row's cells stay at one
+/// address while it is kept; scrolls that don't reach the scrollback (a delete-line, a top
+/// margin) move no history row and count nothing. A row pushed out of the scrollback is reused,
+/// so a slice that pushed the whole scrollback's worth could find it again in a new place:
+/// alacritty's display offset, set to 1 first, grows with every scroll and caps at the
+/// scrollback's size, which says when that may have happened. It is put back to 0 whenever the
+/// primary screen is showing, so no frame sees it.
 fn counting(term: &mut Term<Listener>, f: impl FnOnce(&mut Term<Listener>)) -> usize {
     let primary = !term.mode().contains(TermMode::ALT_SCREEN);
+    let newest = |t: &Term<Listener>| &t.grid()[Line(-1)][Column(0)] as *const _;
     let before = term.grid().history_size();
-    let pinned = primary && before > 0;
-    if pinned {
+    let anchor = (primary && before > 0).then(|| newest(term));
+    if anchor.is_some() {
         term.grid_mut().scroll_display(Scroll::Delta(1));
     }
     f(term);
     if term.mode().contains(TermMode::ALT_SCREEN) {
-        return 0; // the primary grid keeps its offset until it is back; counted then
+        // the primary screen sits untouched under the alternate one (its offset is reset on return)
+        return if primary { GAP } else { 0 };
     }
     let g = term.grid_mut();
-    let (offset, after) = (g.display_offset(), g.history_size());
+    let (overflowed, after) = (g.display_offset() >= SCROLLBACK, g.history_size());
     g.scroll_display(Scroll::Bottom);
-    match offset {
-        SCROLLBACK => GAP, // the offset hit the cap: more were pushed than it says
-        1.. => offset - 1, // pinned (here, or before an alt-screen spell)
-        0 if primary && !pinned && after < SCROLLBACK => after - before,
-        0 if primary && !pinned => GAP, // filled from empty in one slice: unknown
-        _ => GAP + after,               // a clear reset the offset, or the alt screen hid the count
+    match anchor {
+        _ if !primary || overflowed => GAP + after, // a switch hid what was pushed, or it overflowed
+        None if after < SCROLLBACK => after,        // filled from empty
+        None => GAP,
+        Some(a) => {
+            let g = term.grid();
+            (1..=after as i32)
+                .find(|&n| std::ptr::eq(&g[Line(-n)][Column(0)], a))
+                .map_or(GAP + after, |n| n as usize - 1)
+        }
     }
 }
 
@@ -79,7 +91,7 @@ impl Terminal {
     pub fn lines(&self, from: usize, count: usize, theme: &Theme) -> Lines {
         self.with_term(|term| {
             let scrolled = self.scrolled();
-            let start = (from as i64 - scrolled as i64).clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+            let start = (from as i128 - scrolled as i128).clamp(i32::MIN as i128, i32::MAX as i128) as i32;
             let rows = screen::grid_rows(term, theme, start, count.min(MAX_LINES));
             let rows = rows.into_iter().map(|(l, spans, backgrounds)| Row {
                 line: (scrolled as i64 + l as i64) as usize,

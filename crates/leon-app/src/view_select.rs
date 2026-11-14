@@ -49,7 +49,8 @@ impl Workspace {
         }
         if self.reports(id, &ev.modifiers) {
             self.report(id, "press", button(ev.button), ev.position, &ev.modifiers);
-            self.term.panes.entry(id.to_string()).or_default().reporting = button(ev.button);
+            let pv = self.term.panes.entry(id.to_string()).or_default();
+            pv.reporting = pv.reporting.or(button(ev.button)); // the first button held is the one tracked
             return;
         }
         let Some(at) = self.pos_at(id, ev.position).filter(|_| ev.button == MouseButton::Left) else { return };
