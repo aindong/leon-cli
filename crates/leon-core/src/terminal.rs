@@ -6,6 +6,7 @@ use std::io::{self, Read, Write};
 use std::os::fd::FromRawFd;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -30,7 +31,9 @@ pub struct Spec {
     pub env: Vec<(String, String)>,
 }
 
-type Writer = Arc<Mutex<File>>;
+/// Input for the program, written to the PTY by a thread of its own: a program that stops reading
+/// fills the PTY's queue, and a write then blocks until it reads again.
+type Writer = mpsc::Sender<Vec<u8>>;
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
@@ -42,7 +45,7 @@ struct Replies(Writer);
 impl EventListener for Replies {
     fn send_event(&self, event: Event) {
         if let Event::PtyWrite(text) = event {
-            let _ = lock(&self.0).write_all(text.as_bytes());
+            let _ = self.0.send(text.into_bytes());
         }
     }
 }
@@ -112,7 +115,10 @@ impl Terminal {
         if dup < 0 {
             return Err(io::Error::last_os_error());
         }
-        let writer: Writer = Arc::new(Mutex::new(unsafe { File::from_raw_fd(dup) }));
+        let mut pty_in = unsafe { File::from_raw_fd(dup) };
+        let (writer, input) = mpsc::channel::<Vec<u8>>();
+        // Ends once every sender is gone, or when the PTY closes.
+        std::thread::spawn(move || input.iter().try_for_each(|data| pty_in.write_all(&data)));
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
         let term = Arc::new(Mutex::new(Term::new(config, &Size, Replies(writer.clone()))));
 
@@ -133,8 +139,11 @@ impl Terminal {
         self.pid
     }
 
+    /// Queue input for the program; never blocks.
     pub fn write(&self, data: &[u8]) -> io::Result<()> {
-        lock(&self.writer).write_all(data)
+        self.writer
+            .send(data.to_vec())
+            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "the terminal has closed"))
     }
 
     /// Press one key given in binding syntax (`enter`, `ctrl+c`, `up`).
@@ -253,6 +262,21 @@ mod tests {
         let text = screen_until(&t, |s| s.contains("got-abc"));
         assert!(text.lines().any(|l| l == "got-abc"), "{text:?}");
         assert_eq!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), 4);
+    }
+
+    #[test]
+    fn writes_never_block_on_a_program_that_does_not_read() {
+        // Raw mode: the line discipline queues input instead of dropping what doesn't fit.
+        let (t, _rx) = spawn(&["sh", "-c", "stty raw -echo; echo ready; sleep 300"]);
+        screen_until(&t, |s| s.contains("ready"));
+        let t = Arc::new(t);
+        let (done, finished) = mpsc::channel();
+        let writer = t.clone();
+        std::thread::spawn(move || {
+            writer.write(&vec![b'x'; 256 << 10]).unwrap(); // far past the PTY's input buffer
+            done.send(()).unwrap();
+        });
+        finished.recv_timeout(Duration::from_secs(5)).expect("write blocked on a full PTY");
     }
 
     #[test]
