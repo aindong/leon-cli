@@ -58,8 +58,7 @@ trap 'rm -rf "$stage"' EXIT
 app="$stage/Leon.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/leon"
-swift "$repo/scripts/icon.swift" "$stage/Leon.iconset"
-iconutil -c icns -o "$app/Contents/Resources/Leon.icns" "$stage/Leon.iconset"
+cp "$repo/brand/icon/Leon.icns" "$app/Contents/Resources/Leon.icns"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

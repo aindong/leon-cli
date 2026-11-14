@@ -90,7 +90,7 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread
   stalled the program while it parsed (docs/performance.md).
 - **Packaging.** `scripts/bundle.sh` wraps the one `leon` binary in `Leon.app` (bundle id
-  `dev.leon.app`, version from `leon --version`, an icon drawn by `scripts/icon.swift`, ad-hoc
+  `dev.leon.app`, version from `leon --version`, the brand icon `brand/icon/Leon.icns`, ad-hoc
   signed); opened from Finder it runs with no arguments, which opens the app. `scripts/install.sh`
   copies the app to `~/Applications` and links `~/.local/bin/leon` to the binary inside it. Both
   replace only what they made: an app with our bundle id, or a link whose text is our binary's path.
