@@ -4,6 +4,11 @@
 /// The bytes for one key. `app_cursor` is the terminal's application-cursor mode (DECCKM).
 pub fn encode(key: &str, app_cursor: bool) -> Result<Vec<u8>, String> {
     let bad = || format!("unknown key {key:?}");
+    // A lone character types itself, case and all (`A`, `+`); only names and modifiers fold case.
+    let mut chars = key.trim().chars();
+    if let (Some(c), None) = (chars.next(), chars.next()) {
+        return if c.is_control() { Err(bad()) } else { Ok(c.to_string().into_bytes()) };
+    }
     let lower = key.trim().to_lowercase();
     let mut parts: Vec<&str> = lower.split('+').collect();
     let name = parts.pop().filter(|n| !n.is_empty()).ok_or_else(bad)?;
