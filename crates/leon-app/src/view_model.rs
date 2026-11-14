@@ -24,18 +24,14 @@ impl Workspace {
                     .iter()
                     .map(|w| WindowRow {
                         id: w.id.clone(),
-                        title: w.label.clone().unwrap_or_else(|| {
-                            let shown = target(w).and_then(|id| s.blocks.iter().find(|b| b.id == id));
-                            shown
-                                .map_or("empty".into(), |b| b.title.clone().unwrap_or_else(|| program_name(&b.command)))
-                        }),
+                        title: switcher::tab_title(s, w),
                         status: status::aggregate(s.blocks.iter().filter(|b| b.window_id == w.id).map(shows)),
                     })
                     .collect();
                 SessionRow {
                     host,
                     id: s.id.clone(),
-                    title: s.label.clone().unwrap_or_else(|| format!("Session {}", i + 1)),
+                    title: switcher::session_title(s, i),
                     status: status::aggregate(windows.iter().map(|w| w.status)),
                     windows,
                     active: s.active,

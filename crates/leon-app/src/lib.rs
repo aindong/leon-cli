@@ -14,6 +14,7 @@ pub mod remote;
 pub mod render;
 pub mod scrollback;
 pub mod status;
+pub mod switcher;
 pub mod theme;
 pub mod view;
 

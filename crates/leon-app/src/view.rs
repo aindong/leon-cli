@@ -33,6 +33,7 @@ use crate::panes::{self, Divider, GAP};
 use crate::remote::Remote;
 use crate::render::{self, Frame};
 use crate::status::{self, Indicator};
+use crate::switcher;
 use crate::theme::{Theme, DARK, SECONDARY_TEXT, UI_TEXT};
 
 actions!(
@@ -201,6 +202,8 @@ struct Palette {
     selected: usize,
     /// Asking for text instead of listing actions (Add Host…), with the last refusal.
     ask: Option<(hosts_view::Ask, Option<String>)>,
+    /// The session switcher (⌘K): places to go instead of actions.
+    switch: bool,
 }
 
 /// The last `client.keymap` reply, handed over from the runtime thread that fetched it.
@@ -279,6 +282,8 @@ pub struct Workspace {
     /// The chords of a sequence typed so far (`ctrl+b`).
     pending: Vec<Chord>,
     palette: Option<Palette>,
+    /// Window ids of the tabs shown, most recent first (the switcher's order).
+    recent: Vec<String>,
     font_size: f32,
     /// Where the spinner's clock starts.
     epoch: Instant,
@@ -392,6 +397,7 @@ impl Workspace {
             keymap_asked: None,
             pending: Vec::new(),
             palette: None,
+            recent: Vec::new(),
             font_size: FONT_SIZE,
             epoch: Instant::now(),
             seen_focus: None,
@@ -519,6 +525,8 @@ mod select;
 mod sidebar;
 #[path = "view_stats.rs"]
 mod stats;
+#[path = "view_switch.rs"]
+mod switch;
 use bars::status_mark;
 use paint::*;
 use panes_view::*;

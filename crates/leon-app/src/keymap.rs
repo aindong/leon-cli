@@ -28,6 +28,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+-", "client.font.decrease"),
     ("cmd+0", "client.font.reset"),
     ("cmd+shift+p", "client.palette.toggle"),
+    ("cmd+k", "session.switch"),
     ("cmd+c", "pane.copy"),
     ("cmd+a", "pane.select_all"),
     ("cmd+f", "client.find.open"),

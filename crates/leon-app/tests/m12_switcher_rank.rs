@@ -64,9 +64,15 @@ fn a_query_puts_the_best_match_first_and_recency_breaks_ties() {
 fn a_block_row_shows_only_when_its_title_matches() {
     let t = tab("This Mac", "web", "zsh", "w1");
     let blocks = vec![block(&t, "b1", "claude: fixing the tests")];
-    assert!(rank(&[t.clone()], &blocks, "", &[]).iter().all(|r| r.block_id.is_none()), "no query: tabs only");
-    assert!(rank(&[t.clone()], &blocks, "web", &[]).iter().all(|r| r.block_id.is_none()), "web is not its title");
-    let rows = rank(&[t.clone()], &blocks, "claude", &[]);
+    assert!(
+        rank(std::slice::from_ref(&t), &blocks, "", &[]).iter().all(|r| r.block_id.is_none()),
+        "no query: tabs only"
+    );
+    assert!(
+        rank(std::slice::from_ref(&t), &blocks, "web", &[]).iter().all(|r| r.block_id.is_none()),
+        "web is not its title"
+    );
+    let rows = rank(std::slice::from_ref(&t), &blocks, "claude", &[]);
     assert_eq!(rows.len(), 1, "{:?}", names(&rows));
     assert_eq!(rows[0].block_id.as_deref(), Some("b1"));
     assert_eq!(rows[0].text(), "This Mac › web › zsh › claude: fixing the tests");

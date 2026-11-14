@@ -3,6 +3,7 @@
 /// The app's own actions the palette offers, as (action name, title).
 pub const BUILTINS: &[(&str, &str)] = &[
     ("session.new", "New Session"),
+    ("session.switch", "Switch Session or Tab…"),
     ("client.tab.new", "New Tab"),
     ("pane.split.right", "Split Right"),
     ("pane.split.down", "Split Below"),

@@ -93,6 +93,7 @@ impl Workspace {
     ) {
         match name {
             "session.new" => self.new_session_on(self.host_arg(args), cx),
+            "session.switch" => self.switch_action(args, cx),
             "client.host.add" => self.ask_host(cx),
             "client.tab.new" => self.new_tab(&NewTab, window, cx),
             "client.tab.next" => self.step_tab(1, cx),
@@ -131,7 +132,7 @@ impl Workspace {
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
-                    None => Some(Palette { query: String::new(), selected: 0, ask: None }),
+                    None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: false }),
                 };
                 cx.notify();
             }
@@ -211,6 +212,9 @@ impl Workspace {
 
     pub(super) fn palette_matches(&self) -> Vec<Item> {
         let Some(p) = self.palette.as_ref().filter(|p| p.ask.is_none()) else { return Vec::new() };
+        if p.switch {
+            return self.switcher_items(&p.query);
+        }
         let items = self.palette_items();
         palette::filter(&items, &p.query).into_iter().map(|i| items[i].clone()).collect()
     }
@@ -238,7 +242,8 @@ impl Workspace {
         let m = &ks.modifiers;
         let named = |name: &str| ks.key == name && !m.platform && !m.control;
         let toggle = chord.is_some_and(|c| {
-            matches!(self.keymap.press(&[], c), Pressed::Run(b) if b.action.as_deref() == Some("client.palette.toggle"))
+            let toggles = ["client.palette.toggle", "session.switch"];
+            matches!(self.keymap.press(&[], c), Pressed::Run(b) if b.action.as_deref().is_some_and(|a| toggles.contains(&a)))
         });
         let matches = self.palette_matches();
         let Some(p) = self.palette.as_mut() else { return };
@@ -246,10 +251,14 @@ impl Workspace {
             self.palette = None;
         } else if named("enter") && p.ask.is_some() {
             self.ask_enter(cx);
-        } else if named("enter") {
+        } else if named("enter") || (ks.key == "enter" && m.platform && p.switch) {
             let pick = matches.into_iter().nth(p.selected);
             self.palette = None;
-            if let Some(item) = pick {
+            if let Some(mut item) = pick {
+                if m.platform {
+                    item.args.get_or_insert_with(|| json!({}))["split"] = json!(true);
+                    // ⌘↩: in a split
+                }
                 self.run_action(&item.name, item.args.as_ref(), "palette", window, cx);
             }
         } else if named("down") || (m.control && ks.key == "n") {
