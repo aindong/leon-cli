@@ -46,7 +46,10 @@ pub(super) fn process_cwd(pid: i32) -> Option<PathBuf> {
 
 #[cfg(target_os = "linux")]
 pub(super) fn process_cwd(pid: i32) -> Option<PathBuf> {
-    std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::fs::read_link(format!("/proc/{pid}/cwd")).ok()?;
+    // a removed directory reads "<path> (deleted)": there is nothing there to start a split in
+    (!path.as_os_str().as_bytes().ends_with(b" (deleted)")).then_some(path)
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]

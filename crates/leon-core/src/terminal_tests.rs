@@ -52,6 +52,21 @@ fn writes_never_block_on_a_program_that_does_not_read() {
 }
 
 #[test]
+fn a_removed_cwd_is_not_reported() {
+    let dir = tempfile::tempdir().unwrap();
+    let start = std::fs::canonicalize(dir.path()).unwrap();
+    std::fs::create_dir(start.join("gone")).unwrap();
+    let spec = Spec { command: vec!["sh".into()], cwd: Some(start.clone()), env: vec![] };
+    let t = Terminal::spawn(spec, |_| {}).unwrap();
+    t.write(b"cd gone; echo in-$((40+2))\r").unwrap();
+    screen_until(&t, |s| s.lines().any(|l| l == "in-42"));
+    std::fs::remove_dir(start.join("gone")).unwrap();
+    // Linux's /proc/<pid>/cwd then reads "<path> (deleted)", which is no directory to start in
+    let cwd = t.cwd().unwrap();
+    assert!(!cwd.to_string_lossy().ends_with(" (deleted)"), "reported {cwd:?}");
+}
+
+#[test]
 fn cwd_follows_the_shell_then_osc7_then_the_start_dir() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir(dir.path().join("sub")).unwrap();
