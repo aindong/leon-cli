@@ -50,6 +50,18 @@ pub enum Cmd {
     /// List, describe and call server API methods.
     #[command(subcommand)]
     Api(ApiCmd),
+    /// Check the Lua config.
+    #[command(subcommand)]
+    Config(ConfigCmd),
+}
+
+#[derive(Subcommand)]
+pub enum ConfigCmd {
+    /// Load a config without applying it: print counts and diagnostics, exit 1 on error. Needs no server.
+    Check {
+        /// [default: $LEON_CONFIG, else $XDG_CONFIG_HOME/leon/init.lua, else ~/.config/leon/init.lua]
+        path: Option<std::path::PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]

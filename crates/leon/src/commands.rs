@@ -7,16 +7,19 @@ use leon_core::ApiError;
 use serde_json::{json, Value};
 
 use crate::client::{connect, spawn_server, Client, Fail};
-use crate::{ApiCmd, Cli, Cmd, ServerCmd, SessionCmd, WindowCmd};
+use crate::{ApiCmd, Cli, Cmd, ConfigCmd, ServerCmd, SessionCmd, WindowCmd};
 
 pub fn run(cli: &Cli) -> Result<(), Fail> {
     let socket = socket_path();
     if let Cmd::Server(cmd) = &cli.cmd {
         return server(cli, cmd);
     }
+    if let Cmd::Config(ConfigCmd::Check { path }) = &cli.cmd {
+        return config_check(path.clone());
+    }
     let mut c = connect(&socket, cli.autostart)?;
     match &cli.cmd {
-        Cmd::Server(_) => unreachable!(),
+        Cmd::Server(_) | Cmd::Config(_) => unreachable!(),
         Cmd::New { label } | Cmd::Session(SessionCmd::New { label }) => {
             let r = c.call("session.create", json!({ "label": label }))?;
             println!("{}", r["session_id"].as_str().unwrap_or_default());
@@ -65,6 +68,30 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         Cmd::Api(cmd) => api(&mut c, cli, cmd)?,
     }
     Ok(())
+}
+
+/// Exit 1 when the load fails or a `leon.*` call was skipped; warnings and logs don't fail it.
+fn config_check(path: Option<std::path::PathBuf>) -> Result<(), Fail> {
+    let path = path
+        .or_else(leon_lua::config_path)
+        .ok_or_else(|| Fail::Other("no config path: set LEON_CONFIG or HOME".into()))?;
+    let cfg = leon_lua::load(&path).map_err(|e| Fail::Other(e.to_string()))?;
+    let n = |n: usize, what: &str| format!("{n} {what}{}", if n == 1 { "" } else { "s" });
+    println!(
+        "{}: {}, {}, {}",
+        path.display(),
+        n(cfg.bindings.len(), "binding"),
+        n(cfg.modes.len(), "mode"),
+        n(cfg.actions.len(), "action")
+    );
+    for d in cfg.diagnostics.iter().chain(&cfg.logs) {
+        println!("{d}");
+    }
+    let errors = cfg.diagnostics.iter().filter(|d| d.level == leon_lua::Level::Error).count();
+    match errors {
+        0 => Ok(()),
+        n => Err(Fail::Other(format!("{n} error{} in {}", if n == 1 { "" } else { "s" }, path.display()))),
+    }
 }
 
 fn window(c: &mut Client, cli: &Cli, cmd: &WindowCmd) -> Result<(), Fail> {

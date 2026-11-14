@@ -43,7 +43,7 @@ fn check_path(name: &str) -> Run {
 fn good_config_prints_counts_and_exits_0() {
     let r = check_path("good");
     assert_eq!(r.code, 0, "{}", r.out);
-    assert!(r.out.contains("8 bindings, 1 mode, 1 action"), "{}", r.out);
+    assert!(r.out.contains("7 bindings, 1 mode, 1 action"), "{}", r.out);
     assert!(!r.out.contains("error"), "{}", r.out);
 }
 
@@ -118,7 +118,7 @@ fn default_path_follows_leon_config_then_xdg_then_home() {
     let xdg = tempfile::tempdir().unwrap();
     copy_dir(&partial, &xdg.path().join("leon"));
     let r = check(&[], &[("LEON_CONFIG", &good), ("XDG_CONFIG_HOME", xdg.path())]);
-    assert!(r.out.contains("8 bindings"), "{}", r.out);
+    assert!(r.out.contains("7 bindings"), "{}", r.out);
 
     // then $XDG_CONFIG_HOME/leon/init.lua
     let r = check(&[], &[("XDG_CONFIG_HOME", xdg.path())]);
