@@ -133,3 +133,18 @@ fn cmd_b_toggles_the_sidebar(cx: &mut TestAppContext) {
     assert!(ws.read_with(cx, |ws, _| ws.sidebar_visible()));
     s.app.stop();
 }
+
+#[gpui::test]
+fn closing_the_last_tab_leaves_an_empty_app_that_cmd_n_recovers(cx: &mut TestAppContext) {
+    let s = setup();
+    let (ws, cx) = open(cx, &s.app);
+    cx.simulate_keystrokes("cmd-w");
+    assert!(s.app.ctx().state().sessions.is_empty(), "the last tab took its session with it");
+    assert_eq!(ws.read_with(cx, |ws, _| ws.session_id()), None);
+    assert!(ws.read_with(cx, |ws, _| ws.terminal()).is_none());
+    cx.simulate_keystrokes("a enter"); // no terminal: keys go nowhere, nothing panics
+    cx.simulate_keystrokes("cmd-n");
+    assert_eq!(s.app.ctx().state().sessions.len(), 1);
+    assert!(ws.read_with(cx, |ws, _| ws.terminal()).is_some());
+    s.app.stop();
+}
