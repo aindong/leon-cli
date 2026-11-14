@@ -109,7 +109,7 @@ impl Workspace {
     /// The pane area's size (w, h): the window less the sidebar and the titlebar row.
     pub(super) fn pane_area(&self, window: &Window) -> (f32, f32) {
         let view = window.viewport_size();
-        let sidebar = if self.sidebar { self.settings.sidebar_width } else { 0. };
+        let sidebar = if self.places().sidebar.is_some() { self.settings.sidebar_width } else { 0. };
         let top = if self.titlebar_shown() { TITLEBAR } else { 0. };
         ((f32::from(view.width) - sidebar).max(0.), (f32::from(view.height) - top).max(0.))
     }

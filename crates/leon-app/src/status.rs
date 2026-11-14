@@ -49,6 +49,16 @@ impl Indicator {
     }
 }
 
+/// The state in a word, for where the program gave no caption.
+pub fn word(i: Indicator) -> &'static str {
+    match i {
+        Indicator::Working { .. } => "working",
+        Indicator::Blocked(_) => "needs you",
+        Indicator::Done => "done",
+        Indicator::Error => "error",
+    }
+}
+
 /// The highest-priority indicator; on a tie the first.
 pub fn aggregate(all: impl IntoIterator<Item = Option<Indicator>>) -> Option<Indicator> {
     all.into_iter().flatten().fold(None, |best, i| match best {

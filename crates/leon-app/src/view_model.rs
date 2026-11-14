@@ -55,6 +55,13 @@ impl Workspace {
         status::caption_of(&self.app.model().block(block_id)?.1.newest_first())
     }
 
+    /// What a pane's header says after its status icon: the program's caption, else the state's word.
+    pub fn header_caption(&self, block_id: &str) -> Option<String> {
+        let m = self.app.model();
+        let r = m.block(block_id)?.1.newest_first();
+        status::caption_of(&r).or_else(|| status::indicator_of(&r).map(|i| status::word(i).to_string()))
+    }
+
     /// What a pane's header names it: the title its program set, else the program and where it is.
     pub fn pane_title(&self, block_id: &str) -> Option<String> {
         let m = self.app.model();
@@ -76,7 +83,9 @@ impl Workspace {
 
     /// Where tabs and sessions are drawn now.
     pub fn places(&self) -> Places {
-        chrome::places(self.settings.tab_style, self.sidebar)
+        // with no session the sidebar has nothing to list: the empty state takes the window
+        let sessions = !self.app.model().sessions.is_empty();
+        chrome::places(self.settings.tab_style, self.sidebar && sessions)
     }
 
     /// Save the settings, when this workspace has a place for them.

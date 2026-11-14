@@ -33,6 +33,7 @@ impl Workspace {
             .items_center()
             .justify_center()
             .size(px(TOOLBAR_TARGET))
+            .tooltip(self.tip(action))
             .rounded(px(6.))
             .cursor_pointer()
             .text_color(rgb(t.muted))
@@ -117,12 +118,20 @@ impl Workspace {
             .h(px(26.))
             .pl(px(10.))
             .pr(px(4.))
-            .max_w(px(220.))
+            .max_w(px(260.))
             .rounded(px(6.))
             .cursor_pointer()
             .when(active, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
             .when(!active, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
-            .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(w.title.clone()))
+            .child(
+                div()
+                    .flex_1()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .min_w(px(0.))
+                    .text_ellipsis()
+                    .child(w.title.clone()),
+            )
             .children(w.status.map(|s| status_mark(s, frame)))
             .when(i < 9, |d| {
                 d.child(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(format!("⌘{}", i + 1)))
@@ -146,6 +155,38 @@ impl Workspace {
                     ),
             )
             .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.focus_window(i, cx)))
+    }
+}
+
+/// A tooltip: what a button does, and the keys that do it.
+struct Tip(SharedString);
+
+impl Render for Tip {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let t = &DARK;
+        div()
+            .px(px(8.))
+            .py(px(4.))
+            .rounded(px(5.))
+            .bg(rgb(t.hover))
+            .border_1()
+            .border_color(rgb(t.border))
+            .font_family(".SystemUIFont")
+            .text_size(px(SECONDARY_TEXT))
+            .text_color(rgb(t.title))
+            .child(self.0.clone())
+    }
+}
+
+impl Workspace {
+    /// A tooltip builder for the button that runs `action`: its palette title and live shortcut.
+    pub(super) fn tip(&self, action: &str) -> impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static {
+        let title = crate::palette::BUILTINS.iter().find(|(n, _)| *n == action).map_or(action, |(_, t)| *t);
+        let text: SharedString = match self.keymap.shortcut(action) {
+            Some(keys) => format!("{title}   {keys}").into(),
+            None => title.to_string().into(),
+        };
+        move |_, cx| cx.new(|_| Tip(text.clone())).into()
     }
 }
 

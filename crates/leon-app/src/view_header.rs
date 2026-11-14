@@ -6,14 +6,12 @@ use super::*;
 impl Workspace {
     pub(super) fn render_header(&self, id: &str, focused: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &DARK;
-        let (caption, shown) = self.app.model().block(id).map_or((None, None), |(_, b)| {
-            let r = b.newest_first();
-            (status::caption_of(&r), status::indicator_of(&r))
-        });
+        let shown = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
+        let caption = self.header_caption(id);
         let frame = shown.and_then(|_| self.spinning(&self.rows())).unwrap_or(0);
         let title = self.pane_title(id).unwrap_or_default();
         let group = SharedString::from(format!("pane-{id}"));
-        let control = |what: &'static str, icon: Icon, cx: &mut Context<Self>| {
+        let control = |what: &'static str, icon: Icon, action: &'static str, cx: &mut Context<Self>| {
             let (block, name) = (id.to_string(), format!("header-{what}-{id}"));
             div()
                 .id(SharedString::from(name.clone()))
@@ -28,17 +26,12 @@ impl Workspace {
                 .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
                 .child(icon.in_button(ROW_ICON, t.muted, t.title, name.clone()))
                 .debug_selector(|| sel(name))
+                .tooltip(self.tip(action))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |ws, _, window, cx| {
                         cx.stop_propagation();
                         ws.focus_block(&block, cx); // the actions act on the focused pane
-                        let action = match what {
-                            "split-right" => "pane.split.right",
-                            "split-down" => "pane.split.down",
-                            "zoom" => "pane.zoom",
-                            _ => "pane.close",
-                        };
                         ws.run_action(action, None, "pane_header", window, cx);
                     }),
                 )
@@ -48,10 +41,10 @@ impl Workspace {
             .flex_none()
             .gap(px(2.))
             .when(!focused, |d| d.invisible().group_hover(group.clone(), |d| d.visible()))
-            .child(control("split-right", Icon::SplitRight, cx))
-            .child(control("split-down", Icon::SplitDown, cx))
-            .child(control("zoom", Icon::Zoom, cx))
-            .child(control("close", Icon::Close, cx));
+            .child(control("split-right", Icon::SplitRight, "pane.split.right", cx))
+            .child(control("split-down", Icon::SplitDown, "pane.split.down", cx))
+            .child(control("zoom", Icon::Zoom, "pane.zoom", cx))
+            .child(control("close", Icon::Close, "pane.close", cx));
         div()
             .debug_selector(|| sel(format!("header-{id}")))
             .flex()
@@ -69,6 +62,7 @@ impl Workspace {
                     .max_w(px(320.))
                     .overflow_hidden()
                     .whitespace_nowrap()
+                    .min_w(px(0.))
                     .text_ellipsis()
                     .text_color(rgb(if focused { t.title } else { t.text }))
                     .child(title),
@@ -81,6 +75,7 @@ impl Workspace {
                     .min_w(px(0.))
                     .overflow_hidden()
                     .whitespace_nowrap()
+                    .min_w(px(0.))
                     .text_ellipsis()
                     .text_color(rgb(t.muted))
                     .children(caption),
@@ -100,7 +95,7 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .h(px(30.))
+                    .h(px(34.))
                     .px(px(10.))
                     .rounded(px(6.))
                     .when(!action.is_empty(), |d| d.cursor_pointer().hover(|d| d.bg(rgb(t.hover))))
@@ -112,7 +107,7 @@ impl Workspace {
                             .bg(rgb(t.hover))
                             .text_color(rgb(t.accent))
                             .font_family(FONT_FAMILY)
-                            .text_size(px(SECONDARY_TEXT))
+                            .text_size(px(UI_TEXT))
                             .child(keys),
                     )
                     .child(div().text_color(rgb(t.text)).child(what))
@@ -134,7 +129,7 @@ impl Workspace {
             .items_center()
             .justify_center()
             .child(mark())
-            .child(div().mt(px(14.)).text_size(px(22.)).text_color(rgb(t.title)).child("leon"))
+            .child(div().mt(px(16.)).text_size(px(28.)).text_color(rgb(t.title)).child("leon"))
             .child(div().text_color(rgb(t.muted)).child("Keep your work in view."))
             .child(hints)
     }
@@ -147,5 +142,5 @@ fn mark() -> impl IntoElement {
         let png = include_bytes!("../../../brand/icon/Leon.iconset/icon_128x128@2x.png");
         Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Png, png.to_vec()))
     });
-    gpui::img(icon.clone()).size(px(72.))
+    gpui::img(icon.clone()).size(px(88.))
 }

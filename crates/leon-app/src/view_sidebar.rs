@@ -51,6 +51,7 @@ impl Workspace {
                                 .flex_1()
                                 .overflow_hidden()
                                 .whitespace_nowrap()
+                                .min_w(px(0.))
                                 .text_ellipsis()
                                 .child(win.title.clone()),
                         )
@@ -136,7 +137,15 @@ impl Workspace {
             .text_size(px(SECONDARY_TEXT))
             .font_weight(FontWeight::MEDIUM)
             .text_color(rgb(if selected { t.text } else { t.muted }))
-            .child(div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(row.title.clone()))
+            .child(
+                div()
+                    .flex_1()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .min_w(px(0.))
+                    .text_ellipsis()
+                    .child(row.title.clone()),
+            )
             .when(!open, |d| {
                 d.children(
                     row.status.map(|s| status_mark(s, frame).debug_selector(|| sel(format!("session-status-{i}")))),
@@ -198,7 +207,15 @@ impl Workspace {
             .cursor_pointer()
             .when(selected, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
             .when(!selected, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
-            .child(div().flex_1().overflow_hidden().whitespace_nowrap().text_ellipsis().child(row.title.clone()))
+            .child(
+                div()
+                    .flex_1()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .min_w(px(0.))
+                    .text_ellipsis()
+                    .child(row.title.clone()),
+            )
             .when(!selected, |d| {
                 d.children(
                     row.status.map(|s| status_mark(s, frame).debug_selector(|| sel(format!("session-status-{i}")))),

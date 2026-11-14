@@ -35,10 +35,16 @@ impl Workspace {
                     .mx(px(4.))
                     .rounded(px(5.))
                     .cursor_pointer()
-                    .when(i == selected, |d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
+                    .when(i == selected, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
                     .when(i != selected, |d| d.text_color(rgb(t.text)))
                     .child(
-                        div().flex_1().overflow_hidden().text_ellipsis().whitespace_nowrap().child(item.title.clone()),
+                        div()
+                            .flex_1()
+                            .overflow_hidden()
+                            .min_w(px(0.))
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .child(item.title.clone()),
                     )
                     .children(
                         item.shortcut
