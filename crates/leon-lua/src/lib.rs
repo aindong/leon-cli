@@ -120,7 +120,7 @@ impl std::error::Error for LoadError {}
 pub fn config_path() -> Option<PathBuf> {
     let var = |k| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
     var("LEON_CONFIG")
-        .or_else(|| var("XDG_CONFIG_HOME").map(|d| d.join("leon/init.lua")))
+        .or_else(|| var("XDG_CONFIG_HOME").filter(|d| d.is_absolute()).map(|d| d.join("leon/init.lua")))
         .or_else(|| var("HOME").map(|h| h.join(".config/leon/init.lua")))
 }
 

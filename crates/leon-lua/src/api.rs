@@ -50,6 +50,9 @@ pub(crate) fn run(path: &Path, src: &[u8]) -> mlua::Result<Config> {
     lua.set_app_data(State::default());
     sandbox(&lua, path)?;
     lua.globals().set("leon", leon_table(&lua)?)?;
+    // Like luaL_loadfile (which `require` uses), ignore a `#` first line but keep its newline.
+    let src =
+        if src.starts_with(b"#") { &src[src.iter().position(|&b| b == b'\n').unwrap_or(src.len())..] } else { src };
     let result = lua.load(src).set_name(format!("@{}", path.display())).exec();
     let st = lua.remove_app_data::<State>().expect("leon state");
     result?;
@@ -64,6 +67,17 @@ fn sandbox(lua: &Lua, path: &Path) -> mlua::Result<()> {
     // shortcut: a config dir whose path holds `?` or `;` breaks these templates; escape them if anyone hits it.
     package.set("path", format!("{0}/?.lua;{0}/?/init.lua", dir.display()))?;
     package.set("cpath", "")?;
+    // The full debug library is memory-unsafe under mlua; traceback covers `xpcall(f, debug.traceback)`.
+    let debug = lua.create_table()?;
+    debug.set(
+        "traceback",
+        lua.create_function(|lua, (msg, level): (Value, Option<usize>)| match msg {
+            Value::String(s) => lua.traceback(Some(&s.to_string_lossy()), level.unwrap_or(1)).map(Value::String),
+            Value::Nil => lua.traceback(None, level.unwrap_or(1)).map(Value::String),
+            v => Ok(v),
+        })?,
+    )?;
+    lua.globals().set("debug", debug)?;
     lua.load(
         r#"io.popen = function() error("io.popen is not available in leon; use leon.exec", 2) end
            os.execute = function() error("os.execute is not available in leon; use leon.exec", 2) end"#,
@@ -77,12 +91,18 @@ fn state(lua: &Lua) -> mlua::AppDataRefMut<'_, State> {
 }
 
 /// `file:line` of the Lua code calling the running `leon.*` function.
+/// Skips C frames, so `pcall(leon.bind, …)` still points at the config line.
 fn caller(lua: &Lua) -> String {
-    lua.inspect_stack(1, |d| {
-        let src = d.source().source.map(|s| s.trim_start_matches('@').to_string()).unwrap_or_default();
-        format!("{src}:{}", d.current_line().unwrap_or(0))
-    })
-    .unwrap_or_else(|| "?".into())
+    (1..)
+        .map_while(|level| {
+            lua.inspect_stack(level, |d| {
+                let src = d.source().source?.strip_prefix('@')?.to_string();
+                Some(format!("{src}:{}", d.current_line().unwrap_or(0)))
+            })
+        })
+        .flatten()
+        .next()
+        .unwrap_or_else(|| "?".into())
 }
 
 /// A `leon.NAME` function that never raises: a bad call is recorded as an error diagnostic at the
@@ -109,6 +129,15 @@ fn field<T: FromLua>(t: &Table, k: &str) -> Result<Option<T>, Bad> {
     t.get::<Option<T>>(k).map_err(|e| Bad(format!("{k}: {e}")))
 }
 
+/// A boolean option; Lua truthiness would turn `"false"` or `0` into true.
+fn flag(t: &Table, k: &str) -> Result<bool, Bad> {
+    match t.get::<Value>(k)? {
+        Value::Nil => Ok(false),
+        Value::Boolean(b) => Ok(b),
+        v => Err(format!("{k} must be true or false, got {}", v.type_name()).into()),
+    }
+}
+
 fn required<T: FromLua>(t: &Table, k: &str) -> Result<T, Bad> {
     field(t, k)?.ok_or_else(|| Bad(format!("{k} is required")))
 }
@@ -127,7 +156,7 @@ fn leon_table(lua: &Lua) -> mlua::Result<Table> {
         "encode",
         func(lua, "json.encode", |_, (v, opts): (Value, Option<Table>)| {
             let indent = match opts {
-                Some(t) => field::<bool>(&t, "indent")?.unwrap_or(false),
+                Some(t) => flag(&t, "indent")?,
                 None => false,
             };
             let s = if indent { serde_json::to_string_pretty(&v) } else { serde_json::to_string(&v) };
@@ -255,7 +284,7 @@ fn mode(lua: &Lua, (name, opts): (String, Option<Table>)) -> Result<(), Bad> {
         return Err(format!("bad mode name {name:?}: use [a-z0-9_-]").into());
     }
     let exclusive = match opts {
-        Some(t) => field::<bool>(&t, "exclusive")?.unwrap_or(false),
+        Some(t) => flag(&t, "exclusive")?,
         None => false,
     };
     let source = caller(lua);
@@ -334,7 +363,7 @@ fn action(lua: &Lua, t: Table) -> Result<(), Bad> {
         category: field(&t, "category")?.unwrap_or_else(|| "Actions".into()),
         keywords: field(&t, "keywords")?.unwrap_or_default(),
         args,
-        repeats: field(&t, "repeats")?.unwrap_or(false),
+        repeats: flag(&t, "repeats")?,
         source,
     };
     let mut st = state(lua);
