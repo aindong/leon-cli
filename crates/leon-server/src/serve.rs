@@ -202,6 +202,8 @@ async fn serve_lines(
     sub: &Arc<Subscriber>,
     shared: &Shared,
 ) -> io::Result<()> {
+    // Order: a finished call's reply, then the next request, then events, so an event flood can't
+    // hold up replies and an attach reply precedes its events.
     // The call being answered: its id, whether it stops the server, and its result.
     let mut pending: Option<(Value, bool, Later<Value>)> = None;
     loop {
@@ -221,17 +223,6 @@ async fn serve_lines(
                     shared.shutdown.notify_one(); // only after this connection's own stop reply is out
                 }
             }
-            _ = sub.ready.notified() => loop {
-                match sub.pop() {
-                    Err(_) => return Ok(()), // too far behind: dropped
-                    Ok(None) => break,
-                    Ok(Some(event)) => {
-                        if !send(write, &event, sub).await? {
-                            return Ok(());
-                        }
-                    }
-                }
-            },
             msg = lines.recv(), if pending.is_none() => {
                 let text = match msg {
                     None => return Ok(()),
@@ -265,6 +256,17 @@ async fn serve_lines(
                     }
                 }
             }
+            _ = sub.ready.notified() => loop {
+                match sub.pop() {
+                    Err(_) => return Ok(()), // too far behind: dropped
+                    Ok(None) => break,
+                    Ok(Some(event)) => {
+                        if !send(write, &event, sub).await? {
+                            return Ok(());
+                        }
+                    }
+                }
+            },
         }
     }
 }
