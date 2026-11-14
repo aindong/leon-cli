@@ -78,13 +78,7 @@ impl Drop for Env {
 }
 
 fn spawn_foreground(env: &Env) -> Child {
-    let child = env
-        .cmd()
-        .args(["server", "run"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
+    let child = env.cmd().args(["server", "run"]).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
     env.wait_for("server socket", 10, || env.alive());
     child
 }
@@ -249,8 +243,14 @@ fn c9_autostarted_server_exits_when_idle() {
     assert!(gone, "idle autostarted server should exit");
 
     // A server from `server run` stays up past its idle period.
-    let mut child = env.cmd().env("LEON_IDLE_EXIT_SECS", "1").args(["server", "run"])
-        .stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+    let mut child = env
+        .cmd()
+        .env("LEON_IDLE_EXIT_SECS", "1")
+        .args(["server", "run"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
     env.wait_for("server socket", 10, || env.alive());
     std::thread::sleep(Duration::from_secs(3));
     assert!(child.try_wait().unwrap().is_none(), "server run must not idle-exit");
