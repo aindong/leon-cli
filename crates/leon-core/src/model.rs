@@ -28,6 +28,10 @@ pub fn clean_label(label: Option<&str>) -> Result<Option<String>, ApiError> {
     match label.map(str::trim) {
         None | Some("") => Ok(None),
         Some(l) if l.chars().count() > 128 => Err(ApiError::bad_request("labels are at most 128 characters")),
+        // Labels get printed to terminals; control characters would let a program inject escapes.
+        Some(l) if l.chars().any(char::is_control) => {
+            Err(ApiError::bad_request("labels can't contain control characters"))
+        }
         Some(l) => Ok(Some(l.to_string())),
     }
 }
@@ -90,6 +94,20 @@ impl State {
         if s.active >= i && s.active > 0 {
             s.active -= 1;
         }
+        Ok(())
+    }
+
+    pub fn set_session_label(&mut self, session_id: &str, label: &str) -> Result<(), ApiError> {
+        let label = clean_label(Some(label))?;
+        self.session_mut(session_id)?.label = label;
+        Ok(())
+    }
+
+    pub fn set_window_label(&mut self, session_id: &str, window_id: &str, label: &str) -> Result<(), ApiError> {
+        let label = clean_label(Some(label))?;
+        let s = self.session_mut(session_id)?;
+        let i = s.window_index(window_id)?;
+        s.windows[i].label = label;
         Ok(())
     }
 

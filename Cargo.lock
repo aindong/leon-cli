@@ -225,8 +225,10 @@ dependencies = [
 name = "leon-core"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "serde",
  "serde_json",
+ "tempfile",
  "uuid",
 ]
 
@@ -235,6 +237,7 @@ name = "leon-server"
 version = "0.1.0"
 dependencies = [
  "leon-core",
+ "libc",
  "schemars",
  "serde",
  "serde_json",

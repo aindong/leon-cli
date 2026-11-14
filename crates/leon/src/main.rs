@@ -112,7 +112,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(fail) => {
             let code = match &fail {
-                Fail::Api(e) if matches!(e.code.as_str(), "not_found" | "ambiguous" | "session_not_found") => 3,
+                Fail::Api(e) if e.is_target_error() => 3,
                 Fail::Api(_) | Fail::Other(_) => 1,
                 Fail::Unreachable(_) => 4,
             };

@@ -15,7 +15,8 @@ pub fn resolve(kind: &str, query: &str, items: &[Candidate]) -> Result<usize, Ap
     if let Some(i) = items.iter().position(|c| c.id == q) {
         return Ok(i);
     }
-    if let Some(i) = one(kind, q, items, |c| c.label.is_some_and(|l| l.eq_ignore_ascii_case(q)))? {
+    let lower = q.to_lowercase();
+    if let Some(i) = one(kind, q, items, |c| c.label.is_some_and(|l| l.to_lowercase() == lower))? {
         return Ok(i);
     }
     if let Ok(n) = q.parse::<usize>() {
@@ -60,6 +61,12 @@ mod tests {
         assert_eq!(resolve("session", "1", &items).unwrap(), 1, "label beats position");
         assert_eq!(resolve("session", "3", &items).unwrap(), 2, "position");
         assert_eq!(resolve("session", "3333", &items).unwrap(), 2, "suffix");
+    }
+
+    #[test]
+    fn labels_match_case_insensitively_beyond_ascii() {
+        let items = [c("session:aaaa1111", Some("Привет"))];
+        assert_eq!(resolve("session", "привет", &items).unwrap(), 0);
     }
 
     #[test]

@@ -182,7 +182,11 @@ fn c6_target_resolution() {
     assert_eq!(id_of("2"), b, "1-based position");
     assert_eq!(id_of(&b[b.len() - 6..]), b, "id suffix");
     assert_eq!(env.code(&["session", "inspect", "nope"]), 3, "unknown target");
-    assert_eq!(env.code(&["session", "inspect", &b[b.len() - 3..]]), 3, "suffix shorter than 4 is not a match");
+    // A 3-char hex suffix such as "002" would parse as a position, so only test one that can't.
+    let short = &b[b.len() - 3..];
+    if short.parse::<usize>().is_err() {
+        assert_eq!(env.code(&["session", "inspect", short]), 3, "suffix shorter than 4 is not a match");
+    }
     // Order: a label beats a position, and a label beats an ID suffix.
     let one = env.ok(&["new", "1"]).trim().to_string(); // at position 3, labelled "1"
     assert_eq!(id_of("1"), one, "label before position");

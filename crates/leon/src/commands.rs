@@ -40,7 +40,9 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
             }
         }
         Cmd::Kill { sessions: targets } | Cmd::Session(SessionCmd::Kill { targets }) => {
-            let ids = targets.iter().map(|t| resolve(&mut c, "session", t, None)).collect::<Result<Vec<_>, _>>()?;
+            let mut ids = targets.iter().map(|t| resolve(&mut c, "session", t, None)).collect::<Result<Vec<_>, _>>()?;
+            ids.sort(); // `kill web 1` may name one session twice
+            ids.dedup();
             for id in ids {
                 c.call("session.destroy", json!({ "session_id": id }))?;
             }
@@ -145,20 +147,23 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
     match cmd {
         ServerCmd::Run { autostarted } => {
             let idle = std::env::var("LEON_IDLE_EXIT_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
-            let opts =
-                leon_server::serve::Options { socket, autostarted: *autostarted, idle_exit: Duration::from_secs(idle) };
+            let info = leon_server::Info {
+                pid: std::process::id(),
+                version: env!("CARGO_PKG_VERSION"),
+                socket: socket.display().to_string(),
+            };
+            let ctx = std::sync::Arc::new(leon_server::Ctx::new(info, *autostarted));
+            let opts = leon_server::serve::Options { socket, idle_exit: Duration::from_secs(idle) };
             let rt = tokio::runtime::Runtime::new().map_err(|e| Fail::Other(e.to_string()))?;
-            rt.block_on(leon_server::serve::serve(opts)).map_err(|e| Fail::Other(e.to_string()))
+            rt.block_on(leon_server::serve::serve(ctx, opts)).map_err(|e| Fail::Other(e.to_string()))
         }
-        // shortcut: `start` while an autostarted server runs leaves it autostarted (it can still
-        // idle-exit); add a server.persist method if that bites.
+        // A running server (perhaps autostarted on demand) is told to stay up; otherwise start one.
         ServerCmd::Start => match Client::connect(&socket) {
-            Ok(_) => Ok(()),
+            Ok(mut c) => c.call("server.persist", json!({})).map(|_| ()),
             Err(_) => spawn_server(&socket, false),
         },
         ServerCmd::Stop => {
-            let mut c = Client::connect(&socket)
-                .map_err(|_| Fail::Unreachable(format!("no leon server at {}", socket.display())))?;
+            let mut c = connect(&socket, false)?;
             c.call("server.stop", json!({}))?;
             let end = Instant::now() + Duration::from_secs(5);
             while Instant::now() < end && Client::connect(&socket).is_ok() {
@@ -167,8 +172,7 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
             Ok(())
         }
         ServerCmd::Status => {
-            let mut c = Client::connect(&socket)
-                .map_err(|_| Fail::Unreachable(format!("no leon server at {}", socket.display())))?;
+            let mut c = connect(&socket, false)?;
             let st = c.call("server.status", json!({}))?;
             if cli.json {
                 print_json(&st);

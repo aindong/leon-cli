@@ -6,7 +6,7 @@ use leon_core::ApiError;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{Ctx, Registry};
+use crate::Registry;
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -151,10 +151,6 @@ pub struct Resolved {
     pub id: String,
 }
 
-fn state(ctx: &Ctx) -> std::sync::MutexGuard<'_, leon_core::State> {
-    ctx.state.lock().unwrap_or_else(|e| e.into_inner())
-}
-
 fn view(s: &leon_core::Session) -> SessionView {
     SessionView {
         session_id: s.id.clone(),
@@ -196,20 +192,23 @@ pub fn registry() -> Registry {
             pid: ctx.info.pid,
             version: ctx.info.version.into(),
             socket: ctx.info.socket.clone(),
-            autostarted: ctx.info.autostarted,
-            sessions: state(ctx).sessions.len(),
+            autostarted: ctx.is_autostarted(),
+            sessions: ctx.state().sessions.len(),
         })
+    });
+    r.add("server.persist", "Keep running when idle (an autostarted server otherwise exits).", |ctx, _: NoParams| {
+        ctx.autostarted.store(false, Ordering::SeqCst);
+        Ok(Empty {})
     });
     r.add("server.version", "The server's version.", |ctx, _: NoParams| {
         Ok(Version { version: ctx.info.version.into() })
     });
-    r.add("server.stop", "Stop the server after replying; every session ends.", |ctx, _: NoParams| {
-        ctx.stopping.store(true, Ordering::SeqCst);
-        Ok(Empty {})
-    });
+    // The socket loop stops the server once this reply is written (serve.rs).
+    r.add("server.stop", "Stop the server after replying; every session ends.", |_, _: NoParams| Ok(Empty {}));
     r.add("session.list", "Every session in order, with its label and window count.", |ctx, _: NoParams| {
         Ok(SessionList {
-            sessions: state(ctx)
+            sessions: ctx
+                .state()
                 .sessions
                 .iter()
                 .map(|s| SessionSummary { session_id: s.id.clone(), label: s.label.clone(), windows: s.windows.len() })
@@ -217,45 +216,40 @@ pub fn registry() -> Registry {
         })
     });
     r.add("session.create", "Create a session with one window.", |ctx, p: CreateSession| {
-        let (session_id, window_id) = state(ctx).create_session(p.label.as_deref(), p.window_label.as_deref())?;
+        let (session_id, window_id) = ctx.state().create_session(p.label.as_deref(), p.window_label.as_deref())?;
         Ok(Created { session_id, window_id })
     });
     r.add("session.destroy", "Destroy a session and everything in it.", |ctx, p: SessionRef| {
-        state(ctx).destroy_session(&p.session_id)?;
+        ctx.state().destroy_session(&p.session_id)?;
         Ok(Empty {})
     });
     r.add("session.set_label", "Rename a session.", |ctx, p: SetLabel| {
-        let label = leon_core::model::clean_label(Some(&p.label))?;
-        state(ctx).session_mut(&p.session_id)?.label = label;
+        ctx.state().set_session_label(&p.session_id, &p.label)?;
         Ok(Empty {})
     });
     r.add("session.view", "A session's windows, in tab order.", |ctx, p: SessionRef| {
-        Ok(view(state(ctx).session(&p.session_id)?))
+        Ok(view(ctx.state().session(&p.session_id)?))
     });
     r.add(
         "session.new_window",
         "Add a window (tab) at the end of a session and make it active.",
         |ctx, p: NewWindow| {
-            Ok(WindowCreated { window_id: state(ctx).new_window(&p.session_id, p.window_label.as_deref())? })
+            Ok(WindowCreated { window_id: ctx.state().new_window(&p.session_id, p.window_label.as_deref())? })
         },
     );
     r.add("session.close_window", "Close a window; closing the last one destroys the session.", |ctx, p: WindowRef| {
-        state(ctx).close_window(&p.session_id, &p.window_id)?;
+        ctx.state().close_window(&p.session_id, &p.window_id)?;
         Ok(Empty {})
     });
     r.add("session.set_window_label", "Rename a window.", |ctx, p: SetWindowLabel| {
-        let label = leon_core::model::clean_label(Some(&p.label))?;
-        let mut st = state(ctx);
-        let s = st.session_mut(&p.session_id)?;
-        let i = s.window_index(&p.window_id)?;
-        s.windows[i].label = label;
+        ctx.state().set_window_label(&p.session_id, &p.window_id, &p.label)?;
         Ok(Empty {})
     });
     r.add(
         "target.resolve",
         "Turn a query (ID, label, position or ID suffix) into one ID; ambiguous queries fail with every match.",
         |ctx, p: Resolve| {
-            let st = state(ctx);
+            let st = ctx.state();
             let id = match p.kind {
                 TargetKind::Session => st.resolve_session(&p.query)?.id.clone(),
                 TargetKind::Window => {
@@ -276,7 +270,7 @@ mod tests {
     use crate::{Ctx, Info};
 
     fn ctx() -> Ctx {
-        Ctx::new(Info { pid: 1, version: "test", socket: "/tmp/x".into(), autostarted: false })
+        Ctx::new(Info { pid: 1, version: "test", socket: "/tmp/x".into() }, false)
     }
 
     #[test]
