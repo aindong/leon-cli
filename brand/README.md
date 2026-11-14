@@ -1,67 +1,58 @@
 # leon identity
 
-**Chosen direction: Pane mane.** A calm, front-facing lion with six offset, rectangular mane panels. The lion makes the name immediate; its split mane connects the animal to leon's many terminal panes. Level eyes and a closed muzzle give it a quiet, watchful expression. The stepped silhouette is compact, not a shield or a heraldic crest.
+**Chosen direction: Pane mane / Fired mosaic.** A calm, front-facing lion with ten softly cornered rectangular mane panels. The lion makes the name immediate; distinct pane colours express many terminals running at once. Its broad brow, curved closed eyes, wide flat-topped nose, broad two-lobed muzzle and small heart-shaped chin follow the original concept 01. The ears are tucked out of sight. This replaces the first vector's narrow face, round ears and block-like mane.
 
 **Tagline:** Keep your work in view.
 
 ![leon hero](marketing/hero.png)
 
-## Four lion directions explored
+## Exploration and refinement
 
-The built-in Codex imagegen [concept sheet](exploration/directions.png) and [exact prompt and evaluation](exploration/prompts.md) record four routes. The [reference comparison](research.md) explains how the final lion differs from existing lion brands and the reference app.
+The original [four-direction sheet](exploration/directions.png) records Pane mane, Quiet face, Single line and Lion L; [its prompt](exploration/prompts.md) is retained. The user chose Pane mane and requested closer fidelity to concept 01, then asked for a livelier colour treatment.
 
-1. **Pane mane — selected.** Names the animal and the product's pane structure in one compact mark. Six deliberately offset partitions give it its own silhouette.
-2. **Quiet face.** Simple and legible, but the pointed oval mane is less distinctive and closer to the generic crest category.
-3. **Single line.** Elegant profile, but fine lines weaken at 16 px and profiles have more automotive/luxury resemblance risk. The generated study also failed to become literally one continuous stroke.
-4. **Lion L.** Reads as an initial before an animal; decorative mane locks overwhelm the product connection.
+The built-in imagegen [colour sheet](exploration/colour-directions.png) compares three palettes. **Fired mosaic wins:** Oxide preserves continuity, warm crown colours meet cool side panes, and Iron gives the light face a strong silhouette. Orchard light feels botanical; Night signal feels more like a generic neon tool. The [exact colour prompt and selection notes](exploration/colour-prompts.md) record the generation. No reference company imagery was supplied to imagegen.
 
-The chosen concept was redrawn, not traced. The production lion starts with a 100-unit grid: a stepped 84×84 occupied area (x=8–92, y=6–90), a broad negative-space face, rounded ears, six mane panels separated by 4-unit channels, 7×3-unit eyes, and a 12-unit nose. The lower channels meet the face rather than becoming tiny interior slots. These hand-authored shapes were combined with vector boolean subtraction and rounded to two-decimal SVG coordinates. The face uses a small round-ended muzzle stroke; all other details are filled geometry. No generated raster or third-party logo path is embedded in the identity SVGs.
+![Original concept 01 beside the refined 1024 icon](exploration/refine-compare.png)
 
-## Name, lockup, and usage
+The [comparison](exploration/refine-compare.png) uses an unpainted crop from the original sheet and the rebuilt icon. Production geometry is handwritten SVG on a 100-unit grid, not a raster trace. Two crown panes, offset temple and side panes, and tapered lower panes closely frame a much wider face. Pane channels are approximately 2–3 units; the nose is about 18 units wide. Small corner curves soften the rectangles without turning the mane into a cog. The full-colour face is Parchment with Iron eyes and nose; monochrome variants use the face as negative space.
 
-Use **leon** in product copy, **Leon.app** for the macOS bundle, and `leon` for commands. The existing bespoke lowercase lettering stays: its soft corners pair well with the lion's rounded ears and pane corners. The wordmark begins at x=100 instead of x=108 in the revised 360×90 lockup, tightening the gap without crowding the mane.
+## Assets and usage
 
 | Asset | Light surfaces | Dark surfaces |
 | --- | --- | --- |
-| Full lockup | [logo.svg](logo.svg) | [logo-dark.svg](logo-dark.svg) |
-| Standalone lion | [logo-mark.svg](logo-mark.svg) | [logo-mark-dark.svg](logo-mark-dark.svg) |
-| Wordmark | [wordmark.svg](wordmark.svg) | [wordmark-dark.svg](wordmark-dark.svg) |
+| Colour lockup | [logo.svg](logo.svg) | [logo-dark.svg](logo-dark.svg) |
+| Colour lion | [logo-mark.svg](logo-mark.svg) | [logo-mark-dark.svg](logo-mark-dark.svg) |
+| Single-colour lion | [logo-mark-mono.svg](logo-mark-mono.svg) | [logo-mark-mono-dark.svg](logo-mark-mono-dark.svg) |
+| Original wordmark | [wordmark.svg](wordmark.svg) | [wordmark-dark.svg](wordmark-dark.svg) |
 
-Keep at least 12 design units of clear space around the occupied lion (about one seventh of its width). Use the full mark at 24 px or larger and the lockup at 108 px or larger. At 16 px use the [optical icon](icon/leon-small.svg), also embedded as the landing page favicon. Do not stretch, rotate, add a crown or shield, open the mouth, angle the eyes, or colour the mane panels separately. The flat lion uses one colour, including its muzzle stroke; for recolouring, change both `fill` and `color`. On a busy surface use a solid Parchment or Iron field. Keep lighting effects confined to the app icon.
+The bespoke lowercase wordmark and its 360×90 lockup spacing stay unchanged. Use **leon** in copy, **Leon.app** for the bundle and `leon` for commands. Keep 12 design units of clear space around the occupied lion. Use the detailed mark at 24 px or more and the lockup at 108 px or more; use the dedicated optical icon at 16 px.
 
-The palette is retained deliberately. Oxide gives the lion warmth without a bright orange body; Iron and Parchment preserve the useful contrast and the existing page's tone. The animal does not require a new palette.
+Keep the panel colour assignments fixed. Repetition across ten panels is intentional: six colours distinguish groups of panes without a rainbow spectrum or confetti effect. Keep the face light and facial details Iron. Do not add ears, angry brows, teeth, a crown, a shield, or an outline around the entire animal. Do not stretch or rotate it. For engraving, one-ink print, or an unfamiliar background use the supplied monochrome lion, recoloured as one unit. Depth and lighting belong only to the app tile, not the flat logo.
 
-## Palette
+## Palette and contrast
 
-| Token | Hex | Role |
+The base remains **Oxide #B64C32**, **Iron #292521**, and **Parchment #F5F0E7**. Five vivid accents extend it. The app tile changes to deep Iron so colour can frame a consistently light face; a warm oxide tile would blur the copper crown and weaken the varied panes. Flat panel colour and a restrained tile rim give this lion its own treatment, distinct from the reference app's rainbow character on a pale tile.
+
+| Token | Hex | Role | On Iron | On Parchment |
+| --- | --- | --- | ---: | ---: |
+| Oxide | `#B64C32` | Anchor; crown and lower mane; light-mode links | 2.95:1 | 4.55:1 |
+| Copper | `#E78155` | Crown and lower mane; working state on dark panels | 5.55:1 | 2.41:1 |
+| Saffron | `#EBC45E` | Temple pane; blocked state on dark panels | 9.12:1 | 1.47:1 |
+| Lagoon | `#55B5AE` | Side panes; done state on dark panels | 6.23:1 | 2.15:1 |
+| Iris | `#AA91D6` | Lower side panes; decorative section rules | 5.60:1 | 2.39:1 |
+| Rose | `#E28E9B` | Temple pane; error state token on dark panels | 6.21:1 | 2.16:1 |
+
+Ratios use WCAG sRGB relative luminance. The five new accents pass 4.5:1 for normal text on Iron, and Iron text on those accents also passes. They **do not** pass for normal text on Parchment: use Iron/Umber text and the colours as decorative rules there. Oxide is suitable for normal text on Parchment, not Iron. The face/details pair is Parchment/Iron at **13.40:1**. Brand colours are not a replacement for status labels: use `● working` in Copper, `! blocked` in Saffron, `✓ done` in Lagoon and an explicit error word/symbol in Rose when an error exists. No extra error state is invented in the marketing demo.
+
+| Retained supporting token | Hex | Use |
 | --- | --- | --- |
-| Parchment | `#F5F0E7` | Light background, inverse text, icon symbol |
-| Iron | `#292521` | Primary text, dark background |
-| Oxide | `#B64C32` | Main mark and light-mode accent |
-| Clay | `#E6AA91` | Dark-mode accent, working state |
-| Umber | `#65594F` | Secondary light-mode text |
-| Chalk | `#D8CEC2` | Secondary dark-mode text |
-| Sand | `#EBE3D7` | Light raised surface |
-| Coal | `#1F1C19` | Terminal pane surface |
-| Sage | `#B8C6AC` | Done status on dark surfaces |
-| Wheat | `#E8C77D` | Blocked status on dark surfaces |
-
-Calculated from sRGB relative luminance using `(Llighter + 0.05) / (Ldarker + 0.05)`, rounded to two decimals. These approved text pairs meet WCAG AA's 4.5:1 normal-text threshold; the icon's lighting is decorative rather than a text colour specification.
-
-| Text / background | Contrast |
-| --- | ---: |
-| Iron / Parchment | 13.40:1 |
-| Umber / Parchment | 5.98:1 |
-| Oxide / Parchment | 4.55:1 |
-| Parchment / Oxide | 4.55:1 |
-| Parchment / Iron | 13.40:1 |
-| Chalk / Iron | 9.80:1 |
-| Clay / Iron | 7.62:1 |
-| Sage / Iron | 8.48:1 |
-| Wheat / Iron | 9.34:1 |
-| Chalk / Coal | 10.92:1 |
-
-Use the lighter Clay accent on dark backgrounds. Do not use Oxide as small text on Iron. Pair every status colour with its word and a distinct symbol, as the demo does; colour alone is insufficient.
+| Clay | `#E6AA91` | Dark-mode links and monochrome lion; 7.62:1 on Iron |
+| Umber | `#65594F` | Secondary light text; 5.98:1 on Parchment |
+| Chalk | `#D8CEC2` | Secondary dark text; 9.80:1 on Iron |
+| Sand | `#EBE3D7` | Light raised surfaces |
+| Coal | `#1F1C19` | Terminal pane and deep icon shading |
+| Sage | `#B8C6AC` | Legacy supporting palette, no longer the demo's done colour |
+| Wheat | `#E8C77D` | Legacy supporting palette, no longer the demo's blocked colour |
 
 ## Type
 
@@ -69,38 +60,30 @@ Use the lighter Clay accent on dark backgrounds. Do not use Oxide as small text 
 - **Terminal and code:** **Menlo**, the font already used by `FONT_FAMILY` in `crates/leon-app/src/view.rs`. It ships with macOS and is not redistributed here. Web fallback is `monospace`. Instrument Sans is a brand/UI recommendation, not a change to the app's existing system UI font.
 - **Logo lettering:** bespoke vector paths. Do not typeset a replacement with a similar font.
 
-## macOS app icon
+## macOS icon and small sizes
 
-The [editable 1024 master SVG](icon/leon-1024.svg) supplies the [1024×1024 PNG](icon/leon-1024.png), all ten [iconset slots](icon/Leon.iconset), and [Leon.icns](icon/Leon.icns). The opaque oxide tile has a restrained rim and raised parchment lion, with transparent exterior padding. Its broad foreground and shallow depth follow the current macOS layered direction, rendered as a static ICNS for the existing bundler. It is not a compiled Icon Composer `.icon` package and does not claim dynamic Liquid Glass appearances. [Unmasked background](icon/background.svg) and [foreground](icon/foreground.svg) are supplied for later native composition.
+The editable [1024 SVG master](icon/leon-1024.svg) supplies the [1024 PNG](icon/leon-1024.png), all ten [iconset slots](icon/Leon.iconset), and [Leon.icns](icon/Leon.icns). The dark rounded tile, subtle rim and shallow raised foreground form a static ICNS for the existing bundler. The [unmasked background](icon/background.svg) and [foreground](icon/foreground.svg) are also supplied; this is not a native adaptive Icon Composer package.
 
-![16, 32, and 128 pixel lion icons on light and dark backgrounds](icon/size-check.png)
+![Native 16, 32, and 128 px icons on light and dark backgrounds](icon/size-check.png)
 
-At 16 px the full master's muzzle and six seams become soft. The handwritten [optical small source](icon/leon-small.svg) enlarges the head, uses a flat oxide tile, reduces the mane to three broad seams, aligns the two eyes to whole pixels, and replaces the muzzle curves with a simple nose. Rounded ears and the stepped mane remain. Both 16 pt and 32 pt slots (including Retina 2×) use this source. Slots at 128 pt and above use the full dimensional master. The proof compares direct reduction against the optical version at 8×, plus native 16/32/128 px examples on light and dark.
+The [optical source](icon/leon-small.svg) merges ten narrow mane panels into **six broader colour regions**, removes shading, thickens the curved closed eyes, and preserves the wide nose, broad light muzzle and pointed-heart chin. This keeps animal anatomy primary and colour secondary at 16 px. Both 16 pt and 32 pt slots, including their 2× variants, use the optical source; 128 pt and above use the detailed master. The same optical SVG is the page favicon. The proof compares direct 16 px reduction with the corrected source at 8×, alongside native-size checks on both backgrounds.
 
-The ICNS has been decoded with `iconutil` and all ten decoded slots checked for dimensions, alpha, and opaque-pixel fidelity against the source iconset (see the native small-slot edge conversion note in verification.md). `scripts/bundle.sh` already copies `brand/icon/Leon.icns`; no bundler or application code was changed. Root `README.md` was not edited; its existing hero path receives the new image automatically.
+`iconutil` builds and decodes all ten slots. Native AppKit rendering was checked separately because the legacy decoder changes translucent exterior RGB in the two smallest 1× PNG round-trips; see [verification.md](verification.md). The app's existing bundler already copies the ICNS. No application code, bundler, or root README changed.
 
-## Marketing kit
+## Marketing and rebuild
 
-- [README hero](marketing/hero.png), **1600×600**, with [SVG source](marketing/hero.svg).
-- [Social / OG image](marketing/og.png), **1200×630**, with [SVG source](marketing/og.svg).
-- [Copy sheet](marketing/copy.md), unchanged: tagline, three alternatives, 50-word pitch, 150-word description.
-- [Landing page](marketing/index.html): a single HTML file with inline CSS, inline lion lockups, optical favicon, embedded font and optimised app icon. Responsive at phone widths and follows the user's light/dark preference.
+- [Hero PNG](marketing/hero.png) and [SVG](marketing/hero.svg): **1600×600**.
+- [OG PNG](marketing/og.png) and [SVG](marketing/og.svg): **1200×630**.
+- [Landing page](marketing/index.html): single HTML, inline CSS, font and icon embedded; dark mode and phone layouts.
+- [Copy sheet](marketing/copy.md): unchanged tagline, alternatives, 50-word pitch and 150-word description.
 
-The illustrated terminal workflow and existing copy remain. Status is program-reported; layouts can restore, but quitting ends running programs. The page has six capabilities, the real source-install command, and agent instructions. No scripts or runtime external requests are required. Repository-relative documentation links work from the checkout; set deployment URLs and an absolute `og:image` only when a host is chosen.
-
-## Rebuild and checks
-
-On macOS with Node, Google Chrome, and `iconutil`:
+The page reuses the mane accents in section rules, the small hero colour strip, and labelled terminal statuses. Its text stays readable and its copy stays unchanged. The original illustrated workflow remains explicitly labelled; statuses are program-reported and quitting ends running programs. Checkout-relative documentation links and relative OG metadata need deployment URLs only when hosting is chosen.
 
 ```sh
 npm install --prefix /tmp/leon-brand-build sharp playwright
 NODE_PATH=/tmp/leon-brand-build/node_modules node brand/build-assets.cjs
 ```
 
-The script renders the handwritten SVG master, regenerates the full iconset and ICNS, refreshes the landing page's icon embed, renders the SVG banners, and rebuilds the optical-size proof. PNG exports use indexed palettes and maximum compression effort. The generated concept sheet is a historical design input, not a build dependency. Production assets need no imagegen call to rebuild.
+On macOS with Google Chrome and `iconutil`, the script renders the SVG master, all slots and ICNS, both banners, embedded page icon, optical proof, and comparison sheet. Concept raster images remain saved historical inputs; no imagegen call is needed to rebuild production assets. PNGs are palette-optimised. [FILES.md](FILES.md) lists the kit; [verification.md](verification.md) records the checks.
 
-Verified at **1440, 390, and 320 CSS px**, each in light and dark mode in a browser and Chrome: correct requested widths, no document overflow, loaded font and icon, six capabilities, no scripts, external resource requests, or console errors. Both banners, the master and optical proof, and desktop/phone landing renders were visually inspected. See [verification.md](verification.md) for dimensions, byte sizes, contrast, and icon round-trip evidence; [FILES.md](FILES.md) lists the kit.
-
-## Human review
-
-**Pick Pane mane.** There is no unresolved pair of final marks: Quiet face is the runner-up concept, not a second production identity. Pane mane is the stronger choice because its stepped, partitioned outline belongs to a multi-pane terminal. Final aesthetic review should focus on animal recognition at 16 px and the icon's depth in a real Dock.
+**Human review:** compare the original concept and refined icon in `refine-compare.png`, then assess the optical lion at 16 px. Pane mane / Fired mosaic is the selected final direction; there is no unresolved palette tie-break.

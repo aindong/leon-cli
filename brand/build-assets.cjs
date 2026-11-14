@@ -15,6 +15,13 @@ const png = { palette: true, colors: 256, effort: 10 };
 async function main() {
   await sharp(path.join(root, 'icon/leon-1024.svg')).resize(1024, 1024).png(png)
     .toFile(path.join(root, 'icon/leon-1024.png'));
+  // Review sheet: crop the original study without repainting it; compare the full icon.
+  const concept = await sharp(path.join(root, 'exploration/directions.png'))
+    .extract({ left: 65, top: 48, width: 430, height: 410 }).resize(500, 477).png().toBuffer();
+  const refined = await sharp(path.join(root, 'icon/leon-1024.png')).resize(640, 640).png().toBuffer();
+  const compare = `<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="800"><rect width="1400" height="800" fill="#F5F0E7"/><g fill="#292521" font-family="Arial,sans-serif"><text x="75" y="60" font-size="26">01 / Original Pane mane concept</text><text x="750" y="60" font-size="26">02 / Refined Fired mosaic icon</text><text x="75" y="730" font-size="19">Broad brow · closed eyes · wide muzzle · heart-shaped chin</text><text x="750" y="730" font-size="19">Same lion anatomy · distinct pane colours · deep Iron tile</text></g></svg>`;
+  await sharp(Buffer.from(compare)).composite([{ input: concept, left: 95, top: 160 }, { input: refined, left: 715, top: 75 }])
+    .png(png).toFile(path.join(root, 'exploration/refine-compare.png'));
   const pageIcon = await sharp(path.join(root, 'icon/leon-1024.png')).resize(580, 580).png(png).toBuffer();
   const htmlPath = path.join(root, 'marketing/index.html');
   const html = await fs.readFile(htmlPath, 'utf8');
@@ -49,12 +56,12 @@ async function main() {
     const before = await sharp(path.join(root, 'icon/leon-1024.png')).resize(16).png().toBuffer();
     await page.goto('about:blank');
     await page.setViewportSize({ width: 960, height: 600 });
-    await page.setContent(`<!doctype html><style>*{box-sizing:border-box}body{margin:0;font:14px Menlo,monospace;background:#F5F0E7;color:#292521}h1{font:24px system-ui;margin:0 0 20px}main{padding:28px}.row{display:flex;gap:20px;padding:20px;border-radius:8px;align-items:center;margin-bottom:14px}.dark{background:#292521;color:#F5F0E7}.cell{width:150px;display:flex;align-items:center;justify-content:space-between;gap:20px}.cell img{flex-shrink:0}.caption{font-size:12px;max-width:250px;margin-left:20px;line-height:1.6}.zoom{image-rendering:pixelated}.zoomrow{display:flex;align-items:center;gap:26px;margin-top:20px}.label{font-size:12px}</style><main><h1>leon · optical size check</h1>${['light', 'dark'].map(theme => `<div class="row ${theme}">${[16, 32, 128].map(s => `<div class="cell"><span>${s}px</span><img width="${s}" height="${s}" src="${icons[s]}" alt="leon at ${s}px"></div>`).join('')}<div class="caption">${theme} background<br>Shown at native pixel size.</div></div>`).join('')}<div class="zoomrow"><img class="zoom" width="128" height="128" src="data:image/png;base64,${before.toString('base64')}" alt="Before: downsampled 16px icon"><div class="label">Before<br>16px enlarged 8×</div><img class="zoom" width="128" height="128" src="${icons[16]}" alt="After: optically adjusted 16px icon"><div class="label">After<br>16px enlarged 8×</div><div class="caption">Flat oxide field.<br>Three broad mane seams.<br>Pixel eyes; nose replaces muzzle.</div></div></main>`);
+    await page.setContent(`<!doctype html><style>*{box-sizing:border-box}body{margin:0;font:14px Menlo,monospace;background:#F5F0E7;color:#292521}h1{font:24px system-ui;margin:0 0 20px}main{padding:28px}.row{display:flex;gap:20px;padding:20px;border-radius:8px;align-items:center;margin-bottom:14px}.dark{background:#292521;color:#F5F0E7}.cell{width:150px;display:flex;align-items:center;justify-content:space-between;gap:20px}.cell img{flex-shrink:0}.caption{font-size:12px;max-width:250px;margin-left:20px;line-height:1.6}.zoom{image-rendering:pixelated}.zoomrow{display:flex;align-items:center;gap:26px;margin-top:20px}.label{font-size:12px}</style><main><h1>leon · optical size check</h1>${['light', 'dark'].map(theme => `<div class="row ${theme}">${[16, 32, 128].map(s => `<div class="cell"><span>${s}px</span><img width="${s}" height="${s}" src="${icons[s]}" alt="leon at ${s}px"></div>`).join('')}<div class="caption">${theme} background<br>Shown at native pixel size.</div></div>`).join('')}<div class="zoomrow"><img class="zoom" width="128" height="128" src="data:image/png;base64,${before.toString('base64')}" alt="Before: downsampled 16px icon"><div class="label">Before<br>16px enlarged 8×</div><img class="zoom" width="128" height="128" src="${icons[16]}" alt="After: optically adjusted 16px icon"><div class="label">After<br>16px enlarged 8×</div><div class="caption">Flat Iron field.<br>Six broad colour panes.<br>Wide muzzle; thicker closed eyes.</div></div></main>`);
     await page.evaluate(() => Promise.all([...document.images].map(i => i.decode())));
     await sharp(await page.screenshot()).png(png).toFile(path.join(root, 'icon/size-check.png'));
   } finally {
     await browser.close();
   }
-  console.log('Built hero.png, og.png, 10 iconset PNGs, Leon.icns, and size-check.png.');
+  console.log('Built hero.png, og.png, 10 iconset PNGs, Leon.icns, size-check.png, and refine-compare.png.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
