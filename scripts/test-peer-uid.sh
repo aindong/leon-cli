@@ -22,9 +22,10 @@ old = "stream.peer_cred().is_ok_and(|c| c.uid() == unsafe { libc::geteuid() })"
 assert s.count(old) == 1, "peer-check mutation must match exactly once"
 open(p, "w").write(s.replace(old, "{ let _ = stream; true }"))
 PY
-cargo build --locked -p leon --no-default-features
+# Never leave the disabled-auth binary in the ordinary Linux build cache.
+CARGO_TARGET_DIR=/tmp/peer-mutant-target cargo build --locked -p leon --no-default-features
 set +e
-python3 scripts/peer-uid.py /target/debug/leon > /tmp/peer-red.txt 2>&1
+python3 scripts/peer-uid.py /tmp/peer-mutant-target/debug/leon > /tmp/peer-red.txt 2>&1
 rc=$?
 set -e
 cat /tmp/peer-red.txt
