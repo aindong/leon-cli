@@ -23,7 +23,9 @@ fn attach_over_ssh_survives_a_link_drop() {
     let r = Remote::new();
     r.ok(&["-H", "ssh://box", "new", "r1"]);
     let b = r.ok(&["-H", "ssh://box", "-s", "r1", "run", "--", "sh", "-c", "echo hello-remote; exec sh"]);
-    r.until("the remote block's first line", || r.ok(&["-H", "ssh://box", "capture", "-b", &b]).contains("hello-remote"));
+    r.until("the remote block's first line", || {
+        r.ok(&["-H", "ssh://box", "capture", "-b", &b]).contains("hello-remote")
+    });
 
     let vars = r.vars();
     let vars: Vec<(&str, &str)> = vars.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();

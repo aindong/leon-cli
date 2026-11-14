@@ -5,11 +5,12 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use leon_core::ApiError;
+use leon_hosts::Link;
 use serde_json::{json, Value};
 
 /// Replies longer than this are refused, like requests are on the server.
@@ -24,6 +25,8 @@ pub enum Fail {
     Unreachable(String),
     /// Anything else (exit 1).
     Other(String),
+    /// A bad command line that clap can't see, such as a bad -H endpoint (exit 2).
+    Usage(String),
     /// Exit quietly with this status (`wait` passing on a program's exit status).
     Exit(i32),
 }
@@ -157,6 +160,36 @@ pub fn spawn_server(socket: &Path, autostarted: bool, restore: bool) -> Result<(
         std::thread::sleep(Duration::from_millis(20));
     }
     Err(Fail::Unreachable(format!("the server didn't come up; see {}", log_path.display())))
+}
+
+/// Where client commands go: this machine's socket, or another machine's through a `Link`.
+pub struct Server {
+    pub socket: PathBuf,
+    /// The host's name in messages, and the link (kept open while the command runs).
+    pub link: Option<(String, Link)>,
+}
+
+impl Server {
+    pub fn local() -> Server {
+        Server { socket: leon_core::paths::socket_path(), link: None }
+    }
+
+    pub fn over(name: &str, link: Link) -> Server {
+        Server { socket: link.socket().to_path_buf(), link: Some((name.to_string(), link)) }
+    }
+
+    /// A checked connection. Locally a server may be started (`autostart`); over a link the
+    /// host's proxy decides that, as the link was opened to.
+    pub fn connect(&self, autostart: bool) -> Result<Client, Fail> {
+        let Some((name, _)) = &self.link else { return connect(&self.socket, autostart) };
+        let lost = || Fail::Unreachable(format!("can't reach leon on {name}"));
+        let mut c = Client::connect(&self.socket).map_err(|_| lost())?;
+        c.call("server.version", json!({})).map_err(|f| match f {
+            Fail::Unreachable(_) => lost(),
+            f => f,
+        })?;
+        Ok(c)
+    }
 }
 
 /// Connect, starting a personal server first when `autostart` allows. The connection is checked

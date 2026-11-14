@@ -13,7 +13,13 @@ const H: &str = "ssh://box";
 fn commands_act_on_the_remote_server() {
     let r = Remote::new();
     let run = |args: &[&str]| {
-        let out = r.cmd().env("LEON_SESSION", "session:local-only").env("LEON_BLOCK", "block:local-only").args(args).output().unwrap();
+        let out = r
+            .cmd()
+            .env("LEON_SESSION", "session:local-only")
+            .env("LEON_BLOCK", "block:local-only")
+            .args(args)
+            .output()
+            .unwrap();
         assert!(out.status.success(), "leon {args:?}: {}", String::from_utf8_lossy(&out.stderr));
         String::from_utf8(out.stdout).unwrap().trim().to_string()
     };

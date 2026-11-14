@@ -36,7 +36,11 @@ fn the_link_is_private_and_not_tcp() {
     assert_eq!(mode(&sockets[0]), 0o600);
     let pid = ev.child.id().to_string();
     let out = Command::new("lsof").args(["-a", "-p", &pid, "-i"]).output().unwrap();
-    assert!(String::from_utf8_lossy(&out.stdout).trim().is_empty(), "a TCP/UDP socket: {}", String::from_utf8_lossy(&out.stdout));
+    assert!(
+        String::from_utf8_lossy(&out.stdout).trim().is_empty(),
+        "a TCP/UDP socket: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
 
     // SAFETY: a signal to a process this test started
     unsafe { libc::kill(ev.child.id() as i32, libc::SIGINT) };

@@ -22,7 +22,10 @@ fn linux_bin(arch: &str) -> Option<PathBuf> {
     }
     let arch = if arch == "arm64" { "aarch64" } else { arch };
     let target = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target");
-    ["gnu", "musl"].iter().map(|libc| target.join(format!("{arch}-unknown-linux-{libc}/release/leon"))).find(|p| p.exists())
+    ["gnu", "musl"]
+        .iter()
+        .map(|libc| target.join(format!("{arch}-unknown-linux-{libc}/release/leon")))
+        .find(|p| p.exists())
 }
 
 struct Container(String);
