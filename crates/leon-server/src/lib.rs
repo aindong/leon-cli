@@ -4,6 +4,7 @@
 mod blocks;
 pub mod events;
 mod layout;
+pub mod lua;
 pub mod methods;
 pub mod registry;
 pub mod serve;
@@ -37,6 +38,8 @@ pub struct Ctx {
     exited: tokio::sync::watch::Sender<u64>,
     /// Attached connections. Only touched with the state lock held, so events and snapshots line up.
     subscribers: Mutex<Vec<Weak<Subscriber>>>,
+    /// The loaded `init.lua` (lua.rs).
+    lua: lua::Shared,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -82,6 +85,7 @@ impl Ctx {
             autostarted: AtomicBool::new(autostarted),
             exited: tokio::sync::watch::channel(0).0,
             subscribers: Mutex::default(),
+            lua: lua::Shared::default(),
         }
     }
 

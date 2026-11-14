@@ -456,6 +456,7 @@ dependencies = [
 name = "leon-lua"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "mlua",
  "serde_json",
  "tempfile",
@@ -466,6 +467,7 @@ name = "leon-server"
 version = "0.1.0"
 dependencies = [
  "leon-core",
+ "leon-lua",
  "libc",
  "schemars",
  "serde",

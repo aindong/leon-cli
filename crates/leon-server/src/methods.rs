@@ -333,6 +333,7 @@ pub fn registry() -> Registry {
     blocks::add(&mut r);
     crate::layout::add(&mut r);
     crate::events::add(&mut r);
+    crate::lua::add(&mut r);
     r
 }
 
