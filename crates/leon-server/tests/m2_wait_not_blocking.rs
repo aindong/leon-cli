@@ -14,7 +14,7 @@ fn a_pending_wait_leaves_the_runtime_free() {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async {
             let info = leon_server::Info { pid: 1, version: "test", socket: "/nonexistent/server.sock".into() };
-            let ctx = leon_server::Ctx::new(info, false);
+            let ctx = std::sync::Arc::new(leon_server::Ctx::new(info, false));
             let s = ctx.call("session.create", json!({})).await.unwrap();
             let sid = s["session_id"].as_str().unwrap().to_string();
             let layout = json!({ "block": { "options": { "command": ["sleep", "30"] } } });

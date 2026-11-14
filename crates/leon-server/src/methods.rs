@@ -1,4 +1,4 @@
-//! The M1 methods: help, server, session and target.
+//! Help, server, session and target methods (blocks are in blocks.rs).
 
 use std::sync::atomic::Ordering;
 
@@ -6,6 +6,7 @@ use leon_core::ApiError;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::blocks::{self, BlockType, Layout};
 use crate::Registry;
 
 #[derive(Deserialize, JsonSchema)]
@@ -32,6 +33,8 @@ pub struct MethodDoc {
 #[derive(Serialize, JsonSchema)]
 pub struct Help {
     pub methods: Vec<MethodDoc>,
+    /// Block creators, their flavors, and the block methods `block.method` calls.
+    pub block_types: Vec<BlockType>,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -70,12 +73,15 @@ pub struct CreateSession {
     pub label: Option<String>,
     /// Label for the session's first window.
     pub window_label: Option<String>,
+    /// What the first window holds; default a login shell.
+    pub layout: Option<Layout>,
 }
 
 #[derive(Serialize, JsonSchema)]
 pub struct Created {
     pub session_id: String,
     pub window_id: String,
+    pub block_id: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -93,6 +99,7 @@ pub struct WindowView {
     /// 1-based position in tab order.
     pub position: usize,
     pub active: bool,
+    pub block_ids: Vec<String>,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -107,11 +114,14 @@ pub struct SessionView {
 pub struct NewWindow {
     pub session_id: String,
     pub window_label: Option<String>,
+    /// What the window holds; default a login shell.
+    pub layout: Option<Layout>,
 }
 
 #[derive(Serialize, JsonSchema)]
 pub struct WindowCreated {
     pub window_id: String,
+    pub block_id: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -134,6 +144,7 @@ pub struct SetWindowLabel {
 pub enum TargetKind {
     Session,
     Window,
+    Block,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -142,13 +153,15 @@ pub struct Resolve {
     pub kind: TargetKind,
     /// A full ID, a label (case-insensitive), a 1-based position, or an ID suffix of 4+ characters.
     pub query: String,
-    /// Required for `window`: the session to look in.
+    /// Required for `window`: the session to look in. For `block`, omitted searches every session.
     pub session_id: Option<String>,
 }
 
 #[derive(Serialize, JsonSchema)]
 pub struct Resolved {
     pub id: String,
+    /// For a block: the session it belongs to.
+    pub session_id: Option<String>,
 }
 
 fn view(s: &leon_core::Session) -> SessionView {
@@ -164,6 +177,7 @@ fn view(s: &leon_core::Session) -> SessionView {
                 label: w.label.clone(),
                 position: i + 1,
                 active: i == s.active,
+                block_ids: s.blocks.iter().filter(|b| b.window_id == w.id).map(|b| b.id.clone()).collect(),
             })
             .collect(),
     }
@@ -184,6 +198,7 @@ pub fn registry() -> Registry {
                     output_schema: m.output_schema.clone(),
                 })
                 .collect(),
+            block_types: blocks::block_types(),
         })
     });
     r.add("server.status", "Whether the server runs, its pid, version and socket.", |ctx, _: NoParams| {
@@ -215,9 +230,16 @@ pub fn registry() -> Registry {
                 .collect(),
         })
     });
-    r.add("session.create", "Create a session with one window.", |ctx, p: CreateSession| {
-        let (session_id, window_id) = ctx.state().create_session(p.label.as_deref(), p.window_label.as_deref())?;
-        Ok(Created { session_id, window_id })
+    r.add("session.create", "Create a session with one window holding one terminal.", |ctx, p: CreateSession| {
+        let mut st = ctx.state();
+        let (session_id, window_id) = st.create_session(p.label.as_deref(), p.window_label.as_deref())?;
+        match blocks::open(ctx, &mut st, &session_id, &window_id, Layout::block(p.layout)) {
+            Ok(block_id) => Ok(Created { session_id, window_id, block_id }),
+            Err(e) => {
+                let _ = st.destroy_session(&session_id);
+                Err(e)
+            }
+        }
     });
     r.add("session.destroy", "Destroy a session and everything in it.", |ctx, p: SessionRef| {
         ctx.state().destroy_session(&p.session_id)?;
@@ -232,9 +254,17 @@ pub fn registry() -> Registry {
     });
     r.add(
         "session.new_window",
-        "Add a window (tab) at the end of a session and make it active.",
+        "Add a window (tab) holding one terminal at the end of a session and make it active.",
         |ctx, p: NewWindow| {
-            Ok(WindowCreated { window_id: ctx.state().new_window(&p.session_id, p.window_label.as_deref())? })
+            let mut st = ctx.state();
+            let window_id = st.new_window(&p.session_id, p.window_label.as_deref())?;
+            match blocks::open(ctx, &mut st, &p.session_id, &window_id, Layout::block(p.layout)) {
+                Ok(block_id) => Ok(WindowCreated { window_id, block_id }),
+                Err(e) => {
+                    let _ = st.close_window(&p.session_id, &window_id);
+                    Err(e)
+                }
+            }
         },
     );
     r.add("session.close_window", "Close a window; closing the last one destroys the session.", |ctx, p: WindowRef| {
@@ -250,33 +280,39 @@ pub fn registry() -> Registry {
         "Turn a query (ID, label, position or ID suffix) into one ID; ambiguous queries fail with every match.",
         |ctx, p: Resolve| {
             let st = ctx.state();
-            let id = match p.kind {
-                TargetKind::Session => st.resolve_session(&p.query)?.id.clone(),
+            Ok(match p.kind {
+                TargetKind::Session => Resolved { id: st.resolve_session(&p.query)?.id.clone(), session_id: None },
                 TargetKind::Window => {
                     let sid = p.session_id.ok_or_else(|| ApiError::bad_request("window targets need session_id"))?;
-                    st.resolve_window(&sid, &p.query)?.id.clone()
+                    Resolved { id: st.resolve_window(&sid, &p.query)?.id.clone(), session_id: None }
                 }
-            };
-            Ok(Resolved { id })
+                TargetKind::Block => {
+                    let (sid, id) = st.resolve_block(p.session_id.as_deref(), &p.query)?;
+                    Resolved { id, session_id: Some(sid) }
+                }
+            })
         },
     );
+    blocks::add(&mut r);
     r
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use serde_json::json;
 
     use crate::{Ctx, Info};
 
-    fn ctx() -> Ctx {
-        Ctx::new(Info { pid: 1, version: "test", socket: "/tmp/x".into() }, false)
+    fn ctx() -> Arc<Ctx> {
+        Arc::new(Ctx::new(Info { pid: 1, version: "test", socket: "/tmp/x".into() }, false))
     }
 
-    #[test]
-    fn help_lists_every_method_with_object_schemas() {
+    #[tokio::test]
+    async fn help_lists_every_method_with_object_schemas() {
         let c = ctx();
-        let help = c.call("help.all", json!(null)).unwrap();
+        let help = c.call("help.all", json!(null)).await.unwrap();
         let methods = help["methods"].as_array().unwrap();
         assert_eq!(methods.len(), c.registry.methods().len());
         for m in methods {
@@ -285,26 +321,26 @@ mod tests {
         }
     }
 
-    #[test]
-    fn sessions_through_the_registry() {
+    #[tokio::test]
+    async fn sessions_through_the_registry() {
         let c = ctx();
-        let created = c.call("session.create", json!({"label": "web"})).unwrap();
+        let created = c.call("session.create", json!({"label": "web"})).await.unwrap();
         let sid = created["session_id"].as_str().unwrap();
-        let r = c.call("target.resolve", json!({"kind": "session", "query": "WEB"})).unwrap();
+        let r = c.call("target.resolve", json!({"kind": "session", "query": "WEB"})).await.unwrap();
         assert_eq!(r["id"], sid);
-        let w = c.call("session.new_window", json!({"session_id": sid, "window_label": "logs"})).unwrap();
-        let v = c.call("session.view", json!({"session_id": sid})).unwrap();
+        let w = c.call("session.new_window", json!({"session_id": sid, "window_label": "logs"})).await.unwrap();
+        let v = c.call("session.view", json!({"session_id": sid})).await.unwrap();
         assert_eq!(v["windows"][1]["window_id"], w["window_id"]);
         assert_eq!(v["windows"][1]["active"], true);
     }
 
-    #[test]
-    fn errors_are_typed() {
+    #[tokio::test]
+    async fn errors_are_typed() {
         let c = ctx();
-        assert_eq!(c.call("nope", json!({})).unwrap_err().code, "method_not_found");
-        assert_eq!(c.call("session.create", json!({"bogus": 1})).unwrap_err().code, "bad_request");
+        assert_eq!(c.call("nope", json!({})).await.unwrap_err().code, "method_not_found");
+        assert_eq!(c.call("session.create", json!({"bogus": 1})).await.unwrap_err().code, "bad_request");
         assert_eq!(
-            c.call("session.destroy", json!({"session_id": "session:x"})).unwrap_err().code,
+            c.call("session.destroy", json!({"session_id": "session:x"})).await.unwrap_err().code,
             "session_not_found"
         );
     }

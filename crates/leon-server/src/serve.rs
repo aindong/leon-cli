@@ -179,7 +179,7 @@ async fn connection(stream: UnixStream, shared: &Shared) -> io::Result<()> {
         shared.touch();
         let mut stop = false;
         let reply = match serde_json::from_str::<Request>(&text) {
-            Ok(req) => match shared.ctx.call(&req.method, req.params) {
+            Ok(req) => match shared.ctx.call(&req.method, req.params).await {
                 Ok(result) => {
                     stop = req.method == "server.stop";
                     json!({ "id": req.id, "result": result })
