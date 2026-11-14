@@ -1,107 +1,84 @@
 # leon identity
 
-**Chosen direction: Open corner.** A solid L-shaped rail holds a separate square pane in an open corner. The rail gives the workspace structure; the separate pane gives another job room to run. It reads as both the initial and a small arrangement of terminals, with two solid shapes that survive reduction to an icon.
+**11 / Original, cleaned** is leon's production identity. The user selected the original Pocket guardian over refinements A, B and C: keep its chunky square silhouette, rounded ear and mane bumps, relaxed lids, broad nose and knowing half-smile. The final render only cleans the grain and contour, smooths the gold-to-coral-to-Oxide shading, and polishes the deep maroon tile. The bottom stays broad and level; the original shallow forehead notch is retained without adding B's swoosh or pointed chin.
 
 **Tagline:** Keep your work in view.
 
 ![leon hero](marketing/hero.png)
 
-## Three directions explored
+## Selection and review
 
-The [imagegen concept sheet](exploration/directions.png) explores three routes. The [research](research.md) documents the reference brands; the [generation prompts](exploration/prompts.md) record both built-in imagegen calls.
+[Original 11 beside the final master and true 32 px reductions](exploration/final-compare.png) is the current review sheet. This directly compares the user's selected thumbnail with the production icon. [Exact prompt and preparation notes](exploration/final-prompts.md) document the cleanup and vector work.
 
-1. **Open corner — selected.** A rail and one detached pane suggest orientation, parallel work, and calm control. It has the clearest relation to the name, works in one colour, and stays recognisable without detail.
-2. **Parallel current.** Three advancing rails suggest speed and simultaneous jobs. Rejected because it becomes a generic speed symbol and says less about a place to work.
-3. **Focus aperture.** A broken square ring surrounds an active pane. Rejected because it is closer to a generic scan/focus control and its thin gaps weaken at small sizes.
+![Original 11 and the cleaned production icon](exploration/final-compare.png)
 
-The final vectors distil the first exploration into an 80-unit square: a 64-unit occupied area, an 18-unit rail, a 36-unit square, and a 10-unit channel. The square and rail share a colour. This corrects the concept sheet's low-contrast, two-colour icon treatment. The final wordmark is original hand-drawn SVG geometry, not lettering extracted from the generated image.
+The [twelve-character sheet](exploration/character-directions.png) records the user's choice. The A/B/C refinement sheet and all pane-mane/glass studies remain historical and are superseded. No reference-company artwork was supplied to imagegen. Leon keeps a frontal square character, warm continuous colour and a maroon tile.
 
-## Name and mark
+## Assets and rules
 
-Use **leon** in running product copy and the lowercase wordmark. Use **Leon.app** for the actual macOS bundle name and `leon` for commands. The wordmark's open e, round o, and quiet lowercase forms keep the identity approachable without a mascot.
-
-| Asset | For light surfaces | For dark surfaces |
+| Asset | Light surfaces | Dark surfaces |
 | --- | --- | --- |
-| Full lockup | [logo.svg](logo.svg) | [logo-dark.svg](logo-dark.svg) |
-| Standalone mark | [logo-mark.svg](logo-mark.svg) | [logo-mark-dark.svg](logo-mark-dark.svg) |
-| Standalone wordmark | [wordmark.svg](wordmark.svg) | [wordmark-dark.svg](wordmark-dark.svg) |
+| Flat colour lockup | [logo.svg](logo.svg) | [logo-dark.svg](logo-dark.svg) |
+| Flat colour lion | [logo-mark.svg](logo-mark.svg) | [logo-mark-dark.svg](logo-mark-dark.svg) |
+| Single-colour lion | [logo-mark-mono.svg](logo-mark-mono.svg) | [logo-mark-mono-dark.svg](logo-mark-mono-dark.svg) |
+| Existing wordmark | [wordmark.svg](wordmark.svg) | [wordmark-dark.svg](wordmark-dark.svg) |
 
-All six files are clean, hand-authored SVG paths and shapes, with no font or bitmap dependency. The unsuffixed versions are the light variants. Keep at least one rail-width of clear space around the occupied mark; do not stretch, rotate, add a prompt, or recolour its two parts separately. For a monochrome use, give both parts the same foreground colour. The flat mark works down to 16 px; use the full lockup at 110 px wide or larger. On busy surfaces use a solid paper or iron field.
+The flat lion is a manual SVG contour transcription of the cleaned original: one square mane silhouette with rounded top bumps, relaxed lids, a broad nose and a one-sided smile. Light marks use Oxide with Parchment details; dark marks use Amber with Maroon details. Monochrome marks cut the features out of one solid colour. The flat logo is an intentional simplification of the shaded character, not a miniature raster embedded in a logo.
+
+Keep at least 10 design units of space around the lion. Use flat marks at 24 px or above and lockups at 108 px or above; use the optical app icon for 16 px. Preserve the sideways smile, low lids, original rounded ear bumps, cheek tufts, broad base and single colour field. Do not add a swept top curl, pointed chin, fangs, angry brows, shields, panels or separated colour chips. Do not stretch, rotate or give individual mane parts their own gloss. Keep depth on the app icon; keep logos flat.
+
+The custom lowercase wordmark, 360 × 90 lockup frame, tagline and product copy are retained. Use **leon** in copy, **Leon.app** for the bundle and `leon` for commands.
 
 ## Palette
 
+Oxide stays the brand anchor. Maroon replaces Iron as the app tile colour: its warm dark field separates the golden face and gives the character its own setting. Iron and Parchment remain the primary text/surface pair.
+
 | Token | Hex | Role |
 | --- | --- | --- |
-| Parchment | `#F5F0E7` | Light background, inverse text, icon symbol |
-| Iron | `#292521` | Primary text, dark background |
-| Oxide | `#B64C32` | Main mark and light-mode accent |
-| Clay | `#E6AA91` | Dark-mode accent, working state |
-| Umber | `#65594F` | Secondary light-mode text |
-| Chalk | `#D8CEC2` | Secondary dark-mode text |
-| Sand | `#EBE3D7` | Light raised surface |
-| Coal | `#1F1C19` | Terminal pane surface |
-| Sage | `#B8C6AC` | Done status on dark surfaces |
-| Wheat | `#E8C77D` | Blocked status on dark surfaces |
+| Oxide | `#B64C32` | Brand anchor, flat light mark, light-mode links; lower gradient shading |
+| Maroon | `#542D35` | App tile base; details in the Amber flat mark |
+| Deep maroon | `#352028` | Tile shadows; small-icon facial details |
+| Gold | `#FFD477` | Soft upper-left light |
+| Amber | `#F3A747` | Warm upper face and flat dark-surface mark |
+| Coral | `#EB795D` | Warm midtone transition |
+| Iron | `#292521` | Main light-mode text; dark-mode page and terminal surfaces |
+| Parchment | `#F5F0E7` | Light page; dark-mode main text |
+| Umber / Chalk | `#65594F` / `#D8CEC2` | Secondary light / dark text |
+| Clay | `#E6AA91` | Dark-mode links |
+| Sand / Coal | `#EBE3D7` / `#1F1C19` | Raised light surface / terminal pane |
 
-Calculated from sRGB relative luminance using `(Llighter + 0.05) / (Ldarker + 0.05)`, rounded to two decimals. These approved text pairs meet WCAG AA's 4.5:1 normal-text threshold; the icon's lighting is decorative rather than a text colour specification.
+The icon's continuous light field moves **Gold → Amber → Coral → Oxide**, with maroon in the deepest shadows. The flat optical source uses stops at 0%, 38%, 70%, 100%. Those are art-direction targets; the approved raster includes continuous lighting and its sampled pixels are not restricted to four hex values. The generated source uses palette optimisation to keep file size small.
 
-| Text / background | Contrast |
-| --- | ---: |
-| Iron / Parchment | 13.40:1 |
-| Umber / Parchment | 5.98:1 |
-| Oxide / Parchment | 4.55:1 |
-| Parchment / Oxide | 4.55:1 |
-| Parchment / Iron | 13.40:1 |
-| Chalk / Iron | 9.80:1 |
-| Clay / Iron | 7.62:1 |
-| Sage / Iron | 8.48:1 |
-| Wheat / Iron | 9.34:1 |
-| Chalk / Coal | 10.92:1 |
+Status accents are quieter than the retired pane colours: **Copper `#E78155`** for `● working`, **Sage `#B8C6AC`** for `✓ done`, **Wheat `#E8C77D`** for `! blocked`, and **Rose `#E28E9B`** for a real error label. Working retains its warm accent; done and blocked return to softer supporting tones. Status always includes a word and distinct symbol. The demo does not invent an error state. Iris and Lagoon are retired from production identity use.
 
-Use the lighter Clay accent on dark backgrounds. Do not use Oxide as small text on Iron. Pair every status colour with its word and a distinct symbol, as the demo does; colour alone is insufficient.
+Approved text contrast: Iron/Parchment **13.40:1**, Umber/Parchment **5.98:1**, Oxide/Parchment **4.55:1**, Chalk/Iron **9.80:1**, Clay/Iron **7.62:1**. Copper, Sage, Wheat and Rose on Iron are **5.55, 8.48, 9.34 and 6.21:1** respectively. Amber/Maroon is **5.78:1**. Gold, Amber and Coral are decorative on light surfaces, not light-mode text colours. See [verification](verification.md) for measured checks.
 
-## Type
+## Icon sources and small sizes
 
-- **UI and marketing:** [Instrument Sans](https://fonts.google.com/specimen/Instrument+Sans), a free SIL Open Font License family, weights 400–700. Use 400 for body text, 500–600 for headings, and 600 for actions. The supplied 29 KB Latin WOFF2 and [licence](fonts/OFL.txt) are embedded in the standalone page and SVG marketing sources; no font service is called.
-- **Terminal and code:** **Menlo**, the font already used by `FONT_FAMILY` in `crates/leon-app/src/view.rs`. It ships with macOS and is not redistributed here. Web fallback is `monospace`. Instrument Sans is a brand/UI recommendation, not a change to the app's existing system UI font.
-- **Logo lettering:** bespoke vector paths. Do not typeset a replacement with a similar font.
+The canonical [1024 PNG master](icon/leon-1024.png) is the approved imagegen render with alpha outside the macOS rounded tile. The [1024 SVG](icon/leon-1024.svg) is a standalone **raster wrapper**, explicitly embedding that PNG; it is not editable vector artwork. This raster master is permitted by the production brief.
 
-## macOS icon
+The [optical SVG](icon/leon-small.svg) supplies the 16 pt slots at 1× and 2× and the page favicon. It replaces volumetric folds with one rounded mane shape and a simple warm gradient, removes the tile rim/shadow, and enlarges the lids, nose and half-smile. The 32 pt and larger slots use the raster master. Fine facial expression softens at 16 px, so the mane silhouette and broad dark details do the work.
 
-The [1024×1024 RGBA master](icon/leon-1024.png) is original imagegen raster art: an oxide rounded square, restrained glass rim, and raised parchment shapes. The [complete iconset](icon/Leon.iconset) and [Leon.icns](icon/Leon.icns) are ready for the existing macOS packaging flow. The bitmap has transparent space outside the tile.
+![Native 16, 32, and 128 px icons on light and dark backgrounds](icon/size-check.png)
 
-![16, 32, and 128 pixel icon checks on light and dark backgrounds](icon/size-check.png)
+The proof shows 16/32/128 px on Parchment and Iron, plus direct reduction versus the optical 16 px source enlarged 8×. [Leon.iconset](icon/Leon.iconset) contains all ten standard slots; [Leon.icns](icon/Leon.icns) uses Apple's native encoder. The existing bundle script already copies it. Native AppKit rendering and decoder round-trip checks are recorded in [verification.md](verification.md).
 
-I checked **16, 32, and 128 px side by side**, on light and dark backgrounds. A plain 16 px reduction softened the channel and let the bright outer rim compete with the mark. The [optical small-size source](icon/leon-small.svg) removes the fine rim and cast shadow, uses a larger flat symbol, and keeps a 1.5 px channel on its 16-unit grid. Both 16 pt and 32 pt slots, including their Retina versions, use that correction; 128 pt and larger use the dimensional raster master. There is a deliberately simpler small-icon appearance.
+[background.svg](icon/background.svg) and [foreground.svg](icon/foreground.svg) are simplified, unmasked vector references for possible future layered work. They are not the exact layers of the rendered icon. The delivered ICNS is static; it does not claim native adaptive Liquid Glass behaviour or an Icon Composer package.
 
-All ten required PNG names are present: 16, 32, 128, 256, and 512 pt, each at 1× and 2×. `iconutil` built the ICNS successfully. [Unmasked background](icon/background.svg) and [foreground](icon/foreground.svg) are also supplied for future Icon Composer work. The delivered ICNS is static; it does not claim native adaptive Liquid Glass behaviour or include a compiled `.icon` package.
+## Marketing, type and rebuild
 
-`scripts/bundle.sh` was left unchanged: its current two-step Swift/iconutil flow still produces the existing app icon. The coordinator can adopt the supplied ICNS when integrating the brand. Root `README.md` was not edited.
+- [Hero](marketing/hero.png) / [SVG](marketing/hero.svg): **1600 × 600**.
+- [OG](marketing/og.png) / [SVG](marketing/og.svg): **1200 × 630**; the SVG embeds the approved app icon.
+- [Landing page](marketing/index.html): single HTML with inline CSS, embedded font/icon/favicon, phone layout and dark mode.
+- [Copy](marketing/copy.md): unchanged tagline, alternatives, 50-word pitch and 150-word description.
 
-## Marketing kit
+Instrument Sans remains the UI/marketing family, with the local Latin WOFF2 and SIL [OFL licence](fonts/OFL.txt). Menlo remains the terminal/code family with a monospace web fallback. The custom wordmark remains vector paths. No app typography or application code changes.
 
-- [README hero PNG](marketing/hero.png), **1600×600**, with [editable SVG source](marketing/hero.svg).
-- [Social / OG PNG](marketing/og.png), **1200×630**, with [editable SVG source](marketing/og.svg).
-- [Copy sheet](marketing/copy.md): primary tagline, three alternatives, exactly 50 words of pitch and exactly 150 words of description, using whitespace word counts.
-- [Landing page](marketing/index.html): one HTML file with inline CSS, inline vector identity, embedded font and icon, and zero scripts or runtime network requests. Includes six product capabilities, a terminal demo, the real source-install command, and an agent section.
-
-The workflow panels are original illustrations, explicitly labelled as such. They are not screenshots, measured test results, or evidence that every program reports status automatically. The page uses the architecture's restart behaviour: quitting the app leaves programs running; when the server stops, layouts restore and programs don't.
-
-The page can be opened directly from the checkout. Its documentation links are repository-relative; before public hosting, point those links at the hosted docs and set `og:image` to the deployed absolute URL. No deployment hostname was invented.
-
-## Rebuild and checks
-
-On macOS with Node and Google Chrome installed:
+The page and hero retain the illustrated workflow and labelled statuses; the OG shows the current icon. A continuous warm rule replaces the old pane-colour strip. Checkout-relative documentation links and OG metadata remain deployment-time concerns.
 
 ```sh
 npm install --prefix /tmp/leon-brand-build sharp playwright
 NODE_PATH=/tmp/leon-brand-build/node_modules node brand/build-assets.cjs
 ```
 
-The build script renders the SVG banners with their embedded font, optimises PNGs, builds all icon slots and the ICNS, and renders the optical-size comparison. It treats the generated 1024 px master as an input. The page is directly editable HTML; its embedded font and icon keep it portable.
-
-Verified in Chrome at **1440, 390, and 320 px**, in both light and dark modes: no page errors, no horizontal overflow, six feature items, loaded font and imagery, no scripts, and no external resource requests. Desktop and 390 px renders were visually inspected, alongside both exported banners and the icon proof. SVGs parse as XML; PNG dimensions, alpha, iconset slots, copy lengths, local page anchors, and documentation destinations were checked. See [verification.md](verification.md) for the recorded result and [FILES.md](FILES.md) for every delivered file.
-
-## Human review
-
-The chosen mark is ready; there is no unresolved choice between final marks. Judge whether the oxide icon's warmth and glass depth feel right beside the user's other Dock apps, and whether the custom rounded lettering feels sufficiently technical. The optical small-icon treatment and dimensional master should also be judged together on a real Retina display. These are aesthetic review points, not uncompleted deliverables.
+On macOS with Google Chrome and `iconutil`, the builder reads the committed raster master and optical SVG, then regenerates the wrapper, ten icon slots, ICNS, size proof, page embed, OG embed and both banner PNGs. It never regenerates or overwrites the canonical raster and never calls imagegen. Flat logo SVGs and banner layouts are editable sources. Historical exploration sheets are not rewritten by a production build. [FILES.md](FILES.md) lists the complete kit.
