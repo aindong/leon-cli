@@ -64,7 +64,7 @@ impl Dimensions for Size {
 pub struct Terminal {
     term: Arc<Mutex<Term<Replies>>>,
     writer: Writer,
-    _master: Box<dyn MasterPty + Send>,
+    _master: Mutex<Box<dyn MasterPty + Send>>,
     pid: i32,
     exited: Arc<AtomicBool>,
     /// The argv that runs (the login shell's path when `Spec::command` was empty).
@@ -126,7 +126,7 @@ impl Terminal {
             done.store(true, Ordering::SeqCst);
             on_exit(status);
         });
-        Ok(Terminal { term, writer, _master: pair.master, pid, exited, command })
+        Ok(Terminal { term, writer, _master: Mutex::new(pair.master), pid, exited, command })
     }
 
     pub fn pid(&self) -> i32 {

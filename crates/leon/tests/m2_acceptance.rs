@@ -144,7 +144,11 @@ fn c2_wait_returns_the_exit_status() {
     wait_for("the finished block to close", 10, || env.blocks(&s).iter().all(|x| x["block_id"] != b.as_str()));
     let out = env.run(&["wait", &b]);
     assert_eq!(out.status.code(), Some(3));
-    assert!(out.stderr.is_empty(), "3 must be the child's status, not a target error: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.stderr.is_empty(),
+        "3 must be the child's status, not a target error: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     // A wait that is already pending when the child exits.
     let b = env.ok(&["-s", &s, "run", "--", "sh", "-c", "sleep 1; exit 7"]);
@@ -323,7 +327,9 @@ fn c11_the_api_describes_blocks() {
     let s = session(&env);
     let help = env.json(&["api", "call", "help.all"]);
     let methods = help["methods"].as_array().unwrap();
-    for name in ["block.close", "block.method", "block.event", "block.wait", "session.list_blocks", "session.describe_block"] {
+    for name in
+        ["block.close", "block.method", "block.event", "block.wait", "session.list_blocks", "session.describe_block"]
+    {
         let m = methods.iter().find(|m| m["name"] == name).unwrap_or_else(|| panic!("help.all lacks {name}"));
         assert_eq!(m["input_schema"]["type"], "object", "{name}");
     }
