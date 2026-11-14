@@ -5,13 +5,14 @@ mod client;
 mod commands;
 mod events;
 mod layout;
+mod script;
 mod skill;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::builder::BoolishValueParser;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use client::Fail;
 
@@ -171,9 +172,15 @@ pub enum Cmd {
     /// List, describe and call server API methods.
     #[command(subcommand)]
     Api(ApiCmd),
-    /// Check the Lua config.
+    /// Check or reload the Lua config.
     #[command(subcommand)]
     Config(ConfigCmd),
+    /// Run a config action on the server, or a Lua script here: `do ACTION|SCRIPT.lua|-e CODE [k=v…]`.
+    Do(DoArgs),
+    /// List the server's config actions.
+    Actions,
+    /// Print the server's key bindings and modes.
+    Keymap,
     /// Teach coding agents (Claude Code, Codex) to drive leon. Needs no server.
     #[command(subcommand)]
     Skill(SkillCmd),
@@ -212,6 +219,34 @@ pub enum SkillCmd {
     Hook,
 }
 
+#[derive(Args)]
+pub struct DoArgs {
+    /// Lua code to run as a script.
+    #[arg(short = 'e', long = "eval", value_name = "CODE", conflicts_with = "action")]
+    pub code: Option<String>,
+    /// Run this action (when its name could be taken for a script path).
+    #[arg(short = 'a', long = "action", value_name = "NAME")]
+    pub action: Option<String>,
+    /// Arguments as a JSON object (inline, @file, or - for stdin); k=v words override its keys.
+    #[arg(long, value_name = "JSON")]
+    pub args: Option<String>,
+    /// The action's `ctx.origin` [default: cli].
+    #[arg(long)]
+    pub origin: Option<String>,
+    /// Scripts: get events from every session, not just -s's.
+    #[arg(long)]
+    pub all: bool,
+    /// Scripts: end after this long (e.g. 500ms, 10s, 2m), exiting 0.
+    #[arg(long = "for", value_parser = blocks::parse_duration)]
+    pub run_for: Option<std::time::Duration>,
+    /// Scripts: an error in a handler or timer ends the script (exit 1) instead of being reported.
+    #[arg(long)]
+    pub fail_fast: bool,
+    /// ACTION or SCRIPT (unless -e or -a), then k=v arguments (values are JSON, else strings).
+    #[arg(value_name = "ACTION|SCRIPT [k=v]")]
+    pub words: Vec<String>,
+}
+
 #[derive(Subcommand)]
 pub enum ConfigCmd {
     /// Load a config without applying it: print counts and diagnostics, exit 1 on error. Needs no server.
@@ -219,6 +254,8 @@ pub enum ConfigCmd {
         /// [default: $LEON_CONFIG, else $XDG_CONFIG_HOME/leon/init.lua, else ~/.config/leon/init.lua]
         path: Option<std::path::PathBuf>,
     },
+    /// Re-read the config on the server; a failed load keeps the last good one (exit 1).
+    Reload,
 }
 
 #[derive(Subcommand)]
@@ -248,6 +285,9 @@ pub enum ServerCmd {
     Run {
         #[arg(long, hide = true)]
         autostarted: bool,
+        /// The Lua config [default: $LEON_CONFIG, else $XDG_CONFIG_HOME/leon/init.lua, else ~/.config/leon/init.lua].
+        #[arg(long, value_name = "PATH")]
+        config: Option<PathBuf>,
     },
     /// Start a server in the background (does nothing if one runs).
     Start,

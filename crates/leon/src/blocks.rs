@@ -144,7 +144,7 @@ fn env(name: &str) -> Option<String> {
 
 /// The block query a command names: an explicit target, then `-b`, then `$LEON_BLOCK` (only when
 /// `-s` names no session, since a name always beats the caller's own block).
-fn block_query(cli: &Cli, explicit: Option<&str>) -> Option<String> {
+pub(crate) fn block_query(cli: &Cli, explicit: Option<&str>) -> Option<String> {
     explicit
         .or(cli.block.as_deref())
         .map(str::to_string)

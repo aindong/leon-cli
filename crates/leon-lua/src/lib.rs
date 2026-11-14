@@ -1,8 +1,16 @@
-//! Lua configuration (`init.lua`, spec §4): loads a config file into a plain [`Config`].
-//! The Lua state is dropped after the load; running fn bindings and actions is M5b's job.
+//! Lua (spec §4): `init.lua` loaded into a plain [`Config`] ([`load`]), or kept alive as a
+//! [`Runtime`] that runs its actions and function bindings; and `leon do` scripts ([`run_script`]).
+//! Both reach the server through a [`Host`].
 
 mod api;
+mod exec;
 pub mod keys;
+mod runtime;
+mod sandbox;
+mod script;
+
+pub use runtime::{CallCtx, Host, Runtime, LOAD_LIMIT, MAX_DEPTH, TIMED_OUT};
+pub use script::{run_script, ScriptOptions, MAX_TIMERS};
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -11,7 +19,7 @@ use keys::KeySpec;
 use serde_json::Value;
 
 /// Everything a config file declared, in the order it was declared.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Config {
     /// Bindings after unbinds and conflict removal. Same-key bindings stack; the newest wins.
     pub bindings: Vec<Binding>,
@@ -127,14 +135,20 @@ pub fn config_path() -> Option<PathBuf> {
 /// Run `path` top to bottom. A bad `leon.*` call is skipped with a diagnostic; anything else
 /// that raises fails the whole load.
 pub fn load(path: &Path) -> Result<Config, LoadError> {
-    let src = std::fs::read(path).map_err(|e| LoadError(format!("cannot read {}: {e}", path.display())))?;
-    api::run(path, &src).map_err(|e| LoadError(lua_message(e)))
+    struct NoServer;
+    impl Host for NoServer {
+        fn call(&mut self, _: &str, _: Value, _: Option<std::time::Instant>) -> Result<Value, String> {
+            Err("no server".into())
+        }
+    }
+    Runtime::load(path, Box::new(NoServer)).map(|(_, cfg)| cfg)
 }
 
 /// The Lua error text, without mlua's "runtime error: " prefix and Lua's traceback.
 fn lua_message(e: mlua::Error) -> String {
     let msg = match e {
         mlua::Error::SyntaxError { message, .. } | mlua::Error::RuntimeError(message) => message,
+        mlua::Error::CallbackError { cause, .. } => return lua_message((*cause).clone()),
         e => e.to_string(),
     };
     msg.split("\nstack traceback:").next().unwrap_or_default().to_string()

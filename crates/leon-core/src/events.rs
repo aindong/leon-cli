@@ -67,6 +67,12 @@ impl State {
         self.outbox.push(Event { session_id: session_id.into(), server: true, body });
     }
 
+    /// A server-wide event about no session (`keymap_changed`): only `--all` subscribers get it.
+    pub fn emit_global(&mut self, kind: &str, payload: Value) {
+        let body = json!({ "type": kind, "payload": payload });
+        self.outbox.push(Event { session_id: String::new(), server: false, body });
+    }
+
     pub(crate) fn emit(&mut self, session_id: &str, kind: &str, payload: Value) {
         let event = json!({ "type": kind, "payload": payload });
         let body = json!({ "type": "session_event", "payload": { "session_id": session_id, "event": event } });
