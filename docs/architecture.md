@@ -36,6 +36,14 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   `server.stop {if_idle: true}` and replaced. Closing the window ends every program; `leon server
   stop` from the CLI quits the app. The view polls each terminal's change counter (~8 ms) and
   redraws only when something changed.
+- **Agent skill.** `leon skill show` prints a guide compiled into the binary. `skill setup` installs a
+  SKILL.md stub (marked `<!-- leon-skill: … -->`) that tells the agent to run `leon skill show`, so
+  upgrades reach agents without a reinstall, plus a matcher-less SessionStart hook running
+  `leon skill hook` (prints `LEON_SESSION`/`LEON_BLOCK`, nothing outside leon, no server call). Claude
+  Code: `$CLAUDE_CONFIG_DIR` (`~/.claude`) `skills/leon` + `settings.json`; Codex: `~/.agents/skills/leon`
+  + `$CODEX_HOME` (`~/.codex`) `hooks.json`. Settings edits keep key order, back up once to
+  `<file>.leon-backup`, write atomically through symlinks, and refuse files that aren't the expected
+  JSON shape. Not yet: OpenCode/Pi, `--project`, `--session-naming`.
 - **Naming.** Method, action, event and flag names follow `docs/spec.md`, so scripts and agents written
   for that interface carry over. Env vars are `LEON_*`.
 
