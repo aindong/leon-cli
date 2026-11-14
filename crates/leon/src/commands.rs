@@ -31,6 +31,13 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
     if let Cmd::Hosts(cmd) = cli.cmd() {
         return crate::hosts::run(cli, cmd);
     }
+    // Validate before connecting/autostarting: a bad local path is a usage error.
+    let new_cwd = match cli.cmd() {
+        Cmd::New { cwd, .. } | Cmd::Session(SessionCmd::New { cwd, .. }) => {
+            cwd.as_deref().map(new_directory).transpose()?
+        }
+        _ => None,
+    };
     let server = crate::hosts::server(cli, cli.autostart)?;
     if let Cmd::Attach { target, prefix } = cli.cmd() {
         let target = target.as_deref().or(cli.session.as_deref());
@@ -48,8 +55,12 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         Cmd::Do(args) => crate::script::run(&mut c, cli, args, &server.socket)?,
         Cmd::Actions => crate::script::actions(&mut c, cli)?,
         Cmd::Keymap => crate::script::keymap(&mut c, cli)?,
-        Cmd::New { label } | Cmd::Session(SessionCmd::New { label }) => {
-            let r = c.call("session.create", json!({ "label": label }))?;
+        Cmd::New { label, .. } | Cmd::Session(SessionCmd::New { label, .. }) => {
+            let mut params = json!({ "label": label });
+            if let Some(cwd) = new_cwd {
+                params["cwd"] = json!(cwd);
+            }
+            let r = c.call("session.create", params)?;
             println!("{}", r["session_id"].as_str().unwrap_or_default());
         }
         Cmd::Ls | Cmd::Session(SessionCmd::Ls) => {
@@ -390,4 +401,15 @@ pub(crate) fn json_out(cli: &Cli, v: &Value) {
     if cli.json {
         print_json(v);
     }
+}
+
+/// Canonicalizing also resolves relative paths in the caller, before the server sees them.
+fn new_directory(path: &std::path::Path) -> Result<std::path::PathBuf, Fail> {
+    let dir = path
+        .canonicalize()
+        .map_err(|e| Fail::Usage(format!("--cwd {}: cannot open directory: {e}", path.display())))?;
+    if !dir.is_dir() {
+        return Err(Fail::Usage(format!("--cwd {}: not a directory", path.display())));
+    }
+    Ok(dir)
 }

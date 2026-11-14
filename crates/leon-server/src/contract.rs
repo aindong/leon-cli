@@ -10,7 +10,7 @@ use crate::methods::MethodDoc;
 
 /// The API's semver, apart from the build's version. A change to a stable method needs a bump:
 /// docs/api-snapshot.json won't take the change without one.
-pub const API_VERSION: &str = "1.0.0";
+pub const API_VERSION: &str = "1.1.0";
 
 #[derive(Serialize, JsonSchema, Clone, Copy, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -127,8 +127,8 @@ fn example(name: &str) -> Option<(Value, Value)> {
         "server.version" => (json!({}), json!({ "version": "0.1.0", "api_version": API_VERSION })),
         "session.list" => (json!({}), json!({ "sessions": [{ "session_id": SID, "label": "web", "windows": 2 }] })),
         "session.create" => (
-            json!({ "label": "web", "layout": { "block": { "options": {
-                "command": ["ls", "-l"], "cwd": "/tmp", "exit": { "on_completion": false } } } } }),
+            json!({ "label": "web", "cwd": "/tmp", "layout": { "block": { "options": {
+                "command": ["ls", "-l"], "exit": { "on_completion": false } } } } }),
             json!({ "session_id": SID, "window_id": WID, "block_id": BID }),
         ),
         "target.resolve" => (json!({ "kind": "session", "query": "web" }), json!({ "id": SID, "session_id": null })),

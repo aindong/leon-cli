@@ -98,9 +98,13 @@ watchdog process does it even after SIGKILL. Killed by a signal, it exits 128 + 
 
 ## Sessions
 
-### `leon new [LABEL]`
+### `leon new [LABEL] [--cwd DIR]`
 
 Create a session and print its ID. Same as `leon session new`.
+
+- `-c, --cwd DIR`: start the first terminal in this existing directory. Relative paths resolve
+  against the caller's working directory. A missing path or a file exits 2 (usage error).
+  Omitted uses the server's home directory.
 
 ### `leon ls`
 
@@ -114,7 +118,7 @@ Destroy sessions and end every program in them. Same as `leon session kill`.
 
 Manage sessions.
 
-### `leon session new [LABEL]`
+### `leon session new [LABEL] [--cwd DIR]`
 
 Create a session and print its ID.
 
