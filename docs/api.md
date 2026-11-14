@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.1.0**. Every method is marked:
+API version **1.2.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -19,7 +19,7 @@ same facts for the server you run.
 
 - [help](#help): 1
 - [server](#server): 5
-- [session](#session): 23
+- [session](#session): 28
 - [target](#target): 1
 - [block](#block): 5
 - [client](#client): 3
@@ -351,7 +351,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.1.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.2.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -942,12 +942,42 @@ same facts for the server you run.
 | `active` | boolean | yes |  |
 | `block_ids` | [string] | yes | In layout order. |
 | `layout` | `Node` \| null |  |  |
+| `floating` | [`Floating`] | yes | Back to front, including hidden floats. |
+| `docked` | [`Docked`] | yes | At most one panel per side, including hidden drawers. |
 | `focused_block_id` | string \| null |  |  |
 | `zoomed_block_id` | string \| null |  | The block shown filling the window; the layout is unchanged. |
 
 **`Node`:** { block: { block_id: string } } | { split: { split_id: string, direction: `Direction`, ratio: number, before: `Node`, after: `Node` } }.
 
 **`Direction`:** `"horizontal"` | `"vertical"`.
+
+**`Floating`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `block_id` | string | yes |  |
+| `bounds` | `Bounds` | yes |  |
+| `hidden` | boolean | yes |  |
+
+**`Bounds`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `x` | number | yes |  |
+| `y` | number | yes |  |
+| `width` | number | yes |  |
+| `height` | number | yes |  |
+
+**`Docked`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `block_id` | string | yes |  |
+| `side` | `DockSide` | yes |  |
+| `size` | number | yes |  |
+| `hidden` | boolean | yes |  |
+
+**`DockSide`:** `"left"` | `"right"` | `"bottom"`.
 
 <details><summary>JSON Schemas</summary>
 
@@ -1038,6 +1068,20 @@ same facts for the server you run.
               }
             ]
           },
+          "floating": {
+            "description": "Back to front, including hidden floats.",
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Floating"
+            }
+          },
+          "docked": {
+            "description": "At most one panel per side, including hidden drawers.",
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Docked"
+            }
+          },
           "focused_block_id": {
             "type": [
               "string",
@@ -1056,7 +1100,9 @@ same facts for the server you run.
           "window_id",
           "position",
           "active",
-          "block_ids"
+          "block_ids",
+          "floating",
+          "docked"
         ]
       },
       "Node": {
@@ -1133,6 +1179,87 @@ same facts for the server you run.
             "type": "string",
             "const": "vertical"
           }
+        ]
+      },
+      "Floating": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "bounds": {
+            "$ref": "#/$defs/Bounds"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "block_id",
+          "bounds",
+          "hidden"
+        ]
+      },
+      "Bounds": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ]
+      },
+      "Docked": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "side": {
+            "$ref": "#/$defs/DockSide"
+          },
+          "size": {
+            "type": "number",
+            "format": "double"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "block_id",
+          "side",
+          "size",
+          "hidden"
+        ]
+      },
+      "DockSide": {
+        "type": "string",
+        "enum": [
+          "left",
+          "right",
+          "bottom"
         ]
       }
     }
@@ -2699,6 +2826,579 @@ same facts for the server you run.
 
 </details>
 
+### `session.float_block`
+
+*stable*. Move a block above its tiled layout; show, focus and raise it without restarting its program.
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes |  |
+| `block_id` | string | yes |  |
+| `bounds` | `Bounds` \| null |  | Fractions of the whole window; default centered 80% by 80%. |
+| `label` | string \| null |  |  |
+
+**Output:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `revision` | integer (uint64) | yes |  |
+
+**`Bounds`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `x` | number | yes |  |
+| `y` | number | yes |  |
+| `width` | number | yes |  |
+| `height` | number | yes |  |
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Float",
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "block_id": {
+        "type": "string"
+      },
+      "bounds": {
+        "description": "Fractions of the whole window; default centered 80% by 80%.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Bounds"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "label": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "session_id",
+      "block_id"
+    ],
+    "$defs": {
+      "Bounds": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ]
+      }
+    }
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Revision",
+    "description": "What a call that changes a session's view returns.",
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ]
+  }
+}
+```
+
+</details>
+
+### `session.new_floating`
+
+*stable*. Open a terminal in a visible floating pane in a window (default active).
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes |  |
+| `window_id` | string \| null |  | Default active window. |
+| `bounds` | `Bounds` \| null |  |  |
+| `layout` | `Layout` \| null |  |  |
+
+**Output:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `block_id` | string | yes |  |
+| `window_id` | string | yes |  |
+| `revision` | integer (uint64) | yes |  |
+
+**`Bounds`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `x` | number | yes |  |
+| `y` | number | yes |  |
+| `width` | number | yes |  |
+| `height` | number | yes |  |
+
+**`Layout`:** { block: `BlockSpec` }. What a new window or split holds: one block (nested layouts aren't supported yet).
+
+**`BlockSpec`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `flavor` | string \| null |  | Only `dev.leon.terminal.shell` exists (the default). |
+| `label` | string \| null |  |  |
+| `options` | `TerminalOptions` |  |  |
+
+**`TerminalOptions`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `exit` | `ExitOptions` \| null |  |  |
+
+**`ExitOptions`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `on_completion` | boolean | yes | Close the block when its program exits (default true); false keeps it open. |
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "NewFloating",
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "window_id": {
+        "description": "Default active window.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "bounds": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Bounds"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "layout": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Layout"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "session_id"
+    ],
+    "$defs": {
+      "Bounds": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ]
+      },
+      "Layout": {
+        "description": "What a new window or split holds: one block (nested layouts aren't supported yet).",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "block": {
+                "$ref": "#/$defs/BlockSpec"
+              }
+            },
+            "required": [
+              "block"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "BlockSpec": {
+        "type": "object",
+        "properties": {
+          "flavor": {
+            "description": "Only `dev.leon.terminal.shell` exists (the default).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "options": {
+            "$ref": "#/$defs/TerminalOptions"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TerminalOptions": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "argv to run directly; omitted runs the login shell.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "description": "Working directory; defaults to `$HOME`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ExitOptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExitOptions": {
+        "type": "object",
+        "properties": {
+          "on_completion": {
+            "description": "Close the block when its program exits (default true); false keeps it open.",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "on_completion"
+        ]
+      }
+    }
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "SplitCreated",
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": "string"
+      },
+      "window_id": {
+        "type": "string"
+      },
+      "revision": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "block_id",
+      "window_id",
+      "revision"
+    ]
+  }
+}
+```
+
+</details>
+
+### `session.dock_block`
+
+*stable*. Pin a block to left, right or bottom; an occupied side fails without changes.
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes |  |
+| `block_id` | string | yes |  |
+| `side` | `DockSide` | yes |  |
+| `size` | number \| null |  | Fraction of the window (default 0.3), strictly between zero and one. |
+
+**Output:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `revision` | integer (uint64) | yes |  |
+
+**`DockSide`:** `"left"` | `"right"` | `"bottom"`.
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Dock",
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "block_id": {
+        "type": "string"
+      },
+      "side": {
+        "$ref": "#/$defs/DockSide"
+      },
+      "size": {
+        "description": "Fraction of the window (default 0.3), strictly between zero and one.",
+        "type": [
+          "number",
+          "null"
+        ],
+        "format": "double"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "session_id",
+      "block_id",
+      "side"
+    ],
+    "$defs": {
+      "DockSide": {
+        "type": "string",
+        "enum": [
+          "left",
+          "right",
+          "bottom"
+        ]
+      }
+    }
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Revision",
+    "description": "What a call that changes a session's view returns.",
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ]
+  }
+}
+```
+
+</details>
+
+### `session.unfloat_block`
+
+*stable*. Return a float or drawer to the tiled tree, split equally beside its root.
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes |  |
+| `block_id` | string | yes |  |
+
+**Output:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `revision` | integer (uint64) | yes |  |
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "FocusBlock",
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "block_id": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "session_id",
+      "block_id"
+    ]
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Revision",
+    "description": "What a call that changes a session's view returns.",
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ]
+  }
+}
+```
+
+</details>
+
+### `session.toggle`
+
+*stable*. Show or hide a labeled float or drawer without stopping its program; optionally create a scratch shell.
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes |  |
+| `label` | string | yes | Exact case-insensitive block label, unique within this session. |
+| `create` | boolean |  | If absent, create a login-shell drawer docked to the bottom of the active window. |
+
+**Output:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `revision` | integer (uint64) | yes |  |
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Toggle",
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "label": {
+        "description": "Exact case-insensitive block label, unique within this session.",
+        "type": "string"
+      },
+      "create": {
+        "description": "If absent, create a login-shell drawer docked to the bottom of the active window.",
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "session_id",
+      "label"
+    ]
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Revision",
+    "description": "What a call that changes a session's view returns.",
+    "type": "object",
+    "properties": {
+      "revision": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "revision"
+    ]
+  }
+}
+```
+
+</details>
+
 ### `session.attach`
 
 *stable*. Snapshot a session; on a socket connection, also receive its events (block events too) as `{"event":…,"seq":N}` lines from now on, with seq above the snapshot's.
@@ -2737,12 +3437,42 @@ same facts for the server you run.
 | `active` | boolean | yes |  |
 | `block_ids` | [string] | yes | In layout order. |
 | `layout` | `Node` \| null |  |  |
+| `floating` | [`Floating`] | yes | Back to front, including hidden floats. |
+| `docked` | [`Docked`] | yes | At most one panel per side, including hidden drawers. |
 | `focused_block_id` | string \| null |  |  |
 | `zoomed_block_id` | string \| null |  | The block shown filling the window; the layout is unchanged. |
 
 **`Node`:** { block: { block_id: string } } | { split: { split_id: string, direction: `Direction`, ratio: number, before: `Node`, after: `Node` } }.
 
 **`Direction`:** `"horizontal"` | `"vertical"`.
+
+**`Floating`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `block_id` | string | yes |  |
+| `bounds` | `Bounds` | yes |  |
+| `hidden` | boolean | yes |  |
+
+**`Bounds`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `x` | number | yes |  |
+| `y` | number | yes |  |
+| `width` | number | yes |  |
+| `height` | number | yes |  |
+
+**`Docked`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `block_id` | string | yes |  |
+| `side` | `DockSide` | yes |  |
+| `size` | number | yes |  |
+| `hidden` | boolean | yes |  |
+
+**`DockSide`:** `"left"` | `"right"` | `"bottom"`.
 
 <details><summary>JSON Schemas</summary>
 
@@ -2863,6 +3593,20 @@ same facts for the server you run.
               }
             ]
           },
+          "floating": {
+            "description": "Back to front, including hidden floats.",
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Floating"
+            }
+          },
+          "docked": {
+            "description": "At most one panel per side, including hidden drawers.",
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Docked"
+            }
+          },
           "focused_block_id": {
             "type": [
               "string",
@@ -2881,7 +3625,9 @@ same facts for the server you run.
           "window_id",
           "position",
           "active",
-          "block_ids"
+          "block_ids",
+          "floating",
+          "docked"
         ]
       },
       "Node": {
@@ -2958,6 +3704,87 @@ same facts for the server you run.
             "type": "string",
             "const": "vertical"
           }
+        ]
+      },
+      "Floating": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "bounds": {
+            "$ref": "#/$defs/Bounds"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "block_id",
+          "bounds",
+          "hidden"
+        ]
+      },
+      "Bounds": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ]
+      },
+      "Docked": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "side": {
+            "$ref": "#/$defs/DockSide"
+          },
+          "size": {
+            "type": "number",
+            "format": "double"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "block_id",
+          "side",
+          "size",
+          "hidden"
+        ]
+      },
+      "DockSide": {
+        "type": "string",
+        "enum": [
+          "left",
+          "right",
+          "bottom"
         ]
       }
     }

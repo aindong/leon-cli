@@ -31,7 +31,7 @@ fn check_json(v: &Value) -> Result<(), String> {
 #[tokio::test]
 async fn a_snapshot_passes_its_own_checks() {
     let v = saved_json().await;
-    assert_eq!(v["version"], 2);
+    assert_eq!(v["version"], VERSION);
     assert_eq!(v["sessions"][0]["blocks"][1]["command"], json!(["sleep", "300"]), "saved for the record");
     check_json(&v).unwrap();
 }
@@ -81,7 +81,7 @@ fn newer_and_missing_versions_are_refused() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
     assert!(load(&file).unwrap().is_none(), "no file: nothing to restore");
-    fs::write(&file, br#"{"version":3,"sessions":[]}"#).unwrap();
+    fs::write(&file, serde_json::to_vec(&json!({"version": VERSION + 1, "sessions":[]})).unwrap()).unwrap();
     assert!(load(&file).err().unwrap().contains("newer"));
     fs::write(&file, br#"{"sessions":[]}"#).unwrap();
     assert!(load(&file).is_err());
@@ -170,4 +170,31 @@ fn a_version_1_file_still_loads() {
     let file = dir.path().join(FILE);
     fs::write(&file, br#"{"version":1,"sessions":[]}"#).unwrap();
     assert!(load(&file).unwrap().unwrap().sessions.is_empty());
+}
+
+#[tokio::test]
+async fn m20_persist_hidden_float_only_and_drawer_roundtrip() {
+    let c = ctx();
+    let r = c
+        .call("session.create", json!({"layout":{"block":{"label":"float", "options":{"command":["sleep","300"]}}}}))
+        .await
+        .unwrap();
+    let sid = r["session_id"].as_str().unwrap();
+    c.call("session.float_block", json!({"session_id":sid,"block_id":r["block_id"]})).await.unwrap();
+    c.call("session.toggle", json!({"session_id":sid,"label":"float"})).await.unwrap();
+    c.call("session.toggle", json!({"session_id":sid,"label":"drawer","create":true})).await.unwrap();
+    c.call("session.toggle", json!({"session_id":sid,"label":"drawer"})).await.unwrap();
+    let before = serde_json::to_value(crate::methods::view(c.state().session(sid).unwrap())).unwrap();
+    assert!(before["windows"][0]["layout"].is_null());
+    let d = tempfile::tempdir().unwrap();
+    let file = d.path().join("sessions.json");
+    save(&c.state(), &file).unwrap();
+    let saved = load(&file).unwrap().unwrap();
+    let how = restore::Restoring { cap: 0, saved_at: None, policy: Resume::Never };
+    let s = restore_session(&c, saved.sessions.into_iter().next().unwrap(), &how).unwrap();
+    assert_eq!(serde_json::to_value(crate::methods::view(&s)).unwrap(), before);
+    assert_ne!(s.blocks[0].terminal.command, vec!["sleep", "300"], "restore starts fresh shells");
+    let mut v: Value = serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
+    v["sessions"][0]["windows"][0]["floating"][0]["bounds"]["width"] = json!(2);
+    assert!(check_json(&v).is_err());
 }

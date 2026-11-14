@@ -25,8 +25,8 @@ use crate::restore::{self, Resume};
 use crate::Ctx;
 
 pub const FILE: &str = "sessions.json";
-/// Version 2 added `saved_at`, and per block `scrollback` and `resume`; version 1 files still load.
-const VERSION: u64 = 2;
+/// Version 3 adds window overlays and nullable layouts; versions 1 and 2 still load.
+const VERSION: u64 = 3;
 /// A bigger file is taken as corrupt: the saved text (`restore::TOTAL`) at most doubles in JSON.
 const MAX_FILE: u64 = 32 << 20;
 /// More blocks than this (the spec's server limit) is taken as corrupt: each would start a shell.
@@ -71,7 +71,11 @@ struct SavedSession {
 struct SavedWindow {
     window_id: String,
     label: Option<String>,
-    layout: Node,
+    layout: Option<Node>,
+    #[serde(default)]
+    floating: Vec<leon_core::overlays::Floating>,
+    #[serde(default)]
+    docked: Vec<leon_core::overlays::Docked>,
     focus: Option<String>,
     zoomed: Option<String>,
 }
@@ -167,14 +171,14 @@ fn snapshot(st: &State) -> Saved {
         windows: s
             .windows
             .iter()
-            .filter_map(|w| {
-                Some(SavedWindow {
-                    window_id: w.id.clone(),
-                    label: w.label.clone(),
-                    layout: w.layout.clone()?, // None only while a call opens its first block
-                    focus: w.focus.clone(),
-                    zoomed: w.zoomed.clone(),
-                })
+            .map(|w| SavedWindow {
+                window_id: w.id.clone(),
+                label: w.label.clone(),
+                layout: w.layout.clone(),
+                floating: s.overlay(&w.id).floating,
+                docked: s.overlay(&w.id).docked,
+                focus: w.focus.clone(),
+                zoomed: w.zoomed.clone(),
             })
             .collect(),
         blocks: s
@@ -245,11 +249,20 @@ fn restore_session(ctx: &Arc<Ctx>, s: SavedSession, how: &restore::Restoring) ->
             Ok(Block { id, label, window_id, keep_open, exit_code: None, terminal })
         })
         .collect::<Result<Vec<_>, ApiError>>()?;
+    let overlays = windows
+        .iter()
+        .map(|w| {
+            (
+                w.window_id.clone(),
+                leon_core::overlays::Overlays { floating: w.floating.clone(), docked: w.docked.clone() },
+            )
+        })
+        .collect();
     let windows = windows
         .into_iter()
-        .map(|w| Window { id: w.window_id, label: w.label, layout: Some(w.layout), focus: w.focus, zoomed: w.zoomed })
+        .map(|w| Window { id: w.window_id, label: w.label, layout: w.layout, focus: w.focus, zoomed: w.zoomed })
         .collect();
-    Ok(Session { id: session_id, label, windows, active, blocks, revision })
+    Ok(Session { id: session_id, label, windows, overlays, active, blocks, revision })
 }
 
 /// The saved sessions, None if there is no file, or why the file can't be used.
@@ -314,8 +327,13 @@ fn check(saved: &Saved) -> Result<(), String> {
         for w in &s.windows {
             fresh(&w.window_id, "window")?;
             label(&w.label)?;
-            splits(&w.layout, &mut fresh)?;
-            let mut leaves = w.layout.leaves();
+            if let Some(t) = &w.layout {
+                splits(t, &mut fresh)?;
+            }
+            let o = leon_core::overlays::Overlays { floating: w.floating.clone(), docked: w.docked.clone() };
+            o.check().map_err(|e| e.message)?;
+            let mut leaves = w.layout.as_ref().map_or(vec![], Node::leaves);
+            leaves.extend(o.ids());
             let mut own: Vec<&str> =
                 s.blocks.iter().filter(|b| b.window_id == w.window_id).map(|b| b.block_id.as_str()).collect();
             leaves.sort_unstable();
@@ -324,12 +342,16 @@ fn check(saved: &Saved) -> Result<(), String> {
                 return Err(format!("{}'s layout doesn't hold exactly its blocks", w.window_id));
             }
             for id in [&w.focus, &w.zoomed].into_iter().flatten() {
-                if !leaves.contains(&id.as_str()) {
+                if !leaves.contains(&id.as_str()) || o.hidden(id) {
                     return Err(format!("{id:?} isn't in {}", w.window_id));
                 }
             }
         }
-        let placed: usize = s.windows.iter().map(|w| w.layout.leaves().len()).sum();
+        let placed: usize = s
+            .windows
+            .iter()
+            .map(|w| w.layout.as_ref().map_or(0, |t| t.leaves().len()) + w.floating.len() + w.docked.len())
+            .sum();
         if placed != s.blocks.len() {
             return Err(format!("{} has blocks in no window", s.session_id));
         }

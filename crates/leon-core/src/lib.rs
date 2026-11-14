@@ -6,6 +6,7 @@ pub mod keys;
 pub mod layout;
 pub mod model;
 pub mod mouse;
+pub mod overlays;
 pub mod panes;
 pub mod paths;
 pub mod program_status;

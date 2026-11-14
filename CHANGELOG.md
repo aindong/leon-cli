@@ -1,5 +1,9 @@
 # Changelog
 
+## API 1.2.0 — M20a floating panes and drawers
+
+Add session.float_block, new_floating, dock_block, unfloat_block and toggle. Window views now carry floating (back to front) and docked placements, including hidden panes; hiding preserves programs. CLI/Lua and attach support floats and drawers.
+
 Everything that changes in leon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the API follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) through its `api_version`.
@@ -15,7 +19,7 @@ M9) and M15 (Linux) are still to come.
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.1.0`.
+one is `1.2.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
