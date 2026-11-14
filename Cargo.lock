@@ -3095,6 +3095,7 @@ name = "leon"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "gpui",
  "leon-app",
  "leon-core",
  "leon-lua",
