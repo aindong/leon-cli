@@ -88,7 +88,9 @@ pub async fn serve(opts: Options) -> io::Result<()> {
 }
 
 async fn bind(socket: &PathBuf) -> io::Result<UnixListener> {
-    if let Some(dir) = socket.parent() {
+    // Make a runtime dir we create private, but never chmod one that already exists:
+    // LEON_RUNTIME_DIR can name a shared directory such as /tmp.
+    if let Some(dir) = socket.parent().filter(|d| !d.exists()) {
         std::fs::create_dir_all(dir)?;
         std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
     }
@@ -130,4 +132,29 @@ async fn connection(stream: UnixStream, shared: &Shared) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn bind_leaves_an_existing_dirs_mode_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+        let socket = dir.path().join("server.sock");
+        let _l = bind(&socket).await.unwrap();
+        let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(dir.path()), 0o755, "LEON_RUNTIME_DIR=/tmp must not chmod /tmp");
+        assert_eq!(mode(&socket), 0o600);
+    }
+
+    #[tokio::test]
+    async fn bind_makes_a_new_dir_private() {
+        let parent = tempfile::tempdir().unwrap();
+        let socket = parent.path().join("leon/server.sock");
+        let _l = bind(&socket).await.unwrap();
+        let mode = std::fs::metadata(parent.path().join("leon")).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
+    }
 }
