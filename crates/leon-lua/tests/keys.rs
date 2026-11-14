@@ -32,8 +32,22 @@ fn modifiers_are_case_and_order_insensitive_with_aliases() {
 #[test]
 fn named_physical_and_punctuation_keys() {
     for k in [
-        "enter", "escape", "tab", "space", "backspace", "delete", "left", "right", "up", "down", "home", "end",
-        "pageup", "pagedown", "f1", "f12",
+        "enter",
+        "escape",
+        "tab",
+        "space",
+        "backspace",
+        "delete",
+        "left",
+        "right",
+        "up",
+        "down",
+        "home",
+        "end",
+        "pageup",
+        "pagedown",
+        "f1",
+        "f12",
     ] {
         assert_eq!(norm(&k.to_uppercase()), k);
     }

@@ -109,7 +109,11 @@ assert(leon.unbind(b) == 0)
 fn bad_unbind_calls_are_diagnosed_not_raised() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("init.lua");
-    std::fs::write(&path, "leon.bind('a', 'x.y')\nlocal n, e = leon.unbind('hyper+a')\nassert(n == nil and e)\nleon.unbind{}\n").unwrap();
+    std::fs::write(
+        &path,
+        "leon.bind('a', 'x.y')\nlocal n, e = leon.unbind('hyper+a')\nassert(n == nil and e)\nleon.unbind{}\n",
+    )
+    .unwrap();
     let c = load(&path).unwrap();
     let errs: Vec<_> = c.diagnostics.iter().filter(|d| d.level == Level::Error).map(|d| d.to_string()).collect();
     assert_eq!(errs.len(), 2, "{errs:?}");

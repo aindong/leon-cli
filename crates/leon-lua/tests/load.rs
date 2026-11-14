@@ -60,16 +60,25 @@ assert(leon.json.encode({ x = 1 }, { indent = true }):find("\n"))
     assert_eq!(c.bindings[6].key.to_string(), "ctrl+a>%");
     let b = &c.bindings[1];
     assert_eq!(b.key.to_string(), "ctrl+b>c");
-    assert_eq!(b.target, Target::Action { name: "session.new_window".into(), args: Some(json!({"label": "x", "n": 2})) });
+    assert_eq!(
+        b.target,
+        Target::Action { name: "session.new_window".into(), args: Some(json!({"label": "x", "n": 2})) }
+    );
     assert!(b.source.ends_with("init.lua:3"), "{}", b.source);
     assert_eq!(c.bindings[2].target, Target::Function);
     assert_eq!(c.bindings[3].key.to_string(), "resize/left");
 
-    assert_eq!(c.modes.iter().map(|m| (m.name.as_str(), m.exclusive)).collect::<Vec<_>>(), [("resize", true), ("scroll", false)]);
+    assert_eq!(
+        c.modes.iter().map(|m| (m.name.as_str(), m.exclusive)).collect::<Vec<_>>(),
+        [("resize", true), ("scroll", false)]
+    );
 
     assert_eq!(c.actions.len(), 1);
     let a = &c.actions[0];
-    assert_eq!((a.name.as_str(), a.title.as_str(), a.category.as_str(), a.repeats), ("say_hi", "Say hi", "Actions", true));
+    assert_eq!(
+        (a.name.as_str(), a.title.as_str(), a.category.as_str(), a.repeats),
+        ("say_hi", "Say hi", "Actions", true)
+    );
     assert_eq!(a.keywords, ["hello"]);
     let schema = a.args.as_ref().unwrap();
     assert_eq!(schema["type"], "object");
@@ -104,7 +113,11 @@ leon.bind("g>g", "a.seven")
     assert_eq!(keys, ["ctrl+b>c", "ctrl+x>y", "ctrl+b>c", "m/g", "g>g"]);
     let warns: Vec<_> = c.diagnostics.iter().filter(|d| d.level == Level::Warning).map(|d| d.to_string()).collect();
     assert_eq!(warns.len(), 2, "{warns:?}");
-    assert!(warns[0].contains("init.lua:3") && warns[0].contains("ctrl+b>c") && warns[0].contains("ctrl+b"), "{}", warns[0]);
+    assert!(
+        warns[0].contains("init.lua:3") && warns[0].contains("ctrl+b>c") && warns[0].contains("ctrl+b"),
+        "{}",
+        warns[0]
+    );
     assert!(warns[0].contains("init.lua:2"), "{}", warns[0]);
     assert!(warns[1].contains("ctrl+x>y>z") && warns[1].contains("init.lua:4"), "{}", warns[1]);
     assert!(errors(&c).is_empty());
