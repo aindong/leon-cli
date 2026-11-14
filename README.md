@@ -96,7 +96,8 @@ change it):
 | ctrl+b n, ctrl+b p | Next, previous tab |
 | ctrl+b s | Back to the picker |
 
-Your `init.lua` bindings work there too, except `cmd` keys, which a terminal never sends.
+Your `init.lua` bindings work there too, except `cmd` keys (a terminal never sends them) and a
+binding on the prefix key itself.
 
 ## Let an agent drive it
 

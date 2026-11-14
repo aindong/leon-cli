@@ -82,6 +82,7 @@ pub fn bytes(k: &KeyEvent, app_cursor: bool) -> Option<Vec<u8>> {
         let byte = match (ctrl, c) {
             (false, _) => None,
             (true, '4'..='7') => Some(0x1c + (c as u8 - b'4')),
+            (true, ' ') => Some(0), // NUL arrives as ctrl+space
             (true, c) => leon_core::keys::encode(&format!("ctrl+{}", c.to_ascii_lowercase()), false).ok()?.pop(),
         };
         let mut out = match byte {

@@ -81,9 +81,12 @@ pub fn watchdog() -> std::io::Result<()> {
         if libc::pipe(fds.as_mut_ptr()) != 0 {
             return Err(err());
         }
-        // close-on-exec: a server this process starts later must not hold the pipe open
+        // close-on-exec: nothing this process runs later may hold the pipe open (not atomic with
+        // `pipe`, which is fine while no other thread can fork meanwhile)
         for fd in fds {
-            libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
+            if libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) != 0 {
+                return Err(err());
+            }
         }
         match libc::fork() {
             -1 => Err(err()),

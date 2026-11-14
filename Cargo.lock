@@ -3298,7 +3298,6 @@ dependencies = [
  "leon-server",
  "libc",
  "ratatui",
- "serde",
  "serde_json",
  "tempfile",
  "tokio",

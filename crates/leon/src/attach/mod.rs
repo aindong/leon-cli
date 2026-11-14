@@ -118,6 +118,10 @@ fn resolve_target(c: &mut Client, t: &str) -> Result<Pick, Fail> {
     }
 }
 
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 struct Tui {
     remote: Remote,
     keys: Keys,
@@ -180,10 +184,8 @@ impl Tui {
                 }
             }
             if dirty && last.elapsed() >= FRAME {
-                if let Flow::Done(r) = self.draw(&mut host.term).map_err(io)? {
-                    return r;
-                }
-                (dirty, last) = (false, Instant::now());
+                dirty = !self.draw(&mut host.term).map_err(io)?;
+                last = Instant::now();
             }
         }
     }
@@ -258,7 +260,7 @@ impl Tui {
     }
 
     fn say(&self, msg: impl Into<String>) {
-        *self.note.lock().unwrap_or_else(|e| e.into_inner()) = Some(msg.into());
+        *lock(&self.note) = Some(msg.into());
     }
 
     /// Call a method that changes the model; a failure shows on the status bar.
@@ -272,7 +274,7 @@ impl Tui {
         let (note, tx) = (self.note.clone(), self.tx.clone());
         self.remote.spawn(method, params, move |r| {
             if let Err(e) = r {
-                *note.lock().unwrap_or_else(|e| e.into_inner()) = Some(e.message);
+                *lock(&note) = Some(e.message);
                 let _ = tx.send(Msg::Wake);
             }
         });

@@ -83,8 +83,9 @@ ctrl+b):
 | the prefix again | Type the prefix key into the pane |
 
 Panes are sized to fit this terminal whenever its own layout of them changes (attaching, a resize,
-a split or zoom, another tab); a pane another client resized since is clipped or padded. On exit
-(detach, the server stopping, SIGHUP, SIGTERM, SIGINT) the terminal is given back as it was; a
+a split or zoom, a pane coming back on screen); a pane another client resized since is clipped or
+padded. On exit
+(detach, the server stopping, SIGHUP, SIGTERM, SIGINT, SIGQUIT) the terminal is given back as it was; a
 watchdog process does it even after SIGKILL. Killed by a signal, it exits 128 + the signal.
 
 ## Sessions

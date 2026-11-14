@@ -106,7 +106,7 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   built-in table decides. Other config bindings resolve through the app's keymap; anything unbound
   goes to the pane. **Sizes:** the server has no `own_block` yet, so the rule is the client's own
   size: the TUI resizes a pane only when its own layout of that pane changes (attach, host resize,
-  split, zoom, tab), never because another client resized it, and clips or pads a screen of another
+  split, zoom, the pane coming back on screen), never because another client resized it, and clips or pads a screen of another
   size. The app re-fits whenever a screen's size differs from its pane, so while both show the
   same tab the app's size wins. **The host terminal** is put back (raw mode off, alt screen left,
   cursor shown, bracketed paste off) on detach, errors, a panic (hook), and SIGHUP, SIGTERM,

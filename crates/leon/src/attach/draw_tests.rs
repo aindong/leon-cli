@@ -102,3 +102,28 @@ fn a_split_tab_draws_at_any_size() {
         }
     }
 }
+
+/// Pane text never reaches the host as control characters: an OSC 52 clipboard write, a C1 OSC or
+/// a bell in a span is dropped (ratatui's set_stringn filters them; this pins it across upgrades).
+#[test]
+fn control_characters_in_pane_text_never_reach_the_host() {
+    let text = "a\x1b]52;c;QQ==\x07b\u{9d}0;t\u{9c}c\x08";
+    let span = Span {
+        col: 0,
+        cells: 20,
+        text: text.into(),
+        fg: DARK.fg,
+        bold: false,
+        italic: false,
+        underline: false,
+        strikeout: false,
+    };
+    let f = Frame { lines: 1, cols: 30, rows: vec![vec![span]], ..Frame::default() };
+    let mut buf = Buffer::empty(Rect::new(0, 0, 30, 1));
+    let area = buf.area;
+    screen(&mut buf, area, &f, Colors { truecolor: true });
+    for x in 0..30 {
+        let sym = buf[(x, 0)].symbol();
+        assert!(!sym.chars().any(char::is_control), "cell {x} holds a control character: {sym:?}");
+    }
+}

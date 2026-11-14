@@ -13,6 +13,9 @@ use super::keys::{self, After};
 use super::picker::{self, Picker};
 use super::{Flow, Mode, Tui};
 
+/// The app's limit for one paste (a request over the server's 1 MiB would drop the connection).
+const MAX_PASTE: usize = 400 << 10;
+
 /// The tab being shown: its session, the block keys go to, and whether it is zoomed.
 struct Target {
     sid: String,
@@ -30,7 +33,7 @@ impl Tui {
     }
 
     pub(super) fn attached_key(&mut self, k: KeyEvent, dirty: &mut bool) -> Flow {
-        if self.note.lock().unwrap_or_else(|e| e.into_inner()).take().is_some() {
+        if super::lock(&self.note).take().is_some() {
             *dirty = true;
         }
         let Some(c) = keys::chord(&k) else {
@@ -93,6 +96,9 @@ impl Tui {
             return;
         }
         let Some(t) = self.target() else { return };
+        if text.len() > MAX_PASTE {
+            return self.say(format!("not pasting {} bytes: at most {MAX_PASTE} go in one paste", text.len()));
+        }
         let event = json!({ "session_id": t.sid, "block_id": t.block, "event": { "type": "paste", "data": text } });
         if let Err(e) = self.remote.call("block.event", event) {
             self.say(e.message);
@@ -103,8 +109,7 @@ impl Tui {
     /// server), and a Lua function goes through `client.key` so its fallthrough rules apply.
     fn binding(&mut self, b: Bound, prefix: Vec<Chord>, last: &Chord) -> Flow {
         match b.action.as_deref() {
-            Some(name) if name.contains('.') => self.action(name, b.args.as_ref()),
-            Some(name) => self.config_action(name, b.args.as_ref()),
+            Some(name) => self.action(name, b.args.as_ref()),
             None => {
                 let Some(t) = self.target() else { return Flow::Go };
                 let prefix =
@@ -170,6 +175,8 @@ impl Tui {
             }
             "pane.focus.left" | "pane.focus.right" | "pane.focus.up" | "pane.focus.down" => {
                 if t.zoomed {
+                    // from the pane on screen: a zoom doesn't move focus, so the focused one may be hidden
+                    self.act("session.focus_block", json!({ "session_id": sid, "block_id": t.block }));
                     self.act("session.zoom_block", json!({ "session_id": sid, "block_id": t.block, "zoom": false }));
                 }
                 let toward = &name["pane.focus.".len()..];
@@ -193,10 +200,14 @@ impl Tui {
         }
     }
 
-    /// Draw the picker or the attached tab. A session that went away goes back to the picker.
-    pub(super) fn draw(&mut self, term: &mut super::host::Term) -> std::io::Result<Flow> {
+    /// Draw the picker or the attached tab; a session that went away goes back to the picker.
+    /// False when the host was resized between laying the frame out and drawing it: nothing was
+    /// drawn (the buffer is the new size), so the caller draws again.
+    pub(super) fn draw(&mut self, term: &mut super::host::Term) -> std::io::Result<bool> {
+        term.autoresize()?;
         let size = term.size()?;
         let area = Rect::new(0, 0, size.width, size.height);
+        let mut drawn = true;
         let colors = self.colors;
         if let Mode::Picker(p, _) = &self.mode {
             let (rows, screens) = {
@@ -204,10 +215,13 @@ impl Tui {
                 (picker::rows(&m.sessions), m.screens.clone())
             };
             self.remote.watch(p.selected_row(&rows).and_then(|r| r.block.clone()).into_iter().collect());
-            term.draw(|f| p.draw(f.buffer_mut(), area, &rows, &screens, colors))?;
-            return Ok(Flow::Go);
+            term.draw(|f| match f.area() == area {
+                true => p.draw(f.buffer_mut(), area, &rows, &screens, colors),
+                false => drawn = false,
+            })?;
+            return Ok(drawn);
         }
-        let Mode::Attached(sid) = &self.mode else { return Ok(Flow::Go) };
+        let Mode::Attached(sid) = &self.mode else { return Ok(true) };
         let (session, screens) = {
             let m = self.remote.model();
             (m.session(sid).cloned(), m.screens.clone())
@@ -227,10 +241,16 @@ impl Tui {
             ),
             None => panes::Layout::default(),
         };
-        self.remote.watch(laid.panes.iter().map(|p| p.block_id.clone()).collect());
-        // the size rule: resize a pane when this client's own size for it changes, never because
-        // another client resized it
-        for p in &laid.panes {
+        // run inside a pane on screen, the client neither sizes its own pane (its terminal would
+        // shrink, and it would ask again, down to one row) nor draws it into itself
+        let own = std::env::var("LEON_BLOCK").ok();
+        let shown: Vec<String> =
+            laid.panes.iter().map(|p| p.block_id.clone()).filter(|id| Some(id) != own.as_ref()).collect();
+        // the size rule: resize a pane when this client's own size for it changes (or it comes
+        // back on screen), never because another client resized it
+        self.asked.retain(|id, _| shown.contains(id));
+        self.remote.watch(shown.clone());
+        for p in laid.panes.iter().filter(|p| shown.contains(&p.block_id)) {
             let r = draw::cells(&p.rect, panes_area);
             let want = (r.height.max(1), r.width.max(2));
             if self.asked.get(&p.block_id) != Some(&want) {
@@ -240,8 +260,9 @@ impl Tui {
         }
         let focus = w.and_then(|w| w.zoomed.clone().or(w.focus.clone()));
         let tabs = s.windows.iter().enumerate().map(|(i, w)| (picker::tab_name(&s, w), i == s.active)).collect();
-        let note = self.note.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        let name = picker::session_name(&s);
+        let note = super::lock(&self.note).clone();
+        let index = self.remote.model().sessions.iter().position(|x| x.id == s.id).unwrap_or(0);
+        let name = picker::session_name(&s, index);
         let bar = Bar {
             session: &name,
             tabs,
@@ -250,18 +271,27 @@ impl Tui {
             note: note.as_deref(),
         };
         term.draw(|f| {
+            if f.area() != area {
+                drawn = false;
+                return;
+            }
             let buf = f.buffer_mut();
             let mut cursor = None;
             for p in &laid.panes {
                 let r = draw::cells(&p.rect, panes_area);
+                if own.as_ref() == Some(&p.block_id) {
+                    let style = ratatui::style::Style::default().fg(colors.rgb(draw::brand::UMBER));
+                    buf.set_stringn(r.x, r.y, "(this terminal: leon attach)", r.width as usize, style);
+                    continue;
+                }
                 let Some(frame) = screens.get(&p.block_id) else { continue };
                 draw::screen(buf, r, frame, colors);
                 if focus.as_deref() == Some(p.block_id.as_str()) {
                     cursor = frame
                         .cursor
                         .as_ref()
-                        .map(|c| (r.x + c.col as u16, r.y + c.line as u16))
-                        .filter(|&(x, y)| x < r.x + r.width && y < r.y + r.height);
+                        .filter(|c| c.col < r.width as usize && c.line < r.height as usize)
+                        .map(|c| (r.x + c.col as u16, r.y + c.line as u16));
                 }
             }
             draw::borders(buf, panes_area, &laid.dividers, &laid.panes, focus.as_deref(), colors);
@@ -270,6 +300,6 @@ impl Tui {
                 f.set_cursor_position(Position { x, y });
             }
         })?;
-        Ok(Flow::Go)
+        Ok(drawn)
     }
 }

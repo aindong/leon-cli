@@ -39,28 +39,34 @@ pub struct Row {
     pub block: Option<String>,
 }
 
-/// A session's name as leon shows it: its label, else the end of its ID.
-pub fn session_name(s: &Session) -> String {
-    s.label.clone().unwrap_or_else(|| s.id.chars().rev().take(8).collect::<Vec<_>>().into_iter().rev().collect())
+/// A session's name as the app's sidebar shows it: its label, else "Session N" (1-based).
+pub fn session_name(s: &Session, index: usize) -> String {
+    s.label.clone().unwrap_or_else(|| format!("Session {}", index + 1))
 }
 
-/// A tab's name: its label, else its focused block's program.
+/// A tab's name as the app's tab bar shows it: its label, else the shown block's program.
 pub fn tab_name(s: &Session, w: &leon_core::Window) -> String {
-    let program = |id: &str| s.blocks.iter().find(|b| b.id == id).map(program);
-    w.label.clone().or_else(|| w.focus.as_deref().and_then(program)).unwrap_or_else(|| "tab".into())
+    let shown = w.zoomed.as_ref().or(w.focus.as_ref()).and_then(|id| s.blocks.iter().find(|b| &b.id == id));
+    w.label.clone().unwrap_or_else(|| shown.map_or("empty".into(), |b| program_name(&b.command)))
 }
 
+/// argv0's file name without a login shell's `-` (as the app's `program_name`, which is private).
+fn program_name(command: &[String]) -> String {
+    let argv0 = command.first().map_or("", String::as_str);
+    argv0.rsplit('/').next().unwrap_or(argv0).trim_start_matches('-').to_string()
+}
+
+/// A block row: its program and arguments, so the filter can find a command.
 fn program(b: &leon_app::remote::Block) -> String {
-    let first = b.command.first().map(String::as_str).unwrap_or("shell");
-    let mut words = vec![first.rsplit('/').next().unwrap_or(first).to_string()];
+    let mut words = vec![program_name(&b.command)];
     words.extend(b.command.iter().skip(1).cloned());
     words.join(" ")
 }
 
 pub fn rows(sessions: &[Session]) -> Vec<Row> {
     let mut out = Vec::new();
-    for s in sessions {
-        let name = session_name(s);
+    for (i, s) in sessions.iter().enumerate() {
+        let name = session_name(s, i);
         let active = s.windows.get(s.active);
         out.push(Row {
             depth: 0,

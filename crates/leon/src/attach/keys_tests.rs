@@ -17,6 +17,8 @@ fn keys_become_the_bytes_send_key_uses() {
     assert_eq!(bytes(&ch('é'), false), Some("é".as_bytes().to_vec()));
     assert_eq!(bytes(&key(KeyCode::Char('b'), ctrl), false), Some(vec![2]));
     assert_eq!(bytes(&key(KeyCode::Char('4'), ctrl), false), Some(vec![0x1c]), "ctrl+\\ arrives as ctrl+4");
+    assert_eq!(bytes(&key(KeyCode::Char(' '), ctrl), false), Some(vec![0]), "ctrl+space is NUL");
+    assert_eq!(bytes(&key(KeyCode::Char(' '), ctrl | KeyModifiers::ALT), false), Some(vec![0x1b, 0]));
     assert_eq!(bytes(&key(KeyCode::Char('x'), KeyModifiers::ALT), false), Some(b"\x1bx".to_vec()));
     assert_eq!(bytes(&key(KeyCode::Enter, KeyModifiers::NONE), false), Some(b"\r".to_vec()));
     assert_eq!(bytes(&key(KeyCode::BackTab, KeyModifiers::SHIFT), false), Some(b"\x1b[Z".to_vec()));

@@ -7,10 +7,6 @@ use serde_json::Value;
 use support::host::{has_words, Host};
 use support::Env;
 
-fn view(env: &Env, session: &str) -> Value {
-    env.view(session)
-}
-
 fn active(v: &Value) -> usize {
     v["windows"].as_array().unwrap().iter().position(|w| w["active"] == true).unwrap()
 }
@@ -25,15 +21,15 @@ fn prefix_keys_drive_tabs_zoom_focus_and_the_picker() {
 
     h.send(b"\x02c");
     Host::until("a second tab, active", || {
-        let v = view(&env, &session);
+        let v = env.view(&session);
         v["windows"].as_array().unwrap().len() == 2 && active(&v) == 1
     });
     h.send(b"\x02p");
-    Host::until("the first tab active again", || active(&view(&env, &session)) == 0);
+    Host::until("the first tab active again", || active(&env.view(&session)) == 0);
     h.send(b"\x02n");
-    Host::until("the second tab active", || active(&view(&env, &session)) == 1);
+    Host::until("the second tab active", || active(&env.view(&session)) == 1);
     h.send(b"\x02p");
-    Host::until("back on the first tab", || active(&view(&env, &session)) == 0);
+    Host::until("back on the first tab", || active(&env.view(&session)) == 0);
 
     h.send(b"\x02%");
     Host::until("two panes", || env.window(&session, 0)["layout"]["split"].is_object());
