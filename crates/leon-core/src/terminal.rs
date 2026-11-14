@@ -355,7 +355,7 @@ impl Reading {
                 title = Some(new.clone());
                 notify(Notice::Title(new));
             }
-            let new_pwd = fed.pwd.map(|p| clean(&String::from_utf8_lossy(&p)));
+            let new_pwd = fed.pwd.and_then(|p| pwd_url(&p));
             if let Some(new) = new_pwd.filter(|p| pwd.as_ref() != Some(p)) {
                 pwd = Some(new.clone());
                 notify(Notice::Pwd(new));
@@ -368,6 +368,34 @@ impl Reading {
         let gone = lock(&self.tracker).store.process_exited();
         gone.into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
     }
+}
+
+/// An OSC 7 URL to report, or None. It is dropped whole when it isn't UTF-8 or when it, or its
+/// percent-decoding (which whoever shows the path does), holds anything `clean` would remove.
+fn pwd_url(raw: &[u8]) -> Option<String> {
+    let url = std::str::from_utf8(raw).ok()?;
+    let decoded = String::from_utf8(percent_decode(raw)).ok()?;
+    (clean(url) == url && clean(&decoded) == decoded).then(|| url.to_string())
+}
+
+/// `%XX` escapes as bytes; anything else (a stray `%` too) as is.
+fn percent_decode(s: &[u8]) -> Vec<u8> {
+    let hex = |b: u8| (b as char).to_digit(16);
+    let mut out = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        match (s[i], s.get(i + 1).copied().and_then(hex), s.get(i + 2).copied().and_then(hex)) {
+            (b'%', Some(hi), Some(lo)) => {
+                out.push((hi * 16 + lo) as u8);
+                i += 3;
+            }
+            (b, _, _) => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    out
 }
 
 /// Program-supplied text for events: no control, bidi or invisible characters (they would reach

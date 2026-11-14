@@ -19,3 +19,17 @@ fn an_unterminated_osc_is_not_passed_to_the_emulator_without_bound() {
     }
     assert!(passed < 64 << 10, "{passed} bytes of one unterminated OSC reached vte");
 }
+
+#[test]
+fn an_overlong_osc_is_cancelled_not_cut_short() {
+    let mut s = Scanner::default();
+    let mut pass = Vec::new();
+    let long = format!("a\x1b]2;{}\x07b\x1b]2;{}\x1b\\c", "x".repeat(5000), "y".repeat(5000));
+    s.feed(long.as_bytes(), |p| {
+        if let Piece::Bytes(b) = p {
+            pass.extend_from_slice(b)
+        }
+    });
+    let shown: Vec<u8> = pass.iter().copied().filter(|&b| b != b'x' && b != b'y').collect();
+    assert_eq!(shown, b"a\x1b]2;\x18b\x1b]2;\x18c", "each OSC is cancelled, its terminator swallowed");
+}

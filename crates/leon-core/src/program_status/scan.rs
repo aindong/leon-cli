@@ -46,8 +46,8 @@ pub struct Scanner {
     pass: Vec<u8>,
     /// The payload of the last complete OSC 7 (after `7;`), until taken.
     pwd: Option<Vec<u8>>,
-    /// Bytes of the current other OSC passed on so far. vte buffers a whole OSC with no limit, so
-    /// past `MAX_SEQUENCE` only its terminator is passed on.
+    /// Payload bytes of the current other OSC so far. vte buffers a whole OSC with no limit, so past
+    /// `MAX_SEQUENCE` the OSC is cancelled (CAN) and the rest, terminator included, is swallowed.
     osc_len: usize,
 }
 
@@ -79,7 +79,9 @@ impl Scanner {
             Mode::Ground if b == ESC => self.mode = Mode::Esc { osc: false },
             Mode::Ground => self.pass.push(b),
             Mode::Esc { osc: true } if b == b'\\' => {
-                self.pass.extend_from_slice(b"\x1b\\");
+                if self.osc_len <= MAX_SEQUENCE {
+                    self.pass.extend_from_slice(b"\x1b\\");
+                }
                 self.end_osc(f);
             }
             Mode::Esc { osc } => {
@@ -125,7 +127,9 @@ impl Scanner {
             }
             Mode::Osc => match b {
                 BEL => {
-                    self.pass.push(b);
+                    if self.osc_len <= MAX_SEQUENCE {
+                        self.pass.push(b);
+                    }
                     self.end_osc(f);
                 }
                 ESC => self.mode = Mode::Esc { osc: true },
@@ -137,6 +141,8 @@ impl Scanner {
                     self.osc_len += 1;
                     if self.osc_len <= MAX_SEQUENCE {
                         self.pass.push(b);
+                    } else if self.osc_len == MAX_SEQUENCE + 1 {
+                        self.pass.push(CAN); // vte drops the OSC instead of running a cut-off one
                     }
                     // vte ignores other C0 bytes inside an OSC. One byte past the limit marks an OSC 7 too long.
                     let keep = if self.buf.starts_with(b"7;") { MAX_SEQUENCE + 1 } else { 6 };
