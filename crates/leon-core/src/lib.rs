@@ -1,6 +1,7 @@
 //! leon's object model: sessions and windows with stable IDs, and target resolution.
 
 pub mod error;
+pub mod keys;
 pub mod model;
 pub mod paths;
 pub mod target;
