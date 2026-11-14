@@ -25,7 +25,8 @@ pub(super) fn feed(term: &mut Term<Listener>, parser: &mut Processor, bytes: &[u
     for slice in bytes.chunks(SLICE) {
         // a history clear (`CSI 3 J`, `ESC c`) with nothing pinned can't be seen afterwards
         let clears = [b"\x1b[3J".as_slice(), b"\x1bc"].iter().any(|c| slice.windows(c.len()).any(|w| w == *c));
-        let pushed = counting(term, |t| parser.advance(t, slice));
+        let guess = slice.iter().filter(|&&b| b == b'\n').count();
+        let pushed = counting(term, guess, |t| parser.advance(t, slice));
         let pushed = if clears { GAP + term.grid().history_size() } else { pushed };
         // never below the history, so the oldest kept line has a number
         let n = (scrolled.load(Ordering::SeqCst) + pushed).max(term.grid().history_size());
@@ -41,7 +42,7 @@ pub(super) fn feed(term: &mut Term<Listener>, parser: &mut Processor, bytes: &[u
 /// alacritty's display offset, set to 1 first, grows with every scroll and caps at the
 /// scrollback's size, which says when that may have happened. It is put back to 0 whenever the
 /// primary screen is showing, so no frame sees it.
-fn counting(term: &mut Term<Listener>, f: impl FnOnce(&mut Term<Listener>)) -> usize {
+fn counting(term: &mut Term<Listener>, guess: usize, f: impl FnOnce(&mut Term<Listener>)) -> usize {
     let primary = !term.mode().contains(TermMode::ALT_SCREEN);
     let newest = |t: &Term<Listener>| &t.grid()[Line(-1)][Column(0)] as *const _;
     let before = term.grid().history_size();
@@ -63,9 +64,10 @@ fn counting(term: &mut Term<Listener>, f: impl FnOnce(&mut Term<Listener>)) -> u
         None => GAP,
         Some(a) => {
             let g = term.grid();
-            (1..=after as i32)
-                .find(|&n| std::ptr::eq(&g[Line(-n)][Column(0)], a))
-                .map_or(GAP + after, |n| n as usize - 1)
+            let at = |n: i32| std::ptr::eq(&g[Line(-n)][Column(0)], a);
+            // a line feed per pushed line is the usual case: look there first
+            let first = (guess < after).then_some(guess as i32 + 1).filter(|&n| at(n));
+            first.or_else(|| (1..=after as i32).find(|&n| at(n))).map_or(GAP + after, |n| n as usize - 1)
         }
     }
 }

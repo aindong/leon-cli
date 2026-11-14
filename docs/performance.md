@@ -156,12 +156,15 @@ with other builds running (load average 12 to 18), `--samples 300`:
 | | `session.list` round trip p50 / p99 | input latency p50 / p99 | `yes \| head` 100 MB | `cat` 100 MB | keystroke to screen p50 / p99 | `seq 1 200000` in-process / attached |
 |---|---|---|---|---|---|---|
 | main | 0.019 / 0.064 ms | 0.064 / 4.395 ms | 2.2 MB/s | 102.1 MB/s (92.7, 102.1, 111.7) | 0.245 / 0.680 ms | 188 / 175 ms (0.93x) |
-| M11 | 0.004 / 0.015 ms | 0.031 / 0.048 ms | 2.5 MB/s | 109.6 MB/s (106.0, 109.6, 110.7) | 0.347 / 0.591 ms | 198 / 172 ms (0.87x) |
+| M11, first counter | 0.004 / 0.015 ms | 0.031 / 0.048 ms | 2.5 MB/s | 109.6 MB/s (106.0, 109.6, 110.7) | 0.347 / 0.591 ms | 198 / 172 ms (0.87x) |
+| main, again | 0.007 / 0.011 ms | 0.024 / 0.048 ms | 1.5 MB/s | 73.3 MB/s (70.8, 73.3, 83.7) | 0.137 / 0.509 ms | 304 / 291 ms (0.96x) |
+| M11, final (row-address counter) | 0.009 / 0.017 ms | 0.042 / 0.077 ms | 1.4 MB/s | 111.6 MB/s (103.7, 111.6, 117.5) | 0.319 / 0.651 ms | 191 / 165 ms (0.86x) |
 
-The budget holds (keystroke to screen p50 < 4 ms, p99 < 16 ms; `seq` attached at most 1.5x), and
-`cat` stayed above the floor of 95 MB/s (90% of the 108–126 MB/s recorded above; main measured 102
-here). The spread between the two rows is the machine's load, not the change: main's own `cat`
-runs span 93 to 112. History, find and selections cost nothing until the app asks: `lines`
+The final counter finds how far the newest history row moved, looking first where one line feed
+per pushed line puts it. The budget holds (keystroke to screen p50 < 4 ms, p99 < 16 ms; `seq`
+attached at most 1.5x), and `cat` stayed above the floor of 95 MB/s (90% of the 108–126 MB/s
+recorded above). The spread between rows is the machine's load, not the change: main's own `cat`
+runs span 71 to 112 across the two rounds. History, find and selections cost nothing until the app asks: `lines`
 returns at most 1000 rows, and find holds the terminal's lock for at most 300 ms.
 
 ## Not measured yet
