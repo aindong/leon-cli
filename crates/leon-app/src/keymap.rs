@@ -36,6 +36,8 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+f", "client.find.open"),
     ("cmd+g", "client.find.next"),
     ("cmd+shift+g", "client.find.previous"),
+    ("cmd+shift+c", "client.copy_mode"),
+    ("cmd+shift+h", "client.hints"),
     ("cmd+up", "client.scroll.top"),
     ("cmd+down", "client.scroll.bottom"),
 ];

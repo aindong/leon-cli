@@ -30,7 +30,7 @@ impl Workspace {
             }
             let focused = target.as_deref() == Some(p.block_id.as_str());
             let id = p.block_id.clone();
-            let view = self.composed(&id);
+            let view = self.drawn(&id);
             let marks = self.pane_marks(&id, &view);
             let canvas = terminal_canvas(
                 self.app.clone(),

@@ -1,0 +1,286 @@
+//! Copy mode (⌘⇧C: tmux's copy mode with vi keys) and hints (⌘⇧H: tmux-fingers) on the target
+//! pane: their keys, what they write over the pane, and what they copy or type. Copy mode moves
+//! over the scrollback the view already fetches, selects with the server's selections and
+//! searches with its find (docs/architecture/protocol-and-clients.md).
+
+use gpui::ClipboardItem;
+use leon_core::hints::{self, Hint};
+use leon_core::search::{Kind, Pos, Range};
+
+use super::scroll::Sel;
+use super::*;
+use crate::copy_mode::{self, Area, CopyMode, Op};
+use crate::scrollback::{self, Composed};
+use crate::stamp::stamp;
+
+/// Hints on one pane: the labelled tokens of its view, the letters typed so far, and whether one
+/// was typed in upper case (then the text is typed into the pane instead of copied).
+pub(super) struct Hints {
+    block: String,
+    hints: Vec<Hint>,
+    typed: String,
+    upper: bool,
+}
+
+impl Workspace {
+    /// `client.copy_mode` and `client.hints`, on the target pane; either ends the other.
+    pub(super) fn mode_action(&mut self, name: &str, cx: &mut Context<Self>) {
+        let Some((_, id, _)) = self.target() else { return };
+        (self.term.copy, self.term.hints) = (None, None);
+        match name {
+            "client.copy_mode" => self.enter_copy(id),
+            _ => self.open_hints(id),
+        }
+        cx.notify();
+    }
+
+    /// A key while copy mode or hints are on: true when it was theirs (all but ⌘ chords). A mode
+    /// whose pane is no longer the target has ended.
+    pub(super) fn mode_key(&mut self, ks: &gpui::Keystroke, chord: Option<&Chord>, cx: &mut Context<Self>) -> bool {
+        let target = self.target_block();
+        if self.term.copy.as_ref().is_some_and(|c| Some(&c.block) != target.as_ref()) {
+            self.term.copy = None;
+        }
+        if self.term.hints.as_ref().is_some_and(|h| Some(&h.block) != target.as_ref()) {
+            self.term.hints = None;
+        }
+        if ks.modifiers.platform || (self.term.copy.is_none() && self.term.hints.is_none()) {
+            return false;
+        }
+        match self.term.copy.is_some() {
+            true => self.copy_key(ks, chord, cx),
+            false => self.hint_key(ks, cx),
+        }
+        cx.notify();
+        true
+    }
+
+    /// Copy mode starts at the terminal's cursor, or at the view's bottom row when scrolled back.
+    fn enter_copy(&mut self, id: String) {
+        let live = self.live(&id);
+        let c = self.composed(&id);
+        let cursor = match (self.view_top(&id), &live.cursor) {
+            (None, Some(k)) => Pos { line: live.view.scrolled + k.line, col: k.col },
+            _ => Pos { line: c.top + c.frame.lines.saturating_sub(1), col: 0 },
+        };
+        if let Some(pv) = self.term.panes.get_mut(&id) {
+            pv.selection = None;
+        }
+        self.term.copy = Some(CopyMode::new(id, cursor));
+    }
+
+    fn copy_key(&mut self, ks: &gpui::Keystroke, chord: Option<&Chord>, cx: &mut Context<Self>) {
+        let Some(cm) = self.term.copy.as_mut() else { return };
+        let id = cm.block.clone();
+        if let Some((forward, text)) = cm.prompt.as_mut() {
+            let m = &ks.modifiers;
+            match ks.key.as_str() {
+                "escape" => cm.prompt = None,
+                "enter" => {
+                    cm.search = Some((std::mem::take(text), *forward));
+                    cm.prompt = None;
+                    self.copy_search(&id, false);
+                }
+                "backspace" => {
+                    text.pop();
+                }
+                "space" => text.push(' '),
+                _ => {
+                    if let Some(typed) = ks.key_char.as_deref().filter(|_| !m.control && !m.alt) {
+                        text.extend(typed.chars().filter(|c| !c.is_control()));
+                    }
+                }
+            }
+            return;
+        }
+        let Some(op) = chord.and_then(copy_mode::op) else { return };
+        let at = cm.cursor;
+        match op {
+            Op::Move(m) => {
+                let area = self.copy_area(&id);
+                let to = copy_mode::motion(at, m, &area, &mut |line| self.line_cells(&id, line));
+                self.copy_to(&id, to);
+            }
+            Op::Select(kind) => {
+                cm.select(kind);
+                self.copy_to(&id, at);
+            }
+            Op::Search { forward } => cm.prompt = Some((forward, String::new())),
+            Op::Next { reverse } => self.copy_search(&id, reverse),
+            Op::Yank => {
+                self.copy(&id, cx);
+                self.exit_copy(&id);
+            }
+            Op::Exit => self.exit_copy(&id),
+        }
+    }
+
+    fn exit_copy(&mut self, id: &str) {
+        self.term.copy = None;
+        if let Some(pv) = self.term.panes.get_mut(id) {
+            pv.selection = None;
+        }
+        self.scroll_to(id, None);
+    }
+
+    /// The lines copy mode moves over: the oldest kept to the screen's last.
+    fn copy_area(&self, id: &str) -> Area {
+        let live = self.live(id);
+        let (oldest, _) = scrollback::bounds(&live);
+        Area { oldest, last: live.view.scrolled + live.lines.saturating_sub(1), cols: live.cols, rows: live.lines }
+    }
+
+    /// Line `line`'s cells, from the screen or the scrollback (fetched when not cached).
+    fn line_cells(&mut self, id: &str, line: usize) -> Vec<char> {
+        let live = self.live(id);
+        let spans = match line.checked_sub(live.view.scrolled) {
+            Some(l) => live.rows.get(l).cloned().unwrap_or_default(),
+            None => self.history_row(id, line).map(|r| r.spans).unwrap_or_default(),
+        };
+        scrollback::cells(&spans, live.cols)
+    }
+
+    /// Put the cursor at `to`: the view scrolls to keep it on screen, and a selection follows it.
+    fn copy_to(&mut self, id: &str, to: Pos) {
+        let Some(cm) = self.term.copy.as_mut() else { return };
+        cm.cursor = to;
+        let selection = cm.selection;
+        let c = self.composed(id);
+        let rows = c.frame.lines.max(1);
+        if to.line < c.top {
+            self.scroll_to(id, Some(to.line));
+        } else if to.line >= c.top + rows {
+            self.scroll_to(id, Some(to.line + 1 - rows));
+        }
+        // the server's selection takes both cells, so `v` alone selects the one under the cursor
+        let selection = selection.map(|(kind, anchor)| {
+            let mut s = Sel { kind, anchor, head: to, range: None, dragging: false };
+            s.range = self.selected(id, &s, false).map(|g| Range { start: g.start, end: g.end });
+            s
+        });
+        self.term.panes.entry(id.to_string()).or_default().selection = selection;
+    }
+
+    /// The last search again from the cursor (`reverse`: the other way), over find's matches.
+    fn copy_search(&mut self, id: &str, reverse: bool) {
+        let Some(cm) = self.term.copy.as_ref() else { return };
+        let (Some((query, forward)), at) = (cm.search.clone(), cm.cursor) else { return };
+        if query.is_empty() {
+            return;
+        }
+        let args = json!({ "query": query, "regex": false, "case_sensitive": false });
+        let Ok(found) = self.term_call(id, "find", args) else { return };
+        let matches: Vec<Range> = serde_json::from_value(found["matches"].clone()).unwrap_or_default();
+        if let Some(to) = copy_mode::pick(&matches, at, forward != reverse) {
+            self.copy_to(id, to);
+        }
+    }
+
+    fn open_hints(&mut self, id: String) {
+        let c = self.composed(&id);
+        let rows: Vec<String> =
+            c.frame.rows.iter().map(|r| scrollback::cells(r, c.frame.cols).into_iter().collect()).collect();
+        // the config's patterns were checked when it loaded
+        let extra: Vec<_> = self.keymap.hint_patterns.iter().filter_map(|p| hints::compile(p).ok()).collect();
+        let found = hints::find(&rows, &extra);
+        if !found.is_empty() {
+            self.term.hints = Some(Hints { block: id, hints: found, typed: String::new(), upper: false });
+        }
+    }
+
+    /// A letter narrows the labels (one no label continues is ignored); a whole label copies its
+    /// text, or types it into the pane when a letter of it came in upper case. Esc leaves.
+    fn hint_key(&mut self, ks: &gpui::Keystroke, cx: &mut Context<Self>) {
+        let Some(h) = self.term.hints.as_mut() else { return };
+        let m = &ks.modifiers;
+        let letter = ks.key.chars().next().filter(|c| ks.key.len() == 1 && c.is_ascii_alphabetic());
+        if ks.key == "escape" {
+            self.term.hints = None;
+            return;
+        }
+        if ks.key == "backspace" {
+            h.typed.pop();
+            return;
+        }
+        let Some(letter) = letter.filter(|_| !m.control && !m.alt) else { return };
+        let typed = format!("{}{}", h.typed, letter.to_ascii_lowercase());
+        if !h.hints.iter().any(|x| x.label.starts_with(&typed)) {
+            return;
+        }
+        h.upper |= m.shift || letter.is_ascii_uppercase();
+        h.typed = typed;
+        let Some(text) = h.hints.iter().find(|x| x.label == h.typed).map(|x| x.text.clone()) else { return };
+        let (id, upper) = (h.block.clone(), h.upper);
+        self.term.hints = None;
+        match upper {
+            true => self.block_event(&id, json!({ "type": "paste", "data": text })),
+            false => cx.write_to_clipboard(ClipboardItem::new_string(text)),
+        }
+    }
+
+    /// What pane `id` draws: its view, with copy mode's badge or search prompt (top right, the
+    /// program's cursor hidden) or the hint labels written over it.
+    pub(super) fn drawn(&self, id: &str) -> Composed {
+        let mut c = self.composed(id);
+        let t = &DARK;
+        if let Some(cm) = self.term.copy.as_ref().filter(|m| m.block == id) {
+            c.frame.cursor = None;
+            let badge = match (&cm.prompt, cm.selection) {
+                (Some((true, q)), _) => format!("/{q}▏"),
+                (Some((false, q)), _) => format!("?{q}▏"),
+                (None, Some((Kind::Line, _))) => "COPY LINE".into(),
+                (None, Some(_)) => "COPY VISUAL".into(),
+                (None, None) => "COPY".into(),
+            };
+            let col = c.frame.cols.saturating_sub(badge.chars().count());
+            stamp(&mut c.frame, 0, col, &badge, t.bg, t.accent);
+        }
+        if let Some(h) = self.term.hints.as_ref().filter(|h| h.block == id) {
+            for x in h.hints.iter().filter(|x| x.label.starts_with(&h.typed)) {
+                stamp(&mut c.frame, x.row, x.col, &x.label, t.bg, t.accent);
+            }
+        }
+        c
+    }
+
+    /// What copy mode and hints mark on pane `id`'s rows: the cursor (outlined), and each hint's
+    /// text after its label.
+    pub(super) fn mode_marks(&self, id: &str, c: &Composed) -> Vec<CellMark> {
+        let mut out = Vec::new();
+        if let Some(cm) = self.term.copy.as_ref().filter(|m| m.block == id) {
+            if let Some(row) = cm.cursor.line.checked_sub(c.top).filter(|r| *r < c.frame.lines) {
+                out.push(CellMark { row, from: cm.cursor.col, to: cm.cursor.col, mark: Mark::Current });
+            }
+        }
+        if let Some(h) = self.term.hints.as_ref().filter(|h| h.block == id) {
+            for x in h.hints.iter().filter(|x| x.label.starts_with(&h.typed) && x.cells > x.label.len()) {
+                let (from, to) = (x.col + x.label.len(), x.col + x.cells - 1);
+                out.push(CellMark { row: x.row, from, to, mark: Mark::Found });
+            }
+        }
+        out
+    }
+
+    /// Copy mode's cursor on pane `id` and its line's text, while copy mode is on there.
+    pub fn copy_cursor(&self, id: &str) -> Option<(Pos, String)> {
+        let cm = self.term.copy.as_ref().filter(|m| m.block == id)?;
+        let live = self.live(id);
+        let spans = match cm.cursor.line.checked_sub(live.view.scrolled) {
+            Some(l) => live.rows.get(l).cloned().unwrap_or_default(),
+            None => self.cached_row(id, cm.cursor.line).map(|r| r.spans.clone()).unwrap_or_default(),
+        };
+        Some((cm.cursor, scrollback::text_of(&spans, live.cols, 0, live.cols.saturating_sub(1))))
+    }
+
+    /// The hints showing on pane `id`: (label, text).
+    pub fn hint_labels(&self, id: &str) -> Vec<(String, String)> {
+        let h = self.term.hints.as_ref().filter(|h| h.block == id);
+        h.map(|h| h.hints.iter().map(|x| (x.label.clone(), x.text.clone())).collect()).unwrap_or_default()
+    }
+
+    /// The text pane `id` draws now, labels and badges included, a line per row.
+    pub fn drawn_text(&self, id: &str) -> Option<String> {
+        let shown = self.app.model().screens.contains_key(id); // the model's lock goes before drawn takes it
+        shown.then(|| self.drawn(id).frame.text())
+    }
+}

@@ -30,6 +30,26 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### M19: tmux migrants
+
+#### Added
+
+- Repeatable bindings: `leon.bind(key, target, args, { repeats = true })`, like tmux's `bind -r`,
+  in the app and `leon attach`, with `leon.set("repeat_time", ms)` (default 500).
+- Copy mode in the app (⌘⇧C, `client.copy_mode`): vi keys over the scrollback, `v`/`V` selections,
+  `/` and `?` search with `n`/`N`, `y` copies.
+- Hints in the app (⌘⇧H, `client.hints`): labels on the URLs, paths, git hashes, UUIDs, hex and IP
+  addresses and long numbers on screen; a label copies, in upper case it types the text into the
+  pane. `leon.set("hint_patterns", {...})` adds patterns.
+- docs/lua.md: a tmux-style preset and a vim-navigator recipe.
+- `repeats` on `client.keymap` bindings and `repeat_time` and `hint_patterns` in its settings
+  (`internal`).
+
+#### Changed
+
+- `leon actions` lists the app's own actions after the config's.
+- Shifted symbols (`&`, `|`, `%`, `"`, …) in bindings are documented as accepted as typed.
+
 ### M18: a promise for integrators
 
 #### Added

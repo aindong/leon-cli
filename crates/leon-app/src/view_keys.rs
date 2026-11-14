@@ -14,6 +14,10 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        if self.mode_key(ks, chord.as_ref(), cx) {
+            cx.stop_propagation();
+            return;
+        }
         let finding = self.term.find.as_ref().is_some_and(|f| Some(&f.block) == self.target_block().as_ref());
         if finding && self.find_key(ks, cx) {
             cx.stop_propagation();
@@ -156,6 +160,7 @@ impl Workspace {
                 }
             }
             "client.find.open" | "client.find.next" | "client.find.previous" => self.find_action(name, cx),
+            "client.copy_mode" | "client.hints" => self.mode_action(name, cx),
             "client.scroll.page_up" | "client.scroll.page_down" | "client.scroll.top" | "client.scroll.bottom" => {
                 self.scroll_action(name, cx)
             }

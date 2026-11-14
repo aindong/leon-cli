@@ -34,6 +34,9 @@ pub(super) struct TermUi {
     pub(super) mouse_at: Option<gpui::Point<Pixels>>,
     /// Opens a link; None is the system handler (tests put a recorder here).
     pub(super) opener: Option<Opener>,
+    /// Copy mode and hints, on the pane they started on (`view_copy.rs`).
+    pub(super) copy: Option<crate::copy_mode::CopyMode>,
+    pub(super) hints: Option<super::copy::Hints>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -124,6 +127,21 @@ impl Workspace {
         }
         let scrolled = lines.scrolled;
         pv.cache.extend(lines.rows.into_iter().filter(|r| r.line < scrolled).map(|r| (r.line, r)));
+    }
+
+    /// History line `line` of pane `id`, if cached.
+    pub(super) fn cached_row(&self, id: &str, line: usize) -> Option<&Row> {
+        self.term.panes.get(id)?.cache.get(&line)
+    }
+
+    /// History line `line` of pane `id`, fetched with the rows around it when it isn't cached.
+    pub(super) fn history_row(&mut self, id: &str, line: usize) -> Option<Row> {
+        if let Some(r) = self.cached_row(id, line) {
+            return Some(r.clone());
+        }
+        let (oldest, _) = scrollback::bounds(&self.live(id));
+        self.fetch(id, line.saturating_sub(FETCH / 2).max(oldest), FETCH);
+        self.cached_row(id, line).cloned()
     }
 
     /// What pane `id` shows now.

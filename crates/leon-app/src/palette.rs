@@ -27,6 +27,8 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("client.find.open", "Find"),
     ("client.find.next", "Find Next"),
     ("client.find.previous", "Find Previous"),
+    ("client.copy_mode", "Copy Mode"),
+    ("client.hints", "Hints: Copy What's on Screen"),
     ("client.scroll.page_up", "Scroll Up a Page"),
     ("client.scroll.page_down", "Scroll Down a Page"),
     ("client.scroll.top", "Scroll to the Top"),

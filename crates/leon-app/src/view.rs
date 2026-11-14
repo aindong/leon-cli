@@ -450,6 +450,8 @@ impl Workspace {
 
 #[path = "view_bars.rs"]
 mod bars;
+#[path = "view_copy.rs"]
+mod copy;
 #[path = "view_find.rs"]
 mod find;
 #[path = "view_handlers.rs"]
