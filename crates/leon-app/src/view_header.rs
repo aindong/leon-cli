@@ -91,7 +91,7 @@ impl Workspace {
     pub(super) fn render_empty(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &DARK;
         let actions = ["session.new", "client.palette.toggle", ""];
-        let mut hints = div().flex().flex_col().gap(px(4.)).mt(px(18.)).w(px(380.));
+        let mut hints = div().flex().flex_col().gap(px(4.)).mt(px(18.));
         for (i, ((keys, what), action)) in self.empty_hints().into_iter().zip(actions).enumerate() {
             hints = hints.child(
                 div()

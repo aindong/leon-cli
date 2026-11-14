@@ -97,6 +97,17 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   server (`client.action` / `client.key`) without waiting. A pending sequence shows a hint and has
   no timeout; unbound keys go to the pane (`dev.leon.terminal.write`). Program status (OSC 7501)
   comes with the model copy; arriving at a pane clears its `done`/`error` (reason `seen`).
+- **App layout and look.** Tabs are drawn in one place (`leon_app::chrome::places`): as rows under
+  their session in the sidebar (the default), or with `client.tab_style.toggle` in the titlebar row
+  beside the session's name, the sidebar then listing sessions only. Panes are inset tiles
+  (`panes::tiles`) with a header each; the channel between two tiles is the divider a drag moves.
+  The tab style, pane headers and sidebar width are the app's own settings, saved to
+  `$LEON_STATE_DIR/app.json` (0600, via a temp file and a rename, only into a private dir; a missing
+  or bad file gives the defaults). Every colour comes from `leon_core::theme`, the brand palette
+  (brand/README.md): Coal panes on an Iron window, Amber focus, the Maroon tile for the selected
+  tab, Copper/Sage/Wheat/Rose for working/done/blocked/error. The server keeps each terminal's last
+  OSC 0/2 title, and `session.list_blocks` reports it with the block's cwd, so tabs and pane headers
+  name what the program set.
 - **Agent skill.** `leon skill show` prints a guide compiled into the binary. `skill setup` installs a
   SKILL.md stub (marked `<!-- leon-skill: … -->`) that tells the agent to run `leon skill show`, so
   upgrades reach agents without a reinstall, plus a matcher-less SessionStart hook running

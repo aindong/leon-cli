@@ -16,10 +16,11 @@ Lua, or let your coding agent drive them for you. It's built in Rust, with GPUI 
   your tests there and read the results.
 - **Lua inside.** Key bindings, modes, your own actions, and scripts that react to events.
 
-![The leon app: sessions in the sidebar, a split window, and an agent's progress in its tab, its sidebar row and its pane](docs/images/app-status.png)
+![The leon app: three sessions in the sidebar with their tabs as rows, a tab split into three panes, and an agent's progress on its tab row and its pane header](docs/images/app-status.png)
 
-Programs report what they're doing (working, blocked, done) and the app shows it on the tab, the
-session's sidebar row and the pane. The command palette (⌘⇧P) runs any action, yours included:
+Programs report what they're doing (working, blocked, done) and the app shows it once in each
+place: a symbol on the tab's row, and the symbol with the program's own words in the pane's header.
+Tabs take the title the program set. The command palette (⌘⇧P) runs any action, yours included:
 
 ![The command palette, filtered to "log", listing a config action with its shortcut](docs/images/app-palette.png)
 
@@ -116,8 +117,19 @@ what it created. See [docs/agents.md](docs/agents.md).
 These are defaults: a `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
 removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow.
 A pane whose program reports its status (OSC 7501, as agents do) shows a spinner, ⚠ / ? / ⚿ when
-it is blocked, ✓ when done or ✗ on an error, on its tab and its session in the sidebar; done and
-error clear when you go to the pane.
+it is blocked, ✓ when done or ✗ on an error, on its tab and in its pane header (a collapsed
+session's label shows its most urgent one); done and error clear when you go to the pane. Pane
+headers name the program and where it is, and hold split, zoom and close buttons; "Show or Hide
+Pane Headers" in the palette turns them off. Drag the sidebar's edge to resize it.
+
+Tabs live in one place. ⌘⇧S moves them from the sidebar to the titlebar, beside the session's name,
+and the sidebar then lists only sessions; the app remembers the choice:
+
+![Top tab style: the session's tabs in the titlebar row, the sidebar listing only sessions](docs/images/app-top.png)
+
+With no session open, the app says what to do next:
+
+![The empty state: leon's icon, the tagline, and the keys for a new session and the palette, plus leon skill setup](docs/images/app-empty.png)
 
 ## Script it in Lua
 
