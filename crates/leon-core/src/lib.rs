@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod events;
+pub mod hints;
 pub mod keys;
 pub mod layout;
 pub mod model;

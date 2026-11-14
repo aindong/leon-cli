@@ -3329,6 +3329,7 @@ dependencies = [
  "base64",
  "libc",
  "portable-pty",
+ "regex",
  "regex-syntax",
  "schemars",
  "serde",
