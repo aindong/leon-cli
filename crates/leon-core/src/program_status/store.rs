@@ -13,8 +13,6 @@ pub const MAX_RECORDS: usize = 256;
 #[serde(rename_all = "lowercase")]
 pub enum Reason {
     Report,
-    /// The record's effective `app` changed because an ancestor was reported or removed (see `settle`).
-    Inherited,
     Clear,
     Evicted,
     Exited,
@@ -26,7 +24,9 @@ pub enum Reason {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type")]
 pub enum Change {
-    /// `record.app` is already resolved through the ancestors.
+    /// `record.app` is resolved through the ancestors when the event is made. A later change to an
+    /// ancestor's `app` sends no event for its descendants: re-announcing them would let one tiny report
+    /// fan out into 255 full records. Read `Store::get`/`records` for the current value.
     #[serde(rename = "program_status_changed")]
     Changed { id: Option<String>, record: Record, reason: Reason },
     /// `ids` are sorted (root first).
@@ -40,8 +40,6 @@ struct Entry {
     tick: u64,
     /// With its own `app`, not the inherited one.
     record: Record,
-    /// The effective `app` the last event about this record carried.
-    announced: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -49,8 +47,6 @@ pub struct Store {
     /// Keyed by id; the root record is `""`, which no valid id can be.
     entries: HashMap<String, Entry>,
     tick: u64,
-    /// Something changed since the last `settle`.
-    dirty: bool,
 }
 
 impl Store {
@@ -73,7 +69,7 @@ impl Store {
         self.by_tick().into_iter().map(|(k, e)| (public(k), self.resolved(k, &e.record))).collect()
     }
 
-    /// Applies one report. Follow a batch of calls with [`Store::settle`].
+    /// Applies one report.
     pub fn apply(&mut self, message: Message) -> Vec<Change> {
         match message {
             Message::Query => Vec::new(),
@@ -100,31 +96,6 @@ impl Store {
         self.remove_where(Reason::Reset, |_, _| true)
     }
 
-    /// `inherited` events for records whose effective `app` no longer matches their last event.
-    /// Run once per batch (the tracker does it per read): at most one event per record, so hostile
-    /// output toggling an ancestor's `app` can't multiply events by the number of descendants.
-    pub fn settle(&mut self) -> Vec<Change> {
-        if !std::mem::take(&mut self.dirty) {
-            return Vec::new();
-        }
-        let stale: Vec<(String, Option<String>)> = self
-            .by_tick()
-            .into_iter()
-            .map(|(k, e)| (k, e, self.app(k)))
-            .filter(|(_, e, app)| e.announced != *app)
-            .map(|(k, _, app)| (k.clone(), app))
-            .collect();
-        stale
-            .into_iter()
-            .map(|(k, app)| {
-                let entry = self.entries.get_mut(&k).expect("listed above");
-                entry.announced = app.clone();
-                let record = Record { app, ..entry.record.clone() };
-                Change::Changed { id: public(&k), record, reason: Reason::Inherited }
-            })
-            .collect()
-    }
-
     fn drop_live(&mut self, reason: Reason) -> Vec<Change> {
         self.remove_where(reason, |_, r| matches!(r.state, State::Working | State::Blocked))
     }
@@ -145,8 +116,7 @@ impl Store {
             changes.push(Change::Removed { ids: vec![public(&lru)], reason: Reason::Evicted });
         }
         let resolved = Record { app: self.app_with(&key, record.app.as_ref()), ..record.clone() };
-        self.entries.insert(key.clone(), Entry { tick, record, announced: resolved.app.clone() });
-        self.dirty = true;
+        self.entries.insert(key.clone(), Entry { tick, record });
         changes.push(Change::Changed { id: public(&key), record: resolved, reason: Reason::Report });
         changes
     }
@@ -161,7 +131,6 @@ impl Store {
         for k in &keys {
             self.entries.remove(k);
         }
-        self.dirty = true;
         vec![Change::Removed { ids: keys.iter().map(|k| public(k)).collect(), reason }]
     }
 

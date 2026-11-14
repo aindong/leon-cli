@@ -59,6 +59,7 @@ fn scanner_table_in_every_chunking() {
         ("prompt cut by ESC c", "\x1b]133;A\x1bc", vec![b("\x1b]133;A"), Out::Prompt, b("\x1bc"), Out::Reset]),
         ("prompt cut by CAN", "\x1b]133;A\x18x", vec![b("\x1b]133;A\x18"), Out::Prompt, b("x")]),
         ("prompt cut by ESC [", "\x1b]133;A\x1b[0m", vec![b("\x1b]133;A"), Out::Prompt, b("\x1b[0m")]),
+        ("C0 inside 133;A", "\x1b]133;\x01A\x07", vec![b("\x1b]133;\x01A\x07"), Out::Prompt]),
         ("DECSTR is no reset", "\x1b[!p", vec![b("\x1b[!p")]),
         ("alt screen is no reset", "\x1b[?1049h\x1b[?1049l", vec![b("\x1b[?1049h\x1b[?1049l")]),
         ("133 B is no prompt", "\x1b]133;B\x07", vec![b("\x1b]133;B\x07")]),

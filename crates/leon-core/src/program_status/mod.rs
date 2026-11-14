@@ -15,8 +15,7 @@ pub use store::{Change, Reason, Store, MAX_RECORDS};
 pub const QUERY_REPLY: &[u8] =
     b"\x1b]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth\x1b\\";
 
-/// A scanner and a store for one terminal. Change the store through the tracker, or call
-/// [`Store::settle`] after changing it directly.
+/// A scanner and a store for one terminal.
 #[derive(Debug, Default)]
 pub struct Tracker {
     scanner: Scanner,
@@ -50,14 +49,6 @@ impl Tracker {
             Piece::Prompt => fed.changes.extend(store.prompt()),
             Piece::Reset => fed.changes.extend(store.reset()),
         });
-        fed.changes.extend(self.store.settle());
         fed
-    }
-
-    /// The terminal's foreground program exited.
-    pub fn process_exited(&mut self) -> Vec<Change> {
-        let mut changes = self.store.process_exited();
-        changes.extend(self.store.settle());
-        changes
     }
 }

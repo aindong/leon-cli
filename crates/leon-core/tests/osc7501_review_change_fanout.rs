@@ -11,11 +11,6 @@ fn one_read_cannot_fan_out_unbounded_change_events() {
         .map(|i| if i % 2 == 0 { "\x1b]7501;state=idle:app=a\x07" } else { "\x1b]7501;state=idle:app=b\x07" })
         .collect();
     let fed = t.feed(toggles.as_bytes(), |_| {});
-    // One event per report, plus at most one `inherited` per record per read; not 256 per toggle.
-    assert!(
-        fed.changes.len() <= 1000 + MAX_RECORDS,
-        "{} bytes of input produced {} change events",
-        toggles.len(),
-        fed.changes.len()
-    );
+    // One event per report, not one per descendant.
+    assert!(fed.changes.len() <= 1000, "{} bytes of input produced {} change events", toggles.len(), fed.changes.len());
 }

@@ -164,14 +164,15 @@ fn text(value: Option<&str>) -> Option<String> {
 }
 
 /// One line with nothing hidden: no controls (C0, DEL, C1), line breaks, bidi controls or invisible
-/// characters, and something visible. ZWJ and the emoji variation selectors stay, but only right
-/// after something visible (ZWJ also after a selector, as in 🏳️‍🌈), so they can't form hidden runs.
+/// characters, and something visible. ZWNJ, ZWJ and the emoji presentation selectors stay, but only
+/// right after a visible character (ZWJ also after a selector, as in 🏳️‍🌈), so they can't form hidden
+/// runs. Other variation selectors and tag characters stay out: they can smuggle a byte per character.
 fn safe_text(s: &str) -> bool {
     let mut prev = None;
     for c in s.chars() {
         let ok = match c {
-            '\u{fe0e}' | '\u{fe0f}' => prev.is_some_and(|p| !joiner(p)),
-            '\u{200d}' => prev.is_some_and(|p| p != '\u{200d}'),
+            '\u{200d}' => prev.is_some_and(|p| visible(p) || matches!(p, '\u{fe0e}' | '\u{fe0f}')),
+            '\u{200c}' | '\u{fe0e}' | '\u{fe0f}' => prev.is_some_and(visible),
             _ => !c.is_control() && !invisible(c),
         };
         if !ok {
@@ -179,11 +180,12 @@ fn safe_text(s: &str) -> bool {
         }
         prev = Some(c);
     }
-    s.chars().any(|c| !c.is_whitespace() && !joiner(c))
+    s.chars().any(visible)
 }
 
-fn joiner(c: char) -> bool {
-    matches!(c, '\u{200d}' | '\u{fe0e}' | '\u{fe0f}')
+/// Not whitespace and not one of the joiners `safe_text` allows.
+fn visible(c: char) -> bool {
+    !c.is_whitespace() && !matches!(c, '\u{200c}' | '\u{200d}' | '\u{fe0e}' | '\u{fe0f}')
 }
 
 /// Unicode's Default_Ignorable_Code_Point set, plus the line/paragraph separators and interlinear

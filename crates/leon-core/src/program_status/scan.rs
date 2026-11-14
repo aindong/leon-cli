@@ -122,7 +122,8 @@ impl Scanner {
                 }
                 _ => {
                     self.pass.push(b);
-                    if self.buf.len() < 6 {
+                    // vte ignores other C0 bytes inside an OSC.
+                    if self.buf.len() < 6 && b >= 0x20 {
                         self.buf.push(b);
                     }
                 }
