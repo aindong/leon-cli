@@ -50,6 +50,16 @@ pub struct Status {
     /// True when a client started this server on demand; it exits once idle.
     pub autostarted: bool,
     pub sessions: usize,
+    /// Where sessions are saved on stop; null when they aren't (the state dir isn't private).
+    pub state_file: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Stop {
+    /// Don't save the sessions, and forget the ones saved before: the next start is empty.
+    #[serde(default)]
+    pub discard: bool,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -241,6 +251,7 @@ pub fn registry() -> Registry {
             socket: ctx.info.socket.clone(),
             autostarted: ctx.is_autostarted(),
             sessions: ctx.state().sessions.len(),
+            state_file: crate::events::lock(&ctx.state_file).as_ref().map(|f| f.display().to_string()),
         })
     });
     r.add("server.persist", "Keep running when idle (an autostarted server otherwise exits).", |ctx, _: NoParams| {
@@ -251,7 +262,11 @@ pub fn registry() -> Registry {
         Ok(Version { version: ctx.info.version.into() })
     });
     // The socket loop stops the server once this reply is written (serve.rs).
-    r.add("server.stop", "Stop the server after replying; every session ends.", |_, _: NoParams| Ok(Empty {}));
+    r.add(
+        "server.stop",
+        "Stop the server after replying; every program ends. Sessions are saved unless `discard`.",
+        |_, _: Stop| Ok(Empty {}),
+    );
     r.add("session.list", "Every session in order, with its label and window count.", |ctx, _: NoParams| {
         Ok(SessionList { sessions: session_list(&ctx.state()) })
     });

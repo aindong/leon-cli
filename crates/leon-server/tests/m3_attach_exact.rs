@@ -33,7 +33,8 @@ fn snapshots_and_events_line_up_under_concurrent_changes() {
     let socket = dir.path().join("server.sock");
     let info = leon_server::Info { pid: 1, version: "test", socket: socket.display().to_string() };
     let ctx = Arc::new(leon_server::Ctx::new(info, false));
-    let opts = leon_server::serve::Options { socket: socket.clone(), idle_exit: Duration::from_secs(60) };
+    let opts =
+        leon_server::serve::Options { socket: socket.clone(), idle_exit: Duration::from_secs(60), persist: None };
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.spawn(leon_server::serve::serve(ctx, opts));
     let connect = || loop {

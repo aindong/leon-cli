@@ -197,7 +197,7 @@ fn api(c: &mut Client, cli: &Cli, cmd: &ApiCmd) -> Result<(), Fail> {
 fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
     let socket = socket_path();
     match cmd {
-        ServerCmd::Run { autostarted } => {
+        ServerCmd::Run { autostarted, restore } => {
             let idle = std::env::var("LEON_IDLE_EXIT_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
             let info = leon_server::Info {
                 pid: std::process::id(),
@@ -205,18 +205,20 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                 socket: socket.display().to_string(),
             };
             let ctx = std::sync::Arc::new(leon_server::Ctx::new(info, *autostarted));
-            let opts = leon_server::serve::Options { socket, idle_exit: Duration::from_secs(idle) };
+            let persist = leon_core::paths::state_dir()
+                .map(|d| leon_server::persist::Persist { file: d.join(leon_server::persist::FILE), restore: *restore });
+            let opts = leon_server::serve::Options { socket, idle_exit: Duration::from_secs(idle), persist };
             let rt = tokio::runtime::Runtime::new().map_err(|e| Fail::Other(e.to_string()))?;
             rt.block_on(leon_server::serve::serve(ctx, opts)).map_err(|e| Fail::Other(e.to_string()))
         }
         // A running server (perhaps autostarted on demand) is told to stay up; otherwise start one.
-        ServerCmd::Start => match Client::connect(&socket) {
+        ServerCmd::Start { restore } => match Client::connect(&socket) {
             Ok(mut c) => c.call("server.persist", json!({})).map(|_| ()),
-            Err(_) => spawn_server(&socket, false),
+            Err(_) => spawn_server(&socket, false, *restore),
         },
-        ServerCmd::Stop => {
+        ServerCmd::Stop { discard } => {
             let mut c = connect(&socket, false)?;
-            c.call("server.stop", json!({}))?;
+            c.call("server.stop", json!({ "discard": discard }))?;
             let end = Instant::now() + Duration::from_secs(5);
             while Instant::now() < end && Client::connect(&socket).is_ok() {
                 std::thread::sleep(Duration::from_millis(20));

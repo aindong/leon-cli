@@ -137,6 +137,10 @@ pub struct Terminal {
     exited: Arc<Mutex<bool>>,
     /// The argv that runs (the login shell's path when `Spec::command` was empty).
     pub command: Vec<String>,
+    /// The directory it was started in (None: `$HOME`).
+    start_cwd: Option<PathBuf>,
+    /// The last OSC 7 pwd reported, as a URL.
+    pwd: Arc<Mutex<Option<String>>>,
 }
 
 impl std::fmt::Debug for Terminal {
@@ -168,6 +172,7 @@ impl Terminal {
             cmd.env(k, v);
         }
         let command = if spec.command.is_empty() { vec![cmd.get_shell()] } else { spec.command };
+        let start_cwd = spec.cwd;
         let child = pair.slave.spawn_command(cmd).map_err(pty)?;
         drop(pair.slave); // the child holds the only slave fd, so its exit ends our reads
         let pid = child.process_id().map_or(0, |p| p as i32);
@@ -202,7 +207,9 @@ impl Terminal {
         let tracker = Arc::new(Mutex::new(Tracker::default()));
 
         let (drained, eof) = mpsc::channel::<()>();
-        let reading = Reading { term: term.clone(), tracker: tracker.clone(), seen, writer: writer.clone() };
+        let pwd = Arc::new(Mutex::new(None));
+        let reading =
+            Reading { term: term.clone(), tracker: tracker.clone(), seen, writer: writer.clone(), pwd: pwd.clone() };
         let to_reader = notify.clone();
         std::thread::spawn(move || {
             reading.run(reader, &*to_reader);
@@ -224,7 +231,7 @@ impl Terminal {
             let _ = eof.recv_timeout(DRAIN_WAIT); // disconnects at the reader's EOF
             notify(Notice::Exited(status));
         });
-        Ok(Terminal { term, tracker, writer, master: Mutex::new(pair.master), pid, exited, command })
+        Ok(Terminal { term, tracker, writer, master: Mutex::new(pair.master), pid, exited, command, start_cwd, pwd })
     }
 
     pub fn pid(&self) -> i32 {
@@ -265,6 +272,53 @@ impl Terminal {
     pub fn size(&self) -> (u16, u16) {
         (ROWS, COLS)
     }
+
+    /// Where the program is: its own cwd while it runs, else the last OSC 7 path, else where it
+    /// started. The process comes first: an OSC 7 may come from a remote host (ssh).
+    pub fn cwd(&self) -> Option<PathBuf> {
+        let live = {
+            let exited = lock(&self.exited);
+            // Under the lock the program is unreaped, so its pid is still its own.
+            (!*exited && self.pid > 0).then(|| process_cwd(self.pid)).flatten()
+        };
+        live.or_else(|| lock(&self.pwd).as_deref().and_then(pwd_path)).or_else(|| self.start_cwd.clone())
+    }
+}
+
+/// The path of an OSC 7 `file://host/path` URL, percent-decoded.
+fn pwd_path(url: &str) -> Option<PathBuf> {
+    let rest = url.strip_prefix("file://")?;
+    let path = String::from_utf8(percent_decode(&rest.as_bytes()[rest.find('/')?..])).ok()?;
+    Some(PathBuf::from(path))
+}
+
+#[cfg(target_os = "macos")]
+fn process_cwd(pid: i32) -> Option<PathBuf> {
+    use std::os::unix::ffi::OsStrExt;
+    let size = std::mem::size_of::<libc::proc_vnodepathinfo>() as libc::c_int;
+    // SAFETY: proc_pidinfo writes at most `size` bytes into our zeroed struct; the path is then
+    // read as the struct's own MAXPATHLEN bytes.
+    unsafe {
+        let mut info: libc::proc_vnodepathinfo = std::mem::zeroed();
+        let ptr = &mut info as *mut libc::proc_vnodepathinfo as *mut libc::c_void;
+        if libc::proc_pidinfo(pid, libc::PROC_PIDVNODEPATHINFO, 0, ptr, size) != size {
+            return None;
+        }
+        let raw = &info.pvi_cdir.vip_path;
+        let bytes = std::slice::from_raw_parts(raw.as_ptr() as *const u8, std::mem::size_of_val(raw));
+        let path = &bytes[..bytes.iter().position(|&b| b == 0)?];
+        (!path.is_empty()).then(|| PathBuf::from(std::ffi::OsStr::from_bytes(path)))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn process_cwd(pid: i32) -> Option<PathBuf> {
+    std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn process_cwd(_pid: i32) -> Option<PathBuf> {
+    None
 }
 
 impl Terminal {
@@ -327,6 +381,7 @@ struct Reading {
     tracker: Arc<Mutex<Tracker>>,
     seen: Arc<Mutex<Seen>>,
     writer: Writer,
+    pwd: Arc<Mutex<Option<String>>>,
 }
 
 impl Reading {
@@ -358,6 +413,7 @@ impl Reading {
             let new_pwd = fed.pwd.and_then(|p| pwd_url(&p));
             if let Some(new) = new_pwd.filter(|p| pwd.as_ref() != Some(p)) {
                 pwd = Some(new.clone());
+                *lock(&self.pwd) = Some(new.clone());
                 notify(Notice::Pwd(new));
             }
             if seen.bell {
@@ -501,6 +557,40 @@ mod tests {
             done.send(()).unwrap();
         });
         finished.recv_timeout(Duration::from_secs(5)).expect("write blocked on a full PTY");
+    }
+
+    #[test]
+    fn cwd_follows_the_shell_then_osc7_then_the_start_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        let start = std::fs::canonicalize(dir.path()).unwrap();
+        let spec = Spec { command: vec!["sh".into()], cwd: Some(start.clone()), env: vec![] };
+        let (tx, rx) = mpsc::channel();
+        let tx = Mutex::new(tx);
+        let t = Terminal::spawn(spec, move |n| {
+            if let Notice::Exited(_) = n {
+                lock(&tx).send(()).unwrap();
+            }
+        })
+        .unwrap();
+        assert_eq!(t.cwd(), Some(start.clone()));
+        t.write(b"cd sub; echo cd-$((40+2))\r").unwrap();
+        screen_until(&t, |s| s.lines().any(|l| l == "cd-42"));
+        assert_eq!(t.cwd(), Some(start.join("sub")), "the shell's own cwd");
+        t.write(b"printf '\\033]7;file://h/o%%20sc7\\007'; exit\r").unwrap();
+        rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert_eq!(t.cwd(), Some(PathBuf::from("/o sc7")), "after exit: the last OSC 7 path");
+        let spec = Spec { command: vec!["true".into()], cwd: Some(start.clone()), env: vec![] };
+        let (done, exited) = mpsc::channel();
+        let done = Mutex::new(done);
+        let t = Terminal::spawn(spec, move |n| {
+            if let Notice::Exited(_) = n {
+                lock(&done).send(()).unwrap();
+            }
+        })
+        .unwrap();
+        exited.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert_eq!(t.cwd(), Some(start), "no process, no OSC 7: the start dir");
     }
 
     #[test]

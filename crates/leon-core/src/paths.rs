@@ -35,6 +35,14 @@ pub fn home() -> Option<PathBuf> {
     }
 }
 
+/// Where the server saves its sessions: `$LEON_STATE_DIR`, else `<home>/.local/state/leon`.
+pub fn state_dir() -> Option<PathBuf> {
+    match std::env::var_os("LEON_STATE_DIR").filter(|d| !d.is_empty()) {
+        Some(d) => Some(PathBuf::from(d)),
+        None => home().map(|h| h.join(".local/state/leon")),
+    }
+}
+
 pub fn socket_path() -> PathBuf {
     runtime_dir().join("server.sock")
 }

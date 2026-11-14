@@ -234,15 +234,29 @@ pub enum Edge {
 
 #[derive(Subcommand)]
 pub enum ServerCmd {
-    /// Run the server in the foreground.
+    /// Run the server in the foreground. Sessions are saved in $LEON_STATE_DIR (default
+    /// ~/.local/state/leon) when it stops, and restored when it starts.
     Run {
         #[arg(long, hide = true)]
         autostarted: bool,
+        /// Restore the sessions saved when the last server stopped.
+        #[arg(long, default_value = "true", num_args = 0..=1, require_equals = true,
+              default_missing_value = "true", value_parser = BoolishValueParser::new())]
+        restore: bool,
     },
     /// Start a server in the background (does nothing if one runs).
-    Start,
-    /// Stop the server.
-    Stop,
+    Start {
+        /// Restore the sessions saved when the last server stopped.
+        #[arg(long, default_value = "true", num_args = 0..=1, require_equals = true,
+              default_missing_value = "true", value_parser = BoolishValueParser::new())]
+        restore: bool,
+    },
+    /// Stop the server, saving its sessions; every program ends.
+    Stop {
+        /// Don't save, and forget the sessions saved before: the next start is empty.
+        #[arg(long)]
+        discard: bool,
+    },
     /// Show whether a server runs (exit 4 if not).
     Status,
 }

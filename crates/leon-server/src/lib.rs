@@ -5,6 +5,7 @@ mod blocks;
 pub mod events;
 mod layout;
 pub mod methods;
+pub mod persist;
 pub mod registry;
 pub mod serve;
 
@@ -37,6 +38,8 @@ pub struct Ctx {
     exited: tokio::sync::watch::Sender<u64>,
     /// Attached connections. Only touched with the state lock held, so events and snapshots line up.
     subscribers: Mutex<Vec<Weak<Subscriber>>>,
+    /// Where sessions are saved when the server stops; None when they aren't (`server.status`).
+    pub state_file: Mutex<Option<std::path::PathBuf>>,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -82,6 +85,7 @@ impl Ctx {
             autostarted: AtomicBool::new(autostarted),
             exited: tokio::sync::watch::channel(0).0,
             subscribers: Mutex::default(),
+            state_file: Mutex::default(),
         }
     }
 

@@ -79,28 +79,7 @@ pub fn open(
         return Err(ApiError::bad_request("command needs at least a program name"));
     }
     let id = new_id("block");
-    let env = [
-        ("LEON_SESSION", session_id),
-        ("LEON_BLOCK", id.as_str()),
-        ("LEON_SERVER", ctx.info.socket.as_str()),
-        ("TERM", "xterm-256color"),
-    ];
-    let spec = Spec {
-        command: o.command.unwrap_or_default(),
-        cwd: o.cwd.map(PathBuf::from),
-        env: env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
-    };
-    let weak = Arc::downgrade(ctx);
-    let block_id = id.clone();
-    let terminal = Terminal::spawn(spec, move |notice| {
-        let Some(ctx) = weak.upgrade() else { return };
-        let exited = matches!(notice, Notice::Exited(_));
-        ctx.state().notice(&block_id, notice);
-        if exited {
-            ctx.exited.send_modify(|n| *n += 1);
-        }
-    })
-    .map_err(|e| ApiError::bad_request(format!("can't start the program: {e}")))?;
+    let terminal = spawn(ctx, session_id, &id, o.command.unwrap_or_default(), o.cwd.map(PathBuf::from))?;
     let keep_open = o.exit.is_some_and(|e| !e.on_completion);
     let block = Block {
         id: id.clone(),
@@ -112,6 +91,35 @@ pub fn open(
     };
     st.add_block(session_id, block, place)?;
     Ok(id)
+}
+
+/// Start the terminal of block `block_id`; an empty `command` runs the login shell. Like `open`,
+/// call with the state lock held.
+pub(crate) fn spawn(
+    ctx: &Arc<Ctx>,
+    session_id: &str,
+    block_id: &str,
+    command: Vec<String>,
+    cwd: Option<PathBuf>,
+) -> Result<Terminal, ApiError> {
+    let env = [
+        ("LEON_SESSION", session_id),
+        ("LEON_BLOCK", block_id),
+        ("LEON_SERVER", ctx.info.socket.as_str()),
+        ("TERM", "xterm-256color"),
+    ];
+    let spec = Spec { command, cwd, env: env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect() };
+    let weak = Arc::downgrade(ctx);
+    let block_id = block_id.to_string();
+    Terminal::spawn(spec, move |notice| {
+        let Some(ctx) = weak.upgrade() else { return };
+        let exited = matches!(notice, Notice::Exited(_));
+        ctx.state().notice(&block_id, notice);
+        if exited {
+            ctx.exited.send_modify(|n| *n += 1);
+        }
+    })
+    .map_err(|e| ApiError::bad_request(format!("can't start the program: {e}")))
 }
 
 #[derive(Serialize, JsonSchema)]

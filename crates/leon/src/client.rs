@@ -96,7 +96,7 @@ impl Client {
 
 /// Start `leon server run` detached from this process (own session, no inherited stdio, cwd `/`),
 /// then wait for its socket. Logs go to `server.log` beside the socket.
-pub fn spawn_server(socket: &Path, autostarted: bool) -> Result<(), Fail> {
+pub fn spawn_server(socket: &Path, autostarted: bool, restore: bool) -> Result<(), Fail> {
     let log_path = socket.with_file_name("server.log");
     if let Some(dir) = socket.parent() {
         leon_core::paths::ensure_private_dir(dir).map_err(|e| Fail::Unreachable(e.to_string()))?;
@@ -113,6 +113,9 @@ pub fn spawn_server(socket: &Path, autostarted: bool) -> Result<(), Fail> {
     cmd.args(["server", "run"]);
     if autostarted {
         cmd.arg("--autostarted");
+    }
+    if !restore {
+        cmd.arg("--restore=false");
     }
     cmd.current_dir("/")
         .stdin(Stdio::null())
@@ -153,6 +156,6 @@ pub fn connect(socket: &Path, autostart: bool) -> Result<Client, Fail> {
     if !autostart {
         return Err(Fail::Unreachable(format!("no leon server at {}", socket.display())));
     }
-    spawn_server(socket, true)?;
+    spawn_server(socket, true, true)?;
     Client::connect(socket).map_err(|e| Fail::Unreachable(format!("can't reach the server: {e}")))
 }

@@ -11,7 +11,8 @@ async fn oversized_request_line_is_refused_before_parsing() {
     let socket = dir.path().join("server.sock");
     let info = leon_server::Info { pid: 1, version: "test", socket: socket.display().to_string() };
     let ctx = Arc::new(leon_server::Ctx::new(info, false));
-    let opts = leon_server::serve::Options { socket: socket.clone(), idle_exit: Duration::from_secs(60) };
+    let opts =
+        leon_server::serve::Options { socket: socket.clone(), idle_exit: Duration::from_secs(60), persist: None };
     let server = tokio::spawn(leon_server::serve::serve(ctx, opts));
     let end = std::time::Instant::now() + Duration::from_secs(10);
     let s = loop {
