@@ -4,13 +4,17 @@
 use std::io::{self, BufRead, BufReader, Read};
 use std::os::unix::net::UnixStream;
 
+use leon_core::program_status::{strip_hidden, Record};
 use leon_core::{ApiError, Window};
 use serde_json::{json, Value};
 
 use super::{Block, Conn, Session};
 
-/// The longest line read from the server: a whole 500 × 1000 screen of one-cell spans fits.
-const MAX_LINE: u64 = 256 << 20;
+/// The longest line read from a server, which may be a box we don't control: the server splits
+/// a screen past `leon_server::screens::MAX_SCREEN_LINE` (4 MiB) and caps `lines` replies the same.
+/// shortcut: a reply is still parsed into a `Value` (tens of bytes per byte for a hostile one, once
+/// per call the app makes); parse replies into their types if remote hosts get untrusted users.
+pub(super) const MAX_LINE: u64 = 16 << 20;
 
 /// One line, at most `MAX_LINE` bytes; 0 at the end of the stream.
 pub(super) fn read_line(r: &mut BufReader<UnixStream>, out: &mut String) -> io::Result<usize> {
@@ -42,7 +46,8 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
             (Err(e), _) | (_, Err(e)) if e.code == "unreachable" => return Err(e),
             _ => continue,
         };
-        let text = |v: &Value| v.as_str().map(String::from);
+        // a remote server's names go on screen: nothing that reorders or hides text
+        let text = |v: &Value| v.as_str().map(strip_hidden);
         let windows: Vec<Window> = view["windows"]
             .as_array()
             .into_iter()
@@ -67,7 +72,11 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
         for b in blocks["blocks"].as_array().into_iter().flatten() {
             let p =
                 json!({ "session_id": sid, "block_id": b["block_id"], "method": "dev.leon.terminal.program_status" });
-            let records = c.call("block.method", p).unwrap_or_default();
+            // a broken connection keeps the old model: empty records would read as the status clearing
+            let records = match c.call("block.method", p) {
+                Err(e) if e.code == "unreachable" => return Err(e),
+                r => r.unwrap_or_default(),
+            };
             let status = records["records"].as_array().into_iter().flatten();
             session.blocks.push(Block {
                 id: text(&b["block_id"]).unwrap_or_default(),
@@ -75,10 +84,17 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
                 command: serde_json::from_value(b["command"].clone()).unwrap_or_default(),
                 title: text(&b["title"]),
                 cwd: text(&b["cwd"]),
-                status: status.filter_map(|r| serde_json::from_value(r["record"].clone()).ok()).collect(),
+                status: status.filter_map(|r| serde_json::from_value(r["record"].clone()).ok()).map(shown).collect(),
             });
         }
         out.push(session);
     }
     Ok(out)
+}
+
+/// A record's words with nothing hidden (a server we don't run may not have checked them).
+fn shown(mut r: Record) -> Record {
+    r.title = r.title.map(|t| strip_hidden(&t));
+    r.msg = r.msg.map(|m| strip_hidden(&m));
+    r
 }

@@ -7,9 +7,7 @@ Everything that changes in leon, newest first. The format follows
 leon has had no release yet: every build so far is version 0.1.0. Until the first release, each
 section is a milestone from [docs/roadmap.md](docs/roadmap.md) and
 [docs/research/next-for-leon.md](docs/research/next-for-leon.md), dated by when it landed on
-`main`. Milestones that haven't landed have no section: M12 (the session switcher; the command
-palette came with M9), M13 (Activity, notifications and `leon notify`; status in the app came with
-M9) and M15 (Linux) are still to come.
+`main`. Milestones that haven't landed have no section: M15 (Linux) is still to come.
 
 ## Reading `api_version`
 
@@ -29,6 +27,38 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+### M12 + M13: switch fast, and know which agent needs you
+
+#### Added
+
+- The session switcher (⌘K, `session.switch`): every tab on every host, and a block when the query
+  matches its title, with its status; the most recently used first. ↩ goes there; ⌘↩ moves the
+  pane beside the focused one when both are in the same session.
+- Activity (⌘⇧A, `client.sidebar.activity.toggle`, a toolbar button): every block that needs you
+  across hosts, blocked (with its kind), error, done-unseen, then working with its progress, each
+  with how long it has waited; a click goes to the pane, which clears its done or error.
+- The blocked count on the Activity button and the Dock icon, shown only when something is blocked.
+- Notifications from Leon.app (UNUserNotificationCenter) when a block blocks or errors, or a run of
+  30 s or more finishes while the app is in the background; once a minute per block and state, four
+  a minute in all; `leon.set("notify_blocked" | "notify_error" | "notify_done", false)` turns a kind
+  off. Clicking one goes to its pane.
+- `leon notify [-b BLOCK] [--state working|blocked|done|error] [--title T] [--body B]` and the
+  experimental block method `dev.leon.terminal.report_status`: a status for your own block, held to
+  the OSC 7501 rules.
+
+#### Changed
+
+- The app and `leon attach` read at most 16 MiB per line from a server (was 256 MiB). The server
+  splits a screen update past 4 MiB into several lines and trims `dev.leon.terminal.lines` replies
+  to 4 MiB of rows (ask again for the rest).
+- Applying a screen update is linear in its size, whatever a server sends; a line given twice
+  takes its last row, and a row keeps at most a line's worth of spans, text and backgrounds.
+- A line past the cap ends the connection instead of re-attaching to it; event and screen lines
+  are parsed into their types, so a server gets about a byte of the app's memory per byte it sends.
+  Names and status text from a server are stripped of hidden characters before they are shown.
+- The docs' screenshots are retaken with a neutral demo (`scripts/demo-shots.sh`), and a test keeps
+  the user's login and machine name out of them.
 
 ### M20a — Floating panes and drawers (API `1.2.0`)
 

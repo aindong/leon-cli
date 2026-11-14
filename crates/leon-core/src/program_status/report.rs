@@ -179,7 +179,7 @@ fn safe_text(s: &str) -> bool {
 }
 
 /// `s` without what `safe_text` refuses, for program text we keep rather than drop (titles, pwds).
-pub(crate) fn strip_hidden(s: &str) -> String {
+pub fn strip_hidden(s: &str) -> String {
     let mut prev = None;
     s.chars()
         .filter(|&c| {

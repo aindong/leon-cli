@@ -23,6 +23,9 @@ gui = ["dep:gpui"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui = { workspace = true, optional = true }
+# already in the tree through GPUI; for notifications and the Dock badge (notify_mac.rs)
+objc2 = "0.6.5"
+block2 = "0.6.2"
 
 [dev-dependencies]
 tempfile.workspace = true

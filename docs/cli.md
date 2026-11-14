@@ -232,6 +232,24 @@ leon send-key -b "$id" ctrl+d
 leon wait -b "$id" --for 10s
 ```
 
+### `leon notify`
+
+Report a status for your own block (`-b`, else `$LEON_BLOCK`; with neither, exit 2), as an OSC
+7501 report from its program would: it shows on the tab and pane header, in the app's Activity list,
+and for blocked, error and a long run's done as a notification. For tools that can't write OSC 7501
+(a hook, a job with no tty). It replaces the block's root record, with that record's lifetime.
+
+- `--state working|blocked|done|error`: the state (default `done`).
+- `--title T`, `--body B`: one line each (at most 192 and 2048 bytes). Text OSC 7501 would drop
+  (controls, line breaks, invisible characters) is refused (exit 1), and nothing is recorded.
+
+```sh
+id=$(leon run --keep-open -- sleep 30)
+leon notify -b "$id" --state blocked --title "Deploy" --body "approve the rollout?"
+leon block call -b "$id" program_status
+leon block close "$id"
+```
+
 ## Layout
 
 ### `leon focus TARGET`

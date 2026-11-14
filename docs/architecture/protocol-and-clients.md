@@ -63,7 +63,17 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   bold/italic/underline/strikeout), backgrounds are runs of cells. The first line for a block, and
   any after a size change, is `full` (every row); later ones carry only the dirty rows, found by
   diffing the frame against the last one sent on that connection (`leon_core::screen::diff`).
-  Screen lines have no `seq`: they are state, not events. Per watched block a task waits on the
+  Screen lines have no `seq`: they are state, not events. A client reads at most 16 MiB per line
+  (a server may be a box we don't control; the CLI's cap is 64 MiB), so an update whose line would
+  pass 4 MiB (only a huge screen of distinctly styled cells gets there) goes as several: the first
+  carries `full`, the rest are partial updates of the same size (`screens::encode`), and
+  `dev.leon.terminal.lines` replies keep the first rows that fit in 4 MiB (the app asks again from
+  the first row it lacks). A line past the cap ends the connection for good rather than re-attaching
+  to the same line. Event and screen lines are parsed into their types, not a JSON tree, so memory
+  stays near a byte per byte read (replies still become a `Value`: a shortcut). Applying an update
+  (`screen::apply`) is linear in the update and the frame: one row per line (the last wins), and a
+  row keeps at most `cols` spans and backgrounds inside the line, each span at most a cell's text
+  per column. Per watched block a task waits on the
   terminal's change counter (a `tokio::sync::watch`) and only marks it dirty; the connection loop
   builds the frame under the terminal's lock, between replies and events, so nothing queues per
   connection beyond "dirty": a slow reader gets fewer, newer screens, never a backlog, and is

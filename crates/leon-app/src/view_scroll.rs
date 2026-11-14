@@ -112,6 +112,10 @@ impl Workspace {
         let missing = scrollback::compose(&live, pv.top, &pv.cache).missing;
         if let Some(&first) = missing.first() {
             self.fetch(id, first.saturating_sub(FETCH / 2).max(oldest), live.lines + FETCH);
+            // a reply trimmed to its byte cap can end before `first`: ask from there, or it never comes
+            if !self.term.panes.get(id).is_some_and(|p| p.cache.contains_key(&first)) {
+                self.fetch(id, first, live.lines + FETCH);
+            }
         }
     }
 

@@ -70,6 +70,9 @@ pub(crate) fn config(lua: &Lua) -> Config {
         logs: c.logs.clone(),
         resume: c.resume,
         copy_on_select: c.copy_on_select,
+        notify_blocked: c.notify_blocked,
+        notify_error: c.notify_error,
+        notify_done: c.notify_done,
     }
 }
 
@@ -314,16 +317,30 @@ fn mode(lua: &Lua, (name, opts): (String, Option<Table>)) -> Result<(), Bad> {
     Ok(())
 }
 
-/// `leon.set(name, value)`: a setting: `resume` (`"ask"`, `"always"`, `"never"`) or
-/// `copy_on_select` (a boolean).
+/// `leon.set(name, value)`: a setting: `resume` (`"ask"`, `"always"`, `"never"`), or one of the
+/// booleans `copy_on_select`, `notify_blocked`, `notify_error`, `notify_done`.
 fn set(lua: &Lua, (name, value): (String, Value)) -> Result<(), Bad> {
-    if name == "copy_on_select" {
-        let Value::Boolean(on) = value else { return Err("copy_on_select must be true or false".into()) };
-        state(lua).cfg.copy_on_select = Some(on);
+    let mut st = state(lua);
+    let cfg = &mut st.cfg;
+    let flag = match name.as_str() {
+        "copy_on_select" => Some(&mut cfg.copy_on_select),
+        "notify_blocked" => Some(&mut cfg.notify_blocked),
+        "notify_error" => Some(&mut cfg.notify_error),
+        "notify_done" => Some(&mut cfg.notify_done),
+        _ => None,
+    };
+    if let Some(flag) = flag {
+        let Value::Boolean(on) = value else { return Err(format!("{name} must be true or false").into()) };
+        *flag = Some(on);
         return Ok(());
     }
+    drop(st);
     if name != "resume" {
-        return Err(format!("unknown setting {name:?}; the settings are \"resume\" and \"copy_on_select\"").into());
+        return Err(format!(
+            "unknown setting {name:?}; the settings are \"resume\", \"copy_on_select\", \"notify_blocked\", \
+             \"notify_error\" and \"notify_done\""
+        )
+        .into());
     }
     let text = match &value {
         Value::String(s) => s.to_str().map(|s| s.to_string()).unwrap_or_default(),

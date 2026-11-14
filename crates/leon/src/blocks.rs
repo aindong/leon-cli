@@ -9,6 +9,28 @@ use serde_json::{json, Value};
 use crate::client::{Client, Fail};
 use crate::commands::{json_out, label, pick_session, print_json, read_args, resolve};
 use crate::{BlockCmd, Cli, Cmd};
+use clap::{Args, ValueEnum};
+
+#[derive(Args)]
+pub struct NotifyArgs {
+    /// The state to report.
+    #[arg(long, value_enum, default_value = "done")]
+    state: NotifyState,
+    /// One line naming what it is about (at most 192 bytes).
+    #[arg(long, value_name = "T")]
+    title: Option<String>,
+    /// One line saying more (at most 2048 bytes).
+    #[arg(long, value_name = "B")]
+    body: Option<String>,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum NotifyState {
+    Working,
+    Blocked,
+    Done,
+    Error,
+}
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
     match cli.cmd() {
@@ -43,6 +65,17 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
                 let event = json!({ "type": "key", "key": key });
                 c.call("block.event", json!({ "session_id": sid, "block_id": bid, "event": event }))?;
             }
+        }
+        Cmd::Notify(NotifyArgs { state, title, body }) => {
+            // never the focused pane: a job outside leon would light up whatever the user looks at
+            if block_query(cli, None).is_none() {
+                return Err(Fail::Usage(
+                    "no block to report for: pass -b BLOCK or run inside leon ($LEON_BLOCK)".into(),
+                ));
+            }
+            let (sid, bid) = pick_block(c, cli, None)?;
+            let state = state.to_possible_value().map(|v| v.get_name().to_string());
+            method(c, &sid, &bid, "report_status", json!({ "state": state, "title": title, "msg": body }))?;
         }
         Cmd::Capture { trim } => {
             let (sid, bid) = pick_block(c, cli, None)?;
