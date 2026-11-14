@@ -54,10 +54,12 @@ pub struct Status {
     pub state_file: Option<String>,
 }
 
-/// Checked here; serve.rs reads `discard` from the raw params when the stop goes through.
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Stop {
+    /// Only stop when no session exists; otherwise fail with `conflict`.
+    #[serde(default)]
+    pub if_idle: bool,
     /// Don't save the sessions, and forget the ones saved before: the next start is empty.
     #[serde(default)]
     pub discard: bool,
@@ -266,13 +268,24 @@ pub fn registry() -> Registry {
     r.add(
         "server.stop",
         "Stop the server after replying; every program ends. Sessions are saved unless `discard`.",
-        |_, _: Stop| Ok(Empty {}),
+        |ctx, p: Stop| {
+            let st = ctx.state(); // held while deciding, so no session is created in between
+            if p.if_idle && !st.sessions.is_empty() {
+                return Err(ApiError::new(409, "conflict", "sessions exist; not stopping"));
+            }
+            ctx.stopping.store(true, Ordering::SeqCst);
+            ctx.discard.fetch_or(p.discard, Ordering::SeqCst); // any accepted stop that asked wins
+            Ok(Empty {})
+        },
     );
     r.add("session.list", "Every session in order, with its label and window count.", |ctx, _: NoParams| {
         Ok(SessionList { sessions: session_list(&ctx.state()) })
     });
     r.add("session.create", "Create a session with one window holding one terminal.", |ctx, p: CreateSession| {
         let mut st = ctx.state();
+        if ctx.stopping.load(Ordering::SeqCst) {
+            return Err(ApiError::new(503, "shutting_down", "the server is stopping"));
+        }
         let mark = st.mark();
         let (session_id, window_id) = st.create_session(p.label.as_deref(), p.window_label.as_deref())?;
         match blocks::open(ctx, &mut st, &session_id, &window_id, Layout::block(p.layout), None) {
@@ -323,6 +336,11 @@ pub fn registry() -> Registry {
         st.close_window(&p.session_id, &p.window_id)?;
         Ok(revision(&st, &p.session_id))
     });
+    r.add("session.focus_window", "Make a window the session's active tab.", |ctx, p: WindowRef| {
+        let mut st = ctx.state();
+        st.focus_window(&p.session_id, &p.window_id)?;
+        Ok(revision(&st, &p.session_id))
+    });
     r.add("session.set_window_label", "Rename a window.", |ctx, p: SetWindowLabel| {
         let mut st = ctx.state();
         st.set_window_label(&p.session_id, &p.window_id, &p.label)?;
@@ -349,6 +367,7 @@ pub fn registry() -> Registry {
     blocks::add(&mut r);
     crate::layout::add(&mut r);
     crate::events::add(&mut r);
+    crate::lua::add(&mut r);
     r
 }
 

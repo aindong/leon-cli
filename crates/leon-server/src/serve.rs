@@ -7,7 +7,7 @@
 use std::io;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -18,7 +18,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::signal::unix::{signal, SignalKind};
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::mpsc;
 
 use crate::events::{is_attach, Subscriber};
 use crate::persist::{self, Persist};
@@ -34,8 +34,6 @@ pub struct Options {
     pub socket: PathBuf,
     /// An autostarted server (`Ctx::is_autostarted`) exits after this long with no sessions and no connections.
     pub idle_exit: Duration,
-    /// Restore sessions on start and save them on stop; None keeps nothing.
-    pub persist: Option<Persist>,
 }
 
 #[derive(Deserialize)]
@@ -51,9 +49,6 @@ struct Shared {
     ctx: Arc<Ctx>,
     open: AtomicUsize,
     last_activity: Mutex<Instant>,
-    shutdown: Notify,
-    /// Set by `server.stop {discard: true}`.
-    discard: AtomicBool,
 }
 
 impl Shared {
@@ -72,24 +67,46 @@ impl Drop for Open {
     }
 }
 
-/// Bind the socket (refusing if a live server already owns it), restore the saved sessions, then
-/// serve `ctx` until stopped (`server.stop`, SIGTERM, SIGINT, SIGHUP, or an autostarted server's idle exit),
-/// and save the sessions before every program ends.
+/// A bound socket, ready for `serve_on`.
+pub struct Listener {
+    listener: UnixListener,
+    /// The socket's (dev, inode), so shutdown only removes our own socket.
+    ours: (u64, u64),
+    /// Where to save on stop, and the lock that keeps the state dir ours (`Listener::persist`).
+    saving: Option<(PathBuf, std::fs::File)>,
+}
+
+impl Listener {
+    /// Restore the saved sessions into `ctx` (unless `p.restore` is false) and save them when
+    /// `serve_on` stops. Call before anything uses `ctx`: an app that opens a first session when
+    /// there is none must see the restored ones.
+    pub fn persist(&mut self, ctx: &Arc<Ctx>, p: &Persist) {
+        self.saving = persist::start(ctx, p);
+        *crate::events::lock(&ctx.state_file) = self.saving.as_ref().map(|(f, _)| f.clone());
+    }
+}
+
+/// Bind the socket (refusing if a live server already owns it), then serve `ctx` until stopped.
 pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
-    let (listener, ours) = bind(&opts.socket).await?;
-    // Before restoring, so a signal from here on saves instead of killing the process.
+    serve_on(ctx, listen(&opts.socket).await?, opts).await
+}
+
+/// Bind the socket in its private runtime dir, refusing if a live server already owns it.
+pub async fn listen(socket: &Path) -> io::Result<Listener> {
+    let (listener, ours) = bind(socket).await?;
+    Ok(Listener { listener, ours, saving: None })
+}
+
+/// Serve `ctx` on a bound socket until stopped (`server.stop`, the embedding app quitting,
+/// SIGTERM, SIGINT, SIGHUP, or idle when autostarted). With `Listener::persist`, the sessions are
+/// saved before every program ends.
+pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Result<()> {
+    let Listener { listener, ours, saving } = bound;
+    let (state_file, state_lock) = saving.unzip();
     let mut term = signal(SignalKind::terminate())?;
     let mut int = signal(SignalKind::interrupt())?;
     let mut hup = signal(SignalKind::hangup())?; // `server run`'s terminal closed
-    let (state_file, state_lock) = opts.persist.as_ref().and_then(|p| persist::start(&ctx, p)).unzip();
-    *crate::events::lock(&ctx.state_file) = state_file.clone();
-    let shared = Arc::new(Shared {
-        ctx,
-        open: AtomicUsize::new(0),
-        last_activity: Mutex::new(Instant::now()),
-        shutdown: Notify::new(),
-        discard: AtomicBool::new(false),
-    });
+    let shared = Arc::new(Shared { ctx, open: AtomicUsize::new(0), last_activity: Mutex::new(Instant::now()) });
     let mut tick = tokio::time::interval(Duration::from_millis(200));
     loop {
         tokio::select! {
@@ -112,11 +129,10 @@ pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
                     drop(guard);
                 });
             }
-            _ = shared.shutdown.notified() => break,
+            _ = shared.ctx.shutdown.notified() => break,
             _ = term.recv() => break,
             _ = int.recv() => break,
             _ = hup.recv() => break,
-
             _ = tick.tick() => {
                 let idle = shared.ctx.is_autostarted()
                     && shared.open.load(Ordering::SeqCst) == 0
@@ -127,17 +143,22 @@ pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
         }
     }
     if let Some(file) = &state_file {
-        let done = match shared.discard.load(Ordering::SeqCst) {
+        let st = shared.ctx.state();
+        // Under the lock, as in end_programs: no session is created or changed after the save.
+        shared.ctx.stopping.store(true, Ordering::SeqCst);
+        let done = match shared.ctx.discard.load(Ordering::SeqCst) {
             true => persist::discard(file),
-            false => persist::save(&shared.ctx.state(), file),
+            false => persist::save(&st, file),
         };
+        drop(st);
         if let Err(e) = done {
             eprintln!("leon: warning: can't save sessions to {}: {e}", file.display());
         }
     }
     shared.ctx.end_programs(Duration::from_secs(2)).await;
-    drop(state_lock); // before the socket goes, so a server started next finds the dir free
-                      // Only remove the socket if the path is still ours; a newer server may have bound it.
+    // Before the socket goes, so a server started next finds the state dir free.
+    drop(state_lock);
+    // Only remove the socket if the path is still ours; a newer server may have bound it.
     if std::fs::symlink_metadata(&opts.socket).is_ok_and(|m| (m.dev(), m.ino()) == ours) {
         let _ = std::fs::remove_file(&opts.socket);
     }
@@ -236,24 +257,25 @@ async fn serve_lines(
 ) -> io::Result<()> {
     // Order: a finished call's reply, then the next request, then events, so an event flood can't
     // hold up replies and an attach reply precedes its events.
-    // The call being answered: its id, Some(discard) if it stops the server, and its result.
-    let mut pending: Option<(Value, Option<bool>, Later<Value>)> = None;
+    // The call being answered: its id, whether it stops the server, and its result.
+    let mut pending: Option<(Value, bool, Later<Value>)> = None;
     loop {
         tokio::select! {
             biased;
             result = async { pending.as_mut().expect("guarded").2.as_mut().await }, if pending.is_some() => {
                 let (id, stop, _) = pending.take().expect("guarded");
-                let stop = stop.filter(|_| result.is_ok());
+                let stop = stop && result.is_ok();
                 let reply = match result {
                     Ok(result) => json!({ "id": id, "result": result }),
                     Err(e) => json!({ "id": id, "error": e }),
                 };
-                if !send(write, &line(&reply), sub).await? {
-                    return Ok(());
+                let sent = send(write, &line(&reply), sub).await;
+                if stop {
+                    // After this connection's own stop reply is out, or failed to go: it was accepted.
+                    shared.ctx.shutdown.notify_one();
                 }
-                if let Some(discard) = stop {
-                    shared.discard.fetch_or(discard, Ordering::SeqCst); // any stop that asked wins
-                    shared.shutdown.notify_one(); // only after this connection's own stop reply is out
+                if !sent? {
+                    return Ok(());
                 }
             }
             msg = lines.recv(), if pending.is_none() => {
@@ -273,16 +295,13 @@ async fn serve_lines(
                 shared.touch();
                 match serde_json::from_str::<Request>(&text) {
                     Ok(req) => {
-                        // The handler checks the params; a stop's `discard` is read here.
-                        let stop = (req.method == "server.stop")
-                            .then(|| req.params.get("discard").and_then(Value::as_bool).unwrap_or(false));
                         let later: Later<Value> = if is_attach(&req.method) {
                             // Here, not in the registry: attaching subscribes this connection.
                             Box::pin(std::future::ready(shared.ctx.attach(sub, &req.method, req.params)))
                         } else {
                             shared.ctx.call(&req.method, req.params)
                         };
-                        pending = Some((req.id, stop, later));
+                        pending = Some((req.id, req.method == "server.stop", later));
                     }
                     Err(e) => {
                         let e = ApiError::bad_request(format!("not a request: {e}"));

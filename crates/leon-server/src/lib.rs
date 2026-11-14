@@ -4,6 +4,7 @@
 mod blocks;
 pub mod events;
 mod layout;
+pub mod lua;
 pub mod methods;
 pub mod persist;
 pub mod registry;
@@ -36,10 +37,18 @@ pub struct Ctx {
     pub autostarted: AtomicBool,
     /// Bumped whenever a block's program exits; `block.wait` watches it.
     exited: tokio::sync::watch::Sender<u64>,
+    /// Set (under the state lock) once `server.stop` accepted; no session is created after it.
+    pub stopping: AtomicBool,
+    /// Ends the socket loop (`serve_on`): `server.stop`, or an embedding app quitting.
+    pub shutdown: tokio::sync::Notify,
     /// Attached connections. Only touched with the state lock held, so events and snapshots line up.
     subscribers: Mutex<Vec<Weak<Subscriber>>>,
     /// Where sessions are saved when the server stops; None when they aren't (`server.status`).
     pub state_file: Mutex<Option<std::path::PathBuf>>,
+    /// Set by an accepted `server.stop {discard: true}`: the stop saves nothing and forgets the save.
+    pub discard: AtomicBool,
+    /// The loaded `init.lua` (lua.rs).
+    lua: lua::Shared,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -84,8 +93,12 @@ impl Ctx {
             registry: methods::registry(),
             autostarted: AtomicBool::new(autostarted),
             exited: tokio::sync::watch::channel(0).0,
+            stopping: AtomicBool::new(false),
+            shutdown: tokio::sync::Notify::new(),
             subscribers: Mutex::default(),
             state_file: Mutex::default(),
+            discard: AtomicBool::new(false),
+            lua: lua::Shared::default(),
         }
     }
 
@@ -104,6 +117,8 @@ impl Ctx {
         let mut exits = self.exited.subscribe();
         let terminals: Vec<_> = {
             let mut st = self.state();
+            // Under the lock: no session is created after this, by a connection still open or otherwise.
+            self.stopping.store(true, Ordering::SeqCst);
             let t = st.sessions.iter().flat_map(|s| s.blocks.iter().map(|b| b.terminal.clone())).collect();
             st.sessions.clear();
             t

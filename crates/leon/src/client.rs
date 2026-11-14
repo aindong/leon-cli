@@ -13,7 +13,7 @@ use leon_core::ApiError;
 use serde_json::{json, Value};
 
 /// Replies longer than this are refused, like requests are on the server.
-const MAX_REPLY: u64 = 64 << 20;
+pub(crate) const MAX_REPLY: u64 = 64 << 20;
 
 /// Why a command failed, mapped to the spec's exit codes in `main`.
 #[derive(Debug)]

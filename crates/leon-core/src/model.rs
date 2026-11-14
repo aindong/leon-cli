@@ -201,6 +201,18 @@ impl State {
         Ok(())
     }
 
+    /// Make a window the session's active tab.
+    pub fn focus_window(&mut self, session_id: &str, window_id: &str) -> Result<(), ApiError> {
+        let s = self.session_mut(session_id)?;
+        let w = s.window_index(window_id)?;
+        if s.active != w {
+            s.active = w;
+            self.emit(session_id, "active_window_changed", json!({ "window_id": window_id }));
+            self.touch(session_id);
+        }
+        Ok(())
+    }
+
     /// Add a block to its window: as the whole layout of an empty window (`place` None), or beside
     /// an anchor in a window that has blocks.
     pub fn add_block(&mut self, session_id: &str, block: Block, place: Option<&Place>) -> Result<(), ApiError> {

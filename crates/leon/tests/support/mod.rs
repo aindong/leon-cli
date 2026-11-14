@@ -24,6 +24,8 @@ impl Env {
         let mut c = Command::new(env!("CARGO_BIN_EXE_leon"));
         c.env("LEON_RUNTIME_DIR", self.dir.path())
             .env("LEON_STATE_DIR", self.state_dir())
+            // never the developer's own init.lua; tests that want a config set LEON_CONFIG again
+            .env("LEON_CONFIG", self.dir.path().join("no-init.lua"))
             .env("SHELL", "/bin/sh")
             .env_remove("LEON_SESSION")
             .env_remove("LEON_BLOCK")

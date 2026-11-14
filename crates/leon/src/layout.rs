@@ -27,7 +27,7 @@ fn ratio(side: Side, pct: u8) -> f64 {
 }
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
-    let r = match &cli.cmd {
+    let r = match cli.cmd() {
         Cmd::Split { edge, ratio: pct, label, keep_open, cwd, focus, command } => {
             let (sid, anchor) = match cli.block.as_deref().filter(|b| b.starts_with("split:")) {
                 Some(split) => (pick_session(c, cli, None)?, split.to_string()),

@@ -21,6 +21,13 @@ use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
 
 /// The terminal block namespace (`<ns>.terminal` in docs/spec.md).
+#[path = "terminal_cwd.rs"]
+mod cwd;
+use cwd::{process_cwd, pwd_path, pwd_url};
+#[path = "terminal_reading.rs"]
+mod reading;
+use reading::Reading;
+
 pub const NAMESPACE: &str = "dev.leon.terminal";
 pub const ROWS: u16 = 24;
 pub const COLS: u16 = 80;
@@ -105,7 +112,7 @@ struct Seen {
 
 /// Sends the emulator's answers to terminal queries (cursor position, device attributes) back to
 /// the program, and notes title changes and bells.
-struct Listener {
+pub struct Listener {
     writer: Writer,
     seen: Arc<Mutex<Seen>>,
 }
@@ -122,17 +129,20 @@ impl EventListener for Listener {
     }
 }
 
-struct Size;
+struct Size {
+    rows: u16,
+    cols: u16,
+}
 
 impl Dimensions for Size {
     fn total_lines(&self) -> usize {
-        ROWS.into()
+        self.rows.into()
     }
     fn screen_lines(&self) -> usize {
-        ROWS.into()
+        self.rows.into()
     }
     fn columns(&self) -> usize {
-        COLS.into()
+        self.cols.into()
     }
 }
 
@@ -144,6 +154,8 @@ pub struct Terminal {
     pid: i32,
     /// Set (under its lock) once the program has exited and before it is reaped.
     exited: Arc<Mutex<bool>>,
+    /// Bumped whenever the screen may have changed, so a renderer can skip unchanged frames.
+    generation: Arc<AtomicU64>,
     /// The argv that runs (the login shell's path when `Spec::command` was empty).
     pub command: Vec<String>,
     /// The directory it was started in (None: `$HOME`).
@@ -214,7 +226,7 @@ impl Terminal {
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
         let seen = Arc::new(Mutex::new(Seen::default()));
         let listener = Listener { writer: writer.clone(), seen: seen.clone() };
-        let term = Arc::new(Mutex::new(Term::new(config, &Size, listener)));
+        let term = Arc::new(Mutex::new(Term::new(config, &Size { rows: ROWS, cols: COLS }, listener)));
         let tracker = Arc::new(Mutex::new(Tracker::default()));
 
         // Each disconnects when its end is done: the reads at the PTY's EOF, the parsing after the
@@ -222,6 +234,7 @@ impl Terminal {
         let (at_eof, eof) = mpsc::channel::<()>();
         let (parsed, drained) = mpsc::channel::<()>();
         let (pwd, output) = (Arc::new(Mutex::new(None)), Arc::new(AtomicU64::new(0)));
+        let generation = Arc::new(AtomicU64::new(0));
         let reading = Reading {
             term: term.clone(),
             tracker: tracker.clone(),
@@ -229,6 +242,7 @@ impl Terminal {
             writer: writer.clone(),
             pwd: pwd.clone(),
             output: output.clone(),
+            changes: generation.clone(),
         };
         let to_reader = notify.clone();
         std::thread::spawn(move || {
@@ -260,6 +274,7 @@ impl Terminal {
             master: Mutex::new(pair.master),
             pid,
             exited,
+            generation,
             command,
             start_cwd,
             pwd,
@@ -307,8 +322,32 @@ impl Terminal {
         lines[..keep].join("\n")
     }
 
+    /// (rows, cols).
     pub fn size(&self) -> (u16, u16) {
-        (ROWS, COLS)
+        let term = lock(&self.term);
+        (term.screen_lines() as u16, term.columns() as u16)
+    }
+
+    /// Resize the grid, then the PTY (which signals SIGWINCH), so the program's redraw is parsed
+    /// at the new size. At least 1 row and 2 columns: alacritty's wide-char path needs two.
+    pub fn resize(&self, rows: u16, cols: u16) -> io::Result<()> {
+        let (rows, cols) = (rows.max(1), cols.max(2));
+        lock(&self.term).resize(Size { rows, cols });
+        let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
+        lock(&self.master).resize(size).map_err(pty)?;
+        self.generation.fetch_add(1, Ordering::Release);
+        Ok(())
+    }
+
+    /// Changes so far; a renderer redraws when this moves.
+    pub fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
+    }
+
+    /// Read the emulator's state (grid, cursor, modes) under its lock. Keep `f` short: the
+    /// reader thread waits for it.
+    pub fn with_term<R>(&self, f: impl FnOnce(&Term<Listener>) -> R) -> R {
+        f(&lock(&self.term))
     }
 
     /// Where the program is: its own cwd while it runs, else the last OSC 7 path, else where it
@@ -321,56 +360,6 @@ impl Terminal {
         };
         live.or_else(|| lock(&self.pwd).as_deref().and_then(pwd_path)).or_else(|| self.start_cwd.clone())
     }
-}
-
-/// The path of an OSC 7 `file://host/path` URL, percent-decoded, if the host is this one (an
-/// ssh session reports the remote host's paths).
-fn pwd_path(url: &str) -> Option<PathBuf> {
-    let rest = url.strip_prefix("file://")?;
-    let (host, path) = rest.split_at(rest.find('/')?);
-    if !(host.is_empty() || host == "localhost" || Some(host) == hostname().as_deref()) {
-        return None;
-    }
-    String::from_utf8(percent_decode(path.as_bytes())).ok().map(PathBuf::from)
-}
-
-fn hostname() -> Option<String> {
-    let mut buf = [0u8; 256];
-    // SAFETY: gethostname writes at most buf.len() bytes into our buffer.
-    if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) } != 0 {
-        return None;
-    }
-    let end = buf.iter().position(|&b| b == 0)?;
-    String::from_utf8(buf[..end].to_vec()).ok()
-}
-
-#[cfg(target_os = "macos")]
-fn process_cwd(pid: i32) -> Option<PathBuf> {
-    use std::os::unix::ffi::OsStrExt;
-    let size = std::mem::size_of::<libc::proc_vnodepathinfo>() as libc::c_int;
-    // SAFETY: proc_pidinfo writes at most `size` bytes into our zeroed struct; the path is then
-    // read as the struct's own MAXPATHLEN bytes.
-    unsafe {
-        let mut info: libc::proc_vnodepathinfo = std::mem::zeroed();
-        let ptr = &mut info as *mut libc::proc_vnodepathinfo as *mut libc::c_void;
-        if libc::proc_pidinfo(pid, libc::PROC_PIDVNODEPATHINFO, 0, ptr, size) != size {
-            return None;
-        }
-        let raw = &info.pvi_cdir.vip_path;
-        let bytes = std::slice::from_raw_parts(raw.as_ptr() as *const u8, std::mem::size_of_val(raw));
-        let path = &bytes[..bytes.iter().position(|&b| b == 0)?];
-        (!path.is_empty()).then(|| PathBuf::from(std::ffi::OsStr::from_bytes(path)))
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn process_cwd(pid: i32) -> Option<PathBuf> {
-    std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn process_cwd(_pid: i32) -> Option<PathBuf> {
-    None
 }
 
 impl Terminal {
@@ -427,101 +416,6 @@ impl Drop for Terminal {
     }
 }
 
-/// The reader thread's share of a terminal.
-struct Reading {
-    term: Arc<Mutex<Term<Listener>>>,
-    tracker: Arc<Mutex<Tracker>>,
-    seen: Arc<Mutex<Seen>>,
-    writer: Writer,
-    pwd: Arc<Mutex<Option<String>>>,
-    output: Arc<AtomicU64>,
-}
-
-impl Reading {
-    /// Feed output to the tracker and emulator until the PTY closes, reporting per batch. A thread
-    /// of its own does the reads. Takes the term and tracker locks only while feeding, never while
-    /// notifying.
-    fn run(self, mut reader: Box<dyn Read + Send>, at_eof: mpsc::Sender<()>, notify: &dyn Fn(Notice)) {
-        let (tx, reads) = mpsc::sync_channel::<Vec<u8>>(QUEUED_READS);
-        std::thread::spawn(move || {
-            let _at_eof = at_eof; // dropped when reading ends
-            let mut buf = vec![0u8; READ_SIZE];
-            loop {
-                match reader.read(&mut buf) {
-                    // macOS reports a closed PTY as EIO rather than EOF.
-                    Ok(0) | Err(_) => return,
-                    Ok(n) if tx.send(buf[..n].to_vec()).is_err() => return,
-                    Ok(_) => {}
-                }
-            }
-        });
-        let mut parser: Processor = Processor::new();
-        // The last title and pwd reported: shells resend them at every prompt.
-        let (mut title, mut pwd) = (None, None);
-        while let Ok(mut batch) = reads.recv() {
-            while batch.len() < BATCH {
-                match reads.try_recv() {
-                    Ok(more) => batch.extend_from_slice(&more),
-                    Err(_) => break,
-                }
-            }
-            let fed = {
-                let mut term = lock(&self.term);
-                lock(&self.tracker).feed(&batch, |bytes| parser.advance(&mut *term, bytes))
-            };
-            self.output.fetch_add(batch.len() as u64, Ordering::SeqCst);
-            if !fed.reply.is_empty() {
-                self.writer.reply(fed.reply);
-            }
-            let seen = std::mem::take(&mut *lock(&self.seen));
-            if let Some(new) = seen.title.map(|t| clean(&t)).filter(|t| title.as_ref() != Some(t)) {
-                title = Some(new.clone());
-                notify(Notice::Title(new));
-            }
-            let new_pwd = fed.pwd.and_then(|p| pwd_url(&p));
-            if let Some(new) = new_pwd.filter(|p| pwd.as_ref() != Some(p)) {
-                pwd = Some(new.clone());
-                *lock(&self.pwd) = Some(new.clone());
-                notify(Notice::Pwd(new));
-            }
-            if seen.bell {
-                notify(Notice::Bell);
-            }
-            coalesce(fed.changes).into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
-        }
-        let gone = lock(&self.tracker).store.process_exited();
-        gone.into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
-    }
-}
-
-/// An OSC 7 URL to report, or None. It is dropped whole when it isn't UTF-8 or when it, or its
-/// percent-decoding (which whoever shows the path does), holds anything `clean` would remove.
-fn pwd_url(raw: &[u8]) -> Option<String> {
-    let url = std::str::from_utf8(raw).ok()?;
-    let decoded = String::from_utf8(percent_decode(raw)).ok()?;
-    (clean(url) == url && clean(&decoded) == decoded).then(|| url.to_string())
-}
-
-/// `%XX` escapes as bytes; anything else (a stray `%` too) as is.
-fn percent_decode(s: &[u8]) -> Vec<u8> {
-    let hex = |b: u8| (b as char).to_digit(16);
-    let mut out = Vec::with_capacity(s.len());
-    let mut i = 0;
-    while i < s.len() {
-        match (s[i], s.get(i + 1).copied().and_then(hex), s.get(i + 2).copied().and_then(hex)) {
-            (b'%', Some(hi), Some(lo)) => {
-                out.push((hi * 16 + lo) as u8);
-                i += 3;
-            }
-            (b, _, _) => {
-                out.push(b);
-                i += 1;
-            }
-        }
-    }
-    out
-}
-
 /// Program-supplied text for events: no control, bidi or invisible characters (they would reach
 /// whoever shows the event, docs/spec.md §5), at most `MAX_TEXT` bytes.
 fn clean(s: &str) -> String {
@@ -574,134 +468,5 @@ fn pty(e: impl std::fmt::Display) -> io::Error {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::mpsc;
-
-    use super::*;
-
-    fn spawn(command: &[&str]) -> (Terminal, mpsc::Receiver<i32>) {
-        let (tx, rx) = mpsc::channel();
-        let spec = Spec { command: command.iter().map(|s| s.to_string()).collect(), cwd: None, env: vec![] };
-        let tx = Mutex::new(tx);
-        let t = Terminal::spawn(spec, move |n| {
-            if let Notice::Exited(code) = n {
-                lock(&tx).send(code).unwrap();
-            }
-        })
-        .unwrap();
-        (t, rx)
-    }
-
-    fn screen_until(t: &Terminal, pred: impl Fn(&str) -> bool) -> String {
-        let end = std::time::Instant::now() + Duration::from_secs(10);
-        loop {
-            let text = t.text(true);
-            if pred(&text) || std::time::Instant::now() > end {
-                return text;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-    }
-
-    #[test]
-    fn runs_a_program_and_reads_its_screen() {
-        let (t, rx) = spawn(&["sh", "-c", "read line; echo got-$line; exit 4"]);
-        t.write(b"abc\r").unwrap();
-        let text = screen_until(&t, |s| s.contains("got-abc"));
-        assert!(text.lines().any(|l| l == "got-abc"), "{text:?}");
-        assert_eq!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), 4);
-    }
-
-    #[test]
-    fn writes_never_block_on_a_program_that_does_not_read() {
-        // Raw mode: the line discipline queues input instead of dropping what doesn't fit.
-        let (t, _rx) = spawn(&["sh", "-c", "stty raw -echo; echo ready; sleep 300"]);
-        screen_until(&t, |s| s.contains("ready"));
-        let t = Arc::new(t);
-        let (done, finished) = mpsc::channel();
-        let writer = t.clone();
-        std::thread::spawn(move || {
-            writer.write(&vec![b'x'; 256 << 10]).unwrap(); // far past the PTY's input buffer
-            done.send(()).unwrap();
-        });
-        finished.recv_timeout(Duration::from_secs(5)).expect("write blocked on a full PTY");
-    }
-
-    #[test]
-    fn cwd_follows_the_shell_then_osc7_then_the_start_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir(dir.path().join("sub")).unwrap();
-        let start = std::fs::canonicalize(dir.path()).unwrap();
-        let spec = Spec { command: vec!["sh".into()], cwd: Some(start.clone()), env: vec![] };
-        let (tx, rx) = mpsc::channel();
-        let tx = Mutex::new(tx);
-        let t = Terminal::spawn(spec, move |n| {
-            if let Notice::Exited(_) = n {
-                lock(&tx).send(()).unwrap();
-            }
-        })
-        .unwrap();
-        assert_eq!(t.cwd(), Some(start.clone()));
-        t.write(b"cd sub; echo cd-$((40+2))\r").unwrap();
-        screen_until(&t, |s| s.lines().any(|l| l == "cd-42"));
-        assert_eq!(t.cwd(), Some(start.join("sub")), "the shell's own cwd");
-        t.write(b"printf '\\033]7;file://localhost/o%%20sc7\\007'; exit\r").unwrap();
-        rx.recv_timeout(Duration::from_secs(10)).unwrap();
-        assert_eq!(t.cwd(), Some(PathBuf::from("/o sc7")), "after exit: the last OSC 7 path");
-        let spec = Spec { command: vec!["true".into()], cwd: Some(start.clone()), env: vec![] };
-        let (done, exited) = mpsc::channel();
-        let done = Mutex::new(done);
-        let t = Terminal::spawn(spec, move |n| {
-            if let Notice::Exited(_) = n {
-                lock(&done).send(()).unwrap();
-            }
-        })
-        .unwrap();
-        exited.recv_timeout(Duration::from_secs(10)).unwrap();
-        assert_eq!(t.cwd(), Some(start), "no process, no OSC 7: the start dir");
-    }
-
-    #[test]
-    fn the_exit_is_reported_after_the_last_output_is_on_the_screen() {
-        // Small enough to sit in the read queue whole while the parser can't run.
-        let script = "head -c 20000 /dev/zero | tr '\\0' y; printf END";
-        let spec = Spec { command: vec!["sh".into(), "-c".into(), script.into()], cwd: None, env: vec![] };
-        let (tx, exits) = mpsc::channel();
-        let tx = Mutex::new(tx);
-        let t = Terminal::spawn(spec, move |n| {
-            if let Notice::Exited(_) = n {
-                lock(&tx).send(()).unwrap();
-            }
-        })
-        .unwrap();
-        let parsing = lock(&t.term); // the parser blocks; the reader goes on queueing
-        let end = std::time::Instant::now() + Duration::from_secs(10);
-        while !t.has_exited() {
-            assert!(std::time::Instant::now() < end, "the program didn't exit");
-            std::thread::sleep(Duration::from_millis(5));
-        }
-        std::thread::sleep(DRAIN_WAIT + Duration::from_millis(300)); // past the EOF wait, too
-        assert!(exits.try_recv().is_err(), "the exit was reported while its output was still unparsed");
-        assert_eq!(t.output_bytes(), 0, "nothing parsed while the emulator was locked");
-        drop(parsing);
-        exits.recv_timeout(Duration::from_secs(10)).unwrap();
-        assert!(t.text(true).ends_with("END"), "the last output is on the screen by the exit report");
-        assert_eq!(t.output_bytes(), 20_003, "every byte counted");
-    }
-
-    #[test]
-    fn osc7_paths_count_only_from_this_host() {
-        assert_eq!(pwd_path("file:///a%20b"), Some(PathBuf::from("/a b")));
-        assert_eq!(pwd_path("file://localhost/x"), Some(PathBuf::from("/x")));
-        let here = hostname().unwrap();
-        assert_eq!(pwd_path(&format!("file://{here}/y")), Some(PathBuf::from("/y")));
-        assert_eq!(pwd_path("file://some-remote-box.example/etc"), None, "an ssh session's path");
-    }
-
-    #[test]
-    fn dropping_hangs_up_the_program() {
-        let (t, rx) = spawn(&["sleep", "300"]);
-        drop(t);
-        assert_eq!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), 128 + libc::SIGHUP);
-    }
-}
+#[path = "terminal_tests.rs"]
+mod tests;

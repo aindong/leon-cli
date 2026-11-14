@@ -11,7 +11,7 @@ use crate::commands::{json_out, label, pick_session, print_json, read_args, reso
 use crate::{BlockCmd, Cli, Cmd};
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
-    match &cli.cmd {
+    match cli.cmd() {
         Cmd::Run { label, keep_open, wait, cwd, command } => {
             let here = std::env::current_dir().map_err(|e| Fail::Other(format!("no current directory: {e}")))?;
             let cwd = here.join(cwd.as_deref().unwrap_or(".".as_ref()));
@@ -144,7 +144,7 @@ fn env(name: &str) -> Option<String> {
 
 /// The block query a command names: an explicit target, then `-b`, then `$LEON_BLOCK` (only when
 /// `-s` names no session, since a name always beats the caller's own block).
-fn block_query(cli: &Cli, explicit: Option<&str>) -> Option<String> {
+pub(crate) fn block_query(cli: &Cli, explicit: Option<&str>) -> Option<String> {
     explicit
         .or(cli.block.as_deref())
         .map(str::to_string)

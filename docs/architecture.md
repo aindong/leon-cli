@@ -10,7 +10,7 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 |---|---|
 | `leon-core` | The object model (server state, sessions, windows, layout tree, blocks), stable IDs and target resolution, terminal blocks (PTY via `portable-pty`, emulation via `alacritty_terminal`), the OSC 7501 program-status parser, and the event log with gapless `seq`. No I/O policy, no sockets. |
 | `leon-server` | The API: a method registry where every method carries a description and JSON Schemas (`help.all`), served over a Unix socket. Also runnable in-process. |
-| `leon-lua` | Lua 5.1 (`mlua`): `init.lua` config (bindings, sequences, modes, actions) and `leon do` scripts (`leon.on`, `wait`, timers, `exec`). |
+| `leon-lua` | Lua 5.1 (`mlua`): `init.lua` config (bindings, sequences, modes, actions), the live config `Runtime`, and `leon do` scripts (`leon.on`, `wait`, timers, `exec`). |
 | `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart. With no arguments it opens the app. |
 | `leon-app` | The GPUI client. It embeds the server in-process (no socket hop for rendering) and still listens on the socket, so the CLI and agents drive the same state. |
 
@@ -38,8 +38,28 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   separate Metal Toolchain download.
 - **Async.** `tokio` in the server; PTY readers on their own threads feeding the emulator.
 - **Config.** `leon-lua` turns `init.lua` into a plain `Config` (bindings with modes and sequences,
-  modes, actions, unbinds, diagnostics) and drops the Lua state; a prefix/sequence clash keeps the newest
-  with a warning. `leon config check` exits 1 if the load fails or any `leon.*` call was skipped.
+  modes, actions, unbinds, diagnostics); a prefix/sequence clash keeps the newest with a warning.
+  `leon config check` exits 1 if the load fails or any `leon.*` call was skipped.
+- **Lua at runtime.** The server loads `init.lua` at start (`--config`, else `$LEON_CONFIG`, XDG,
+  `~/.config`; a missing file is an empty config) and keeps its Lua state on a thread of its own, one
+  per good load. Actions (`client.action`, `leon do ACTION`) and function bindings (`client.key`) are
+  jobs on that thread; Lua calls server methods in process. `server.config_reload` loads on a fresh
+  thread and swaps only on success, so a failed reload keeps the last good keymap and a wedged thread is
+  dropped. **Scripts** (`leon do SCRIPT|-e`) run in the `leon do` process on their own connection, so a
+  script can never hang the server. Both sides share the `leon.*` code behind a `Host` trait.
+- **Lua bounds.** Every state: no `io.popen`/`os.execute`/`os.exit`, no C modules, `debug.traceback`
+  only, text chunks only (Lua 5.1 doesn't verify bytecode), no `newproxy` (a `__gc` finalizer runs
+  with hooks off). `leon.exec` runs each program in its own process group and signals the group. Server side: a config load gets 5 s and an action 30 s from its request; an instruction hook
+  (also on every coroutine) raises past the deadline, `pcall`/`xpcall`/`coroutine.resume` re-raise it,
+  and calls and `leon.exec` get only the time left; 256 MiB memory limit. A long C call (a pathological
+  `string.find`) isn't interrupted: its caller still gets a timeout, and the next reload replaces the thread.
+- **The app owns its server.** `leon` (or `leon app`) serves the socket from the app process and
+  renders straight from the in-process grids. If a server with sessions already owns the socket,
+  the app exits 1 and says to run `leon server stop`; an idle one (no sessions) is stopped with
+  `server.stop {if_idle: true}` and replaced. Closing the window ends every program; `leon server
+  stop` from the CLI quits the app. The window shows the active tab's whole split tree; keys go to
+  the zoomed block, else the focused one. The view polls each visible pane's change counter and
+  each session's revision (~8 ms) and redraws only when something changed.
 - **Agent skill.** `leon skill show` prints a guide compiled into the binary. `skill setup` installs a
   SKILL.md stub (marked `<!-- leon-skill: … -->`) that tells the agent to run `leon skill show`, so
   upgrades reach agents without a reinstall, plus a matcher-less SessionStart hook running
@@ -60,6 +80,11 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   flocked by another server, or nothing is saved (`server status` shows `state_file: null`); the file is 0600, written via a temp file and
   a rename. A file that is corrupt, from a newer version, or inconsistent is moved to
   `sessions.json.bad-<secs>-<n>` with a warning in the log, never replaced.
+  The app's embedded server does the same (`embedded::start`): quitting the app (window close,
+  the menu, logout) or `leon server stop` ends the socket loop, which saves before programs end,
+  and the next launch restores. Restoring is `serve::Listener::persist`, called before `serve_on`
+  and before the app looks at the state, so its "open a session when there is none" sees the
+  restored ones. Tests use `embedded::start_at`, which keeps nothing.
 - **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of
   up to 16 KiB); the parser thread feeds what has queued, up to 64 KiB, to the OSC 7501 tracker and
   the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread

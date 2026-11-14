@@ -11,18 +11,25 @@ use crate::{ApiCmd, Cli, Cmd, ConfigCmd, ServerCmd, SessionCmd, WindowCmd};
 
 pub fn run(cli: &Cli) -> Result<(), Fail> {
     let socket = socket_path();
-    if let Cmd::Server(cmd) = &cli.cmd {
+    if let Cmd::App = cli.cmd() {
+        return leon_app::run().map_err(Fail::Other);
+    }
+    if let Cmd::Server(cmd) = cli.cmd() {
         return server(cli, cmd);
     }
-    if let Cmd::Config(ConfigCmd::Check { path }) = &cli.cmd {
+    if let Cmd::Config(ConfigCmd::Check { path }) = cli.cmd() {
         return config_check(path.clone());
     }
-    if let Cmd::Skill(cmd) = &cli.cmd {
+    if let Cmd::Skill(cmd) = cli.cmd() {
         return crate::skill::run(cli, cmd);
     }
     let mut c = connect(&socket, cli.autostart)?;
-    match &cli.cmd {
-        Cmd::Server(_) | Cmd::Config(_) | Cmd::Skill(_) => unreachable!(),
+    match cli.cmd() {
+        Cmd::App | Cmd::Server(_) | Cmd::Config(ConfigCmd::Check { .. }) | Cmd::Skill(_) => unreachable!(),
+        Cmd::Config(ConfigCmd::Reload) => crate::script::reload(&mut c, cli)?,
+        Cmd::Do(args) => crate::script::run(&mut c, cli, args, &socket)?,
+        Cmd::Actions => crate::script::actions(&mut c, cli)?,
+        Cmd::Keymap => crate::script::keymap(&mut c, cli)?,
         Cmd::New { label } | Cmd::Session(SessionCmd::New { label }) => {
             let r = c.call("session.create", json!({ "label": label }))?;
             println!("{}", r["session_id"].as_str().unwrap_or_default());
@@ -197,7 +204,7 @@ fn api(c: &mut Client, cli: &Cli, cmd: &ApiCmd) -> Result<(), Fail> {
 fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
     let socket = socket_path();
     match cmd {
-        ServerCmd::Run { autostarted, restore } => {
+        ServerCmd::Run { autostarted, restore, config } => {
             let idle = std::env::var("LEON_IDLE_EXIT_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
             let info = leon_server::Info {
                 pid: std::process::id(),
@@ -207,9 +214,17 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
             let ctx = std::sync::Arc::new(leon_server::Ctx::new(info, *autostarted));
             let persist = leon_core::paths::state_dir()
                 .map(|d| leon_server::persist::Persist { file: d.join(leon_server::persist::FILE), restore: *restore });
-            let opts = leon_server::serve::Options { socket, idle_exit: Duration::from_secs(idle), persist };
+            let opts = leon_server::serve::Options { socket, idle_exit: Duration::from_secs(idle) };
             let rt = tokio::runtime::Runtime::new().map_err(|e| Fail::Other(e.to_string()))?;
-            rt.block_on(leon_server::serve::serve(ctx, opts)).map_err(|e| Fail::Other(e.to_string()))
+            let serve = async {
+                ctx.start_config(config.clone());
+                let mut bound = leon_server::serve::listen(&opts.socket).await?;
+                if let Some(p) = &persist {
+                    bound.persist(&ctx, p); // after binding: a server that loses the race keeps nothing
+                }
+                leon_server::serve::serve_on(ctx, bound, opts).await
+            };
+            rt.block_on(serve).map_err(|e| Fail::Other(e.to_string()))
         }
         // A running server (perhaps autostarted on demand) is told to stay up; otherwise start one.
         ServerCmd::Start { restore } => match Client::connect(&socket) {
@@ -259,15 +274,21 @@ pub(crate) fn resolve(c: &mut Client, kind: &str, query: &str, session_id: Optio
 /// The session a command acts on: an explicit target, then `-s`, then `$LEON_SESSION`, then the
 /// only session if there is exactly one.
 pub(crate) fn pick_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<String, Fail> {
+    find_session(c, cli, explicit)?
+        .ok_or_else(|| Fail::Api(ApiError::not_found("which session? pass -s or set LEON_SESSION")))
+}
+
+/// `pick_session`, but None when nothing names a session and there isn't exactly one.
+pub(crate) fn find_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<Option<String>, Fail> {
     let env = std::env::var("LEON_SESSION").ok().filter(|s| !s.is_empty());
     if let Some(q) = explicit.or(cli.session.as_deref()).or(env.as_deref()) {
-        return resolve(c, "session", q, None);
+        return resolve(c, "session", q, None).map(Some);
     }
     let r = c.call("session.list", json!({}))?;
-    match r["sessions"].as_array().map(Vec::as_slice) {
-        Some([only]) => Ok(only["session_id"].as_str().unwrap_or_default().to_string()),
-        _ => Err(Fail::Api(ApiError::not_found("which session? pass -s or set LEON_SESSION"))),
-    }
+    Ok(match r["sessions"].as_array().map(Vec::as_slice) {
+        Some([only]) => Some(only["session_id"].as_str().unwrap_or_default().to_string()),
+        _ => None,
+    })
 }
 
 pub(crate) fn read_args(args: Option<&str>) -> Result<Value, Fail> {
