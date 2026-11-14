@@ -18,7 +18,7 @@ use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 
-use crate::program_status::{Change, Record, Tracker};
+use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
 
 /// The terminal block namespace (`<ns>.terminal` in docs/spec.md).
 pub const NAMESPACE: &str = "dev.leon.terminal";
@@ -35,7 +35,8 @@ const MAX_TEXT: usize = 4096;
 const DRAIN_WAIT: Duration = Duration::from_secs(1);
 
 /// What a terminal reports, from its reader and waiter threads. Per PTY read there is at most one
-/// title, one pwd and one bell (the last title and pwd win).
+/// title, one pwd and one bell (the last title and pwd win, and only if they changed), reported in
+/// that order rather than stream order.
 #[derive(Debug)]
 pub enum Notice {
     /// The program exited with this status (128 + signal), after its last output was read.
@@ -334,6 +335,8 @@ impl Reading {
     fn run(self, mut reader: Box<dyn Read + Send>, notify: &dyn Fn(Notice)) {
         let mut parser: Processor = Processor::new();
         let mut buf = [0u8; 8192];
+        // The last title and pwd reported: shells resend them at every prompt.
+        let (mut title, mut pwd) = (None, None);
         loop {
             let n = match reader.read(&mut buf) {
                 // macOS reports a closed PTY as EIO rather than EOF.
@@ -348,27 +351,30 @@ impl Reading {
                 self.writer.reply(fed.reply);
             }
             let seen = std::mem::take(&mut *lock(&self.seen));
-            if let Some(title) = seen.title {
-                notify(Notice::Title(clean(&title)));
+            if let Some(new) = seen.title.map(|t| clean(&t)).filter(|t| title.as_ref() != Some(t)) {
+                title = Some(new.clone());
+                notify(Notice::Title(new));
             }
-            if let Some(pwd) = fed.pwd {
-                notify(Notice::Pwd(clean(&String::from_utf8_lossy(&pwd))));
+            let new_pwd = fed.pwd.map(|p| clean(&String::from_utf8_lossy(&p)));
+            if let Some(new) = new_pwd.filter(|p| pwd.as_ref() != Some(p)) {
+                pwd = Some(new.clone());
+                notify(Notice::Pwd(new));
             }
             if seen.bell {
                 notify(Notice::Bell);
             }
-            fed.changes.into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
+            coalesce(fed.changes).into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
         }
         let gone = lock(&self.tracker).store.process_exited();
         gone.into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
     }
 }
 
-/// Program-supplied text for events: no control characters (they would reach whoever prints the
-/// event), at most `MAX_TEXT` bytes.
+/// Program-supplied text for events: no control, bidi or invisible characters (they would reach
+/// whoever shows the event, docs/spec.md §5), at most `MAX_TEXT` bytes.
 fn clean(s: &str) -> String {
     let mut out = String::new();
-    for c in s.chars().filter(|c| !c.is_control()) {
+    for c in strip_hidden(s).chars() {
         if out.len() + c.len_utf8() > MAX_TEXT {
             break;
         }

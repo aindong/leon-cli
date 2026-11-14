@@ -142,7 +142,8 @@ pub fn add(r: &mut Registry) {
             let ratio = ratio(p.ratio)?;
             let mut st = ctx.state();
             let (window_id, anchor) = match (p.anchor_id, p.window_id) {
-                (Some(anchor), _) => (st.anchor_window(&p.session_id, &anchor)?, anchor),
+                (Some(_), Some(_)) => return Err(ApiError::bad_request("give anchor_id or window_id, not both")),
+                (Some(anchor), None) => (st.anchor_window(&p.session_id, &anchor)?, anchor),
                 (None, Some(w)) => {
                     let s = st.session(&p.session_id)?;
                     let root = s.windows[s.window_index(&w)?].layout.as_ref().map(|t| t.id().to_string());

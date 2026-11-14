@@ -65,8 +65,11 @@ impl Client {
         if let Some(e) = self.events.pop_front() {
             return Ok(e);
         }
+        let behind = leon_server::events::MAX_BACKLOG >> 20;
         self.read()?.ok_or_else(|| {
-            Fail::Other("the server closed the event stream (it drops a reader that falls 8 MiB behind)".into())
+            Fail::Other(format!(
+                "the server closed the event stream (it drops a reader that falls {behind} MiB behind)"
+            ))
         })
     }
 

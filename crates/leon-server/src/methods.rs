@@ -212,7 +212,7 @@ pub(crate) fn session_list(st: &State) -> Vec<SessionSummary> {
 }
 
 pub(crate) fn revision(st: &State, session_id: &str) -> Revision {
-    Revision { revision: st.session(session_id).map_or(0, |s| s.revision) }
+    Revision { revision: st.revision(session_id) }
 }
 
 pub fn registry() -> Registry {
@@ -257,11 +257,13 @@ pub fn registry() -> Registry {
     });
     r.add("session.create", "Create a session with one window holding one terminal.", |ctx, p: CreateSession| {
         let mut st = ctx.state();
+        let mark = st.mark();
         let (session_id, window_id) = st.create_session(p.label.as_deref(), p.window_label.as_deref())?;
         match blocks::open(ctx, &mut st, &session_id, &window_id, Layout::block(p.layout), None) {
             Ok(block_id) => Ok(Created { session_id, window_id, block_id }),
             Err(e) => {
                 let _ = st.destroy_session(&session_id);
+                st.forget_since(mark); // all or nothing, events included
                 Err(e)
             }
         }
@@ -285,6 +287,7 @@ pub fn registry() -> Registry {
         "Add a window (tab) holding one terminal at the end of a session and make it active.",
         |ctx, p: NewWindow| {
             let mut st = ctx.state();
+            let (mark, active) = (st.mark(), st.session(&p.session_id)?.active);
             let window_id = st.new_window(&p.session_id, p.window_label.as_deref())?;
             match blocks::open(ctx, &mut st, &p.session_id, &window_id, Layout::block(p.layout), None) {
                 Ok(block_id) => {
@@ -292,6 +295,8 @@ pub fn registry() -> Registry {
                 }
                 Err(e) => {
                     let _ = st.close_window(&p.session_id, &window_id);
+                    st.forget_since(mark); // all or nothing, events included
+                    st.session_mut(&p.session_id)?.active = active;
                     Err(e)
                 }
             }

@@ -11,14 +11,35 @@ use crate::State;
 #[derive(Debug, Clone)]
 pub struct Event {
     /// The session it is about (for `session_destroyed`, the one destroyed).
-    pub session_id: Option<String>,
+    pub session_id: String,
     /// A server event (`session_created`, `session_destroyed`), which session-lifecycle subscribers get.
     pub server: bool,
     /// The event in the spec's CLI JSON shape (docs/spec.md §4).
     pub body: Value,
 }
 
+/// How far the outbox and the view marks stood at some point (`State::mark`).
+#[derive(Debug, Clone, Copy)]
+pub struct Mark {
+    events: usize,
+    dirty: usize,
+}
+
 impl State {
+    pub fn mark(&self) -> Mark {
+        Mark { events: self.outbox.len(), dirty: self.dirty.len() }
+    }
+
+    /// Forget the events and revision bumps since `mark`, for a call that failed and undid its changes.
+    pub fn forget_since(&mut self, mark: Mark) {
+        self.outbox.truncate(mark.events);
+        for sid in self.dirty.split_off(mark.dirty) {
+            if let Ok(s) = self.session_mut(&sid) {
+                s.revision -= 1;
+            }
+        }
+    }
+
     /// The events since the last call, with one `session_view_changed` per session whose view changed.
     pub fn take_events(&mut self) -> Vec<Event> {
         for sid in std::mem::take(&mut self.dirty) {
@@ -43,13 +64,13 @@ impl State {
 
     pub(crate) fn emit_server(&mut self, session_id: &str, kind: &str, payload: Value) {
         let body = json!({ "type": kind, "payload": payload });
-        self.outbox.push(Event { session_id: Some(session_id.into()), server: true, body });
+        self.outbox.push(Event { session_id: session_id.into(), server: true, body });
     }
 
     pub(crate) fn emit(&mut self, session_id: &str, kind: &str, payload: Value) {
         let event = json!({ "type": kind, "payload": payload });
         let body = json!({ "type": "session_event", "payload": { "session_id": session_id, "event": event } });
-        self.outbox.push(Event { session_id: Some(session_id.into()), server: false, body });
+        self.outbox.push(Event { session_id: session_id.into(), server: false, body });
     }
 
     /// A terminal event for `block_id`; dropped if the block is gone.

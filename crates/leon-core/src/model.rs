@@ -224,7 +224,14 @@ impl State {
             _ => return Err(ApiError::bad_request("an empty window takes no anchor; a window with blocks needs one")),
         }
         s.blocks.push(block);
+        let activated = (place.is_some_and(|p| p.focus) && s.active != w).then(|| s.windows[w].id.clone());
+        if activated.is_some() {
+            s.active = w;
+        }
         self.emit(session_id, "block_created", json!({ "block_id": id }));
+        if let Some(window_id) = activated {
+            self.emit(session_id, "active_window_changed", json!({ "window_id": window_id }));
+        }
         self.touch(session_id);
         Ok(())
     }
@@ -239,8 +246,8 @@ impl State {
     /// Close a block, collapsing its split; a window left without blocks closes too.
     pub fn close_block(&mut self, session_id: &str, block_id: &str) -> Result<(), ApiError> {
         let s = self.session_mut(session_id)?;
-        let i = s.blocks.iter().position(|b| b.id == block_id).ok_or_else(|| no_block(block_id))?;
-        let w = s.window_of(block_id)?;
+        let i = s.block_index(block_id)?;
+        let w = s.window_index(&s.blocks[i].window_id)?;
         s.blocks.remove(i);
         s.windows[w].detach(block_id);
         let emptied = s.windows[w].layout.is_none().then(|| s.windows[w].id.clone());

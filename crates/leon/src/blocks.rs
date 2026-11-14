@@ -7,7 +7,7 @@ use leon_core::ApiError;
 use serde_json::{json, Value};
 
 use crate::client::{Client, Fail};
-use crate::commands::{label, pick_session, print_json, read_args, resolve};
+use crate::commands::{json_out, label, pick_session, print_json, read_args, resolve};
 use crate::{BlockCmd, Cli, Cmd};
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
@@ -94,7 +94,7 @@ fn block(c: &mut Client, cli: &Cli, cmd: &BlockCmd) -> Result<(), Fail> {
         }
         BlockCmd::Close { target } => {
             let (sid, bid) = pick_block(c, cli, target.as_deref())?;
-            c.call("block.close", json!({ "session_id": sid, "block_id": bid }))?;
+            json_out(cli, &c.call("block.close", json!({ "session_id": sid, "block_id": bid }))?);
         }
         BlockCmd::Call { method: m, args } => {
             let (sid, bid) = pick_block(c, cli, None)?;

@@ -22,6 +22,9 @@ use tokio::sync::{mpsc, Notify};
 use crate::events::{is_attach, Subscriber};
 use crate::{Ctx, Later};
 
+/// Event lines written between two looks at replies and requests.
+const EVENT_BATCH: usize = 64;
+
 /// The longest request line accepted (1 MiB); a longer one gets an error and the connection closes.
 pub const MAX_LINE: usize = 1 << 20;
 
@@ -256,17 +259,23 @@ async fn serve_lines(
                     }
                 }
             }
-            _ = sub.ready.notified() => loop {
-                match sub.pop() {
-                    Err(_) => return Ok(()), // too far behind: dropped
-                    Ok(None) => break,
-                    Ok(Some(event)) => {
-                        if !send(write, &event, sub).await? {
-                            return Ok(());
+            _ = sub.ready.notified() => {
+                // A batch per pass, so a finished reply waits for at most one batch.
+                for _ in 0..EVENT_BATCH {
+                    match sub.pop() {
+                        Err(_) => return Ok(()), // too far behind: dropped
+                        Ok(None) => break,
+                        Ok(Some(event)) => {
+                            if !send(write, &event, sub).await? {
+                                return Ok(());
+                            }
                         }
                     }
                 }
-            },
+                if sub.has_lines() {
+                    sub.ready.notify_one();
+                }
+            }
         }
     }
 }

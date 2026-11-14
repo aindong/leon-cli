@@ -2,6 +2,7 @@
 //! pane's share in percent; the API's `ratio` is the before side's share.
 
 use clap::ValueEnum;
+use leon_core::layout::{Direction, Side};
 use leon_core::ApiError;
 use serde_json::{json, Value};
 
@@ -11,18 +12,18 @@ use crate::commands::{pick_session, print_json, resolve};
 use crate::{Cli, Cmd, Edge};
 
 /// (direction, side) for a pane going to `edge` of its anchor.
-fn place(edge: Edge) -> (&'static str, &'static str) {
+fn place(edge: Edge) -> (Direction, Side) {
     match edge {
-        Edge::Right => ("horizontal", "after"),
-        Edge::Left => ("horizontal", "before"),
-        Edge::Above => ("vertical", "before"),
-        Edge::Below => ("vertical", "after"),
+        Edge::Right => (Direction::Horizontal, Side::After),
+        Edge::Left => (Direction::Horizontal, Side::Before),
+        Edge::Above => (Direction::Vertical, Side::Before),
+        Edge::Below => (Direction::Vertical, Side::After),
     }
 }
 
 /// The API ratio that gives the pane on `side` `pct` percent.
-fn ratio(side: &str, pct: u8) -> f64 {
-    f64::from(if side == "before" { pct } else { 100 - pct }) / 100.0
+fn ratio(side: Side, pct: u8) -> f64 {
+    f64::from(if side == Side::Before { pct } else { 100 - pct }) / 100.0
 }
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
@@ -105,7 +106,7 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
             let windows = view["windows"].as_array().cloned().unwrap_or_default();
             let split = windows.iter().find_map(|w| parent(&w["layout"], &bid));
             let split = split.ok_or_else(|| bad("that block isn't in a split"))?;
-            let side = if leaf(&split["before"]) == Some(bid.as_str()) { "before" } else { "after" };
+            let side = if leaf(&split["before"]) == Some(bid.as_str()) { Side::Before } else { Side::After };
             c.call(
                 "session.resize_pane",
                 json!({

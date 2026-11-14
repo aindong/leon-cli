@@ -32,13 +32,16 @@ fn c8_session_stream_has_every_layout_event_in_order() {
     assert_eq!(e[0].session_id.as_deref(), Some(s.as_str()));
     assert_eq!(e[1].payload["revision"].as_u64(), Some(revision(&r)), "the event carries the call's revision");
 
-    let w = env.ok(&["-s", &s, "window", "new"]);
+    let r = env.json(&["-s", &s, "window", "new", "--json"]);
+    let w = r["window_id"].as_str().unwrap().to_string();
     let e = expect(&mut ev, &["window_created", "active_window_changed", "block_created", "session_view_changed"]);
     assert_eq!(e[0].payload["window_id"], w.as_str());
     assert_eq!(e[1].payload["window_id"], w.as_str());
+    assert_eq!(e[3].payload["revision"].as_u64(), Some(revision(&r)));
 
-    env.ok(&["-s", &s, "window", "rename", "2", "logs"]);
+    let r = env.json(&["-s", &s, "window", "rename", "2", "logs", "--json"]);
     let e = expect(&mut ev, &["window_label_changed", "session_view_changed"]);
+    assert_eq!(e[1].payload["revision"].as_u64(), Some(revision(&r)));
     assert_eq!((e[0].payload["window_id"].as_str(), e[0].payload["label"].as_str()), (Some(w.as_str()), Some("logs")));
 
     let r = env.json(&["-s", &s, "focus", "--json", &a]);
@@ -50,17 +53,20 @@ fn c8_session_stream_has_every_layout_event_in_order() {
     let e = expect(&mut ev, &["session_view_changed"]);
     assert_eq!(e[0].payload["revision"].as_u64(), Some(revision(&r)));
 
-    env.ok(&["block", "close", &b]);
+    let r = env.json(&["block", "close", &b, "--json"]);
     let e = expect(&mut ev, &["block_closed", "session_view_changed"]);
     assert_eq!(e[0].payload["block_id"], b.as_str());
+    assert_eq!(e[1].payload["revision"].as_u64(), Some(revision(&r)));
 
-    env.ok(&["-s", &s, "window", "close", "2"]);
+    let r = env.json(&["-s", &s, "window", "close", "2", "--json"]);
     let e = expect(&mut ev, &["block_closed", "window_closed", "session_view_changed"]);
     assert_eq!(e[1].payload["window_id"], w.as_str());
+    assert_eq!(e[2].payload["revision"].as_u64(), Some(revision(&r)));
 
-    env.ok(&["session", "rename", &s, "renamed"]);
+    let r = env.json(&["session", "rename", &s, "renamed", "--json"]);
     let e = expect(&mut ev, &["session_label_changed", "session_view_changed"]);
     assert_eq!(e[0].payload["label"], "renamed");
+    assert_eq!(e[1].payload["revision"].as_u64(), Some(revision(&r)));
 
     env.ok(&["kill", &s]);
     let e = expect(&mut ev, &["session_destroyed"]);

@@ -70,7 +70,7 @@ struct Queue {
 
 impl Queue {
     fn wants(&self, e: &Event) -> bool {
-        self.all || (e.server && self.lifecycle) || e.session_id.as_ref().is_some_and(|s| self.sessions.contains(s))
+        self.all || (e.server && self.lifecycle) || self.sessions.contains(&e.session_id)
     }
 }
 
@@ -117,6 +117,10 @@ impl Subscriber {
         Ok(line)
     }
 
+    pub fn has_lines(&self) -> bool {
+        !lock(&self.queue).lines.is_empty()
+    }
+
     pub fn is_dropped(&self) -> bool {
         lock(&self.queue).dropped
     }
@@ -160,7 +164,9 @@ impl Ctx {
         let (seq, first) = (q.seq, !std::mem::replace(&mut q.registered, true));
         drop(q);
         if first {
-            lock(&self.subscribers).push(Arc::downgrade(sub));
+            let mut subs = lock(&self.subscribers);
+            subs.retain(|s| s.strong_count() > 0);
+            subs.push(Arc::downgrade(sub));
         }
         seq
     }

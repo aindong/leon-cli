@@ -66,18 +66,20 @@ fn c13_a_new_prompt_drops_working() {
     let env = Env::new();
     let (s, a) = env.session();
     let mut ev = env.events(&["-s", &s]);
-    let b = split(
-        &env,
-        &a,
-        &[],
-        &format!(r"{WORKING}; printf '\033]133;A\007'; read x; {WORKING}; printf '\033c'; read x"),
-    );
+    // Each step waits for Enter, so each lands in a read of its own: within one read a report and
+    // its removal net out to the removal alone (the reader coalesces each read's changes).
+    let script =
+        format!(r"{WORKING}; read x; printf '\033]133;A\007'; read x; {WORKING}; read x; printf '\033c'; read x");
+    let b = split(&env, &a, &[], &script);
+    let enter = || env.ok(&["send-key", "-b", &b, "enter"]);
     block_event(&mut ev, &b, "program_status_changed");
+    enter();
     let e = block_event(&mut ev, &b, "program_status_removed");
     assert_eq!(e.payload["ids"], serde_json::json!([null]));
     assert_eq!(e.payload["reason"], "prompt");
-    env.ok(&["send-key", "-b", &b, "enter"]);
+    enter();
     block_event(&mut ev, &b, "program_status_changed");
+    enter();
     let e = block_event(&mut ev, &b, "program_status_removed");
     assert_eq!(e.payload["reason"], "reset", "RIS wipes the records");
 }

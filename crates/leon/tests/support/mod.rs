@@ -208,17 +208,6 @@ impl Ev {
     }
 }
 
-/// The block ids at the leaves of a layout, in order.
-pub fn leaves(node: &Value) -> Vec<String> {
-    if let Some(b) = node.get("block") {
-        return vec![b["block_id"].as_str().unwrap().to_string()];
-    }
-    let s = &node["split"];
-    let mut v = leaves(&s["before"]);
-    v.extend(leaves(&s["after"]));
-    v
-}
-
 /// `"A"`, or `"h(A,B)"` / `"v(A,B)"` with block ids replaced by names, for readable tree asserts.
 pub fn shape(node: &Value, names: &[(&str, &str)]) -> String {
     if let Some(b) = node.get("block") {

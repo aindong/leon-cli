@@ -22,7 +22,12 @@ impl State {
         }
         let s = self.session_mut(session_id)?;
         let (from, to, i) = (s.window_of(block_id)?, s.window_of(anchor_id)?, s.block_index(block_id)?);
+        let (focus, zoomed) = (s.windows[from].focus.clone(), s.windows[from].zoomed.clone());
         s.windows[from].detach(block_id);
+        if from == to {
+            // It never left the window, so its focus and zoom stay.
+            (s.windows[to].focus, s.windows[to].zoomed) = (focus, zoomed);
+        }
         let tree = s.windows[to].layout.as_mut().expect("the anchor is in it");
         assert!(tree.insert(anchor_id, block_id, direction, side, ratio), "the anchor is in it");
         s.blocks[i].window_id = s.windows[to].id.clone();
@@ -31,7 +36,7 @@ impl State {
             self.close_window(session_id, &emptied)?;
         }
         self.touch(session_id);
-        self.revision(session_id)
+        Ok(self.revision(session_id))
     }
 
     /// Blocks trade places, across windows too; each window's focus and zoom stay where they were.
@@ -39,7 +44,7 @@ impl State {
         let s = self.session_mut(session_id)?;
         let (ia, ib) = (s.block_index(a)?, s.block_index(b)?);
         if a == b {
-            return self.revision(session_id);
+            return Ok(self.revision(session_id));
         }
         for w in &mut s.windows {
             if let Some(tree) = &mut w.layout {
@@ -52,7 +57,7 @@ impl State {
         let wa = std::mem::take(&mut s.blocks[ia].window_id);
         s.blocks[ia].window_id = std::mem::replace(&mut s.blocks[ib].window_id, wa);
         self.touch(session_id);
-        self.revision(session_id)
+        Ok(self.revision(session_id))
     }
 
     /// Zoom a block (`Some(true)`), unzoom it (`Some(false)`) or toggle (`None`).
@@ -70,7 +75,7 @@ impl State {
             w.zoomed = new;
             self.touch(session_id);
         }
-        self.revision(session_id)
+        Ok(self.revision(session_id))
     }
 
     /// Set the ratio of the split between two blocks of one window.
@@ -91,7 +96,7 @@ impl State {
         let tree = s.windows[w].layout.as_mut().expect("it holds both");
         tree.set_ratio(direction, before_id, after_id, ratio).map_err(ApiError::bad_request)?;
         self.touch(session_id);
-        self.revision(session_id)
+        Ok(self.revision(session_id))
     }
 
     /// Focus a block and make its window the active one.
@@ -100,7 +105,7 @@ impl State {
         let w = s.window_of(block_id)?;
         let window_changed = s.active != w;
         if !window_changed && s.windows[w].focus.as_deref() == Some(block_id) {
-            return self.revision(session_id);
+            return Ok(self.revision(session_id));
         }
         s.active = w;
         s.windows[w].focus = Some(block_id.to_string());
@@ -109,7 +114,7 @@ impl State {
             self.emit(session_id, "active_window_changed", json!({ "window_id": window_id }));
         }
         self.touch(session_id);
-        self.revision(session_id)
+        Ok(self.revision(session_id))
     }
 
     /// Move focus in the active window by direction; returns (revision, focused block).
@@ -136,9 +141,9 @@ impl State {
         Ok((self.focus_block(session_id, &to)?, to))
     }
 
-    fn revision(&self, session_id: &str) -> Result<u64, ApiError> {
-        // The session may be gone: moving its last block out of a window can't do that, but stay total.
-        Ok(self.session(session_id).map_or(0, |s| s.revision))
+    /// A session's revision; 0 once it is gone (a call that destroyed it).
+    pub fn revision(&self, session_id: &str) -> u64 {
+        self.session(session_id).map_or(0, |s| s.revision)
     }
 }
 
@@ -189,7 +194,18 @@ mod tests {
         assert_eq!(st.zoom_block(&s, "block:b", Some(true)).unwrap(), r + 2, "already on");
         assert!(st.resize_pane(&s, Horizontal, "block:a", "block:b", 1.0).is_err());
         assert!(st.move_block(&s, "block:a", "block:a", Vertical, After, 0.5).is_err());
+        st.move_block(&s, "block:b", "block:a", Vertical, Before, 0.5).unwrap();
+        let w0 = &st.session(&s).unwrap().windows[0];
+        assert_eq!((w0.zoomed.as_deref(), w0.focus.as_deref()), (Some("block:b"), Some("block:a")), "kept in-window");
         st.close_block(&s, "block:b").unwrap();
         assert_eq!(st.session(&s).unwrap().windows[0].zoomed, None, "a closed block's zoom goes");
+
+        // A focused split in a background window brings that window forward.
+        let w1 = st.new_window(&s, None).unwrap();
+        add(&mut st, &s, &w1, "block:c", None);
+        names(&mut st);
+        add(&mut st, &s, &w, "block:d", Some("block:a"));
+        assert_eq!(st.session(&s).unwrap().active, 0);
+        assert!(names(&mut st).iter().any(|e| e.contains("active_window_changed")));
     }
 }
