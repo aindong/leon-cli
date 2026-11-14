@@ -57,3 +57,9 @@ pub fn paint(buf: &mut Buffer, p: &Pane, focused: bool, colors: Colors) {
     let color = if focused { draw::brand::AMBER } else { draw::brand::UMBER };
     Block::default().borders(Borders::ALL).border_style(Style::default().fg(colors.rgb(color))).render(p.outer, buf);
 }
+
+/// A focused overlay remains above a zoomed tile; otherwise preserve tile zoom's input policy.
+pub fn focused(w: &leon_core::Window) -> Option<&str> {
+    let overlay = w.focus.as_deref().filter(|id| !w.layout.as_ref().is_some_and(|t| t.contains(id)));
+    overlay.or(w.zoomed.as_deref()).or(w.focus.as_deref())
+}

@@ -35,8 +35,9 @@ impl Tui {
         let Mode::Attached(sid) = &self.mode else { return None };
         let m = self.remote.model();
         let w = m.session(sid)?.windows.get(m.session(sid)?.active)?;
-        let block = w.zoomed.clone().or(w.focus.clone())?;
-        Some(Target { sid: sid.clone(), block, zoomed: w.zoomed.is_some() })
+        let block = super::overlays::focused(w)?.to_string();
+        let zoomed = w.zoomed.as_deref() == Some(block.as_str());
+        Some(Target { sid: sid.clone(), block, zoomed })
     }
 
     pub(super) fn attached_key(&mut self, k: KeyEvent, dirty: &mut bool) -> Flow {
@@ -323,7 +324,7 @@ impl Tui {
                 self.asked.insert(p.id.clone(), want);
             }
         }
-        let focus = w.and_then(|w| w.zoomed.clone().or(w.focus.clone()));
+        let focus = w.and_then(super::overlays::focused).map(str::to_string);
         let tabs = s.windows.iter().enumerate().map(|(i, w)| (picker::tab_name(&s, w), i == s.active)).collect();
         let note = super::lock(&self.note).clone();
         let index = self.remote.model().sessions.iter().position(|x| x.id == s.id).unwrap_or(0);

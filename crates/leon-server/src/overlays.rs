@@ -42,7 +42,7 @@ struct Toggle {
     session_id: String,
     /// Exact case-insensitive block label, unique within this session.
     label: String,
-    /// If absent, create a login-shell drawer docked to the bottom of the active window.
+    /// When true and no block has this label, create a login-shell drawer at the bottom of the active window.
     #[serde(default)]
     create: bool,
 }

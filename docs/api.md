@@ -3342,7 +3342,7 @@ same facts for the server you run.
 |---|---|---|---|
 | `session_id` | string | yes |  |
 | `label` | string | yes | Exact case-insensitive block label, unique within this session. |
-| `create` | boolean |  | If absent, create a login-shell drawer docked to the bottom of the active window. |
+| `create` | boolean |  | When true and no block has this label, create a login-shell drawer at the bottom of the active window. |
 
 **Output:** 
 
@@ -3367,7 +3367,7 @@ same facts for the server you run.
         "type": "string"
       },
       "create": {
-        "description": "If absent, create a login-shell drawer docked to the bottom of the active window.",
+        "description": "When true and no block has this label, create a login-shell drawer at the bottom of the active window.",
         "type": "boolean",
         "default": false
       }

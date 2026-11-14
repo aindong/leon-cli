@@ -46,7 +46,7 @@ pub fn session_name(s: &Session, index: usize) -> String {
 
 /// A tab's name as the app's tab bar shows it: its label, else the shown block's program.
 pub fn tab_name(s: &Session, w: &leon_core::Window) -> String {
-    let shown = w.zoomed.as_ref().or(w.focus.as_ref()).and_then(|id| s.blocks.iter().find(|b| &b.id == id));
+    let shown = super::overlays::focused(w).and_then(|id| s.blocks.iter().find(|b| b.id == id));
     w.label.clone().unwrap_or_else(|| shown.map_or("empty".into(), |b| program_name(&b.command)))
 }
 
@@ -73,7 +73,7 @@ pub fn rows(sessions: &[Session]) -> Vec<Row> {
             text: name.clone(),
             path: name.clone(),
             pick: Pick::Session(s.id.clone()),
-            block: active.and_then(|w| w.zoomed.clone().or(w.focus.clone())),
+            block: active.and_then(super::overlays::focused).map(str::to_string),
         });
         for (i, w) in s.windows.iter().enumerate() {
             let tab = format!("{}:{}", i + 1, tab_name(s, w));
@@ -82,7 +82,7 @@ pub fn rows(sessions: &[Session]) -> Vec<Row> {
                 text: tab.clone(),
                 path: format!("{name} › {tab}"),
                 pick: Pick::Window(s.id.clone(), w.id.clone()),
-                block: w.zoomed.clone().or(w.focus.clone()),
+                block: super::overlays::focused(w).map(str::to_string),
             });
             let mut ids = w.layout.as_ref().map(|l| l.leaves()).unwrap_or_default();
             for b in s.blocks.iter().filter(|b| b.window_id == w.id) {

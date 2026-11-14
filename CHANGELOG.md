@@ -1,9 +1,5 @@
 # Changelog
 
-## API 1.2.0 — M20a floating panes and drawers
-
-Add session.float_block, new_floating, dock_block, unfloat_block and toggle. Window views now carry floating (back to front) and docked placements, including hidden panes; hiding preserves programs. CLI/Lua and attach support floats and drawers.
-
 Everything that changes in leon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the API follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) through its `api_version`.
@@ -33,6 +29,10 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+### M20a — Floating panes and drawers (API `1.2.0`)
+
+Add session.float_block, new_floating, dock_block, unfloat_block and toggle. Window views now carry floating (back to front) and docked placements, including hidden panes; hiding preserves programs. CLI/Lua and attach support floats and drawers.
 
 ### M21: projects and worktrees as a recipe
 

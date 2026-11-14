@@ -200,3 +200,6 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   Directional focus from an overlay returns to the first tiled pane (with only overlays,
   it cycles). Attach retains session context with no visible focus, so shortcuts can
   show hidden drawers or open tabs. The picker includes hidden and visible overlay blocks.
+
+  A focused overlay takes input above a zoomed tile; tile-only zoom keeps its existing
+  display/input behavior.
