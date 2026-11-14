@@ -6,6 +6,13 @@ use super::*;
 use crate::hosts::Machine;
 use crate::palette::Item;
 
+/// What the palette asks for.
+#[derive(Clone)]
+pub(super) enum Ask {
+    HostLabel,
+    HostEndpoint { label: String },
+}
+
 /// A machine as the sidebar shows it.
 #[derive(Debug, Clone)]
 pub struct HostRow {
@@ -191,6 +198,8 @@ impl Workspace {
                     .pb(px(2.))
                     .text_size(px(SECONDARY_TEXT))
                     .text_color(rgb(if matches!(state, HostState::Unreachable(_)) { t.error } else { t.muted }))
+                    .line_clamp(3)
+                    .text_ellipsis()
                     .child(note)
             }))
     }

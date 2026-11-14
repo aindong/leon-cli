@@ -103,6 +103,15 @@ impl Shared {
     fn failed(&self, why: String) {
         *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(why);
     }
+
+    /// Keep a line of ssh's as the reason: printable only (the app shows it), 200 characters at
+    /// most, blank lines skipped.
+    fn failed_with(&self, line: &str) {
+        let shown: String = line.chars().filter(|c| !c.is_control()).take(200).collect();
+        if !shown.trim().is_empty() {
+            self.failed(shown.trim().to_string());
+        }
+    }
 }
 
 /// One connection: ssh's stdin is what the client writes, ssh's stdout goes back to the client.
@@ -129,11 +138,14 @@ fn serve(conn: UnixStream, s: &Arc<Shared>) {
         let s = s.clone();
         let _ = std::thread::Builder::new().name("leon-link-err".into()).spawn(move || {
             let _read_all = read_all; // dropped at the end of ssh's stderr
-            for line in io::BufRead::lines(io::BufReader::new(err)).map_while(Result::ok) {
-                eprintln!("{line}");
-                if !line.trim().is_empty() {
-                    s.failed(line.trim().to_string());
-                }
+                                      // the host writes what it likes here: a line is read 4 KiB at most at a time
+            let mut err = io::BufReader::new(err);
+            let mut line = Vec::new();
+            while io::BufRead::read_until(&mut (&mut err).take(4096), b'\n', &mut line).is_ok_and(|n| n > 0) {
+                let text = String::from_utf8_lossy(&line);
+                eprintln!("{}", text.trim_end_matches('\n'));
+                s.failed_with(&text);
+                line.clear();
             }
         });
     }
@@ -228,5 +240,31 @@ fn block_signals() {
             libc::sigaddset(&mut set, s);
         }
         libc::pthread_sigmask(libc::SIG_BLOCK, &set, std::ptr::null_mut());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_hosts_words_are_kept_printable_and_short() {
+        let s = Shared {
+            name: "box".into(),
+            endpoint: "ssh://box".parse().unwrap(),
+            reached: AtomicBool::new(false),
+            batch: AtomicBool::new(false),
+            last_error: Mutex::new(None),
+        };
+        s.failed_with("ssh: connect to host box port 22: Connection refused\r\n");
+        assert_eq!(
+            s.last_error.lock().unwrap().as_deref(),
+            Some("ssh: connect to host box port 22: Connection refused")
+        );
+        s.failed_with("  \n");
+        assert!(s.last_error.lock().unwrap().is_some(), "a blank line keeps the reason");
+        s.failed_with(&format!("\x1b]0;title\x07{}\u{202e}", "x".repeat(1000)));
+        let kept = s.last_error.lock().unwrap().clone().unwrap();
+        assert!(kept.chars().count() <= 200 && !kept.chars().any(char::is_control), "{kept:?}");
     }
 }

@@ -122,6 +122,7 @@ impl Workspace {
                 Some("client.palette.toggle"),
             ),
             ("leon skill setup".into(), "Let Claude Code and Codex open panes here".into(), None),
+            ("leon hosts add".into(), "Add a host".into(), Some("client.host.add")),
         ]
     }
 

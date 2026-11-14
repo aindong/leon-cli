@@ -92,34 +92,37 @@ impl Workspace {
             .child(controls)
     }
 
-    /// No session: the name, the tagline, and the three things to know, each one a click away.
+    /// No session: the name, the tagline, and the things to know, each one a click away. Sized for
+    /// a big window: one column, keys in a fixed-width lane so the descriptions line up.
     pub(super) fn render_empty(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &DARK;
-
-        let mut hints = div().flex().flex_col().gap(px(4.)).mt(px(18.));
+        let mut hints = div().flex().flex_col().gap(px(6.)).mt(px(36.)).w_full();
         for (i, (keys, what, action)) in self.empty_items().into_iter().enumerate() {
             hints = hints.child(
                 div()
                     .id(SharedString::from(format!("hint-{i}")))
+                    .debug_selector(|| sel(format!("hint-{i}")))
                     .flex()
                     .items_center()
-                    .gap(px(12.))
-                    .h(px(34.))
-                    .px(px(10.))
-                    .rounded(px(6.))
+                    .gap(px(18.))
+                    .h(px(46.))
+                    .px(px(14.))
+                    .rounded(px(8.))
                     .when(action.is_some(), |d| d.cursor_pointer().hover(|d| d.bg(rgb(t.hover))))
                     .child(
-                        div()
-                            .flex_none()
-                            .px(px(6.))
-                            .rounded(px(4.))
-                            .bg(rgb(t.hover))
-                            .text_color(rgb(t.accent))
-                            .font_family(FONT_FAMILY)
-                            .text_size(px(UI_TEXT))
-                            .child(keys),
+                        div().flex_none().w(px(150.)).flex().justify_end().child(
+                            div()
+                                .px(px(8.))
+                                .py(px(2.))
+                                .rounded(px(5.))
+                                .bg(rgb(t.hover))
+                                .text_color(rgb(t.accent))
+                                .font_family(FONT_FAMILY)
+                                .text_size(px(UI_TEXT + 1.))
+                                .child(keys),
+                        ),
                     )
-                    .child(div().text_color(rgb(t.text)).child(what))
+                    .child(div().flex_1().text_size(px(UI_TEXT + 2.)).text_color(rgb(t.text)).child(what))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |ws, _, window, cx| {
@@ -130,6 +133,25 @@ impl Workspace {
                     ),
             );
         }
+        let content = div()
+            .debug_selector(|| sel("empty-content".into()))
+            .w(px(520.))
+            .flex()
+            .flex_col()
+            .items_center()
+            .child(mark())
+            .child(
+                div()
+                    .debug_selector(|| sel("empty-title".into()))
+                    .mt(px(20.))
+                    .text_size(px(44.))
+                    .text_color(rgb(t.title))
+                    .child("leon"),
+            )
+            .child(
+                div().mt(px(4.)).text_size(px(UI_TEXT + 4.)).text_color(rgb(t.muted)).child("Keep your work in view."),
+            )
+            .child(hints);
         div()
             .debug_selector(|| sel("empty-state".into()))
             .flex_1()
@@ -137,10 +159,9 @@ impl Workspace {
             .flex_col()
             .items_center()
             .justify_center()
-            .child(mark())
-            .child(div().mt(px(16.)).text_size(px(28.)).text_color(rgb(t.title)).child("leon"))
-            .child(div().text_color(rgb(t.muted)).child("Keep your work in view."))
-            .child(hints)
+            // a little above the middle, where the eye expects the centre to be
+            .pb(px(48.))
+            .child(content)
     }
 }
 
@@ -151,5 +172,5 @@ fn mark() -> impl IntoElement {
         let png = include_bytes!("../../../brand/icon/Leon.iconset/icon_128x128@2x.png");
         Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Png, png.to_vec()))
     });
-    gpui::img(icon.clone()).size(px(88.))
+    gpui::img(icon.clone()).debug_selector(|| sel("empty-mark".into())).size(px(132.))
 }

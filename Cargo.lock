@@ -3312,6 +3312,7 @@ dependencies = [
  "futures",
  "gpui",
  "leon-core",
+ "leon-hosts",
  "leon-lua",
  "leon-server",
  "serde",

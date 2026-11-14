@@ -166,43 +166,6 @@ pub fn run(server: Remote) {
     });
 }
 
-/// Frame build times (render start to paint end), printed each second that drew when
-/// `LEON_FRAME_STATS=1`.
-#[derive(Default)]
-struct Stats {
-    enabled: bool,
-    render_start: Option<Instant>,
-    frames: u32,
-    total: Duration,
-    max: Duration,
-    since: Option<Instant>,
-}
-
-impl Stats {
-    fn painted(&mut self) {
-        if let Some(start) = self.render_start.take() {
-            let took = start.elapsed();
-            self.frames += 1;
-            self.total += took;
-            self.max = self.max.max(took);
-            self.since.get_or_insert_with(Instant::now);
-        }
-    }
-
-    fn report(&mut self) {
-        let Some(since) = self.since.filter(|s| s.elapsed() >= Duration::from_secs(1)) else { return };
-        let ms = |d: Duration| d.as_secs_f64() * 1000.;
-        eprintln!(
-            "leon frames: {} in {:.2}s, avg {:.2} ms, max {:.2} ms",
-            self.frames,
-            since.elapsed().as_secs_f64(),
-            ms(self.total) / self.frames as f64,
-            ms(self.max)
-        );
-        (self.frames, self.total, self.max, self.since) = (0, Duration::ZERO, Duration::ZERO, None);
-    }
-}
-
 /// What one render needs from the model, copied out under the state lock.
 struct SessionRow {
     /// Which machine it is on (`Hosts` index; 0 is This Mac).
@@ -225,14 +188,7 @@ struct Palette {
     query: String,
     selected: usize,
     /// Asking for text instead of listing actions (Add Host…), with the last refusal.
-    ask: Option<(Ask, Option<String>)>,
-}
-
-/// What the palette asks for.
-#[derive(Clone)]
-enum Ask {
-    HostLabel,
-    HostEndpoint { label: String },
+    ask: Option<(hosts_view::Ask, Option<String>)>,
 }
 
 /// The last `client.keymap` reply, handed over from the runtime thread that fetched it.
@@ -388,7 +344,7 @@ impl Workspace {
                 return;
             }
         });
-        let stats = Stats { enabled: std::env::var("LEON_FRAME_STATS").is_ok_and(|v| v == "1"), ..Stats::default() };
+        let stats = Stats::new();
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |_, _, cx| cx.notify());
         // the window's frame and display are kept with the settings, and saved when the app quits
@@ -540,6 +496,9 @@ mod paint;
 mod panes_view;
 #[path = "view_sidebar.rs"]
 mod sidebar;
+#[path = "view_stats.rs"]
+mod stats;
 use bars::status_mark;
 use paint::*;
 use panes_view::*;
+use stats::Stats;

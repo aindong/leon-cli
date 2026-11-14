@@ -1,9 +1,27 @@
-//! Reading the whole model from a server: what `Shared::refresh` replaces the copy with.
+//! Reading from a server: one line at a time, and the whole model (what `Shared::refresh`
+//! replaces the copy with).
+
+use std::io::{self, BufRead, BufReader, Read};
+use std::os::unix::net::UnixStream;
 
 use leon_core::{ApiError, Window};
 use serde_json::{json, Value};
 
 use super::{Block, Conn, Session};
+
+/// The longest line read from the server: a whole 500 × 1000 screen of one-cell spans fits.
+const MAX_LINE: u64 = 256 << 20;
+
+/// One line, at most `MAX_LINE` bytes; 0 at the end of the stream.
+pub(super) fn read_line(r: &mut BufReader<UnixStream>, out: &mut String) -> io::Result<usize> {
+    let mut bytes = Vec::new();
+    let n = r.by_ref().take(MAX_LINE + 1).read_until(b'\n', &mut bytes)?;
+    if n as u64 > MAX_LINE {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "a line from the server is too long"));
+    }
+    *out = String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    Ok(n)
+}
 
 /// The model, read with one call per session and per block (a session that vanishes meanwhile is
 /// left out; the event that says so brings another refetch).

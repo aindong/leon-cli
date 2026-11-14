@@ -15,8 +15,8 @@ use serde_json::Value;
 use super::{stream, Env, Stream};
 
 const FAKE_SSH: &str = r#"#!/bin/sh
-printf '%s\037' "$@" >> "$FAKE_SSH_DIR/argv"
-printf '\n' >> "$FAKE_SSH_DIR/argv"
+argv=$(printf '%s\037' "$@")
+printf '%s\n' "$argv" >> "$FAKE_SSH_DIR/argv" # one write: ssh runs in parallel
 echo $$ >> "$FAKE_SSH_DIR/pids"
 while [ $# -gt 0 ]; do
   case $1 in

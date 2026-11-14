@@ -8,7 +8,7 @@
 //! last seq seen (remote_link.rs).
 
 use std::collections::HashMap;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -26,28 +26,14 @@ use serde_json::{json, Value};
 mod fetch_model;
 #[path = "remote_link.rs"]
 mod link;
-use fetch_model::fetch;
+use fetch_model::{fetch, read_line};
+use link::Job;
 pub use link::LinkState;
-use link::{Done, Job};
 
 /// How long a UI call waits for its reply before giving up (the server answers in microseconds).
 const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long the first call over a link waits.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
-/// The longest line read from the server: a whole 500 × 1000 screen of one-cell spans fits.
-const MAX_LINE: u64 = 256 << 20;
-
-/// One line, at most `MAX_LINE` bytes; 0 at the end of the stream.
-fn read_line(r: &mut BufReader<UnixStream>, out: &mut String) -> io::Result<usize> {
-    let mut bytes = Vec::new();
-    let n = r.by_ref().take(MAX_LINE + 1).read_until(b'\n', &mut bytes)?;
-    if n as u64 > MAX_LINE {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "a line from the server is too long"));
-    }
-    *out = String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    Ok(n)
-}
-
 /// One session as the app shows it.
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -425,41 +411,6 @@ impl Remote {
         });
     }
 
-    /// Whether this is a host's link (`connect_retrying`), where calls from the window queue.
-    pub fn is_link(&self) -> bool {
-        self.queue.is_some()
-    }
-
-    /// Call a method whose reply nobody waits for: over a link it queues behind the window's other
-    /// calls, here it runs now. A failure is logged.
-    pub fn send(&self, method: &str, params: Value) {
-        self.enqueue(method, params, false, None);
-    }
-
-    /// `send`, with the reply for `done` (on the queue thread over a link).
-    pub fn send_then(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
-        self.enqueue(method, params, false, Some(Box::new(done)));
-    }
-
-    /// `act` without waiting over a link: the call and the refetch run on the queue thread, then
-    /// `done` gets the reply there. Here it runs now, `done` too.
-    pub fn act_later(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
-        self.enqueue(method, params, true, Some(Box::new(done)));
-    }
-
-    fn enqueue(&self, method: &str, params: Value, refresh: bool, done: Option<Done>) {
-        if let Some(queue) = &self.queue {
-            let _ = queue.send(Job { method: method.to_string(), params, refresh, done });
-            return;
-        }
-        let r = if refresh { self.act(method, params) } else { self.call(method, params) };
-        match (done, r) {
-            (Some(done), r) => done(r),
-            (None, Err(e)) => eprintln!("leon: {method} failed: {}", e.message),
-            (None, Ok(_)) => {}
-        }
-    }
-
     /// Type `bytes` into a block.
     pub fn write(&self, session_id: &str, block_id: &str, bytes: &[u8]) {
         let data = String::from_utf8_lossy(bytes);
@@ -472,29 +423,6 @@ impl Remote {
         let args = json!({ "rows": rows, "cols": cols });
         let p = json!({ "session_id": session_id, "block_id": block_id, "method": "dev.leon.terminal.resize", "args": args });
         self.send("block.method", p);
-    }
-
-    /// Over a link: up, or reconnecting (which try, and how long until the next).
-    pub fn link_state(&self) -> LinkState {
-        *lock(&self.shared.link)
-    }
-
-    /// The last event seq seen, how many times the seq skipped, and how many times the stream was
-    /// resumed after a drop or attached afresh (the server couldn't resume it).
-    pub fn seq(&self) -> u64 {
-        self.shared.seq.load(Ordering::SeqCst)
-    }
-
-    pub fn gaps(&self) -> u64 {
-        self.shared.gaps.load(Ordering::SeqCst)
-    }
-
-    pub fn resumes(&self) -> u64 {
-        self.shared.resumes.load(Ordering::SeqCst)
-    }
-
-    pub fn reattaches(&self) -> u64 {
-        self.shared.reattaches.load(Ordering::SeqCst)
     }
 
     /// Resize a block to (rows, cols) unless that was already asked for while its screen had the

@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use leon_core::ApiError;
 use serde_json::{json, Value};
 
-use super::{attach, lock, unreachable, Conn, Shared, CALL_TIMEOUT};
+use super::{attach, lock, unreachable, Conn, Remote, Shared, CALL_TIMEOUT};
 
 /// A quiet event connection is pinged after this long, and ended when as long again brings nothing.
 const PING_AFTER: Duration = Duration::from_secs(5);
@@ -145,4 +145,64 @@ fn resume_or_attach(shared: &Shared) -> Option<(BufReader<UnixStream>, UnixStrea
     shared.reattaches.fetch_add(1, Ordering::SeqCst);
     shared.restart_stream(&snapshot);
     Some((r, w))
+}
+
+impl Remote {
+    /// Whether this is a host's link (`connect_retrying`), where calls from the window queue.
+    pub fn is_link(&self) -> bool {
+        self.queue.is_some()
+    }
+
+    /// Call a method whose reply nobody waits for: over a link it queues behind the window's other
+    /// calls, here it runs now. A failure is logged.
+    pub fn send(&self, method: &str, params: Value) {
+        self.enqueue(method, params, false, None);
+    }
+
+    /// `send`, with the reply for `done` (on the queue thread over a link).
+    pub fn send_then(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
+        self.enqueue(method, params, false, Some(Box::new(done)));
+    }
+
+    /// `act` without waiting over a link: the call and the refetch run on the queue thread, then
+    /// `done` gets the reply there. Here it runs now, `done` too.
+    pub fn act_later(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
+        self.enqueue(method, params, true, Some(Box::new(done)));
+    }
+
+    fn enqueue(&self, method: &str, params: Value, refresh: bool, done: Option<Done>) {
+        if let Some(queue) = &self.queue {
+            let _ = queue.send(Job { method: method.to_string(), params, refresh, done });
+            return;
+        }
+        let r = if refresh { self.act(method, params) } else { self.call(method, params) };
+        match (done, r) {
+            (Some(done), r) => done(r),
+            (None, Err(e)) => eprintln!("leon: {method} failed: {}", e.message),
+            (None, Ok(_)) => {}
+        }
+    }
+
+    /// Over a link: up, or reconnecting (which try, and how long until the next).
+    pub fn link_state(&self) -> LinkState {
+        *lock(&self.shared.link)
+    }
+
+    /// The last event seq seen, how many times the seq skipped, and how many times the stream was
+    /// resumed after a drop or attached afresh (the server couldn't resume it).
+    pub fn seq(&self) -> u64 {
+        self.shared.seq.load(Ordering::SeqCst)
+    }
+
+    pub fn gaps(&self) -> u64 {
+        self.shared.gaps.load(Ordering::SeqCst)
+    }
+
+    pub fn resumes(&self) -> u64 {
+        self.shared.resumes.load(Ordering::SeqCst)
+    }
+
+    pub fn reattaches(&self) -> u64 {
+        self.shared.reattaches.load(Ordering::SeqCst)
+    }
 }

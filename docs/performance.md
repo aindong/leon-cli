@@ -145,6 +145,42 @@ parsed batch) without a cost `cat` can see. One block's screens are at least 2 m
 flood costs the server at most 500 frame builds a second under the terminal's lock; nothing else
 needed tuning, so there is no shared memory or extra coalescing.
 
+## M16b: hosts through a link
+
+The app reaches a host through a `Link` (docs/architecture.md, "Remote hosts"): each connection
+is an ssh process whose stdin and stdout carry the NDJSON. The bench now also measures keystroke
+to screen that way, with the app's client (`Remote::connect_retrying`) on a `Link` whose
+`LEON_SSH` is a fake ssh. The fake skips ssh's options and the host and runs the host's command
+here, so `leon server proxy` bridges to the same release server: the path has every process and
+pipe a real link has (client → link thread → ssh's stdin → proxy → server, and back), with no
+network. A real link adds its round trip on top. Recorded, not budgeted.
+
+Apple M6 (12 cores), macOS 27, release build, `--samples 200`, with other workers' builds and
+tests running (load average 7 to 12, which is why `cat` is down from about 117 MB/s):
+
+| | `session.list` round trip p50 / p99 | input latency p50 / p99 | `yes \| head` 100 MB | `cat` 100 MB | keystroke to screen p50 / p99 | through a link p50 / p99 | `seq 1 200000` in-process / attached |
+|---|---|---|---|---|---|---|---|
+| M16b | 0.010 / 0.020 ms | 0.040 / 0.063 ms | 1.5 MB/s | 77.2 MB/s | 0.121 / 0.279 ms | 0.137 / 0.243 ms | 298 / 286 ms (0.96x) |
+
+Through a link, a keystroke's echo is on the app's screen model in 0.137 ms at the median, about
+as fast as on the local socket: the two extra processes and four pipe hops cost microseconds. The
+attached budget (keystroke p50 < 4 ms, p99 < 16 ms, `seq` at most 1.5x) still holds.
+
+What keeps a slow link from stalling the window:
+
+- **Screens coalesce.** The reader thread applies each pushed screen to that block's frame in the
+  model, so a burst leaves only the newest; the server already sends a block's screens at least
+  2 ms apart and only dirty rows. The reader wakes the UI with at most one wake queued, and the UI
+  redraws once per wake when what it draws changed.
+- **No call waits on the UI thread.** Over a link, keys, resizes, the focus event, pastes and
+  layout changes go through one queue thread per host (in order), and a layout change's refetch
+  runs there too. m16b_slow_link stops the transports (SIGSTOP), then types 20 keys, splits, opens
+  a tab, steps to it and pastes: the UI thread is back in well under the test's 1 s bound (the
+  synchronous path waited up to 5 s per call), and everything arrives, in order, once the
+  transports run again.
+- **A half-dead link is noticed in about 15 s** (the watchdog's ping), not ssh's 45 s, and the
+  stream resumes on new transports; m16b_slow_link checks that within 25 s.
+
 ## Not measured yet
 
 - tmux, because it isn't installed here. The bench's tmux path drives tmux through a process per
@@ -153,3 +189,5 @@ needed tuning, so there is no shared memory or extra coalescing.
   not until tmux has drawn the output.
 - Latency through a real shell's line editor, and GPUI's paint in the keystroke number (the
   display's next frame comes after the measured point).
+- A real network link: the link number above has no network in it. Over Wi-Fi or a VPN each
+  keystroke adds one network round trip (the write out, the pushed screen back).
