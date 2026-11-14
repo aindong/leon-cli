@@ -92,7 +92,7 @@ assert(leon.json.encode({ x = 1 }, { indent = true }):find("\n"))
     assert_eq!(c.logs.len(), 2);
     assert_eq!(c.logs[0].level, Level::Info);
     assert_eq!(c.logs[0].message, "loaded");
-    assert!(c.logs[0].at.ends_with("init.lua:12"), "{}", c.logs[0].at);
+    assert!(c.logs[0].at.ends_with("init.lua:11"), "{}", c.logs[0].at);
 }
 
 #[test]
