@@ -29,4 +29,4 @@ Use leon for the work you already do: a shell, a build, a server, and an agent, 
 - The demo graphics illustrate a workflow; they are not app screenshots or benchmark results.
 - Status is program-reported, not inferred from every process automatically.
 - Install from a repository checkout with `scripts/install.sh`; no Homebrew formula or remote installer is claimed.
-- Do not claim running jobs survive quitting the app. Saved layouts restore with fresh shells, not resumed processes.
+- Running jobs survive quitting the app (it detaches; the server keeps them). Do not claim they survive the server stopping or a reboot: saved layouts restore with fresh shells, not resumed processes.

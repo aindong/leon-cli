@@ -30,13 +30,18 @@ fn the_docs_say_programs_outlive_the_app() {
         "performance.md has the M10 numbers"
     );
 
-    for (path, text) in [("README.md", &readme), ("docs/architecture.md", &arch), ("docs/cli.md", &cli)] {
+    let brand =
+        ["brand/README.md", "brand/marketing/index.html", "brand/marketing/copy.md"].map(|p| (p, flat(&doc(p))));
+    let docs = [("README.md", &readme), ("docs/architecture.md", &arch), ("docs/cli.md", &cli)];
+    for (path, text) in docs.into_iter().chain(brand.iter().map(|(p, t)| (*p, t))) {
         for stale in [
             "quitting the app ends them",
             "closing the window ends every program",
             "the app exits 1",
             "the app owns its server",
             "runs the server inside the app process",
+            "quitting the app ends",
+            "do not claim running jobs survive quitting the app",
         ] {
             assert!(!text.contains(stale), "{path} still says {stale:?}");
         }

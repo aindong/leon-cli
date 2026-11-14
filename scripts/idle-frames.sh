@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # idle-frames.sh: an idle leon app draws nothing. Runs the release app with frame stats on, a
-# private runtime dir and an idle /bin/sh for 6 s. Passes only if stats appear while the first
+# private runtime and state dir and an idle /bin/sh for 6 s. Passes only if stats appear while the first
 # frames draw (t < 3 s), the app is still alive at the end, and no stats line appears after 3 s.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -19,9 +19,12 @@ cargo build --release -q -p leon
 dir=$(mktemp -d)
 chmod 700 "$dir"
 log="$dir/stats.log"
-LEON_RUNTIME_DIR="$dir" LEON_FRAME_STATS=1 SHELL=/bin/sh ./target/release/leon app 2>"$log" &
+# Private dirs throughout: the app starts a server that outlives it (and would otherwise restore
+# and save the real ~/.local/state/leon), so cleanup stops that server before removing them.
+export LEON_RUNTIME_DIR="$dir" LEON_STATE_DIR="$dir/state" LEON_CONFIG="$dir/no-init.lua"
+LEON_FRAME_STATS=1 SHELL=/bin/sh ./target/release/leon app 2>"$log" &
 pid=$!
-trap 'kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true; rm -rf "$dir"' EXIT
+trap './target/release/leon --autostart=false server stop >/dev/null 2>&1 || true; kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true; rm -rf "$dir"' EXIT
 fail() { echo "idle-frames: FAIL: $*"; cat "$log"; exit 1; }
 sleep 3
 early=$(grep -c '^leon frames' "$log" || true)

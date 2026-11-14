@@ -34,7 +34,13 @@ pub struct Watch {
     pub block_ids: Vec<String>,
 }
 
-/// One `screen` line: an update for one block.
+/// One `screen` line, written straight to bytes (no `Value` tree per push).
+#[derive(Serialize)]
+struct Line<'a> {
+    screen: Pushed<'a>,
+}
+
+/// An update for one block.
 #[derive(Serialize)]
 struct Pushed<'a> {
     block_id: &'a str,
@@ -119,7 +125,7 @@ impl Screens {
             let Some(t) = w.term.upgrade() else { continue };
             let f = frame(&t);
             if let Some(update) = screen::diff(w.sent.as_ref(), &f) {
-                let mut line = serde_json::to_vec(&json!({ "screen": Pushed { block_id: id, update } })).expect("json");
+                let mut line = serde_json::to_vec(&Line { screen: Pushed { block_id: id, update } }).expect("json");
                 line.push(b'\n');
                 out.push(line);
                 w.last = Some(now);

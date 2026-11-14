@@ -70,7 +70,7 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 - **Screen transport.** `block.watch {block_ids}` on a connection replaces the set of blocks whose
   screens it gets; the app watches only the panes on screen. Each screen line is
   `{"screen":{block_id, full, lines, cols, rows:[{line, spans, backgrounds}], cursor, app_cursor,
-  bracketed_paste}}`: spans are runs of same-styled text at their start column (fg as `0xRRGGBB`,
+  bracketed_paste}}`: spans are runs of same-styled text at their start column (fg as a 24-bit RGB integer,
   bold/italic/underline/strikeout), backgrounds are runs of cells. The first line for a block, and
   any after a size change, is `full` (every row); later ones carry only the dirty rows, found by
   diffing the frame against the last one sent on that connection (`leon_core::screen::diff`).
@@ -84,7 +84,11 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   `dev.leon.terminal.screen` returns the same whole screen once. Colours are resolved on the
   server with leon's one theme (shortcut until themes exist: then the client sends its palette, the
   spec's `set_theme`). Other block methods the app uses: `write`, `resize`, `pwd`, and
-  `block.event {type: focus}`, which clears `done`/`error` the way arriving at a pane does.
+  `block.event` with `event: {type: "focus"}`, which clears `done`/`error` the way arriving at a
+  pane does, and `event: {type: "paste", data}`, which the server wraps by the program's
+  bracketed-paste mode at that moment (the app's copy of the screen may be older). `block.watch`
+  and `dev.leon.terminal.screen` are leon's own: the spec's screen stream is `data.connect` over a
+  WebSocket, which leon doesn't serve. The app attaches only to a socket in a private dir.
 - **App keys go through the keymap.** The server loads `init.lua` (`leon server run`).
   The app has no GPUI key table (only ⌘Q): every keystroke becomes an unshifted chord
   (`keymap::chord`) and is resolved against its built-in defaults (`keymap::DEFAULTS`) with the

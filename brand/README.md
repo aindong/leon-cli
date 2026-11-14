@@ -85,7 +85,7 @@ All ten required PNG names are present: 16, 32, 128, 256, and 512 pt, each at 1Ã
 - [Copy sheet](marketing/copy.md): primary tagline, three alternatives, exactly 50 words of pitch and exactly 150 words of description, using whitespace word counts.
 - [Landing page](marketing/index.html): one HTML file with inline CSS, inline vector identity, embedded font and icon, and zero scripts or runtime network requests. Includes six product capabilities, a terminal demo, the real source-install command, and an agent section.
 
-The workflow panels are original illustrations, explicitly labelled as such. They are not screenshots, measured test results, or evidence that every program reports status automatically. The page uses the architecture's restart behaviour: layouts can restore; quitting the app ends running programs.
+The workflow panels are original illustrations, explicitly labelled as such. They are not screenshots, measured test results, or evidence that every program reports status automatically. The page uses the architecture's restart behaviour: quitting the app leaves programs running; when the server stops, layouts restore and programs don't.
 
 The page can be opened directly from the checkout. Its documentation links are repository-relative; before public hosting, point those links at the hosted docs and set `og:image` to the deployed absolute URL. No deployment hostname was invented.
 

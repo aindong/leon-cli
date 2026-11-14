@@ -335,14 +335,13 @@ async fn serve_lines(
                     sub.ready.notify_one();
                 }
             }
-            _ = screens_ready.notified() => {
-                for line in screens.take() {
-                    if !send(write, &line, sub).await? {
-                        return Ok(());
-                    }
+            // a watched block changed, or one held back by the screens' gap is due
+            _ = async {
+                match due {
+                    Some(at) => tokio::select! { _ = screens_ready.notified() => {}, _ = tokio::time::sleep_until(at) => {} },
+                    None => screens_ready.notified().await,
                 }
-            }
-            _ = tokio::time::sleep_until(due.unwrap_or_else(tokio::time::Instant::now)), if due.is_some() => {
+            } => {
                 for line in screens.take() {
                     if !send(write, &line, sub).await? {
                         return Ok(());

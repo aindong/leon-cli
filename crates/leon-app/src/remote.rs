@@ -5,11 +5,11 @@
 //! read. Calls that may run long (Lua actions) get a connection of their own on a thread.
 
 use std::collections::HashMap;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use leon_core::program_status::Record;
@@ -20,6 +20,19 @@ use serde_json::{json, Value};
 
 /// How long a UI call waits for its reply before giving up (the server answers in microseconds).
 const CALL_TIMEOUT: Duration = Duration::from_secs(5);
+/// The longest line read from the server: a whole 500 × 1000 screen of one-cell spans fits.
+const MAX_LINE: u64 = 256 << 20;
+
+/// One line, at most `MAX_LINE` bytes; 0 at the end of the stream.
+fn read_line(r: &mut BufReader<UnixStream>, out: &mut String) -> io::Result<usize> {
+    let mut bytes = Vec::new();
+    let n = r.by_ref().take(MAX_LINE + 1).read_until(b'\n', &mut bytes)?;
+    if n as u64 > MAX_LINE {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "a line from the server is too long"));
+    }
+    *out = String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    Ok(n)
+}
 
 /// One session as the app shows it.
 #[derive(Debug, Clone)]
@@ -97,7 +110,7 @@ impl Conn {
         self.r.get_mut().write_all(&line).map_err(unreachable)?;
         loop {
             let mut reply = String::new();
-            match self.r.read_line(&mut reply) {
+            match read_line(&mut self.r, &mut reply) {
                 Ok(0) => return Err(unreachable("the connection closed")),
                 Err(e) => return Err(unreachable(e)),
                 Ok(_) => {}
@@ -121,9 +134,7 @@ struct Shared {
     /// Refetches go here, one at a time and never through the UI's connection, so a refetch can't
     /// delay a keystroke and an older refetch can't overwrite a newer one.
     fetch: Mutex<Conn>,
-    /// Bumped on every change to `model`; `changed` wakes whoever waits on it.
-    version: Mutex<u64>,
-    changed: Condvar,
+    /// Run after every change to `model`.
     wakers: Mutex<Vec<Box<dyn Fn() + Send>>>,
     /// The event connection's write side, for `block.watch`.
     events: Mutex<UnixStream>,
@@ -134,8 +145,6 @@ struct Shared {
 
 impl Shared {
     fn bump(&self) {
-        *lock(&self.version) += 1;
-        self.changed.notify_all();
         lock(&self.wakers).iter().for_each(|w| w());
     }
 
@@ -143,12 +152,9 @@ impl Shared {
     fn refresh(&self) -> Result<(), ApiError> {
         let mut c = lock(&self.fetch);
         let sessions = fetch(&mut c)?;
-        let mut m = lock(&self.model);
-        let live = |id: &String| sessions.iter().any(|s| s.blocks.iter().any(|b| &b.id == id));
-        m.screens.retain(|id, _| live(id));
-        m.screen_updates.retain(|id, _| live(id));
-        m.sessions = sessions;
-        drop((m, c));
+        // screens go with the watch set (`Remote::watch`), not here: a refetch can skip a session
+        lock(&self.model).sessions = sessions;
+        drop(c);
         self.bump();
         Ok(())
     }
@@ -238,7 +244,7 @@ fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
         let mut stale = false;
         loop {
             let mut line = String::new();
-            if matches!(r.read_line(&mut line), Ok(0) | Err(_)) {
+            if matches!(read_line(&mut r, &mut line), Ok(0) | Err(_)) {
                 if shared.closing.load(Ordering::SeqCst) {
                     return;
                 }
@@ -254,7 +260,9 @@ fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
             }
             let Ok(mut v) = serde_json::from_str::<Value>(&line) else { continue };
             if let Some(s) = v.get_mut("screen") {
-                if let Ok(p) = serde_json::from_value::<Pushed>(s.take()) {
+                // a line still on its way for a block no longer watched would revive a stale copy
+                let pushed = serde_json::from_value::<Pushed>(s.take()).ok();
+                if let Some(p) = pushed.filter(|p| lock(&shared.watched).contains(&p.block_id)) {
                     let mut m = lock(&shared.model);
                     *m.screen_updates.entry(p.block_id.clone()).or_default() += 1;
                     let f = m.screens.entry(p.block_id).or_default();
@@ -282,10 +290,15 @@ fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
 fn reattach(shared: &Shared) -> Option<BufReader<UnixStream>> {
     lock(&shared.fetch).call("server.version", json!({})).ok()?;
     let (r, w) = attach(&shared.socket).ok()?;
+    // held while sending, as `Remote::watch` holds it, so a newer set can't be overtaken
+    let watched = lock(&shared.watched);
     *lock(&shared.events) = w;
+    if shared.closing.load(Ordering::SeqCst) {
+        let _ = lock(&shared.events).shutdown(std::net::Shutdown::Both); // dropped meanwhile
+        return None;
+    }
     lock(&shared.model).screens.clear(); // the new connection starts with whole screens
-    let ids = lock(&shared.watched).clone();
-    shared.send_watch(&ids).ok()?;
+    shared.send_watch(&watched).ok()?;
     Some(r)
 }
 
@@ -302,6 +315,9 @@ pub struct Remote {
 impl Remote {
     /// Attach to the server on `socket` and read its model; fails when nothing answers.
     pub fn connect(socket: &Path) -> Result<Remote, String> {
+        // Keys go to whatever answers, so only to a socket in a dir only we can use (the server
+        // binds only in one): a socket in an open dir could be anyone's.
+        leon_core::paths::ensure_private_dir(socket.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
         let no_server = |e: &dyn std::fmt::Display| format!("no leon server at {}: {e}", socket.display());
         let mut calls = Conn::open(socket, Some(CALL_TIMEOUT)).map_err(|e| no_server(&e))?;
         calls.call("server.version", json!({})).map_err(|e| no_server(&e.message))?;
@@ -311,8 +327,6 @@ impl Remote {
             socket: socket.to_path_buf(),
             model: Mutex::default(),
             fetch: Mutex::new(fetch),
-            version: Mutex::new(0),
-            changed: Condvar::new(),
             wakers: Mutex::default(),
             events: Mutex::new(events),
             watched: Mutex::default(),
@@ -333,9 +347,18 @@ impl Remote {
         lock(&self.shared.model)
     }
 
-    /// Call a method and wait for the reply (methods that answer at once; not `block.wait`).
+    /// Call a method and wait for the reply (methods that answer at once; not `block.wait`). A
+    /// connection that failed (the server closed it, a reply never came) is replaced for the next
+    /// call; this one is not sent again, since it may have been done.
     pub fn call(&self, method: &str, params: Value) -> Result<Value, ApiError> {
-        lock(&self.calls).call(method, params)
+        let mut c = lock(&self.calls);
+        let r = c.call(method, params);
+        if r.as_ref().is_err_and(|e| e.code == "unreachable") {
+            if let Ok(fresh) = Conn::open(&self.shared.socket, Some(CALL_TIMEOUT)) {
+                *c = fresh;
+            }
+        }
+        r
     }
 
     /// Call a method that changes the model, then refetch it, so what the app shows next
@@ -344,11 +367,6 @@ impl Remote {
         let r = self.call(method, params);
         let _ = self.shared.refresh();
         r
-    }
-
-    /// Refetch the model now.
-    pub fn refresh(&self) {
-        let _ = self.shared.refresh();
     }
 
     /// Run a method on a connection of its own without waiting: config actions and key bindings
@@ -389,13 +407,19 @@ impl Remote {
         }
     }
 
-    /// Have the server push these blocks' screens (and stop the others').
+    /// Have the server push these blocks' screens (and stop the others'). The copies of the
+    /// others' screens go too: they would go stale, and `fit` must not trust them; the server
+    /// sends a whole screen when one is watched again.
     pub fn watch(&self, ids: Vec<String>) {
         let mut watched = lock(&self.shared.watched);
         if *watched != ids {
             if let Err(e) = self.shared.send_watch(&ids) {
                 eprintln!("leon: can't watch the panes: {e}");
             }
+            let mut m = self.model();
+            m.screens.retain(|id, _| ids.contains(id));
+            m.screen_updates.retain(|id, _| ids.contains(id));
+            drop(m);
             *watched = ids;
         }
     }
@@ -408,17 +432,6 @@ impl Remote {
     /// Run `f` (on the reader thread) after every change to the model.
     pub fn on_change(&self, f: impl Fn() + Send + 'static) {
         lock(&self.shared.wakers).push(Box::new(f));
-    }
-
-    /// Changes so far.
-    pub fn version(&self) -> u64 {
-        *lock(&self.shared.version)
-    }
-
-    /// Wait until the version passes `seen` or `timeout` passes; returns the version.
-    pub fn wait_change(&self, seen: u64, timeout: Duration) -> u64 {
-        let v = lock(&self.shared.version);
-        *self.shared.changed.wait_timeout_while(v, timeout, |v| *v <= seen).unwrap_or_else(|e| e.into_inner()).0
     }
 }
 

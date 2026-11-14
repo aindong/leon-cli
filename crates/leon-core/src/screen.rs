@@ -14,6 +14,7 @@ use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::terminal::MAX_SIZE;
 use crate::theme::{indexed, mix, Theme};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -139,7 +140,9 @@ pub fn diff(old: Option<&Frame>, new: &Frame) -> Option<Update> {
 /// Apply `u` to `frame`. Rows outside the screen are ignored, so a bad update can't grow it.
 pub fn apply(frame: &mut Frame, u: Update) {
     if u.full {
-        *frame = Frame { lines: u.lines, cols: u.cols, rows: vec![Vec::new(); u.lines], ..Frame::default() };
+        // no larger than a terminal can be, whatever the line said
+        let (lines, cols) = (u.lines.min(MAX_SIZE.0 as usize), u.cols.min(MAX_SIZE.1 as usize));
+        *frame = Frame { lines, cols, rows: vec![Vec::new(); lines], ..Frame::default() };
     }
     let rows: Vec<Row> = u.rows.into_iter().filter(|r| r.line < frame.lines).collect();
     frame.backgrounds.retain(|b| !rows.iter().any(|r| r.line == b.line));

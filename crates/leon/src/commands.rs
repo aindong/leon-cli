@@ -206,9 +206,12 @@ fn api(c: &mut Client, cli: &Cli, cmd: &ApiCmd) -> Result<(), Fail> {
 /// A running server (perhaps autostarted on demand) is told to stay up; otherwise one starts,
 /// detached and persistent, unless `may_start` is false.
 fn start_server(socket: &std::path::Path, restore: bool, may_start: bool) -> Result<(), Fail> {
-    match Client::connect(socket) {
-        Ok(mut c) => c.call("server.persist", json!({})).map(|_| ()),
-        Err(_) if may_start => spawn_server(socket, false, restore),
+    // an idle autostarted server can accept and then exit: then start a fresh one
+    let persisted = Client::connect(socket).map(|mut c| c.call("server.persist", json!({})));
+    match persisted {
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(Fail::Unreachable(_))) | Err(_) if may_start => spawn_server(socket, false, restore),
+        Ok(Err(f)) => Err(f),
         Err(_) => Err(Fail::Unreachable(format!("no leon server at {}", socket.display()))),
     }
 }

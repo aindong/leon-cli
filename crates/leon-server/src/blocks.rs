@@ -194,6 +194,9 @@ pub enum InputEvent {
     Key { key: String },
     /// The user arrived at the block: its `done` and `error` status records are cleared (reason `seen`).
     Focus,
+    /// Paste text: line breaks become Enter, and if the program asked for bracketed paste the text
+    /// is wrapped in its markers (with ESC and C1 controls removed), by the mode it has now.
+    Paste { data: String },
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -256,6 +259,7 @@ pub fn add(r: &mut Registry) {
         match p.event {
             InputEvent::Key { key } => t.key(&key).map_err(ApiError::bad_request)?,
             InputEvent::Focus => t.acknowledge(), // the state lock is free here; the notice takes it
+            InputEvent::Paste { data } => t.paste(&data).map_err(|e| ApiError::new(500, "io", e.to_string()))?,
         }
         Ok(Empty {})
     });

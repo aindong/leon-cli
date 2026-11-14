@@ -203,11 +203,18 @@ impl Workspace {
     }
 
     pub(super) fn paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
-        let (Some((sid, id, f)), Some(text)) = (self.target_screen(), cx.read_from_clipboard().and_then(|c| c.text()))
-        else {
+        let (Some((sid, id, _)), Some(text)) = (self.target(), cx.read_from_clipboard().and_then(|c| c.text())) else {
             return;
         };
-        self.app.write(&sid, &id, &crate::input::paste_bytes(&text, f.bracketed_paste));
+        if text.len() > MAX_PASTE {
+            eprintln!("leon: not pasting {} bytes: at most {MAX_PASTE} go in one paste", text.len());
+            return;
+        }
+        // the server wraps it by the program's mode now; the app's copy of the screen may be older
+        let event = json!({ "session_id": sid, "block_id": id, "event": { "type": "paste", "data": text } });
+        if let Err(e) = self.app.call("block.event", event) {
+            eprintln!("leon: the paste failed: {}", e.message);
+        }
     }
 
     /// Ask once, naming how many sessions end; on yes, stop the server (it saves, then every

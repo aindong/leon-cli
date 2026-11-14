@@ -42,7 +42,10 @@ pub struct Client {
 }
 
 impl Client {
+    /// Connect, but only to a socket in a private dir (the server binds only in one): a socket in a
+    /// dir others can write to could be anyone's, and the app types into what answers.
     pub fn connect(socket: &Path) -> std::io::Result<Self> {
+        leon_core::paths::ensure_private_dir(socket.parent().unwrap_or(Path::new(".")))?;
         Ok(Client { reader: BufReader::new(UnixStream::connect(socket)?), next_id: 1, events: VecDeque::new() })
     }
 

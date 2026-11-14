@@ -3116,7 +3116,6 @@ dependencies = [
  "leon-core",
  "leon-lua",
  "leon-server",
- "libc",
  "serde",
  "serde_json",
  "tempfile",

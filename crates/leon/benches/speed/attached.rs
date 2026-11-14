@@ -4,6 +4,7 @@
 //! at most 1.5x the in-process time.
 
 use std::path::Path;
+use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use leon_app::embedded;
@@ -37,32 +38,28 @@ fn session(r: &Remote, command: &str) -> (String, String) {
     (s("session_id"), s("block_id"))
 }
 
-/// Wait (on the client's own change signal) until block `id`'s screen satisfies `pred`.
-fn until_screen(r: &Remote, id: &str, what: &str, pred: impl Fn(&str) -> bool) {
+/// Wait until block `id`'s screen satisfies `pred`, woken the way the app is (`on_change`).
+fn until_screen(r: &Remote, changed: &Receiver<()>, id: &str, what: &str, pred: impl Fn(&str) -> bool) {
     let end = Instant::now() + Duration::from_secs(30);
-    let mut seen = r.version();
-    loop {
-        if r.model().screens.get(id).is_some_and(|f| pred(&f.text())) {
-            return;
-        }
+    while !r.model().screens.get(id).is_some_and(|f| pred(&f.text())) {
         assert!(Instant::now() < end, "timed out waiting for {what}");
-        seen = r.wait_change(seen, Duration::from_millis(100));
+        let _ = changed.recv_timeout(Duration::from_millis(100));
     }
 }
 
 /// Type one `x` at a time (`KEY_GAP` apart) into a raw-mode echo program and time until the
 /// client has applied the pushed screen that shows it.
-fn key_latency(r: &Remote, n: usize) -> (f64, f64) {
+fn key_latency(r: &Remote, changed: &Receiver<()>, n: usize) -> (f64, f64) {
     assert!(n <= 1500, "the 24×80 screen holds about 1900 echoes");
     let (sid, bid) = session(r, "stty raw echo; echo READY; exec cat >/dev/null");
     r.watch(vec![bid.clone()]);
-    until_screen(r, &bid, "the raw-mode echo program", |t| t.contains("READY"));
+    until_screen(r, changed, &bid, "the raw-mode echo program", |t| t.contains("READY"));
     let times = (1..=n)
         .map(|i| {
             std::thread::sleep(KEY_GAP);
             let t = Instant::now();
             r.write(&sid, &bid, b"x");
-            until_screen(r, &bid, "an echo", |text| text.matches('x').count() == i);
+            until_screen(r, changed, &bid, "an echo", |text| text.matches('x').count() == i);
             t.elapsed()
         })
         .collect();
@@ -74,14 +71,14 @@ fn key_latency(r: &Remote, n: usize) -> (f64, f64) {
 }
 
 /// `seq 1 200000` from the go keystroke until the attached client's screen shows its end.
-fn seq_attached(r: &Remote) -> f64 {
+fn seq_attached(r: &Remote, changed: &Receiver<()>) -> f64 {
     let (sid, bid) = session(r, SEQ);
     r.resize(&sid, &bid, SIZE.0, SIZE.1);
     r.watch(vec![bid.clone()]);
-    until_screen(r, &bid, "the sized screen", |t| t.lines().count() == SIZE.0 as usize);
+    until_screen(r, changed, &bid, "the sized screen", |t| t.lines().count() == SIZE.0 as usize);
     let t = Instant::now();
     r.write(&sid, &bid, b"\r");
-    until_screen(r, &bid, "SEQ-END", |text| text.contains("SEQ-END"));
+    until_screen(r, changed, &bid, "SEQ-END", |text| text.contains("SEQ-END"));
     let ms = t.elapsed().as_secs_f64() * 1e3;
     r.watch(vec![]);
     r.call("session.destroy", json!({ "session_id": sid })).unwrap();
@@ -124,12 +121,16 @@ fn median(mut v: Vec<f64>) -> f64 {
 
 pub fn run(socket: &Path, dir: &Path, samples: usize) -> Results {
     let r = Remote::connect(socket).expect("the bench attaches");
-    let key = key_latency(&r, samples.min(1500));
+    let (tx, changed) = mpsc::channel();
+    r.on_change(move || {
+        let _ = tx.send(());
+    });
+    let key = key_latency(&r, &changed, samples.min(1500));
     // alternate the two paths, so the machine's load hits both alike
     let (mut inproc, mut attached) = (Vec::new(), Vec::new());
     for _ in 0..SEQ_RUNS {
         inproc.push(seq_in_process(dir));
-        attached.push(seq_attached(&r));
+        attached.push(seq_attached(&r, &changed));
     }
     let (seq_in_process, seq_attached) = (median(inproc.clone()), median(attached.clone()));
     println!("leon seq 1 200000 in-process (8 ms poll): median={seq_in_process:.0} ms all={inproc:.0?}");

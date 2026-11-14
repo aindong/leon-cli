@@ -68,6 +68,9 @@ const DIVIDER_GRAB: f32 = 3.;
 const POLL: Duration = Duration::from_millis(8);
 /// The spinner's frame time: at most 8 redraws a second for it.
 const SPIN: Duration = Duration::from_millis(125);
+/// The largest paste sent: one request line is at most 1 MiB (`serve::MAX_LINE`), and JSON can
+/// double a text's size.
+const MAX_PASTE: usize = 400 << 10;
 /// How often the app asks the server for its keymap (a reload elsewhere shows up this late).
 const KEYMAP_POLL: Duration = Duration::from_secs(1);
 
@@ -264,9 +267,11 @@ impl Workspace {
         }
         let focus = cx.focus_handle();
         window.focus(&focus);
-        // the reader thread wakes the poll at once; one pending wake is enough
-        let (wake, mut woken) = futures::channel::mpsc::channel::<()>(1);
-        app.on_change(move || drop(wake.clone().try_send(())));
+        // the reader thread wakes the poll at once; one pending wake is enough (one sender, so the
+        // channel's bound holds: each clone would bring a slot of its own)
+        let (wake, mut woken) = futures::channel::mpsc::channel::<()>(0);
+        let wake = Mutex::new(wake);
+        app.on_change(move || drop(wake.lock().unwrap_or_else(|e| e.into_inner()).try_send(())));
         let poll = cx.spawn(async move |this, cx| loop {
             let timer = cx.background_executor().timer(POLL);
             futures::future::select(timer, woken.next()).await;
@@ -332,6 +337,13 @@ impl Workspace {
         let m = self.app.model();
         let s = m.session(self.session_id.as_deref()?)?;
         s.windows.get(s.active).cloned()
+    }
+
+    /// The selected session's windows in tab order, and which is active.
+    pub fn windows(&self) -> Option<(Vec<leon_core::Window>, usize)> {
+        let m = self.app.model();
+        let s = m.session(self.session_id.as_deref()?)?;
+        Some((s.windows.clone(), s.active))
     }
 
     /// The text of a block's screen as the app last received it (None before any screen came).

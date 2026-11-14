@@ -324,6 +324,12 @@ impl Terminal {
         gone.into_iter().for_each(|c| (self.notify)(Notice::ProgramStatus(c)));
     }
 
+    /// Paste `text` the way the program asked for it now (`keys::paste_bytes`).
+    pub fn paste(&self, text: &str) -> io::Result<()> {
+        let bracketed = lock(&self.term).mode().contains(TermMode::BRACKETED_PASTE);
+        self.write(&crate::keys::paste_bytes(text, bracketed))
+    }
+
     /// Press one key given in binding syntax (`enter`, `ctrl+c`, `up`).
     pub fn key(&self, key: &str) -> Result<(), String> {
         let app_cursor = lock(&self.term).mode().contains(TermMode::APP_CURSOR);
