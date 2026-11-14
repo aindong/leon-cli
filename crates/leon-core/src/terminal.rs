@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::fd::FromRawFd;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -41,7 +42,7 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 /// Sends the emulator's answers to terminal queries (cursor position, device attributes) back to the program.
-struct Replies(Writer);
+pub struct Replies(Writer);
 
 impl EventListener for Replies {
     fn send_event(&self, event: Event) {
@@ -51,17 +52,20 @@ impl EventListener for Replies {
     }
 }
 
-struct Size;
+struct Size {
+    rows: u16,
+    cols: u16,
+}
 
 impl Dimensions for Size {
     fn total_lines(&self) -> usize {
-        ROWS.into()
+        self.rows.into()
     }
     fn screen_lines(&self) -> usize {
-        ROWS.into()
+        self.rows.into()
     }
     fn columns(&self) -> usize {
-        COLS.into()
+        self.cols.into()
     }
 }
 
@@ -72,6 +76,8 @@ pub struct Terminal {
     pid: i32,
     /// Set (under its lock) once the program has exited and before it is reaped.
     exited: Arc<Mutex<bool>>,
+    /// Bumped whenever the screen may have changed, so a renderer can skip unchanged frames.
+    generation: Arc<AtomicU64>,
     /// The argv that runs (the login shell's path when `Spec::command` was empty).
     pub command: Vec<String>,
 }
@@ -122,10 +128,12 @@ impl Terminal {
         // Ends once every sender is gone, or when the PTY closes.
         std::thread::spawn(move || input.iter().try_for_each(|data| pty_in.write_all(&data)));
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
-        let term = Arc::new(Mutex::new(Term::new(config, &Size, Replies(writer.clone()))));
+        let term = Arc::new(Mutex::new(Term::new(config, &Size { rows: ROWS, cols: COLS }, Replies(writer.clone()))));
 
         let screen = term.clone();
-        std::thread::spawn(move || read_loop(reader, &screen));
+        let generation = Arc::new(AtomicU64::new(0));
+        let changes = generation.clone();
+        std::thread::spawn(move || read_loop(reader, &screen, &changes));
         let exited = Arc::new(Mutex::new(false));
         let done = exited.clone();
         std::thread::spawn(move || {
@@ -141,7 +149,7 @@ impl Terminal {
             drop(child); // reaped above; dropping std's Child neither waits nor kills
             on_exit(status);
         });
-        Ok(Terminal { term, writer, master: Mutex::new(pair.master), pid, exited, command })
+        Ok(Terminal { term, writer, master: Mutex::new(pair.master), pid, exited, generation, command })
     }
 
     pub fn pid(&self) -> i32 {
@@ -176,8 +184,31 @@ impl Terminal {
         lines[..keep].join("\n")
     }
 
+    /// (rows, cols).
     pub fn size(&self) -> (u16, u16) {
-        (ROWS, COLS)
+        let term = lock(&self.term);
+        (term.screen_lines() as u16, term.columns() as u16)
+    }
+
+    /// Resize the grid and the PTY (which signals SIGWINCH to the program). Both are at least 1.
+    pub fn resize(&self, rows: u16, cols: u16) -> io::Result<()> {
+        let (rows, cols) = (rows.max(1), cols.max(1));
+        let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
+        lock(&self.master).resize(size).map_err(pty)?;
+        lock(&self.term).resize(Size { rows, cols });
+        self.generation.fetch_add(1, Ordering::Release);
+        Ok(())
+    }
+
+    /// Changes so far; a renderer redraws when this moves.
+    pub fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
+    }
+
+    /// Read the emulator's state (grid, cursor, modes) under its lock. Keep `f` short: the
+    /// reader thread waits for it.
+    pub fn with_term<R>(&self, f: impl FnOnce(&Term<Replies>) -> R) -> R {
+        f(&lock(&self.term))
     }
 }
 
@@ -235,14 +266,17 @@ impl Drop for Terminal {
     }
 }
 
-fn read_loop(mut reader: Box<dyn Read + Send>, term: &Mutex<Term<Replies>>) {
+fn read_loop(mut reader: Box<dyn Read + Send>, term: &Mutex<Term<Replies>>, changes: &AtomicU64) {
     let mut parser: Processor = Processor::new();
     let mut buf = [0u8; 8192];
     loop {
         match reader.read(&mut buf) {
             // macOS reports a closed PTY as EIO rather than EOF.
             Ok(0) | Err(_) => return,
-            Ok(n) => parser.advance(&mut *lock(term), &buf[..n]),
+            Ok(n) => {
+                parser.advance(&mut *lock(term), &buf[..n]);
+                changes.fetch_add(1, Ordering::Release);
+            }
         }
     }
 }

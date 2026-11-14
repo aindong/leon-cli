@@ -122,6 +122,13 @@ impl State {
         Ok(())
     }
 
+    /// Make a window the session's active tab.
+    pub fn focus_window(&mut self, session_id: &str, window_id: &str) -> Result<(), ApiError> {
+        let s = self.session_mut(session_id)?;
+        s.active = s.window_index(window_id)?;
+        Ok(())
+    }
+
     pub fn add_block(&mut self, session_id: &str, block: Block) -> Result<(), ApiError> {
         let s = self.session_mut(session_id)?;
         s.window_index(&block.window_id)?;

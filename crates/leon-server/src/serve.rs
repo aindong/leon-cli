@@ -60,9 +60,27 @@ impl Drop for Open {
     }
 }
 
+/// A bound socket, ready for `serve_on`.
+pub struct Listener {
+    listener: UnixListener,
+    /// The socket's (dev, inode), so shutdown only removes our own socket.
+    ours: (u64, u64),
+}
+
 /// Bind the socket (refusing if a live server already owns it), then serve `ctx` until stopped.
 pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
-    let (listener, ours) = bind(&opts.socket).await?;
+    serve_on(ctx, listen(&opts.socket).await?, opts).await
+}
+
+/// Bind the socket in its private runtime dir, refusing if a live server already owns it.
+pub async fn listen(socket: &Path) -> io::Result<Listener> {
+    let (listener, ours) = bind(socket).await?;
+    Ok(Listener { listener, ours })
+}
+
+/// Serve `ctx` on a bound socket until stopped (`server.stop`, or idle when autostarted).
+pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Result<()> {
+    let Listener { listener, ours } = bound;
     let shared = Arc::new(Shared {
         ctx,
         open: AtomicUsize::new(0),

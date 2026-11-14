@@ -49,6 +49,14 @@ pub struct Status {
     pub sessions: usize,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Stop {
+    /// Only stop when no session exists; otherwise fail with `conflict`.
+    #[serde(default)]
+    pub if_idle: bool,
+}
+
 #[derive(Serialize, JsonSchema)]
 pub struct Version {
     pub version: String,
@@ -219,7 +227,12 @@ pub fn registry() -> Registry {
         Ok(Version { version: ctx.info.version.into() })
     });
     // The socket loop stops the server once this reply is written (serve.rs).
-    r.add("server.stop", "Stop the server after replying; every session ends.", |_, _: NoParams| Ok(Empty {}));
+    r.add("server.stop", "Stop the server after replying; every session ends.", |ctx, p: Stop| {
+        if p.if_idle && !ctx.state().sessions.is_empty() {
+            return Err(ApiError::new(409, "conflict", "sessions exist; not stopping"));
+        }
+        Ok(Empty {})
+    });
     r.add("session.list", "Every session in order, with its label and window count.", |ctx, _: NoParams| {
         Ok(SessionList {
             sessions: ctx
@@ -269,6 +282,10 @@ pub fn registry() -> Registry {
     );
     r.add("session.close_window", "Close a window; closing the last one destroys the session.", |ctx, p: WindowRef| {
         ctx.state().close_window(&p.session_id, &p.window_id)?;
+        Ok(Empty {})
+    });
+    r.add("session.focus_window", "Make a window the session's active tab.", |ctx, p: WindowRef| {
+        ctx.state().focus_window(&p.session_id, &p.window_id)?;
         Ok(Empty {})
     });
     r.add("session.set_window_label", "Rename a window.", |ctx, p: SetWindowLabel| {

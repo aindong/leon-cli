@@ -24,7 +24,8 @@ fn bg_at(f: &Frame, line: usize, col: usize) -> Option<u32> {
 
 #[test]
 fn styles_and_colors() {
-    let t = term(40, 3, b"\x1b[1;31mR\x1b[0m \x1b[3;4mI\x1b[0m \x1b[7mV\x1b[0m \x1b[38;2;1;2;3mT\x1b[48;5;196mB\x1b[0m");
+    let t =
+        term(40, 3, b"\x1b[1;31mR\x1b[0m \x1b[3;4mI\x1b[0m \x1b[7mV\x1b[0m \x1b[38;2;1;2;3mT\x1b[48;5;196mB\x1b[0m");
     let f = frame(&t, &DARK);
     let r = span(&f, 0, "R");
     assert!(r.bold && !r.italic && !r.underline);
