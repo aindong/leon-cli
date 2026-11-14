@@ -152,9 +152,11 @@ fn spawn(lua: &Lua, argv: Value, opts: Option<&Table>, start: bool) -> mlua::Res
     });
     let mut child = cmd.spawn().map_err(|e| bad(format!("leon.exec: {prog}: {e}")))?;
     let mut pipe = child.stdin.take();
-    if let (Value::String(s), Some(mut w)) = (&stdin, pipe.take()) {
-        let data = s.as_bytes().to_vec();
-        std::thread::spawn(move || w.write_all(&data));
+    if let Value::String(s) = &stdin {
+        if let Some(mut w) = pipe.take() {
+            let data = s.as_bytes().to_vec();
+            std::thread::spawn(move || w.write_all(&data));
+        }
     }
     let p = Arc::new(Proc {
         pid: child.id() as i32,
