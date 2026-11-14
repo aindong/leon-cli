@@ -120,7 +120,9 @@ A pane whose program reports its status (OSC 7501, as agents do) shows a spinner
 it is blocked, ✓ when done or ✗ on an error, on its tab and in its pane header (a collapsed
 session's label shows its most urgent one); done and error clear when you go to the pane. Pane
 headers name the program and where it is, and hold split, zoom and close buttons; "Show or Hide
-Pane Headers" in the palette turns them off. Drag the sidebar's edge to resize it.
+Pane Headers" in the palette turns them off. Every button names its action and shortcut on hover.
+Drag the sidebar's edge to resize it. The window opens at most of the screen the first time, then
+where you left it.
 
 Tabs live in one place. ⌘⇧S moves them from the sidebar to the titlebar, beside the session's name,
 and the sidebar then lists only sessions; the app remembers the choice:
