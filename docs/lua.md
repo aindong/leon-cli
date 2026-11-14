@@ -376,3 +376,8 @@ print("timed out:", slow.timed_out)
 `io.popen`, `os.execute` and `os.exit` are not available (use `leon.exec`), nor are C modules or
 precompiled bytecode. On the server, a config load gets 5 seconds and an action 30 seconds.
 `leon.exec` runs each program in its own process group, and a timeout signals the whole group.
+
+## Project sessions
+
+See [Projects and git worktrees](recipes.md) for an example action and `leon do` script that
+reuse a session per folder, with optional worktree sessions and an ignored-file setup hook.

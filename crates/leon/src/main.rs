@@ -79,6 +79,9 @@ pub enum Cmd {
     New {
         /// Name for the session.
         label: Option<String>,
+        /// First terminal's directory; relative to the caller (default: server's home).
+        #[arg(short = 'c', long, value_name = "DIR")]
+        cwd: Option<PathBuf>,
     },
     /// List sessions.
     Ls,
@@ -422,6 +425,9 @@ pub enum SessionCmd {
     New {
         /// Name for the session.
         label: Option<String>,
+        /// First terminal's directory; relative to the caller (default: server's home).
+        #[arg(short = 'c', long, value_name = "DIR")]
+        cwd: Option<PathBuf>,
     },
     /// List sessions.
     Ls,
