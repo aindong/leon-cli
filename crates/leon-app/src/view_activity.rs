@@ -113,6 +113,14 @@ impl Workspace {
                 Some(c) => format!("{} · {c}", attention::state_text(r.status)),
                 None => attention::state_text(r.status),
             };
+            // shortcut: a tab title holding " › " splits in the wrong place; display only
+            let (place, tab) =
+                r.place.rsplit_once(" › ").map_or((String::new(), r.place.clone()), |(p, t)| (p.into(), t.into()));
+            // the progress is in the words below, so the mark stays one icon wide
+            let mark = match r.status {
+                Indicator::Working { .. } => Indicator::Working { progress: None },
+                other => other,
+            };
             let (host, sid, block) = (r.host, r.session_id.clone(), r.block_id.clone());
             list = list.child(
                 div()
@@ -120,28 +128,29 @@ impl Workspace {
                     .debug_selector(move || sel(format!("activity-row-{i}")))
                     .flex()
                     .flex_none()
-                    .items_center()
+                    .items_start()
                     .gap(px(8.))
                     .px(px(10.))
                     .py(px(5.))
                     .rounded(px(6.))
                     .cursor_pointer()
                     .hover(|d| d.bg(rgb(t.hover)))
-                    .child(status_mark(r.status, frame))
+                    .child(div().pt(px(2.)).child(status_mark(mark, frame)))
                     .child(
                         div()
                             .flex_1()
                             .min_w(px(0.))
                             .flex()
                             .flex_col()
-                            .child(div().line_clamp(1).text_ellipsis().text_color(rgb(t.title)).child(r.place))
+                            .child(div().line_clamp(1).text_ellipsis().text_color(rgb(t.title)).child(tab))
+                            .child(div().line_clamp(2).text_ellipsis().text_size(px(SECONDARY_TEXT)).child(what))
                             .child(
                                 div()
                                     .line_clamp(1)
                                     .text_ellipsis()
                                     .text_size(px(SECONDARY_TEXT))
                                     .text_color(rgb(t.muted))
-                                    .child(what),
+                                    .child(place),
                             ),
                     )
                     .child(

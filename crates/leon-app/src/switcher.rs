@@ -72,7 +72,8 @@ pub fn tabs(machines: &[(usize, &str, &Model)]) -> (Vec<Row>, Vec<Row>) {
                     status: status::aggregate(s.blocks.iter().filter(|b| b.window_id == w.id).map(shows)),
                 };
                 for b in s.blocks.iter().filter(|b| b.window_id == w.id) {
-                    let Some(title) = &b.title else { continue };
+                    // a block named like its tab adds nothing to the tab's row
+                    let Some(title) = b.title.as_ref().filter(|t| **t != tab.tab) else { continue };
                     let block_id = Some(b.id.clone());
                     blocks.push(Row { block_id, block: Some(title.clone()), status: shows(b), ..tab.clone() });
                 }

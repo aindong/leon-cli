@@ -99,7 +99,8 @@ fn rows_come_from_every_host_with_each_tabs_status() {
     assert_eq!(tab_rows[2].status, Some(Indicator::Blocked(Some(Kind::Question))));
     assert_eq!(status::glyph(tab_rows[2].status.unwrap(), 0), "?", "the blocked glyph shows its kind");
     assert_eq!(tab_rows[1].status, Some(Indicator::Done));
-    assert_eq!(block_rows.len(), 3, "a block row per block, shown only when its title matches");
+    // vim and claude name their own tabs, so a row for the block would repeat the tab's row
+    assert_eq!(block_rows.len(), 1, "a block row only where the block's title isn't the tab's");
     let rows = rank(&tab_rows, &block_rows, "tail", &[]);
     assert!(
         rows.iter().any(|r| r.block.as_deref() == Some("tail")),
