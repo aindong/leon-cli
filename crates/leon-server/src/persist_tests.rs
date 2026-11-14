@@ -97,3 +97,20 @@ fn moving_aside_never_replaces_an_earlier_bad_file() {
     kept.sort();
     assert_eq!(kept, [b"first".to_vec(), b"second".to_vec()], "both kept, the file itself gone");
 }
+
+#[test]
+fn ratios_come_back_bit_for_bit() {
+    // A ratio one ULP off could become 1.0 and fail check_ratio, which would set the whole file aside.
+    let mut x: u64 = 0x9e37_79b9_7f4a_7c15;
+    let mut ratios = vec![0.3, 0.7, 1e-300, f64::MIN_POSITIVE, 0.999_999_999_999_999_9, 1.0 - f64::EPSILON / 2.0];
+    for _ in 0..100_000 {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        ratios.push((x >> 11) as f64 / (1u64 << 53) as f64);
+    }
+    for r in ratios.into_iter().filter(|r| *r > 0.0 && *r < 1.0) {
+        let back: f64 = serde_json::from_str(&serde_json::to_string(&r).unwrap()).unwrap();
+        assert_eq!(back.to_bits(), r.to_bits(), "{r:e} came back as {back:e}");
+    }
+}

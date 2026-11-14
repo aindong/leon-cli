@@ -615,6 +615,32 @@ mod tests {
     }
 
     #[test]
+    fn the_exit_is_reported_after_the_last_output_is_on_the_screen() {
+        // Small enough to sit in the read queue whole while the parser can't run.
+        let script = "head -c 20000 /dev/zero | tr '\\0' y; printf END";
+        let spec = Spec { command: vec!["sh".into(), "-c".into(), script.into()], cwd: None, env: vec![] };
+        let (tx, exits) = mpsc::channel();
+        let tx = Mutex::new(tx);
+        let t = Terminal::spawn(spec, move |n| {
+            if let Notice::Exited(_) = n {
+                lock(&tx).send(()).unwrap();
+            }
+        })
+        .unwrap();
+        let parsing = lock(&t.term); // the parser blocks; the reader goes on queueing
+        let end = std::time::Instant::now() + Duration::from_secs(10);
+        while !t.has_exited() {
+            assert!(std::time::Instant::now() < end, "the program didn't exit");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(exits.try_recv().is_err(), "the exit was reported while its output was still unparsed");
+        drop(parsing);
+        exits.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(t.text(true).ends_with("END"), "the last output is on the screen by the exit report");
+    }
+
+    #[test]
     fn dropping_hangs_up_the_program() {
         let (t, rx) = spawn(&["sleep", "300"]);
         drop(t);

@@ -19,7 +19,8 @@ mlua = { version = "0.12", features = ["lua51", "vendored", "serialize"] }
 portable-pty = "0.9"
 schemars = "1.2"
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+# float_roundtrip: saved split ratios must parse back bit for bit (persist.rs).
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
