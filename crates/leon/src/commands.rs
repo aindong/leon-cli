@@ -11,15 +11,18 @@ use crate::{ApiCmd, Cli, Cmd, ConfigCmd, ServerCmd, SessionCmd, WindowCmd};
 
 pub fn run(cli: &Cli) -> Result<(), Fail> {
     let socket = socket_path();
-    if let Cmd::Server(cmd) = &cli.cmd {
+    if let Cmd::App = cli.cmd() {
+        return leon_app::run().map_err(Fail::Other);
+    }
+    if let Cmd::Server(cmd) = cli.cmd() {
         return server(cli, cmd);
     }
-    if let Cmd::Config(ConfigCmd::Check { path }) = &cli.cmd {
+    if let Cmd::Config(ConfigCmd::Check { path }) = cli.cmd() {
         return config_check(path.clone());
     }
     let mut c = connect(&socket, cli.autostart)?;
-    match &cli.cmd {
-        Cmd::Server(_) | Cmd::Config(_) => unreachable!(),
+    match cli.cmd() {
+        Cmd::App | Cmd::Server(_) | Cmd::Config(_) => unreachable!(),
         Cmd::New { label } | Cmd::Session(SessionCmd::New { label }) => {
             let r = c.call("session.create", json!({ "label": label }))?;
             println!("{}", r["session_id"].as_str().unwrap_or_default());

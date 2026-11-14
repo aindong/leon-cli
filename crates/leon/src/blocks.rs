@@ -11,7 +11,7 @@ use crate::commands::{label, pick_session, print_json, resolve};
 use crate::{BlockCmd, Cli, Cmd};
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
-    match &cli.cmd {
+    match cli.cmd() {
         Cmd::Run { label, keep_open, wait, cwd, command } => {
             let here = std::env::current_dir().map_err(|e| Fail::Other(format!("no current directory: {e}")))?;
             let cwd = here.join(cwd.as_deref().unwrap_or(".".as_ref()));

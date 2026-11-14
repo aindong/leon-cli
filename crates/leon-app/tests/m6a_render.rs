@@ -15,7 +15,10 @@ fn term(cols: usize, lines: usize, bytes: &[u8]) -> Term<VoidListener> {
 }
 
 fn span<'a>(f: &'a Frame, line: usize, text: &str) -> &'a Span {
-    f.rows[line].iter().find(|s| s.text == text).unwrap_or_else(|| panic!("no span {text:?} in {:?}", f.rows[line]))
+    f.rows[line]
+        .iter()
+        .find(|s| s.text.trim() == text || s.text.starts_with(text))
+        .unwrap_or_else(|| panic!("no span {text:?} in {:?}", f.rows[line]))
 }
 
 fn bg_at(f: &Frame, line: usize, col: usize) -> Option<u32> {
@@ -36,7 +39,7 @@ fn styles_and_colors() {
     let v = span(&f, 0, "V");
     assert_eq!(v.fg, DARK.bg, "inverse draws the text in the background color");
     assert_eq!(bg_at(&f, 0, 4), Some(DARK.fg), "on a foreground-colored cell");
-    assert_eq!(span(&f, 0, "T").fg, 0x010203);
+    assert_eq!(span(&f, 0, "T").fg, 0x010203, "backgrounds are separate rects, so `TB` may share a span");
     assert_eq!(bg_at(&f, 0, 7), Some(0xff0000), "palette 196");
     assert_eq!(bg_at(&f, 0, 6), None, "default background paints nothing");
     assert!(f.rows[1].is_empty() && f.rows[2].is_empty(), "blank lines make no spans");

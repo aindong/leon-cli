@@ -28,12 +28,22 @@ pub struct Cli {
     /// Target block: an ID, label, position or ID suffix [default: $LEON_BLOCK, else the active window's].
     #[arg(short = 'b', long = "block", global = true)]
     pub block: Option<String>,
+    /// [default: app]
     #[command(subcommand)]
-    pub cmd: Cmd,
+    pub cmd: Option<Cmd>,
+}
+
+impl Cli {
+    /// The command to run; with none, `leon` opens the app.
+    pub fn cmd(&self) -> &Cmd {
+        self.cmd.as_ref().unwrap_or(&Cmd::App)
+    }
 }
 
 #[derive(Subcommand)]
 pub enum Cmd {
+    /// Open the leon app; it runs the server in-process (also what `leon` alone does).
+    App,
     /// Run, start, stop or check the server.
     #[command(subcommand)]
     Server(ServerCmd),

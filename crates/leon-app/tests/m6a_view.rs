@@ -49,7 +49,7 @@ fn has_line(text: &str, line: &str) -> bool {
     text.lines().any(|l| l.trim() == line)
 }
 
-fn open(cx: &mut TestAppContext, app: &Rc<Embedded>) -> (Entity<Workspace>, &mut VisualTestContext) {
+fn open<'a>(cx: &'a mut TestAppContext, app: &Rc<Embedded>) -> (Entity<Workspace>, &'a mut VisualTestContext) {
     cx.update(view::init);
     let app = app.clone();
     let (ws, vcx) = cx.add_window_view(move |window, cx| Workspace::new(app, window, cx));
@@ -91,6 +91,8 @@ fn typing_and_paste_reach_the_shell(cx: &mut TestAppContext) {
     assert!(has_line(&text, "hi"), "{text}");
     cx.write_to_clipboard(ClipboardItem::new_string("echo pa\necho pb\n".into()));
     cx.simulate_keystrokes("cmd-v");
+    // A shell with bracketed paste (zsh) holds pasted lines until Enter; plain sh ran them already.
+    cx.simulate_keystrokes("enter");
     let text = wait_text(&t, |x| has_line(x, "pa") && has_line(x, "pb"));
     assert!(has_line(&text, "pa") && has_line(&text, "pb"), "{text}");
     cx.simulate_keystrokes("ctrl-c"); // reaches the shell, doesn't break anything
