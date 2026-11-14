@@ -65,10 +65,8 @@ fn sandbox(lua: &Lua, path: &Path) -> mlua::Result<()> {
     package.set("path", format!("{0}/?.lua;{0}/?/init.lua", dir.display()))?;
     package.set("cpath", "")?;
     lua.load(
-        r#"for _, name in ipairs({ "io.popen", "os.execute" }) do
-             local lib, fn = name:match("(%a+)%.(%a+)")
-             _G[lib][fn] = function() error(name .. " is not available in leon; use leon.exec", 2) end
-           end"#,
+        r#"io.popen = function() error("io.popen is not available in leon; use leon.exec", 2) end
+           os.execute = function() error("os.execute is not available in leon; use leon.exec", 2) end"#,
     )
     .set_name("=sandbox")
     .exec()

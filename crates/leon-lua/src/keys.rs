@@ -85,8 +85,9 @@ pub fn parse(s: &str) -> Result<KeySpec, String> {
     if s.is_empty() {
         return Err("empty key".into());
     }
+    // A prefix before `/` with no `+` or `>` is a mode name; otherwise the `/` is a key (`ctrl+/`).
     let (mode, rest) = match s.split_once('/') {
-        Some((m, r)) if !m.is_empty() && m.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') => {
+        Some((m, r)) if !m.is_empty() && !m.contains(['+', '>']) => {
             if !valid_mode(m) {
                 return Err(format!("bad mode name {m:?} in {s:?}: use [a-z0-9_-]"));
             }
@@ -122,11 +123,12 @@ pub fn parse(s: &str) -> Result<KeySpec, String> {
 }
 
 /// One word at `i`: `[…]`, a run of ASCII letters/digits, or any single other character.
+/// A `[` that ends the chord is the `[` key itself (`ctrl+[`, `ctrl+b>[`).
 fn word(cs: &[char], i: &mut usize) -> Option<String> {
     let start = *i;
     let c = *cs.get(start)?;
     *i += 1;
-    if c == '[' {
+    if c == '[' && !matches!(cs.get(*i), None | Some('>')) {
         match cs[start..].iter().position(|&c| c == ']') {
             Some(n) => *i = start + n + 1,
             None => *i = cs.len(),
@@ -140,7 +142,7 @@ fn word(cs: &[char], i: &mut usize) -> Option<String> {
 }
 
 fn parse_key(w: &str) -> Result<Key, String> {
-    if let Some(code) = w.strip_prefix('[') {
+    if let Some(code) = w.strip_prefix('[').filter(|c| !c.is_empty()) {
         return match code.strip_suffix(']') {
             Some(code) if !code.is_empty() && code.bytes().all(|b| b.is_ascii_alphanumeric()) => {
                 Ok(Key::Physical(code.to_string()))

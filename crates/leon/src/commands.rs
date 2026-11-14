@@ -84,13 +84,15 @@ fn config_check(path: Option<std::path::PathBuf>) -> Result<(), Fail> {
         n(cfg.modes.len(), "mode"),
         n(cfg.actions.len(), "action")
     );
-    for d in cfg.diagnostics.iter().chain(&cfg.logs) {
+    for d in &cfg.diagnostics {
         println!("{d}");
     }
-    let errors = cfg.diagnostics.iter().filter(|d| d.level == leon_lua::Level::Error).count();
-    match errors {
+    for l in &cfg.logs {
+        println!("{}: log.{}: {}", l.at, l.level.as_str(), l.message);
+    }
+    match cfg.diagnostics.iter().filter(|d| d.level == leon_lua::Level::Error).count() {
         0 => Ok(()),
-        n => Err(Fail::Other(format!("{n} error{} in {}", if n == 1 { "" } else { "s" }, path.display()))),
+        errors => Err(Fail::Other(format!("{} in {}", n(errors, "error"), path.display()))),
     }
 }
 

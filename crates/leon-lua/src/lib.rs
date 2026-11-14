@@ -87,15 +87,20 @@ pub struct Diagnostic {
     pub message: String,
 }
 
-impl fmt::Display for Diagnostic {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let level = match self.level {
+impl Level {
+    pub fn as_str(self) -> &'static str {
+        match self {
             Level::Debug => "debug",
             Level::Info => "info",
             Level::Warning => "warning",
             Level::Error => "error",
-        };
-        write!(f, "{}: {level}: {}", self.at, self.message)
+        }
+    }
+}
+
+impl fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}: {}", self.at, self.level.as_str(), self.message)
     }
 }
 
