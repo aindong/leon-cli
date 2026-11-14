@@ -5,7 +5,6 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::fd::FromRawFd;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -67,9 +66,10 @@ impl Dimensions for Size {
 pub struct Terminal {
     term: Arc<Mutex<Term<Replies>>>,
     writer: Writer,
-    _master: Mutex<Box<dyn MasterPty + Send>>,
+    master: Mutex<Box<dyn MasterPty + Send>>,
     pid: i32,
-    exited: Arc<AtomicBool>,
+    /// Set (under its lock) once the program has exited and before it is reaped.
+    exited: Arc<Mutex<bool>>,
     /// The argv that runs (the login shell's path when `Spec::command` was empty).
     pub command: Vec<String>,
 }
@@ -110,8 +110,8 @@ impl Terminal {
         // Write through our own dup of the master: portable-pty's writer types "\n" + EOF when dropped,
         // which would run whatever was half-typed in a shell as its block closes.
         let fd = pair.master.as_raw_fd().ok_or_else(|| io::Error::other("the PTY has no fd"))?;
-        // SAFETY: dup returns a new fd that we own and hand to File.
-        let dup = unsafe { libc::dup(fd) };
+        // SAFETY: returns a new close-on-exec fd that we own and hand to File.
+        let dup = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) };
         if dup < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -124,15 +124,22 @@ impl Terminal {
 
         let screen = term.clone();
         std::thread::spawn(move || read_loop(reader, &screen));
-        let exited = Arc::new(AtomicBool::new(false));
+        let exited = Arc::new(Mutex::new(false));
         let done = exited.clone();
         std::thread::spawn(move || {
-            let status = reap(pid);
+            wait_exit(pid);
+            let status = {
+                let mut done = lock(&done);
+                // The zombie still holds the group ID, so this reaches only what the program left behind.
+                // SAFETY: only sends a signal.
+                unsafe { libc::kill(-pid, libc::SIGHUP) };
+                *done = true; // under the lock, so Drop never signals a group ID that reaping freed
+                reap(pid)
+            };
             drop(child); // reaped above; dropping std's Child neither waits nor kills
-            done.store(true, Ordering::SeqCst);
             on_exit(status);
         });
-        Ok(Terminal { term, writer, _master: Mutex::new(pair.master), pid, exited, command })
+        Ok(Terminal { term, writer, master: Mutex::new(pair.master), pid, exited, command })
     }
 
     pub fn pid(&self) -> i32 {
@@ -173,20 +180,36 @@ impl Terminal {
 }
 
 impl Drop for Terminal {
-    /// Hang up the program's whole process group (portable-pty makes the child a session leader),
-    /// and kill it if it is still running after a grace period.
+    /// Hang up a still-running program: its process group (portable-pty makes the child a session
+    /// leader) and the terminal's foreground job (e.g. vim started from a shell), then kill the
+    /// group if it is still running after a grace period. An exited program's group was already
+    /// hung up when it exited, and its ID may belong to someone else by now, so it gets nothing.
     fn drop(&mut self) {
         let pid = self.pid;
         if pid <= 0 {
             return;
         }
-        // SAFETY: only sends signals. Once the group is empty its ID could be reused by another
-        // group leader, a window we accept (tmux makes the same trade).
-        unsafe { libc::kill(-pid, libc::SIGHUP) };
+        let fd = lock(&self.master).as_raw_fd();
         let exited = self.exited.clone();
+        {
+            let running = lock(&exited);
+            if *running {
+                return;
+            }
+            // SAFETY: only signals; the lock keeps the leader unreaped, so both IDs are still ours.
+            unsafe {
+                let fg = fd.map_or(-1, |fd| libc::tcgetpgrp(fd));
+                if fg > 0 && fg != pid {
+                    libc::kill(-fg, libc::SIGHUP);
+                }
+                libc::kill(-pid, libc::SIGHUP);
+            }
+        }
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(2));
-            if !exited.load(Ordering::SeqCst) {
+            let running = lock(&exited);
+            if !*running {
+                // SAFETY: as above, the held lock keeps the group ID ours.
                 unsafe { libc::kill(-pid, libc::SIGKILL) };
             }
         });
@@ -205,7 +228,19 @@ fn read_loop(mut reader: Box<dyn Read + Send>, term: &Mutex<Term<Replies>>) {
     }
 }
 
-/// Wait for `pid` and turn its wait status into a shell-style exit status.
+/// Block until `pid` exits, leaving it unreaped (a zombie keeps its process group ID taken).
+fn wait_exit(pid: i32) {
+    loop {
+        // SAFETY: waitid on our own child, writing into a local; WNOWAIT leaves it waitable.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        let r = unsafe { libc::waitid(libc::P_PID, pid as libc::id_t, &mut info, libc::WEXITED | libc::WNOWAIT) };
+        if r == 0 || io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+            return;
+        }
+    }
+}
+
+/// Reap `pid` and turn its wait status into a shell-style exit status.
 fn reap(pid: i32) -> i32 {
     let mut status = 0;
     loop {
