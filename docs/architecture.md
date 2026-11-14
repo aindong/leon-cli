@@ -44,8 +44,9 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   renders straight from the in-process grids. If a server with sessions already owns the socket,
   the app exits 1 and says to run `leon server stop`; an idle one (no sessions) is stopped with
   `server.stop {if_idle: true}` and replaced. Closing the window ends every program; `leon server
-  stop` from the CLI quits the app. The view polls each terminal's change counter (~8 ms) and
-  redraws only when something changed.
+  stop` from the CLI quits the app. The window shows the active tab's whole split tree; keys go to
+  the zoomed block, else the focused one. The view polls each visible pane's change counter and
+  each session's revision (~8 ms) and redraws only when something changed.
 - **Agent skill.** `leon skill show` prints a guide compiled into the binary. `skill setup` installs a
   SKILL.md stub (marked `<!-- leon-skill: … -->`) that tells the agent to run `leon skill show`, so
   upgrades reach agents without a reinstall, plus a matcher-less SessionStart hook running
