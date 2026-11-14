@@ -143,27 +143,36 @@ pub enum Cmd {
     },
     /// Float a block, create a floating terminal, or return one to the tiled tree.
     Float {
+        /// Open a new terminal instead of floating the selected block.
         #[arg(long, conflicts_with_all = ["unfloat", "block"])]
         new: bool,
+        /// Return the selected float or drawer to the tiled tree.
         #[arg(long, conflicts_with_all = ["new", "rect", "label"])]
         unfloat: bool,
+        /// Assign a label to the floated block.
         #[arg(long)]
         label: Option<String>,
+        /// Position and size as window fractions, default 0.1,0.1,0.8,0.8.
         #[arg(long, value_name = "X,Y,W,H")]
         rect: Option<String>,
+        /// Program and arguments for --new; omitted starts a login shell.
         #[arg(last = true, requires = "new")]
         command: Vec<String>,
     },
     /// Show or hide a labeled float or drawer; --create opens a scratch shell on first use.
     Toggle {
+        /// Exact, case-insensitive label of the float or drawer.
         label: String,
+        /// Create a bottom scratch-shell drawer if the label is absent.
         #[arg(long)]
         create: bool,
     },
     /// Pin a block to a side (left, right or bottom).
     Dock {
+        /// Window edge to pin the panel to.
         #[arg(value_parser = ["left", "right", "bottom"])]
         side: String,
+        /// Fraction of the window reserved for the panel, default 0.3.
         #[arg(long)]
         size: Option<f64>,
     },
