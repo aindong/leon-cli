@@ -31,9 +31,12 @@ fn the_link_is_private_and_not_tcp() {
     let dirs = link_dirs(&r);
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     assert_eq!(mode(&dirs[0]), 0o700);
-    let sockets: Vec<_> = std::fs::read_dir(&dirs[0]).unwrap().map(|e| e.unwrap().path()).collect();
-    assert_eq!(sockets.len(), 1, "{sockets:?}");
-    assert_eq!(mode(&sockets[0]), 0o600);
+    // the socket, and the lock the link holds while it lives
+    let mut names: Vec<_> = std::fs::read_dir(&dirs[0]).unwrap().map(|e| e.unwrap().file_name()).collect();
+    names.sort();
+    assert_eq!(names, ["lock", "s"], "{names:?}");
+    assert_eq!(mode(&dirs[0].join("s")), 0o600);
+    assert_eq!(mode(&dirs[0].join("lock")), 0o600);
     let pid = ev.child.id().to_string();
     let out = Command::new("lsof").args(["-a", "-p", &pid, "-i"]).output().unwrap();
     assert!(

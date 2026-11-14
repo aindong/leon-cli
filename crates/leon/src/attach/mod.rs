@@ -81,6 +81,9 @@ pub fn run(target: Option<&str>, prefix: Option<&str>, autostart: bool, server: 
             return Err(Fail::Other(format!("can't take the terminal: {e}")));
         }
     };
+    if let Some((_, link)) = &server.link {
+        link.never_prompt(); // the terminal is the TUI's now
+    }
     let woken = Arc::new(AtomicBool::new(false));
     let w = woken.clone();
     let wake = tx.clone();

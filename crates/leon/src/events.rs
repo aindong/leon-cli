@@ -30,11 +30,7 @@ pub fn run(mut c: Client, cli: &Cli, all: bool, server: &Server) -> Result<(), F
     let mut resume = snapshot["resume"].as_str().map(String::from);
     let mut seq = snapshot["seq"].as_u64().unwrap_or(0);
     let mut out = std::io::stdout().lock();
-    let first = if cli.json {
-        json!({ "snapshot": snapshot, "seq": snapshot["seq"] }).to_string()
-    } else {
-        format!("attached at seq {seq}")
-    };
+    let first = if cli.json { header(&snapshot) } else { format!("attached at seq {seq}") };
     // A closed stdout (`leon events | head`) ends the stream quietly.
     if writeln!(out, "{first}").is_err() {
         return Ok(());
@@ -50,7 +46,7 @@ pub fn run(mut c: Client, cli: &Cli, all: bool, server: &Server) -> Result<(), F
                 resume = snapshot["resume"].as_str().map(String::from);
                 seq = snapshot["seq"].as_u64().unwrap_or(0);
                 let text = match cli.json {
-                    true => json!({ "snapshot": snapshot, "seq": seq }).to_string(),
+                    true => header(&snapshot),
                     false => format!("re-attached at seq {seq}; events while the link was down are not shown"),
                 };
                 if writeln!(out, "{text}").is_err() {
@@ -72,6 +68,16 @@ pub fn run(mut c: Client, cli: &Cli, all: bool, server: &Server) -> Result<(), F
             return Ok(());
         }
     }
+}
+
+/// The `--json` snapshot line, without the resume token: it lets whoever reads the log take the
+/// stream over.
+fn header(snapshot: &Value) -> String {
+    let mut shown = snapshot.clone();
+    if let Some(o) = shown.as_object_mut() {
+        o.remove("resume");
+    }
+    json!({ "snapshot": shown, "seq": snapshot["seq"] }).to_string()
 }
 
 /// Get a dropped link back (backing off from 100 ms to 5 s) and resume after `seq`; when the

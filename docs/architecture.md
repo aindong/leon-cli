@@ -197,11 +197,14 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   `Link` (`leon-hosts`): a Unix socket in a fresh private dir, `link-XXXXXX/s` under the runtime
   dir (0700, socket 0600), served by threads in the client process. Each connection to it spawns
   `$LEON_SSH` (default `ssh`) as argv, never through a local shell:
-  `-T -o ServerAliveInterval=15 -o ServerAliveCountMax=3 [-p PORT] -- [USER@]HOST CMD`, and copies
-  bytes both ways. So every client that takes a socket path works unchanged over ssh: the CLI,
+  `-T -a -x -o ClearAllForwardings=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 [-p PORT]
+  -- [USER@]HOST CMD`, and copies bytes both ways, only for a peer of our uid (as the server checks). So every client that takes a socket path works unchanged over ssh: the CLI,
   `leon do` scripts, and `leon_app::remote::Remote` (`leon attach`, and the app in M16b). leon adds
-  only `-T` and the keepalives (a dead Wi-Fi link is noticed in about 45 s); everything else comes
-  from `~/.ssh/config`, and passwords stay between ssh and the terminal. CMD is one fixed string
+  only `-T`, no forwarding (no agent on the host, no port a config's `LocalForward` would bind) and
+  the keepalives (a dead Wi-Fi link is noticed in about 45 s); everything else comes from
+  `~/.ssh/config`, and passwords stay between ssh and the terminal. Once `leon attach` owns the
+  terminal it calls `Link::never_prompt`: later ssh runs get `-o BatchMode=yes`, so a reconnect
+  fails and retries instead of reading a password through the TUI's raw keys. CMD is one fixed string
   with nothing from the endpoint in it: `sh -c '…'` finds `leon` on PATH, else
   `$HOME/.local/bin/leon`, else exits 127, which the link reports as "install leon on HOST".
   There `leon server proxy` does what `leon server start` does (a persistent server, restoring
@@ -214,8 +217,9 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   `$LEON_STATE_DIR/hosts.json` (`{"version":1,"hosts":[{label, endpoints, icon}]}`, spec §2),
   written 0600 via a temp file and a rename, read only from a private dir and a regular file of
   ours, and each endpoint is parsed again when used. With `-H`, `LEON_SESSION`/`LEON_BLOCK` are
-  ignored. A killed client leaves its link dir; the next `Link::open` removes dirs whose socket
-  refuses connections. One ssh session per connection is the price of the simple design
+  ignored. A link flocks `lock` in its dir while it lives; a killed client leaves its dir, and the
+  next `Link::open` removes `link-*` dirs whose lock it can take (never by connecting: a live link
+  answers a connection by running ssh). One ssh session per connection is the price of the simple design
   (`leon attach` opens three); `ControlMaster auto` shares one login.
 - **Resume and reconnect.** `session.attach`/`session.attach_all` with `resumable: true` also
   return a `resume` token. Such a stream keeps the last 1 MiB of lines it wrote (taken off the

@@ -45,6 +45,14 @@ pub fn check_label(label: &str) -> Result<(), String> {
     }
 }
 
+/// An icon name (the app looks it up): the same characters as a label.
+pub fn check_icon(icon: &str) -> Result<(), String> {
+    match crate::word(icon, 64) {
+        true => Ok(()),
+        false => Err(format!("bad icon name {icon:?}: use letters, digits, . _ -")),
+    }
+}
+
 pub fn path() -> Result<PathBuf, String> {
     leon_core::paths::state_dir().map(|d| d.join(FILE)).ok_or_else(|| "no state dir: set LEON_STATE_DIR or HOME".into())
 }

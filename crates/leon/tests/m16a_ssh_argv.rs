@@ -1,5 +1,5 @@
-//! M16a criterion 2 (.agent/plans/2026-11-15-m16a-remote-ssh.md): the exact ssh argv. Only `-T`
-//! and the keepalive options are leon's; the user and host go after `--`, then one fixed remote
+//! M16a criterion 2 (.agent/plans/2026-11-15-m16a-remote-ssh.md): the exact ssh argv. Only `-T`,
+//! no forwarding (added after the security review) and the keepalives are leon's; the user and host go after `--`, then one fixed remote
 //! command that finds `leon` on PATH or in ~/.local/bin.
 
 mod support;
@@ -7,8 +7,20 @@ mod support;
 use support::remote::Remote;
 
 fn expect(port: Option<&str>, dest: &str) -> Vec<String> {
-    let mut v: Vec<String> =
-        ["-T", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"].iter().map(|s| s.to_string()).collect();
+    let mut v: Vec<String> = [
+        "-T",
+        "-a",
+        "-x",
+        "-o",
+        "ClearAllForwardings=yes",
+        "-o",
+        "ServerAliveInterval=15",
+        "-o",
+        "ServerAliveCountMax=3",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
     if let Some(p) = port {
         v.extend(["-p".to_string(), p.to_string()]);
     }

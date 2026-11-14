@@ -58,6 +58,9 @@ pub fn run(cli: &Cli, cmd: &HostsCmd) -> Result<(), Fail> {
         }
         HostsCmd::Add { label, endpoints, icon } => {
             hosts::check_label(label).map_err(Fail::Usage)?;
+            if let Some(i) = icon {
+                hosts::check_icon(i).map_err(Fail::Usage)?;
+            }
             for e in endpoints {
                 e.parse::<Endpoint>().map_err(Fail::Usage)?;
             }

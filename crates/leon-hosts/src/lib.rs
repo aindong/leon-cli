@@ -102,11 +102,23 @@ pub fn remote_command(autostart: bool) -> String {
 }
 
 impl Endpoint {
-    /// ssh's arguments. leon adds only `-T` (no tty: the pipe carries NDJSON) and keepalives, so a
-    /// dead network is noticed in about 45 s; everything else comes from ~/.ssh/config.
+    /// ssh's arguments. leon adds `-T` (no tty: the pipe carries NDJSON), no forwarding of any kind
+    /// (the link needs none: no agent on the host, no port bound by a config's LocalForward), and
+    /// keepalives, so a dead network is noticed in about 45 s; the rest comes from ~/.ssh/config.
     pub fn ssh_args(&self, autostart: bool) -> Vec<String> {
-        let mut args: Vec<String> =
-            ["-T", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"].map(String::from).to_vec();
+        let mut args: Vec<String> = [
+            "-T",
+            "-a",
+            "-x",
+            "-o",
+            "ClearAllForwardings=yes",
+            "-o",
+            "ServerAliveInterval=15",
+            "-o",
+            "ServerAliveCountMax=3",
+        ]
+        .map(String::from)
+        .to_vec();
         if let Some(p) = self.port {
             args.extend(["-p".into(), p.to_string()]);
         }
@@ -119,10 +131,16 @@ impl Endpoint {
     }
 
     /// `$LEON_SSH` (default `ssh`) with `ssh_args`, run directly, never through a local shell.
-    pub fn ssh(&self, autostart: bool) -> Command {
+    /// With `batch`, ssh fails instead of asking for a password or passphrase.
+    pub fn ssh(&self, autostart: bool, batch: bool) -> Command {
         let program = std::env::var_os("LEON_SSH").filter(|p| !p.is_empty()).unwrap_or_else(|| "ssh".into());
+        let mut args = self.ssh_args(autostart);
+        if batch {
+            let at = args.iter().position(|a| a == "--").expect("ssh_args has --");
+            args.splice(at..at, ["-o".to_string(), "BatchMode=yes".to_string()]);
+        }
         let mut c = Command::new(program);
-        c.args(self.ssh_args(autostart));
+        c.args(args);
         c
     }
 }
