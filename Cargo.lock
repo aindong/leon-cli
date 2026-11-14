@@ -3330,6 +3330,7 @@ dependencies = [
  "libc",
  "portable-pty",
  "regex-syntax",
+ "roxmltree",
  "schemars",
  "serde",
  "serde_json",

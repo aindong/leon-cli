@@ -27,6 +27,8 @@ portable-pty = "0.9"
 # leon attach (M17): crossterm 0.29 comes through ratatui::crossterm, so the two agree.
 # regex-syntax: escapes a plain find query for alacritty's regex search (already in the tree through it).
 regex-syntax = "0.8"
+# roxmltree: reads iTerm2 .itermcolors plists (already in the tree through gpui's usvg).
+roxmltree = "0.20"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm_0_29"] }
 schemars = "1.2"
 serde = { version = "1", features = ["derive"] }
