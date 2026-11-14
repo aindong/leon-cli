@@ -140,6 +140,7 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
                     && shared.ctx.state().sessions.is_empty()
                     && shared.last_activity.lock().unwrap_or_else(|e| e.into_inner()).elapsed() >= opts.idle_exit;
                 if idle { break; }
+                shared.ctx.sweep_parked();
             }
         }
     }
@@ -231,6 +232,7 @@ async fn connection(stream: UnixStream, shared: &Shared) -> io::Result<()> {
     let mut screens = Screens::default();
     let result = serve_lines(&mut lines, &mut write, &sub, &mut screens, shared).await;
     reader.abort();
+    shared.ctx.park(&sub); // a resumable stream waits for its client to come back
     result
 }
 

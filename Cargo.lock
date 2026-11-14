@@ -3294,6 +3294,7 @@ dependencies = [
  "gpui",
  "leon-app",
  "leon-core",
+ "leon-hosts",
  "leon-lua",
  "leon-server",
  "libc",
@@ -3334,6 +3335,17 @@ dependencies = [
  "tempfile",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "leon-hosts"
+version = "0.1.0"
+dependencies = [
+ "leon-core",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

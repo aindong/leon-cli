@@ -5,6 +5,7 @@ mod blocks;
 mod client;
 mod commands;
 mod events;
+mod hosts;
 mod layout;
 mod script;
 mod skill;
@@ -33,6 +34,17 @@ pub struct Cli {
     /// Target block: an ID, label, position or ID suffix [default: $LEON_BLOCK, else the active window's].
     #[arg(short = 'b', long = "block", global = true)]
     pub block: Option<String>,
+    /// Act on another machine's leon server, over ssh: a label from `leon hosts`, or
+    /// ssh://[USER@]HOST[:PORT].
+    #[arg(
+        short = 'H',
+        long = "host",
+        global = true,
+        value_name = "HOST",
+        visible_short_alias = 'S',
+        visible_alias = "server"
+    )]
+    pub host: Option<String>,
     /// [default: app]
     #[command(subcommand)]
     pub cmd: Option<Cmd>,
@@ -222,6 +234,38 @@ pub enum Cmd {
     /// Teach coding agents (Claude Code, Codex) to drive leon. Needs no server.
     #[command(subcommand)]
     Skill(SkillCmd),
+    /// Name other machines for -H, and check that they answer.
+    #[command(subcommand)]
+    Hosts(HostsCmd),
+}
+
+#[derive(Subcommand)]
+pub enum HostsCmd {
+    /// List the hosts.
+    List,
+    /// Add a host: a LABEL and its ssh://[USER@]HOST[:PORT] endpoints (-H LABEL uses the first).
+    Add {
+        /// The name to use with -H.
+        label: String,
+        /// Where it is: ssh://[USER@]HOST[:PORT] (HOST may be an ~/.ssh/config alias).
+        #[arg(required = true, value_name = "ENDPOINT")]
+        endpoints: Vec<String>,
+        /// An icon name for the app to show.
+        #[arg(long)]
+        icon: Option<String>,
+    },
+    /// Remove hosts.
+    Remove {
+        /// The labels to remove.
+        #[arg(required = true, value_name = "LABEL")]
+        labels: Vec<String>,
+    },
+    /// Check that hosts answer: ssh works and leon runs there (exit 4 if one doesn't).
+    Check {
+        /// The labels to check [default: every host].
+        #[arg(value_name = "LABEL")]
+        labels: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -366,6 +410,9 @@ pub enum ServerCmd {
     },
     /// Show whether a server runs (exit 4 if not).
     Status,
+    /// Connect stdin and stdout to this machine's server, starting one first (unless
+    /// --autostart=false): what `leon -H` runs on the host over ssh.
+    Proxy,
 }
 
 #[derive(Subcommand)]
@@ -456,12 +503,13 @@ fn main() -> ExitCode {
             let code = match &fail {
                 Fail::Api(e) if e.is_target_error() => 3,
                 Fail::Api(_) | Fail::Other(_) => 1,
+                Fail::Usage(_) => 2,
                 Fail::Unreachable(_) => 4,
                 Fail::Exit(code) => *code,
             };
             match fail {
                 Fail::Api(e) => eprintln!("leon: {e}"),
-                Fail::Unreachable(m) | Fail::Other(m) => eprintln!("leon: {m}"),
+                Fail::Unreachable(m) | Fail::Other(m) | Fail::Usage(m) => eprintln!("leon: {m}"),
                 Fail::Exit(_) => {}
             }
             ExitCode::from(code.clamp(0, 255) as u8)
