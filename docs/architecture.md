@@ -68,6 +68,14 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   + `$CODEX_HOME` (`~/.codex`) `hooks.json`. Settings edits keep key order, back up once to
   `<file>.leon-backup`, write atomically through symlinks, and refuse files that aren't the expected
   JSON shape. Not yet: OpenCode/Pi, `--project`, `--session-naming`.
+- **Packaging.** `scripts/bundle.sh` wraps the one `leon` binary in `Leon.app` (bundle id
+  `dev.leon.app`, version from `leon --version`, an icon drawn by `scripts/icon.swift`, ad-hoc
+  signed); opened from Finder it runs with no arguments, which opens the app. `scripts/install.sh`
+  copies the app to `~/Applications` and links `~/.local/bin/leon` to the binary inside it. Both
+  replace only what they made: an app with our bundle id, or a link whose text is our binary's path.
+- **Docs are tested.** `docs/cli.md` is checked against every `--help`; the `sh` blocks in the docs
+  run against the real binary (a bad command line fails); `docs/lua.md`'s examples go through
+  `leon config check` and `leon do -e`.
 - **Naming.** Method, action, event and flag names follow `docs/spec.md`, so scripts and agents written
   for that interface carry over. Env vars are `LEON_*`.
 
