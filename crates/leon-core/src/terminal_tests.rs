@@ -138,7 +138,8 @@ fn the_line_editor_wait_needs_the_shell_in_front() {
         }
         t.reads_a_line()
     };
-    let (shell, _rx) = spawn(&["sh"]);
+    // bash, not sh: Debian's sh (dash) has no line editor and reads in canonical mode
+    let (shell, _rx) = spawn(&["bash", "--norc", "-i"]);
     assert!(soon(&shell, Duration::from_secs(10)), "an interactive shell reads a line");
 
     // A job in front with canonical mode off (a picker an rc file started) isn't the shell.
