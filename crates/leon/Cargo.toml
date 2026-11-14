@@ -15,7 +15,5 @@ leon-lua.workspace = true
 clap.workspace = true
 libc.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true
+tokio.workspace = true

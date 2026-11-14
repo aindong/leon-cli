@@ -17,7 +17,7 @@ pub fn runtime_dir() -> PathBuf {
     }
 }
 
-fn home() -> Option<PathBuf> {
+pub fn home() -> Option<PathBuf> {
     if let Some(h) = std::env::var_os("HOME").filter(|h| !h.is_empty()) {
         return Some(PathBuf::from(h));
     }

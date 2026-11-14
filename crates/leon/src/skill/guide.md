@@ -24,8 +24,9 @@ or the last 4+ characters of an ID. A name the user gives always wins over your 
 "beside you" and "in this session" mean your own `LEON_SESSION`. If a target is ambiguous, leon lists
 the matches and exits `3`; ask the user rather than guess.
 
-**Careful:** `send`, `send-key` and `capture` with no `-b` act on `LEON_BLOCK`, which is you. Typing
-into your own terminal types into your own input. Always pass `-b` with the block you mean.
+**Careful:** `send`, `send-key` and `capture` with no `-b` act on `LEON_BLOCK`, which is you (or,
+with `-s`, on that session's active window). Typing into your own terminal types into your own
+input. Always pass `-b` with the block you mean.
 
 ## Run a command in a new terminal
 
@@ -97,6 +98,8 @@ Most commands take `--json` for machine-readable output.
   the pane. `leon window close W` closes a whole tab.
 - Never close a block or window you did not create unless the user asks, and never close your own
   `LEON_BLOCK`.
+- Don't type into or read the user's own terminals unless they ask: their screens can hold secrets,
+  and keys you send run in their shell.
 
 ## The API
 
@@ -116,7 +119,7 @@ Params are inline JSON, `@file`, or `-` for stdin. Use the API for what the comm
 - `0`: success.
 - `1`: failed (also `wait --for` timing out).
 - `2`: bad command line.
-- `3`: target not found or ambiguous.
+- `3`: target not found or ambiguous (`leon api call` exits `1` for every failed call instead).
 - `4`: server unreachable.
 - `130`: interrupted.
 

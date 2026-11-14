@@ -1,10 +1,9 @@
 //! `leon skill`: the guide for coding agents, and installing it into Claude Code and Codex. The
 //! installed SKILL.md only says "run `leon skill show`", so the guide always matches the binary.
 
+mod files;
 mod hooks;
 
-use std::io::Write;
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
@@ -12,24 +11,35 @@ use serde_json::{json, Value};
 use crate::client::Fail;
 use crate::commands::print_json;
 use crate::{Cli, SkillCmd};
+use files::Backup;
 
 const GUIDE: &str = include_str!("guide.md");
 const MARKER: &str = "<!-- leon-skill: installed by leon skill setup -->";
-const STUB: &str = r#"---
-name: leon
-description: Drive the leon terminal multiplexer. Open terminals beside you, run commands and wait for them, read other terminals' screens and type into them. Use when LEON_SESSION is set (you run inside leon) or the user mentions leon sessions, tabs, panes or blocks.
----
-<!-- leon-skill: installed by leon skill setup -->
-
-Before you use leon, run `leon skill show` and follow the guide it prints. The guide comes from
+const STUB_BODY: &str =
+    "Before you use leon, run `leon skill show` and follow the guide it prints. The guide comes from
 the installed leon binary, so it always matches the version you are driving.
-"#;
-const BACKUP: &str = "leon-backup";
+";
+
+/// The installed SKILL.md: the guide's front matter (so the agent sees the same name and
+/// description), our marker on its own line, and a pointer to `leon skill show`.
+fn stub() -> String {
+    let end = GUIDE[4..].find("\n---\n").map(|i| i + 4 + 5).expect("guide.md starts with front matter");
+    format!("{}{MARKER}\n\n{STUB_BODY}", &GUIDE[..end])
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, clap::ValueEnum)]
 pub enum Agent {
     Claude,
     Codex,
+}
+
+impl Agent {
+    fn name(self) -> &'static str {
+        match self {
+            Agent::Claude => "claude",
+            Agent::Codex => "codex",
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -61,15 +71,6 @@ struct Target {
     hook: Option<PathBuf>,
 }
 
-impl Target {
-    fn name(&self) -> &'static str {
-        match self.agent {
-            Agent::Claude => "claude",
-            Agent::Codex => "codex",
-        }
-    }
-}
-
 fn env_dir(name: &str) -> Option<PathBuf> {
     std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from)
 }
@@ -77,7 +78,7 @@ fn env_dir(name: &str) -> Option<PathBuf> {
 /// The agent's home dir and its target. Paths follow spec §6: `$CLAUDE_CONFIG_DIR` (~/.claude) for
 /// Claude Code; `$CODEX_HOME` (~/.codex) and ~/.agents/skills for Codex.
 fn target(agent: Agent, named: bool) -> Result<(PathBuf, Target), Fail> {
-    let home = || env_dir("HOME").ok_or_else(|| Fail::Other("HOME is not set".into()));
+    let home = || leon_core::paths::home().ok_or_else(|| Fail::Other("no home directory: set HOME".into()));
     let (dir, skill, hook) = match agent {
         Agent::Claude => {
             let dir = env_dir("CLAUDE_CONFIG_DIR").map_or_else(|| home().map(|h| h.join(".claude")), Ok)?;
@@ -113,8 +114,8 @@ fn skill_state(path: &Path) -> State {
     match std::fs::read_to_string(path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => State::Missing,
         Err(_) => State::Unreadable,
-        Ok(t) if t == STUB => State::Current,
-        Ok(t) if t.contains(MARKER) => State::Outdated,
+        Ok(t) if t == stub() => State::Current,
+        Ok(t) if t.lines().any(|l| l == MARKER) => State::Outdated,
         Ok(_) => State::Foreign,
     }
 }
@@ -149,7 +150,7 @@ fn status_of(t: &Target) -> Value {
     let hook = t.hook.as_ref().map(|p| (p, hook_state(&hooks::read(p))));
     let parts: Vec<State> = std::iter::once(skill).chain(hook.map(|(_, s)| s)).collect();
     json!({
-        "agent": t.name(),
+        "agent": t.agent.name(),
         "status": overall(&parts).as_str(),
         "skill": { "path": t.skill, "state": skill.as_str() },
         "hook": hook.map(|(p, s)| json!({ "path": p, "state": s.as_str() })),
@@ -165,8 +166,21 @@ struct Change {
 
 enum Op {
     None,
-    Write { bytes: Vec<u8>, backup: bool },
-    Delete,
+    /// `follow`: write through a symlink to its target (settings files), else replace the link.
+    Write {
+        bytes: Vec<u8>,
+        backup: Option<Backup>,
+        follow: bool,
+    },
+    Delete {
+        rm_empty_parent: bool,
+    },
+}
+
+impl Change {
+    fn keep(path: &Path, action: &'static str) -> Change {
+        Change { path: path.to_path_buf(), action, op: Op::None }
+    }
 }
 
 fn json_bytes(v: &Value) -> Vec<u8> {
@@ -175,16 +189,20 @@ fn json_bytes(v: &Value) -> Vec<u8> {
     b
 }
 
-/// What setup does for one agent, or why it won't touch it.
+/// What setup does for one agent, or why it won't touch it. A SKILL.md is never written through a
+/// link: `--force` over a linked foreign skill must not overwrite the file the link points to.
 fn setup_changes(t: &Target, force: bool) -> Result<Vec<Change>, String> {
-    let skill = skill_state(&t.skill);
-    let path = t.skill.clone();
-    let stub = || STUB.as_bytes().to_vec();
-    let mut changes = vec![match skill {
-        State::Current => Change { path, action: "unchanged", op: Op::None },
-        State::Missing => Change { path, action: "create", op: Op::Write { bytes: stub(), backup: false } },
-        State::Outdated => Change { path, action: "update", op: Op::Write { bytes: stub(), backup: false } },
-        State::Foreign if force => Change { path, action: "replace", op: Op::Write { bytes: stub(), backup: true } },
+    let path = &t.skill;
+    let write = |action, backup| Change {
+        path: path.clone(),
+        action,
+        op: Op::Write { bytes: stub().into_bytes(), backup, follow: false },
+    };
+    let mut changes = vec![match skill_state(path) {
+        State::Current => Change::keep(path, "unchanged"),
+        State::Missing => write("create", None),
+        State::Outdated => write("update", None),
+        State::Foreign if force => write("replace", Some(Backup::Fresh)),
         State::Foreign => {
             return Err(format!(
                 "{} is not leon's; pass --force to replace it (it is kept as a backup)",
@@ -195,118 +213,90 @@ fn setup_changes(t: &Target, force: bool) -> Result<Vec<Change>, String> {
     }];
     if let Some(p) = &t.hook {
         let read = hooks::read(p)?;
-        let action = match &read {
-            Some(v) if hooks::state(v) == State::Current => "unchanged",
-            Some(_) => "update",
-            None => "create",
-        };
-        let op = match action {
-            "unchanged" => Op::None,
-            _ => Op::Write { backup: read.is_some(), bytes: json_bytes(&hooks::with_ours(read)) },
-        };
-        changes.push(Change { path: p.clone(), action, op });
+        changes.push(match &read {
+            Some(v) if hooks::state(v) == State::Current => Change::keep(p, "unchanged"),
+            _ => Change {
+                path: p.clone(),
+                action: if read.is_some() { "update" } else { "create" },
+                op: Op::Write {
+                    backup: read.is_some().then_some(Backup::Once),
+                    bytes: json_bytes(&hooks::with_ours(read)),
+                    follow: true,
+                },
+            },
+        });
     }
     Ok(changes)
 }
 
 /// What remove does for one agent: only what setup installed; a foreign skill stays.
 fn remove_changes(t: &Target) -> Result<Vec<Change>, String> {
-    let path = t.skill.clone();
-    let mut changes = vec![match skill_state(&path) {
-        State::Current | State::Outdated => Change { path, action: "remove", op: Op::Delete },
-        State::Missing => Change { path, action: "unchanged", op: Op::None },
-        State::Foreign => Change { path, action: "kept (not leon's)", op: Op::None },
+    let path = &t.skill;
+    let mut changes = vec![match skill_state(path) {
+        State::Current | State::Outdated => {
+            Change { path: path.clone(), action: "remove", op: Op::Delete { rm_empty_parent: true } }
+        }
+        State::Missing => Change::keep(path, "unchanged"),
+        State::Foreign => Change::keep(path, "keep (not leon's)"),
         State::Unreadable => return Err(format!("can't read {}", path.display())),
     }];
     if let Some(p) = &t.hook {
         if let Some(v) = hooks::read(p)? {
-            let change = if hooks::state(&v) == State::Missing {
-                Change { path: p.clone(), action: "unchanged", op: Op::None }
+            changes.push(if hooks::state(&v) == State::Missing {
+                Change::keep(p, "unchanged")
             } else {
                 let rest = hooks::without_ours(v);
+                let is_link = std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink());
                 // A file that held only our hook and has no backup was created by setup: delete it.
-                if rest == json!({}) && !backup_path(p).exists() {
-                    Change { path: p.clone(), action: "remove", op: Op::Delete }
+                if rest == json!({}) && !is_link && std::fs::symlink_metadata(files::backup_path(p)).is_err() {
+                    Change { path: p.clone(), action: "remove", op: Op::Delete { rm_empty_parent: false } }
                 } else {
-                    Change {
-                        path: p.clone(),
-                        action: "update",
-                        op: Op::Write { bytes: json_bytes(&rest), backup: true },
-                    }
+                    let op = Op::Write { bytes: json_bytes(&rest), backup: Some(Backup::Once), follow: true };
+                    Change { path: p.clone(), action: "update", op }
                 }
-            };
-            changes.push(change);
+            });
         }
     }
     Ok(changes)
 }
 
-fn backup_path(p: &Path) -> PathBuf {
-    let mut name = p.file_name().unwrap_or_default().to_os_string();
-    name.push(format!(".{BACKUP}"));
-    p.with_file_name(name)
-}
-
 fn apply(c: &Change) -> std::io::Result<()> {
     match &c.op {
         Op::None => Ok(()),
-        Op::Delete => {
+        Op::Delete { rm_empty_parent } => {
             std::fs::remove_file(&c.path)?;
-            if c.path.file_name() == Some("SKILL.md".as_ref()) {
-                let _ = std::fs::remove_dir(c.path.parent().expect("skill dir"));
-                // only if empty
+            if *rm_empty_parent {
+                let _ = std::fs::remove_dir(c.path.parent().expect("a file path"));
+                // fails unless empty
             }
             Ok(())
         }
-        Op::Write { bytes, backup } => {
-            // A backup is made once, before leon's first change, so it keeps the user's original.
-            let b = backup_path(&c.path);
-            if *backup && !b.exists() {
-                std::fs::copy(&c.path, &b)?;
+        Op::Write { bytes, backup, follow } => {
+            if let Some(how) = backup {
+                files::back_up(&c.path, *how)?;
             }
-            write_atomic(&c.path, bytes)
+            files::write_atomic(&c.path, bytes, *follow)
         }
     }
 }
 
-/// Write `bytes` to `path` by renaming a temp file over it. A symlink is followed, so a settings
-/// file linked from a dotfiles repo stays linked; the old file's permissions are kept.
-fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let real = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let dir = real.parent().expect("a file path");
-    std::fs::create_dir_all(dir)?;
-    let mut name = std::ffi::OsString::from(".");
-    name.push(real.file_name().unwrap_or_default());
-    name.push(".leon-tmp");
-    let tmp = dir.join(name);
-    let mut f = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o644)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(&tmp)?;
-    if let Ok(meta) = std::fs::metadata(&real) {
-        f.set_permissions(meta.permissions())?;
-    }
-    f.write_all(bytes)?;
-    f.sync_all()?;
-    std::fs::rename(&tmp, &real)
-}
-
+/// The hook's one line of context. The IDs are checked, since the agent reads this as trusted.
 fn hook_text() -> Option<String> {
     let var = |n| std::env::var(n).ok().filter(|v| !v.is_empty());
     let (session, block) = (var("LEON_SESSION"), var("LEON_BLOCK"));
     if session.is_none() && block.is_none() {
         return None;
     }
-    let or = |v: Option<String>| v.unwrap_or_else(|| "unknown".into());
+    let id = |v: Option<String>| {
+        v.filter(|v| v.len() <= 64 && v.chars().all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '-'))
+            .unwrap_or_else(|| "unknown".into())
+    };
     Some(format!(
         "You are running inside leon, in session {} and terminal block {}. leon commands act on \
          this session by default. Before you open, read or type into terminals, run `leon skill show` \
          for the guide.",
-        or(session),
-        or(block)
+        id(session),
+        id(block)
     ))
 }
 
@@ -340,48 +330,68 @@ pub fn run(cli: &Cli, cmd: &SkillCmd) -> Result<(), Fail> {
             Ok(())
         }
         SkillCmd::Setup { agent, dry_run, force } => {
-            change_all(cli, &targets(*agent, true)?, *dry_run, |t| setup_changes(t, *force))
+            change_all(cli, &targets(*agent, true)?, *dry_run, true, |t| setup_changes(t, *force))
         }
-        SkillCmd::Remove { agent, dry_run } => change_all(cli, &targets(*agent, false)?, *dry_run, remove_changes),
+        SkillCmd::Remove { agent, dry_run } => {
+            change_all(cli, &targets(*agent, false)?, *dry_run, false, remove_changes)
+        }
     }
 }
 
-/// Apply (or with `dry_run` only list) each target's changes, then report. Exit 1 if any failed.
+/// Apply (or with `dry_run` only list) each target's changes in order, stopping an agent at its
+/// first failed write; then report. Exit 1 if anything failed or was refused.
 fn change_all(
     cli: &Cli,
     targets: &[Target],
     dry_run: bool,
+    setup: bool,
     changes: impl Fn(&Target) -> Result<Vec<Change>, String>,
 ) -> Result<(), Fail> {
     let mut failed = false;
     let mut report = vec![];
     for t in targets {
-        let mut entry = json!({ "agent": t.name() });
+        let mut entry = json!({ "agent": t.agent.name() });
+        let mut notes = vec![];
         match changes(t) {
             Err(why) => {
                 failed = true;
-                eprintln!("leon: {}: {why}", t.name());
+                eprintln!("leon: {}: {why}", t.agent.name());
                 entry["error"] = json!(why);
             }
             Ok(list) => {
+                let mut broke = false;
+                let mut files = vec![];
                 for c in &list {
-                    if !dry_run {
-                        if let Err(e) = apply(c) {
-                            failed = true;
-                            eprintln!("leon: {}: {e}", c.path.display());
+                    let action = if broke {
+                        "skipped"
+                    } else if dry_run {
+                        c.action
+                    } else if let Err(e) = apply(c) {
+                        (broke, failed) = (true, true);
+                        eprintln!("leon: {}: {e}", c.path.display());
+                        "failed"
+                    } else {
+                        c.action
+                    };
+                    let wrote_hook = !dry_run && !broke && t.hook.as_ref() == Some(&c.path);
+                    if wrote_hook && setup && t.agent == Agent::Codex && matches!(c.op, Op::Write { .. }) {
+                        notes.push("Codex asks you to trust new hooks once: run /hooks in Codex.".to_string());
+                    }
+                    if wrote_hook && !setup && !matches!(c.op, Op::None) {
+                        let b = files::backup_path(&c.path);
+                        if b.exists() {
+                            notes.push(format!("{} still holds your settings from before setup", b.display()));
                         }
                     }
+                    files.push(json!({ "path": c.path, "action": action }));
                 }
-                entry["files"] = list.iter().map(|c| json!({ "path": c.path, "action": c.action })).collect();
-                if !dry_run
-                    && t.agent == Agent::Codex
-                    && list.iter().any(|c| t.hook.as_ref() == Some(&c.path) && matches!(c.op, Op::Write { .. }))
-                {
-                    entry["note"] = json!("Codex asks you to trust new hooks once: run /hooks in Codex.");
-                }
+                entry["files"] = json!(files);
             }
         }
         entry["status"] = status_of(t)["status"].clone();
+        if !notes.is_empty() {
+            entry["notes"] = json!(notes);
+        }
         report.push(entry);
     }
     if cli.json {
@@ -393,10 +403,10 @@ fn change_all(
                 let action = f["action"].as_str().unwrap_or("");
                 let action =
                     if dry_run && action != "unchanged" { format!("would {action}") } else { action.to_string() };
-                println!("  {action:<18} {}", f["path"].as_str().unwrap_or(""));
+                println!("  {action:<20} {}", f["path"].as_str().unwrap_or(""));
             }
-            if let Some(n) = e["note"].as_str() {
-                println!("  {n}");
+            for n in e["notes"].as_array().into_iter().flatten() {
+                println!("  {}", n.as_str().unwrap_or(""));
             }
         }
     }
@@ -411,14 +421,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_stub_carries_the_marker_and_the_guide_its_name() {
-        assert!(STUB.contains(MARKER));
-        assert_eq!(skill_name(STUB), Some("leon"));
-        assert_eq!(skill_name(GUIDE), Some("leon"));
-    }
-
-    fn skill_name(text: &str) -> Option<&str> {
-        text.lines().find_map(|l| l.strip_prefix("name: "))
+    fn the_stub_shares_the_guides_front_matter() {
+        let s = stub();
+        let front = |t: &str| t.split("\n---\n").next().map(str::to_string);
+        assert_eq!(front(&s), front(GUIDE));
+        assert!(s.lines().any(|l| l == MARKER));
+        assert!(s.contains("leon skill show"));
+        assert!(s.lines().any(|l| l == "name: leon"));
     }
 
     #[test]

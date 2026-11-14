@@ -10,9 +10,13 @@ use super::State;
 /// Runs `leon skill hook` when leon is on PATH, and never fails the agent's session start.
 pub const COMMAND: &str = "command -v leon >/dev/null 2>&1 && leon skill hook || true";
 
-/// A hook entry is ours when its command runs `leon skill hook` (any version of our command).
+/// Commands an older leon wrote, so setup can replace them and remove can find them. A command is
+/// ours only when it is one of these exactly: a user's hook that merely mentions `leon skill hook`
+/// is theirs.
+const OLD_COMMANDS: &[&str] = &["leon skill hook"];
+
 fn is_ours(hook: &Value) -> bool {
-    hook["command"].as_str().is_some_and(|c| c.contains("leon skill hook"))
+    hook["command"].as_str().is_some_and(|c| c.trim() == COMMAND || OLD_COMMANDS.contains(&c.trim()))
 }
 
 /// The group setup adds: no matcher, so it runs on startup, resume, clear and compact.
@@ -69,7 +73,15 @@ pub fn state(v: &Value) -> State {
 
 /// `v` without our entries. Groups, `SessionStart` and `hooks` that only held ours go too; anything
 /// else (an empty group the user wrote, other keys) stays as it was.
-pub fn without_ours(mut v: Value) -> Value {
+// shortcut: a `hooks` or `SessionStart` the user had left empty before setup goes too; record what
+// setup created if that ever matters.
+pub fn without_ours(v: Value) -> Value {
+    strip(v, true)
+}
+
+/// Take out our entries and the groups that held only them; with `prune`, also an emptied
+/// `SessionStart` and `hooks`.
+fn strip(mut v: Value, prune: bool) -> Value {
     if ours_count(&v) == 0 {
         return v;
     }
@@ -83,18 +95,18 @@ pub fn without_ours(mut v: Value) -> Value {
         }
         _ => true,
     });
-    if starts.is_empty() {
+    if prune && starts.is_empty() {
         hooks.shift_remove("SessionStart");
     }
-    if hooks.is_empty() {
+    if prune && hooks.is_empty() {
         root.shift_remove("hooks");
     }
     v
 }
 
-/// `v` (or a new file) with exactly our group, appended after the user's own.
+/// `v` (or a new file) with exactly our group, appended after the user's own. Keys stay where they are.
 pub fn with_ours(v: Option<Value>) -> Value {
-    let mut v = v.map_or_else(|| json!({}), without_ours);
+    let mut v = v.map_or_else(|| json!({}), |v| strip(v, false));
     let root = v.as_object_mut().expect("read() checked");
     let hooks = root.entry("hooks").or_insert_with(|| json!({}));
     let starts = hooks.as_object_mut().expect("read() checked").entry("SessionStart").or_insert_with(|| json!([]));
@@ -125,5 +137,22 @@ mod tests {
         assert_eq!(fixed["hooks"]["SessionStart"][0]["hooks"], json!([{ "type": "command", "command": "x" }]));
         assert_eq!(state(&with_ours(Some(fixed.clone()))), State::Current);
         assert_eq!(state(&json!({ "hooks": { "SessionStart": [our_group(), our_group()] } })), State::Outdated);
+    }
+
+    #[test]
+    fn ours_means_exactly_our_command() {
+        let cmd = |c: &str| json!({ "command": c });
+        assert!(is_ours(&cmd(COMMAND)));
+        assert!(is_ours(&cmd("leon skill hook")));
+        assert!(!is_ours(&cmd("~/bin/ctx.sh; leon skill hook --legacy")));
+        assert!(!is_ours(&cmd("napoleon skill hook")));
+    }
+
+    #[test]
+    fn replacing_an_old_entry_keeps_key_order() {
+        let old = json!({ "hooks": { "SessionStart": [{ "hooks": [{ "command": "leon skill hook" }] }] }, "z": 1 });
+        let new = with_ours(Some(old));
+        assert_eq!(new.as_object().unwrap().keys().collect::<Vec<_>>(), ["hooks", "z"]);
+        assert_eq!(state(&new), State::Current);
     }
 }
