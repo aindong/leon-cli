@@ -284,6 +284,16 @@ pub struct Workspace {
     palette: Option<Palette>,
     /// Window ids of the tabs shown, most recent first (the switcher's order).
     recent: Vec<String>,
+    /// The Activity list shows in the sidebar's place.
+    activity: bool,
+    attention: crate::attention::Tracker,
+    notifier: crate::attention::Notifier,
+    /// The Dock badge as last set.
+    dock: Option<String>,
+    /// Post notifications and set the Dock badge (the real app; never tests).
+    platform: bool,
+    /// The window is the key window: the user is looking at leon.
+    window_active: bool,
     font_size: f32,
     /// Where the spinner's clock starts.
     epoch: Instant,
@@ -312,7 +322,9 @@ impl Workspace {
             eprintln!("leon: can't read the hosts list: {e}");
             Vec::new()
         });
-        Self::with_hosts(app, settings_path(), hosts, window, cx)
+        let mut ws = Self::with_hosts(app, settings_path(), hosts, window, cx);
+        ws.platform = true;
+        ws
     }
 
     /// A workspace with the settings in `path` (the defaults when it is None or unreadable).
@@ -341,6 +353,7 @@ impl Workspace {
             Arc::new(move || drop(wake.lock().unwrap_or_else(|e| e.into_inner()).try_send(())));
         let woke = wake.clone();
         app.on_change(move || woke());
+        crate::notify::on_click(wake.clone());
         let hosts = Hosts::new(app.clone(), hosts, wake);
         let poll = cx.spawn(async move |this, cx| loop {
             let timer = cx.background_executor().timer(POLL);
@@ -351,6 +364,7 @@ impl Workspace {
                     return;
                 }
                 ws.poll_hosts();
+                ws.poll_attention(cx);
                 ws.stats.borrow_mut().report();
                 ws.refresh_keymap(cx);
                 let now = ws.signature();
@@ -365,7 +379,10 @@ impl Workspace {
         });
         let stats = Stats::new();
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
-        let activation = cx.observe_window_activation(window, |_, _, cx| cx.notify());
+        let activation = cx.observe_window_activation(window, |ws, window, cx| {
+            ws.window_active = window.is_window_active();
+            cx.notify()
+        });
         // the window's frame and display are kept with the settings, and saved when the app quits
         // or the window closes (closing drops the workspace before the quit it asks for)
         let bounds = cx.observe_window_bounds(window, |ws, window, cx| {
@@ -398,6 +415,12 @@ impl Workspace {
             pending: Vec::new(),
             palette: None,
             recent: Vec::new(),
+            activity: false,
+            attention: Default::default(),
+            notifier: Default::default(),
+            dock: None,
+            platform: false,
+            window_active: window.is_window_active(),
             font_size: FONT_SIZE,
             epoch: Instant::now(),
             seen_focus: None,
@@ -497,6 +520,8 @@ impl Workspace {
     }
 }
 
+#[path = "view_activity.rs"]
+mod activity;
 #[path = "view_bars.rs"]
 mod bars;
 #[path = "view_find.rs"]

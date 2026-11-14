@@ -9,16 +9,16 @@ use crate::switcher::Row;
 /// Tabs remembered as recently used.
 const RECENT: usize = 64;
 
-impl Workspace {
-    /// Run `f` over every connected machine's model, with its index and label.
-    pub(super) fn with_models<R>(&self, f: impl FnOnce(&[(usize, &str, &Model)]) -> R) -> R {
-        let machines = self.hosts.machines();
-        let guards: Vec<(usize, &str, _)> =
-            self.hosts.remotes().map(|(i, r)| (i, machines[i].label.as_str(), r.model())).collect();
-        let models: Vec<(usize, &str, &Model)> = guards.iter().map(|(i, l, m)| (*i, *l, &**m)).collect();
-        f(&models)
-    }
+/// Run `f` over every connected machine's model, with its index and label.
+pub(super) fn with_models<R>(hosts: &Hosts, f: impl FnOnce(&[(usize, &str, &Model)]) -> R) -> R {
+    let machines = hosts.machines();
+    let guards: Vec<(usize, &str, _)> =
+        hosts.remotes().map(|(i, r)| (i, machines[i].label.as_str(), r.model())).collect();
+    let models: Vec<(usize, &str, &Model)> = guards.iter().map(|(i, l, m)| (*i, *l, &**m)).collect();
+    f(&models)
+}
 
+impl Workspace {
     /// Note the tab on screen as the most recently used.
     pub(super) fn note_recent(&mut self) {
         let Some(w) = self.active_window() else { return };
@@ -40,7 +40,7 @@ impl Workspace {
 
     /// The switcher's rows for `query` as palette items: each runs `session.switch` with where it goes.
     pub(super) fn switcher_items(&self, query: &str) -> Vec<Item> {
-        let rows = self.with_models(|models| {
+        let rows = with_models(&self.hosts, |models| {
             let (tabs, blocks) = switcher::tabs(models);
             switcher::rank(&tabs, &blocks, query, &self.recent)
         });

@@ -29,6 +29,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+0", "client.font.reset"),
     ("cmd+shift+p", "client.palette.toggle"),
     ("cmd+k", "session.switch"),
+    ("cmd+shift+a", "client.sidebar.activity.toggle"),
     ("cmd+c", "pane.copy"),
     ("cmd+a", "pane.select_all"),
     ("cmd+f", "client.find.open"),
@@ -138,6 +139,8 @@ pub struct Keymap {
     pub actions: Vec<ConfigAction>,
     /// `leon.set("copy_on_select", true)` in the config.
     pub copy_on_select: bool,
+    /// The `notify_*` settings.
+    pub notify: crate::attention::Settings,
 }
 
 impl Keymap {
@@ -196,7 +199,13 @@ impl Keymap {
             })
             .collect();
         let copy_on_select = km["settings"]["copy_on_select"] == true;
-        Keymap { generation: km["generation"].as_u64().unwrap_or(0), bindings, actions, copy_on_select }
+        let on = |name: &str| km["settings"][name] != false; // on unless the config turned it off
+        let notify = crate::attention::Settings {
+            blocked: on("notify_blocked"),
+            error: on("notify_error"),
+            done: on("notify_done"),
+        };
+        Keymap { generation: km["generation"].as_u64().unwrap_or(0), bindings, actions, copy_on_select, notify }
     }
 
     /// Resolve `next` after the pending `prefix`.

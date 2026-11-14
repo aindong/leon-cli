@@ -124,6 +124,10 @@ impl Workspace {
             "pane.close" => self.close_pane(&ClosePane, window, cx),
             "pane.paste" => self.paste(&Paste, window, cx),
             "client.sidebar.toggle" => self.toggle_sidebar(&ToggleSidebar, window, cx),
+            "client.sidebar.activity.toggle" => {
+                self.activity = !self.activity;
+                cx.notify();
+            }
             "client.tab_style.toggle" => self.toggle_tab_style(cx),
             "client.pane_header.reveal" => self.toggle_pane_headers(cx),
             "client.font.increase" => self.set_font_size(self.font_size + 1., window, cx),

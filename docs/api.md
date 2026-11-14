@@ -3988,6 +3988,9 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `copy_on_select` | boolean | yes | Copy a selection to the clipboard as it is made (default false). |
+| `notify_blocked` | boolean | yes | Notify when a block becomes blocked (default true). |
+| `notify_error` | boolean | yes | Notify when a block reports an error (default true). |
+| `notify_done` | boolean | yes | Notify when a long run finishes while the app is in the background (default true). |
 
 <details><summary>JSON Schemas</summary>
 
@@ -4191,10 +4194,25 @@ same facts for the server you run.
           "copy_on_select": {
             "description": "Copy a selection to the clipboard as it is made (default false).",
             "type": "boolean"
+          },
+          "notify_blocked": {
+            "description": "Notify when a block becomes blocked (default true).",
+            "type": "boolean"
+          },
+          "notify_error": {
+            "description": "Notify when a block reports an error (default true).",
+            "type": "boolean"
+          },
+          "notify_done": {
+            "description": "Notify when a long run finishes while the app is in the background (default true).",
+            "type": "boolean"
           }
         },
         "required": [
-          "copy_on_select"
+          "copy_on_select",
+          "notify_blocked",
+          "notify_error",
+          "notify_done"
         ]
       }
     }

@@ -21,9 +21,10 @@ impl Workspace {
         let mut items = div().flex().flex_col().gap(px(1.)).px(px(8.)).pt(px(4.));
         let machines = self.hosts.machines();
         // with hosts, each machine's label goes before its sessions (rows come in machine order)
-        let grouped = self.grouped();
+        let activity = list == SidebarList::Activity;
+        let grouped = self.grouped() && !activity;
         let mut labelled = 0;
-        for (i, row) in rows.iter().enumerate() {
+        for (i, row) in rows.iter().enumerate().filter(|_| !activity) {
             while grouped && labelled <= row.host {
                 items = items.child(self.host_label(labelled, &machines[labelled], cx));
                 labelled += 1;
@@ -90,6 +91,9 @@ impl Workspace {
         while grouped && labelled < machines.len() {
             items = items.child(self.host_label(labelled, &machines[labelled], cx));
             labelled += 1;
+        }
+        if activity {
+            items = self.render_activity(cx);
         }
         let width = self.settings.sidebar_width;
         div()

@@ -36,6 +36,11 @@ pub struct Config {
     pub resume: Option<Resume>,
     /// `leon.set("copy_on_select", true)`: the app copies a selection as it is made. None is off.
     pub copy_on_select: Option<bool>,
+    /// `leon.set("notify_blocked" | "notify_error" | "notify_done", false)`: the app's notifications
+    /// for a block becoming blocked, erroring, or finishing a long run. None is on.
+    pub notify_blocked: Option<bool>,
+    pub notify_error: Option<bool>,
+    pub notify_done: Option<bool>,
 }
 
 /// What a restored block does with the resume command a program registered for itself.

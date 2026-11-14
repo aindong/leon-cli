@@ -151,6 +151,16 @@ make it, without ⌘C. The app reads it with the keymap, so a reload takes effec
 leon.set("copy_on_select", true)
 ```
 
+The app notifies you (macOS banners, only from the bundled Leon.app) when a block becomes blocked
+(`notify_blocked`), reports an error (`notify_error`), or finishes a run of 30 s or more while the
+app is in the background (`notify_done`). Each defaults to `true`; set it to `false` to turn that
+kind off. Blocked and error don't notify for the pane you are looking at, a block notifies at most
+once a minute per state, and at most four notices go out a minute in all (the rest come as one).
+
+```lua
+leon.set("notify_done", false)
+```
+
 ## Function bindings
 
 A key can run a Lua function directly. Return `true` if you handled the key; otherwise the key goes
@@ -247,7 +257,7 @@ print("timed out:", slow.timed_out)
 | `leon.unbind(key)` | config | Remove a key's bindings; returns the count. |
 | `leon.mode(name[, {exclusive, prefix}])` | config | Declare a mode; `prefix` (one key) is `leon attach`'s for the `attach` mode. |
 | `leon.bindings([filter])`, `leon.modes()` | config | List bindings and modes made so far. |
-| `leon.set(name, value)` | config | A setting: `resume` = `"ask"`, `"always"` or `"never"`; `copy_on_select` = `true` or `false`. |
+| `leon.set(name, value)` | config | A setting: `resume` = `"ask"`, `"always"` or `"never"`; `copy_on_select`, `notify_blocked`, `notify_error`, `notify_done` = `true` or `false`. |
 | `leon.action{name, title, run, description?, args?}` | both | Define an action. |
 | `leon.invoke(name[, args])` | both | Run an action (nested at most 16 deep). |
 | `leon.session.<method>(params)` | both | Call a session method; fills `session_id`. |

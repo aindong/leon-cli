@@ -9,6 +9,7 @@ pub mod hosts;
 pub mod icons;
 pub mod input;
 pub mod keymap;
+pub mod notify;
 pub mod palette;
 pub mod panes;
 pub mod remote;
