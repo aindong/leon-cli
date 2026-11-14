@@ -29,6 +29,10 @@ is safe to run again, and refuses to replace anything at those paths that it did
 `scripts/install.sh --uninstall` removes both. Open **Leon** from Finder, Spotlight or the Dock, or
 type `leon`.
 
+The app runs the server itself. If a server you started from the shell already holds sessions,
+the app says so and doesn't open: run `leon server stop` (it ends those sessions' programs), then
+open the app again.
+
 To build only the app: `scripts/bundle.sh` writes `target/release/Leon.app`.
 
 ## The first five commands
