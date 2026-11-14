@@ -206,6 +206,8 @@ fn zoom_never_hides_where_input_goes(cx: &mut TestAppContext) {
     let new = term(&s.app, &w.focus.unwrap());
     settle(&new);
     let (rows, cols) = new.size();
+    let beside = term(&s.app, &leaves(&w)[0]).size();
+    assert_eq!(rows, beside.0, "the new pane was laid out (not left at the spawn size): {rows}x{cols}");
     assert!(cols < 120, "the new pane is laid out beside the others: {cols}");
     new.write(b"stty size\r").unwrap();
     let want = format!("{rows} {cols}");
@@ -271,7 +273,7 @@ fn dragging_an_inner_divider_uses_its_own_split(cx: &mut TestAppContext) {
     let pc = cx.debug_bounds(Box::leak(format!("pane-{c}").into_boxed_str())).unwrap();
     let split_h = f32::from(pc.origin.y + pc.size.height - pb.origin.y);
     let divider = cx.debug_bounds("divider-1").expect("the inner divider");
-    let from = center(divider);
+    let from = point(center(divider).x, center(divider).y - px(2.)); // inside B, within the grab area
     let to = point(from.x, from.y + px(100.));
     cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_move(to, MouseButton::Left, Modifiers::none());
@@ -307,7 +309,7 @@ fn click_focuses_and_dragging_a_divider_resizes(cx: &mut TestAppContext) {
 
     let cols_before = term(&s.app, &a).size().1;
     let divider = cx.debug_bounds("divider-0").expect("the divider has bounds");
-    let from = center(divider);
+    let from = point(center(divider).x + px(2.), center(divider).y); // inside b, within the grab area
     let to = point(from.x + px(100.), from.y);
     cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_move(to, MouseButton::Left, Modifiers::none());
@@ -316,6 +318,7 @@ fn click_focuses_and_dragging_a_divider_resizes(cx: &mut TestAppContext) {
     let r = ratio(&window(&s.app, &ws, cx).0);
     assert!(r > 0.55 && r < 0.75, "dragging right raised the ratio: {r}");
     assert!(term(&s.app, &a).size().1 > cols_before, "the left pane grew");
+    assert_eq!(window(&s.app, &ws, cx).0.focus.as_deref(), Some(a.as_str()), "a drag doesn't focus the pane under it");
     assert!(leaves(&window(&s.app, &ws, cx).0).contains(&b));
     s.app.stop();
 }
