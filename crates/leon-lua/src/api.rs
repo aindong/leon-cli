@@ -1,13 +1,11 @@
 //! The `leon` table's config functions, and the sandbox around every Lua state.
 
 use std::path::Path;
-use std::rc::Rc;
 
 use mlua::{FromLua, FromLuaMulti, Function, IntoLuaMulti, Lua, LuaSerdeExt, MultiValue, Table, Value};
 use serde_json::json;
 
 use crate::keys::{self, KeySpec};
-use crate::runtime::Flags;
 use crate::{Action, Binding, Config, Diagnostic, Level, Mode, Target, Unbind};
 
 /// The config (or script) declarations, kept in the Lua state's app data.
@@ -56,7 +54,7 @@ pub(crate) fn exec_chunk(lua: &Lua, path: &Path, src: &[u8]) -> mlua::Result<()>
     // Like luaL_loadfile (which `require` uses), ignore a `#` first line but keep its newline.
     let src =
         if src.starts_with(b"#") { &src[src.iter().position(|&b| b == b'\n').unwrap_or(src.len())..] } else { src };
-    lua.load(src).set_name(format!("@{}", path.display())).exec()
+    lua.load(src).set_name(format!("@{}", path.display())).set_mode(mlua::chunk::ChunkMode::Text).exec()
 }
 
 /// The bindings so far, as a `Config` would list them.
@@ -71,49 +69,6 @@ pub(crate) fn config(lua: &Lua) -> Config {
         diagnostics: c.diagnostics.clone(),
         logs: c.logs.clone(),
     }
-}
-
-/// `require` finds siblings in `dir`; no C modules, no full debug library; `io.popen`, `os.execute`
-/// and `os.exit` raise; and `pcall`, `xpcall` and `coroutine.resume` re-raise once `flags` says the
-/// run is over (timed out or `leon.stop`), so Lua code can't catch its way past either.
-pub(crate) fn sandbox(lua: &Lua, dir: &Path, flags: &Rc<Flags>) -> mlua::Result<()> {
-    let package: Table = lua.globals().get("package")?;
-    // shortcut: a config dir whose path holds `?` or `;` breaks these templates; escape them if anyone hits it.
-    package.set("path", format!("{0}/?.lua;{0}/?/init.lua", dir.display()))?;
-    package.set("cpath", "")?;
-    // The full debug library is memory-unsafe under mlua; traceback covers `xpcall(f, debug.traceback)`.
-    let debug = lua.create_table()?;
-    debug.set(
-        "traceback",
-        lua.create_function(|lua, (msg, level): (Value, Option<usize>)| match msg {
-            Value::String(s) => lua.traceback(Some(&s.to_string_lossy()), level.unwrap_or(1)).map(Value::String),
-            Value::Nil => lua.traceback(None, level.unwrap_or(1)).map(Value::String),
-            v => Ok(v),
-        })?,
-    )?;
-    lua.globals().set("debug", debug)?;
-    let f = flags.clone();
-    let aborted = lua.create_function(move |_, ()| Ok(f.abort.borrow().clone()))?;
-    lua.load(
-        r#"local aborted = ...
-           local function gone(name)
-             return function() error(name .. " is not available in leon; use leon.exec", 2) end
-           end
-           io.popen, os.execute, os.exit = gone("io.popen"), gone("os.execute"), gone("os.exit")
-           local function check(ok, ...)
-             if not ok then
-               local m = aborted()
-               if m then error(m, 0) end
-             end
-             return ok, ...
-           end
-           local pcall0, xpcall0, resume0 = pcall, xpcall, coroutine.resume
-           pcall = function(...) return check(pcall0(...)) end
-           xpcall = function(f, h) return check(xpcall0(f, h)) end
-           coroutine.resume = function(...) return check(resume0(...)) end"#,
-    )
-    .set_name("=sandbox")
-    .call(aborted)
 }
 
 pub(crate) fn state(lua: &Lua) -> mlua::AppDataRefMut<'_, State> {

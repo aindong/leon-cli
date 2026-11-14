@@ -6,9 +6,10 @@ mod api;
 mod exec;
 pub mod keys;
 mod runtime;
+mod sandbox;
 mod script;
 
-pub use runtime::{CallCtx, Host, Runtime, LOAD_LIMIT, MAX_DEPTH};
+pub use runtime::{CallCtx, Host, Runtime, LOAD_LIMIT, MAX_DEPTH, TIMED_OUT};
 pub use script::{run_script, ScriptOptions, MAX_TIMERS};
 
 use std::fmt;
