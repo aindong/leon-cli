@@ -27,6 +27,12 @@ pub struct Theme {
     pub done: u32,
     pub blocked: u32,
     pub error: u32,
+    /// Selected text in a pane (the Maroon tile, as the selected tab).
+    pub selection: u32,
+    /// Find matches (Wheat sunk a long way into Coal); the current one is outlined in `accent`.
+    pub found: u32,
+    /// A link under the mouse with cmd held (Clay, the dark-mode link colour).
+    pub link: u32,
 }
 
 pub const DARK: Theme = Theme {
@@ -50,6 +56,9 @@ pub const DARK: Theme = Theme {
     done: 0xB8C6AC,
     blocked: 0xE8C77D,
     error: 0xE28E9B,
+    selection: 0x542D35,
+    found: 0x5B4C30,
+    link: 0xE6AA91,
 };
 
 /// The app's text sizes in points: UI text, and secondary text (session labels, shortcuts).

@@ -74,7 +74,7 @@ pub struct Screens {
 /// The screen `t` shows now.
 pub fn frame(t: &Terminal) -> Frame {
     // shortcut: colours are resolved with leon's one theme; a client sends its own once themes exist (spec `set_theme`).
-    t.with_term(|term| screen::frame(term, &theme::DARK))
+    t.frame(&theme::DARK)
 }
 
 fn terminals(ctx: &Ctx, ids: &[String]) -> Result<Vec<Arc<Terminal>>, ApiError> {

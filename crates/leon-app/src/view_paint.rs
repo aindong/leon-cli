@@ -25,25 +25,49 @@ pub(super) fn cells_in(w: Pixels, h: Pixels, cell_w: Pixels, line_h: Pixels) -> 
     (cells(h, line_h, 1), cells(w, cell_w, 2))
 }
 
-/// Paints one block's screen as the server last pushed it. Prepaint asks the server to fit the
-/// grid to the bounds (resizing the PTY when rows or columns change); paint draws the frame.
+/// What a cell range is drawn with, besides its text.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum Mark {
+    Selection,
+    Found,
+    /// The current find match: outlined.
+    Current,
+    /// The link under the mouse while cmd is held: underlined.
+    Link,
+}
+
+/// Columns `from..=to` of view row `row`, drawn as `mark`.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct CellMark {
+    pub(super) row: usize,
+    pub(super) from: usize,
+    pub(super) to: usize,
+    pub(super) mark: Mark,
+}
+
+/// Paints one block's view: the screen the server last pushed, or rows of its history when
+/// scrolled back, with selection, find and link marks. Prepaint asks the server to fit the grid
+/// to the bounds (resizing the PTY when rows or columns change); paint draws it and notes where,
+/// for the mouse.
 pub(super) fn terminal_canvas(
     app: Rc<Remote>,
     (sid, block_id): (String, String),
+    (frame, marks): (Frame, Vec<CellMark>),
     active: bool,
     font_size: f32,
-    stats: Rc<RefCell<Stats>>,
+    (stats, painted): (Rc<RefCell<Stats>>, scroll::PaintedMap),
 ) -> impl IntoElement {
     canvas(
         move |bounds, window, _| {
             let (cell_w, line_h) = cell_size(window, font_size);
             let (rows, cols) = cells_in(bounds.size.width, bounds.size.height, cell_w, line_h);
             app.fit(&sid, &block_id, rows, cols);
-            let frame = app.model().screens.get(&block_id).cloned().unwrap_or_default();
-            (frame, cell_w, line_h)
+            (frame, cell_w, line_h, (rows as usize, cols as usize), block_id)
         },
-        move |bounds, (frame, cell_w, line_h), window, cx| {
-            paint_frame(&frame, &DARK, bounds, cell_w, line_h, font_size, active, window, cx);
+        move |bounds, (frame, cell_w, line_h, size, id), window, cx| {
+            let p = scroll::Painted { origin: bounds.origin, cell: (cell_w, line_h), size };
+            painted.borrow_mut().insert(id, p);
+            paint_frame(&frame, &marks, &DARK, bounds, (cell_w, line_h), font_size, active, window, cx);
             stats.borrow_mut().painted();
         },
     )
@@ -53,10 +77,10 @@ pub(super) fn terminal_canvas(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn paint_frame(
     f: &Frame,
+    marks: &[CellMark],
     t: &Theme,
     bounds: Bounds<Pixels>,
-    cell_w: Pixels,
-    line_h: Pixels,
+    (cell_w, line_h): (Pixels, Pixels),
     font_size: f32,
     active: bool,
     window: &mut Window,
@@ -67,16 +91,20 @@ pub(super) fn paint_frame(
     for r in &f.backgrounds {
         window.paint_quad(fill(Bounds::new(at(r.line, r.col), size(cell_w * r.len as f32, line_h)), rgb(r.color)));
     }
+    let span = |m: &CellMark| Bounds::new(at(m.row, m.from), size(cell_w * (m.to + 1 - m.from) as f32, line_h));
+    for m in marks.iter().filter(|m| matches!(m.mark, Mark::Selection | Mark::Found | Mark::Current)) {
+        window.paint_quad(fill(span(m), rgb(if m.mark == Mark::Selection { t.selection } else { t.found })));
+    }
     let mark = f.cursor.as_ref().map(|c| {
         let w = cell_w * if c.wide { 2. } else { 1. };
         let origin = at(c.line, c.col);
         match c.shape {
-            CursorShape::Beam => Mark::Bar(Bounds::new(origin, size(px(2.), line_h))),
+            CursorShape::Beam => CursorMark::Bar(Bounds::new(origin, size(px(2.), line_h))),
             CursorShape::Underline => {
-                Mark::Bar(Bounds::new(point(origin.x, origin.y + line_h - px(2.)), size(w, px(2.))))
+                CursorMark::Bar(Bounds::new(point(origin.x, origin.y + line_h - px(2.)), size(w, px(2.))))
             }
-            CursorShape::Block if active => Mark::Block(Bounds::new(origin, size(w, line_h))),
-            _ => Mark::Hollow(Bounds::new(origin, size(w, line_h))), // also any block in an inactive window
+            CursorShape::Block if active => CursorMark::Block(Bounds::new(origin, size(w, line_h))),
+            _ => CursorMark::Hollow(Bounds::new(origin, size(w, line_h))), // also any block in an inactive window
         }
     });
     let mut paint_text =
@@ -98,7 +126,7 @@ pub(super) fn paint_frame(
             let _ = shaped.paint(at(line, col), line_h, window, cx);
         };
     // A solid block cursor sits under the text; its cell's text is redrawn in the background color.
-    if let Some(Mark::Block(b)) = mark {
+    if let Some(CursorMark::Block(b)) = mark {
         window.paint_quad(fill(b, rgb(t.cursor)));
     }
     for (line, spans) in f.rows.iter().enumerate() {
@@ -106,22 +134,71 @@ pub(super) fn paint_frame(
             paint_text(&s.text, line, s.col, s.fg, Some(s), window);
         }
     }
+    for m in marks {
+        let b = span(m);
+        match m.mark {
+            Mark::Current => window.paint_quad(outline(b, rgb(t.accent), gpui::BorderStyle::Solid)),
+            Mark::Link => window.paint_quad(fill(
+                Bounds::new(point(b.origin.x, b.origin.y + line_h - px(2.)), size(b.size.width, px(1.))),
+                rgb(t.link),
+            )),
+            _ => {}
+        }
+    }
     match (mark, &f.cursor) {
-        (Some(Mark::Block(_)), Some(c)) if !c.text.trim().is_empty() => {
+        (Some(CursorMark::Block(_)), Some(c)) if !c.text.trim().is_empty() => {
             paint_text(&c.text, c.line, c.col, t.bg, None, window)
         }
-        (Some(Mark::Bar(b)), _) => window.paint_quad(fill(b, rgb(t.cursor))),
-        (Some(Mark::Hollow(b)), _) => window.paint_quad(outline(b, rgb(t.cursor), gpui::BorderStyle::Solid)),
+        (Some(CursorMark::Bar(b)), _) => window.paint_quad(fill(b, rgb(t.cursor))),
+        (Some(CursorMark::Hollow(b)), _) => window.paint_quad(outline(b, rgb(t.cursor), gpui::BorderStyle::Solid)),
         _ => {}
     }
 }
 
 /// How the cursor is drawn.
-enum Mark {
+enum CursorMark {
     /// Filled, under the text.
     Block(Bounds<Pixels>),
     /// A beam or underline bar, over the text.
     Bar(Bounds<Pixels>),
     /// An outline: a hollow-block cursor, or the cursor of an inactive window.
     Hollow(Bounds<Pixels>),
+}
+
+impl Workspace {
+    /// What pane `id` marks on the rows it shows: its selection, the find matches, the link under
+    /// the mouse.
+    pub(super) fn pane_marks(&self, id: &str, c: &crate::scrollback::Composed) -> Vec<CellMark> {
+        use crate::scrollback::covered;
+        let (cols, rows) = (c.frame.cols, c.frame.lines);
+        let mut out = Vec::new();
+        let mut add = |start, end, block, mark| {
+            for row in 0..rows {
+                if let Some((from, to)) = covered(start, end, block, c.top + row, cols) {
+                    out.push(CellMark { row, from, to, mark });
+                }
+            }
+        };
+        if let Some(f) = self.term.find.as_ref().filter(|f| f.block == id) {
+            let shown = c.top..c.top + rows;
+            for (i, m) in
+                f.matches.iter().enumerate().filter(|(_, m)| m.start.line < shown.end && m.end.line >= shown.start)
+            {
+                add(m.start, m.end, false, Mark::Found);
+                if f.current == Some(i) {
+                    add(m.start, m.end, false, Mark::Current);
+                }
+            }
+        }
+        let pv = self.term.panes.get(id);
+        if let Some(s) = pv.and_then(|p| p.selection.as_ref()) {
+            if let Some(r) = s.range {
+                add(r.start, r.end, s.kind == leon_core::search::Kind::Block, Mark::Selection);
+            }
+        }
+        if let Some((_, l)) = self.term.hovered.as_ref().filter(|(b, _)| b == id) {
+            add(l.start, l.end, false, Mark::Link);
+        }
+        out
+    }
 }

@@ -110,6 +110,8 @@ fn glyphs(binding: &str) -> String {
             "up" => "↑".to_string(),
             "down" => "↓".to_string(),
             "enter" => "↩".to_string(),
+            "pageup" => "PageUp".to_string(),
+            "pagedown" => "PageDown".to_string(),
             k => k.to_uppercase(),
         })
         .collect()

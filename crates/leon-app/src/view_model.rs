@@ -171,6 +171,7 @@ impl Workspace {
         let st = &self.settings;
         (st.tab_style, st.pane_headers, st.sidebar_width.to_bits()).hash(&mut h);
         self.session_id.hash(&mut h);
+        self.find_due().hash(&mut h);
         // each header draws its own pane's state, which its tab's may hide
         for id in &shown {
             let state = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));

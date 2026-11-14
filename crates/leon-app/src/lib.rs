@@ -11,6 +11,7 @@ pub mod palette;
 pub mod panes;
 pub mod remote;
 pub mod render;
+pub mod scrollback;
 pub mod status;
 pub mod theme;
 #[cfg(all(feature = "gui", target_os = "macos"))]

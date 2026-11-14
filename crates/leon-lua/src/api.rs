@@ -69,6 +69,7 @@ pub(crate) fn config(lua: &Lua) -> Config {
         diagnostics: c.diagnostics.clone(),
         logs: c.logs.clone(),
         resume: c.resume,
+        copy_on_select: c.copy_on_select,
     }
 }
 
@@ -313,10 +314,16 @@ fn mode(lua: &Lua, (name, opts): (String, Option<Table>)) -> Result<(), Bad> {
     Ok(())
 }
 
-/// `leon.set(name, value)`: a setting. The only one is `resume` (`"ask"`, `"always"`, `"never"`).
+/// `leon.set(name, value)`: a setting: `resume` (`"ask"`, `"always"`, `"never"`) or
+/// `copy_on_select` (a boolean).
 fn set(lua: &Lua, (name, value): (String, Value)) -> Result<(), Bad> {
+    if name == "copy_on_select" {
+        let Value::Boolean(on) = value else { return Err("copy_on_select must be true or false".into()) };
+        state(lua).cfg.copy_on_select = Some(on);
+        return Ok(());
+    }
     if name != "resume" {
-        return Err(format!("unknown setting {name:?}; the only one is \"resume\"").into());
+        return Err(format!("unknown setting {name:?}; the settings are \"resume\" and \"copy_on_select\"").into());
     }
     let text = match &value {
         Value::String(s) => s.to_str().map(|s| s.to_string()).unwrap_or_default(),

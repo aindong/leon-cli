@@ -14,6 +14,11 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        let finding = self.term.find.as_ref().is_some_and(|f| Some(&f.block) == self.target_block().as_ref());
+        if finding && self.find_key(ks, cx) {
+            cx.stop_propagation();
+            return;
+        }
         // a key binding syntax has no name for continues no sequence either: it ends it
         if chord.is_none() && !self.pending.is_empty() {
             self.pending.clear();
@@ -55,6 +60,10 @@ impl Workspace {
         let Some((sid, id, f)) = self.target_screen() else { return };
         if let Some(bytes) = crate::input::key_bytes(ks, f.app_cursor) {
             self.app.write(&sid, &id, &bytes);
+            if self.view_top(&id).is_some() {
+                self.scroll_to(&id, None); // typing goes back to the prompt
+                cx.notify();
+            }
             cx.stop_propagation();
         }
     }
@@ -124,6 +133,20 @@ impl Workspace {
                     None => Some(Palette { query: String::new(), selected: 0 }),
                 };
                 cx.notify();
+            }
+            "pane.copy" => {
+                if let Some((_, id, _)) = self.target() {
+                    self.copy(&id, cx);
+                }
+            }
+            "pane.select_all" => {
+                if let Some((_, id, _)) = self.target() {
+                    self.select_all(&id, cx);
+                }
+            }
+            "client.find.open" | "client.find.next" | "client.find.previous" => self.find_action(name, cx),
+            "client.scroll.page_up" | "client.scroll.page_down" | "client.scroll.top" | "client.scroll.bottom" => {
+                self.scroll_action(name, cx)
             }
             "client.config.reload" => {
                 let inbox = self.inbox.clone();
@@ -251,7 +274,7 @@ impl Workspace {
             inbox.reply.take()
         };
         if let Some(km) = reply.filter(|km| km["generation"].as_u64() != Some(self.keymap.generation)) {
-            self.keymap = Keymap::new(&km);
+            self.keymap = Keymap::app(&km);
             cx.notify();
         }
     }
@@ -259,7 +282,7 @@ impl Workspace {
     /// Fetch the keymap and apply it now, waiting for the server (tests, and nothing on a hot path).
     pub fn sync_keymap(&mut self) {
         if let Ok(km) = self.app.call("client.keymap", json!({})) {
-            self.keymap = Keymap::new(&km);
+            self.keymap = Keymap::app(&km);
         }
     }
 }

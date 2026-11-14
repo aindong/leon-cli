@@ -1,6 +1,7 @@
 # Architecture: protocol and clients
 
-The wire protocol, events, layout, Lua, the app, `leon attach` and the agent skill. Part of [the architecture](../architecture.md).
+The wire protocol, events, layout, Lua, the app (scrollback, selection, find, links, mouse), `leon
+attach` and the agent skill. Part of [the architecture](../architecture.md).
 
 ## Decisions
 
@@ -77,6 +78,46 @@ The wire protocol, events, layout, Lua, the app, `leon attach` and the agent ski
   bracketed-paste mode at that moment (the app's copy of the screen may be older). `block.watch`
   and `dev.leon.terminal.screen` are leon's own: the spec's screen stream is `data.connect` over a
   WebSocket, which leon doesn't serve. The app attaches only to a socket in a private dir.
+- **Scrollback in the app.** Every terminal numbers its lines: `scrolled` counts the lines ever
+  pushed into its scrollback, so the screen's top row is line `scrolled`, the oldest kept is
+  `scrolled - history`, and appended output never renumbers a line. The count is taken per 4 KiB
+  slice of parsed output as how far the newest history row moved: alacritty rotates rows rather
+  than copying them, so a kept row's cells stay at one address, and scrolls that never reach the
+  scrollback (a delete-line, a top margin) move no history row. A row pushed out of a full
+  scrollback is reused, so alacritty's display offset, pinned at 1 for the slice, says when a slice
+  may have pushed the whole scrollback's worth (it caps there); it is set back to 0 whenever the
+  primary screen shows, so frames never see it. A slice whose count can't be known (that
+  overflow, a history clear, an alt-screen switch) moves the count past anything a client keeps,
+  so no old number lands on a new line; a resize keeps `scrolled` at least `history`. Screen updates carry `scrolled`, `history`,
+  `alt_screen`, `alternate_scroll` and `mouse`. History goes over in ranges, never streamed:
+  `dev.leon.terminal.lines {from, count ≤ 1000}` returns rows by absolute number in the screen's row
+  shape. The app keeps per pane the top line while scrolled back (None follows the output), a
+  trackpad remainder (pixel deltas add up across events, momentum ones too), and a cache of history
+  rows fetched 200 around what it shows, on the UI connection (a reply takes well under a
+  millisecond); a new size, an alt-screen switch or a shrinking history drops the cache, the
+  selection and the scroll. "↓ N new lines" counts from `scrolled` when the view left the bottom.
+- **Selection, find and links** run on the server, which has the whole grid:
+  `dev.leon.terminal.selection {kind: simple|word|line|block, anchor, head, text}` is alacritty's
+  selection (word characters, lines across wraps, rectangles; half a wide character takes the
+  whole one) and its selection-to-text (no newline inside a wrapped line), in absolute lines, so a
+  selection stays on its text as output arrives. The app keeps kind, anchor and head, asks for the
+  range on each drag step and for the text on ⌘C (or at once with `copy_on_select`, a `leon.set`
+  setting carried in `client.keymap`'s `settings`). `dev.leon.terminal.find {query, regex,
+  case_sensitive, limit}` is alacritty's regex search over scrollback and screen (a plain query is
+  escaped; case is forced either way, overriding alacritty's smart case), matches capped at 10000;
+  the app runs it on each keystroke and again at most every 250 ms while output arrives.
+  `dev.leon.terminal.link_at {line, col}` is the cell's OSC 8 hyperlink, else a URL regex over its
+  logical line (across wraps), trailing punctuation and an unmatched `)` trimmed; a URI over 2 KiB
+  or with a control, bidi or invisible character is refused. ⌘-click opens `http(s)` at once and
+  anything else only after a prompt that shows it.
+- **Mouse reporting.** `block.event` takes the spec's `mouse` (press, release, move; button;
+  cell; shift/alt/ctrl) and `wheel` (notches) events, encoded on the server by the program's mode
+  at that moment (`leon_core::mouse`), as paste is: X10 (`?9`, which alacritty doesn't parse, so a
+  bounded scanner beside the OSC 7501 one follows it), 1000, 1002, 1003; SGR (1006), UTF-8 (1005)
+  or the legacy bytes (coordinates past 223 dropped); the wheel as buttons 64/65, or on the
+  alternate screen with no mouse mode and `?1007` as arrow keys. The app sends presses, releases
+  and moves (all moves only for 1003) when the program asked and shift isn't held and the pane
+  isn't scrolled back; otherwise the mouse selects.
 - **The terminal client.** `leon attach` (`crates/leon/src/attach/`) is the app's client code drawn
   with ratatui 0.30 (crossterm 0.29 through `ratatui::crossterm`) instead of GPUI: it uses
   `leon_app::remote::Remote` (the same connections, model refetches and `block.watch` screen

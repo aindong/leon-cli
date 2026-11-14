@@ -180,7 +180,12 @@ what it created. See [docs/agents.md](docs/agents.md).
 | ⌘W | Close the pane |
 | ⌘⇧], ⌘⇧[ | Next, previous tab |
 | ⌘1 … ⌘9 | Go to tab 1–9 |
-| ⌘V | Paste |
+| ⌘C, ⌘V | Copy the selection, paste |
+| ⌘A | Select everything in the pane, scrollback too |
+| ⌘F | Find in the pane: ↩ and ⇧↩ step, ⌥C case, ⌥R regex, esc closes |
+| ⌘G, ⌘⇧G | Next, previous match |
+| ⇧PageUp, ⇧PageDown | Scroll a page back, forward |
+| ⌘↑, ⌘↓ | Scroll to the oldest line, back to the bottom |
 | ⌘B | Show or hide the sidebar |
 | ⌘⇧S | Tabs in the sidebar or in the titlebar (saved for the next launch) |
 | ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
@@ -194,7 +199,16 @@ a warning, question or key icon when it is blocked, a check when done or a cross
 session's label shows its most urgent one); done and error clear when you go to the pane. Pane
 headers name the program and where it is, and hold split, zoom and close buttons; "Show or Hide
 Pane Headers" in the palette turns them off. Every button names its action and shortcut on hover.
-Drag the sidebar's edge to resize it. The window opens at most of the screen the first time, then
+Drag the sidebar's edge to resize it.
+
+The wheel and trackpad scroll a pane back through its scrollback (fetched from the server as you
+go). New output doesn't move what you are reading; a "↓ N new lines" pill takes you back down, and
+so does typing. Drag to select, double-click a word, triple-click a line, shift+click to extend,
+option+drag for a rectangle; a line that wrapped copies as one line. With
+`leon.set("copy_on_select", true)` in your `init.lua` a selection is copied as you make it. A
+program that asks for the mouse (vim, htop, tmux) gets clicks and the wheel; hold shift to select
+anyway. Hold ⌘ over a link (OSC 8, or a URL, even one that wraps) to underline it and ⌘-click to
+open it; anything but an `http(s)` link shows its full address first. The window opens at most of the screen the first time, then
 where you left it.
 
 Tabs live in one place. ⌘⇧S moves them from the sidebar to the titlebar, beside the session's name,

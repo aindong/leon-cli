@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::fd::FromRawFd;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -30,6 +30,8 @@ mod process;
 use process::{reap, wait_exit};
 #[path = "terminal_reading.rs"]
 mod reading;
+#[path = "terminal_view.rs"]
+mod view;
 use reading::{Reading, Reported};
 
 pub const NAMESPACE: &str = "dev.leon.terminal";
@@ -174,6 +176,10 @@ pub struct Terminal {
     notify: Notify,
     /// The command a program registered to resume itself after a restart (`set_resume`).
     resume: Mutex<Option<Vec<String>>>,
+    /// Lines ever pushed into the scrollback (`View::scrolled`); written under the term's lock.
+    scrolled: Arc<AtomicUsize>,
+    /// The program set X10 mouse mode (`?9`), which alacritty doesn't track.
+    x10: Arc<AtomicBool>,
 }
 
 impl std::fmt::Debug for Terminal {
@@ -249,7 +255,8 @@ impl Terminal {
         let listener = Listener { writer: writer.clone(), seen: seen.clone() };
         let mut emulator = Term::new(config, &Size { rows: ROWS, cols: COLS }, listener);
         let mut parser: Processor = Processor::new();
-        parser.advance(&mut emulator, shown);
+        let scrolled = Arc::new(AtomicUsize::new(0));
+        view::feed(&mut emulator, &mut parser, shown, &scrolled);
         let term = Arc::new(Mutex::new(emulator));
         let tracker = Arc::new(Mutex::new(Tracker::default()));
 
@@ -267,7 +274,10 @@ impl Terminal {
             reported: reported.clone(),
             output: output.clone(),
             changes: generation.clone(),
+            scrolled: scrolled.clone(),
+            x10: Arc::default(),
         };
+        let x10 = reading.x10.clone();
         let to_reader = notify.clone();
         let to_self = notify.clone();
         std::thread::spawn(move || {
@@ -306,6 +316,8 @@ impl Terminal {
             output,
             notify: to_self,
             resume: Mutex::new(None),
+            scrolled,
+            x10,
         })
     }
 
@@ -386,7 +398,12 @@ impl Terminal {
     /// most `MAX_SIZE`: any client can ask, and a grid's memory grows with rows × columns.
     pub fn resize(&self, rows: u16, cols: u16) -> io::Result<()> {
         let (rows, cols) = (rows.clamp(1, MAX_SIZE.0), cols.clamp(2, MAX_SIZE.1));
-        lock(&self.term).resize(Size { rows, cols });
+        {
+            let mut term = lock(&self.term);
+            term.resize(Size { rows, cols });
+            // shrinking pushes rows into the scrollback: the oldest kept line keeps a number
+            self.scrolled.fetch_max(term.grid().history_size(), Ordering::SeqCst);
+        }
         let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
         lock(&self.master).resize(size).map_err(pty)?;
         self.generation.send_modify(|g| *g += 1);

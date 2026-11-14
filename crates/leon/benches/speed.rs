@@ -1,6 +1,7 @@
 //! `cargo bench -p leon --bench speed [-- --samples N]`: input latency, output throughput and API
 //! round trip against a private leon server, and the same against tmux when it is installed.
-//! Results and method: docs/performance.md. Exits 1 when the attached app's budget is missed.
+//! Results and method: docs/performance.md. Exits 1 when the attached app's budget is missed (macOS),
+//! or `cat` throughput is under `--cat-floor MBPS`.
 
 // macOS only: the attached app's path needs the GPUI app crate (the `app` feature).
 #[cfg(all(feature = "app", target_os = "macos"))]
@@ -81,6 +82,9 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let samples: usize =
         args.iter().position(|a| a == "--samples").and_then(|i| args.get(i + 1)?.parse().ok()).unwrap_or(300).max(1);
+    // fail below this `cat` throughput (MB/s): a change on the parse path shows up there first
+    let cat_floor: Option<f64> =
+        args.iter().position(|a| a == "--cat-floor").and_then(|i| args.get(i + 1)?.parse().ok());
     let dir = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
     let server = Command::new(env!("CARGO_BIN_EXE_leon"))
         .args(["server", "run", "--restore=false"])
@@ -117,6 +121,7 @@ fn main() {
     c.call("server.stop", json!({ "discard": true }));
     let _ = server.0.wait();
 
+    let cat_mbps = leon.4;
     let mut rows = vec![leon];
     match Command::new("tmux").arg("-V").output() {
         Ok(o) if o.status.success() => rows.push(tmux_row(samples, &yes, &cat)),
@@ -131,7 +136,16 @@ fn main() {
     }
     // macOS only: the attached app's rows and budget (mod attached, above).
     #[cfg(all(feature = "app", target_os = "macos"))]
-    attached::report(&app);
+    let app_ok = attached::report(&app);
+    #[cfg(not(all(feature = "app", target_os = "macos")))]
+    let app_ok = true;
+    if let Some(floor) = cat_floor {
+        let verdict = if cat_mbps >= floor { "met" } else { "MISSED" };
+        println!("cat throughput floor ({floor:.1} MB/s): {cat_mbps:.1} MB/s, {verdict}");
+    }
+    if !app_ok || cat_floor.is_some_and(|f| cat_mbps < f) {
+        std::process::exit(1);
+    }
 }
 
 fn round_trip(c: &mut Conn, n: usize) -> (f64, f64) {
