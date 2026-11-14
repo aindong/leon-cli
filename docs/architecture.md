@@ -11,8 +11,40 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 | `leon-core` | The object model (server state, sessions, windows, layout tree, blocks), stable IDs and target resolution, terminal blocks (PTY via `portable-pty`, emulation via `alacritty_terminal`), the OSC 7501 program-status parser, and the event log with gapless `seq`. No I/O policy, no sockets. |
 | `leon-server` | The API: a method registry where every method carries a description and JSON Schemas (`help.all`), served over a Unix socket. Also runnable in-process. |
 | `leon-lua` | Lua 5.1 (`mlua`): `init.lua` config (bindings, sequences, modes, actions), the live config `Runtime`, and `leon do` scripts (`leon.on`, `wait`, timers, `exec`). |
-| `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart. With no arguments it opens the app. |
-| `leon-app` | The GPUI client. It attaches to the server over the socket like any client and paints the screens the server pushes, so programs outlive the app. |
+| `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart. With no arguments it opens the app; a build without the app prints the help. |
+| `leon-app` | The GPUI client (macOS for now). It attaches to the server over the socket like any client and paints the screens the server pushes, so programs outlive the app. |
+
+## Platforms
+
+| | macOS | Linux (x86_64, aarch64) |
+|---|---|---|
+| Server, CLI, Lua, agent skill | yes | yes |
+| The app (`leon app`, `leon` alone) | yes | not yet (M15 part 2): `leon` alone prints the help, `leon app` exits 1 |
+| Tested | everything, `cargo test` | everything but the app, `scripts/linux-test.sh` in Docker |
+| Packages | `Leon.app` (`scripts/bundle.sh`, `scripts/install.sh`) | tarball and `.deb` (`scripts/package-linux.sh`) |
+
+The app is the `leon` crate's `app` feature, on by default, and `leon-app` is a macOS-only
+dependency; the code that calls it is behind `cfg(all(feature = "app", target_os = "macos"))`.
+Cargo has no per-platform default features, so the pair is the per-platform default: `cargo build`
+gives the app on macOS and a headless binary on Linux with no flags, and `--no-default-features`
+gives a headless macOS build. `leon-app` stays a workspace member, so Linux commands pass
+`--workspace --exclude leon-app`. Tests of the app and of `Leon.app` are gated to macOS with a
+`// macOS only: <reason>` line, which `scripts/linux-test.sh` requires and lists.
+
+Platform code: the socket goes under `$XDG_RUNTIME_DIR/leon` when that is set (Linux desktops set
+it; the dir must still be private); the peer check is tokio's `peer_cred` (`SO_PEERCRED` on Linux,
+`getpeereid` on macOS); a program's cwd is `/proc/<pid>/cwd` on Linux and `proc_pidinfo` on macOS;
+the skill hook reads `/proc/<pid>/stat` for the process tree there. Signals, process groups,
+`flock`, PTYs (`portable-pty`) and the state dir are the same POSIX code on both.
+
+`scripts/linux-test.sh [--arch arm64|amd64]` runs clippy, `cargo test --no-fail-fast` and
+`scripts/linux-smoke.sh` (start, a session, `run -- echo hi`, `capture`, a block's cwd, stop, then
+the socket through `XDG_RUNTIME_DIR`) for the non-app crates in the pinned official image
+`rust:1.100.0-bookworm` (tag and digest in `scripts/linux-image.sh`), as uid 1000 rather than root
+so the private-dir and peer checks are real, with the cargo registry in the named volume
+`leon-cargo-registry` and each arch's target dir in `leon-linux-target-<arch>`. The source is
+mounted read-only. CI (`.github/workflows/ci.yml`) runs the full macOS gate and the Linux script
+and packages on x86_64 and aarch64 runners.
 
 ## Decisions
 
@@ -147,7 +179,8 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   process group with canonical mode off, so neither an rc file's picker nor typeahead gets it; zsh
   and fish must also have turned bracketed paste on, which their line editors do and a key an rc
   file reads (oh-my-zsh's update question, compinit's `read -q`) doesn't. bash and sh are taken at
-  canonical mode alone. The command stays registered until replaced or cleared; with `"always"` the
+  canonical mode alone. dash (Debian's `sh`) has no line editor and never turns canonical mode
+  off, so a dash login shell is offered nothing: the wait gives up and types nothing. The command stays registered until replaced or cleared; with `"always"` the
   private state file is a place that runs the commands programs registered, which is why `"ask"` is
   the default.
 - **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of
@@ -159,6 +192,14 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   signed); opened from Finder it runs with no arguments, which opens the app. `scripts/install.sh`
   copies the app to `~/Applications` and links `~/.local/bin/leon` to the binary inside it. Both
   replace only what they made: an app with our bundle id, or a link whose text is our binary's path.
+- **Linux packages.** `scripts/package-linux.sh [--arch arm64|amd64]` builds a release binary
+  (symbols stripped) in the same pinned image and writes `target/linux/leon-<version>-<arch>-linux.tar.gz`
+  (`leon`, `README.md`, `LICENSE`, `docs/`) and `target/linux/leon_<version>_<debarch>.deb` (hand-built
+  with `dpkg-deb`: `/usr/bin/leon`, docs in `/usr/share/doc/leon`, `Depends: libc6 (>= …)` from the
+  newest glibc symbol the binary uses). It then installs the `.deb` in a clean
+  `debian:bookworm-slim` and unpacks the tarball in `ubuntu:24.04`, and fails unless each `leon
+  --version` prints the version. Rust links glibc dynamically: the binary needs glibc 2.34 or newer
+  (measured on arm64; no musl build yet).
 - **`LEON_BIN_DIR`.** Every terminal gets the server binary's directory as `LEON_BIN_DIR` and at
   the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
   `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an
@@ -172,5 +213,5 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 ## Verification
 
 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (the loop's
-`the verify script` runs all three). Terminal behaviour is tested end to end: spawn a real shell in a PTY,
+`the verify script` runs all three); on Linux, `scripts/linux-test.sh` (Platforms, above). Terminal behaviour is tested end to end: spawn a real shell in a PTY,
 send input, wait for the screen, assert on `capture`. The GUI is checked by window-only screenshots.

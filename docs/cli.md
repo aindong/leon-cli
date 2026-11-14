@@ -54,6 +54,9 @@ sessions you see. `leon` with no command does the same. Quitting the app (⌘Q, 
 window) detaches and every program keeps running; the app's "Quit and End All Sessions…" or
 `leon server stop` ends them. With `--autostart=false` and no server it exits 4.
 
+A build without the app (Linux for now, or macOS with `--no-default-features`) has no window:
+`leon` alone prints the help and exits 0, and `leon app` exits 1 saying so.
+
 ## Sessions
 
 ### `leon new [LABEL]`
