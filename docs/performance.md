@@ -93,6 +93,21 @@ The two builds were run alternately, three rounds each, on the same loaded machi
 latency and round trip didn't change beyond the noise: the extra thread hop costs less than one
 poll. `yes | head` stays at the limit of `head` itself.
 
+## After merging main (the app and the Lua runtime)
+
+The merge brought M6's per-batch `generation` counter for the renderer and M5b's config thread
+into the server (the bench pins `LEON_CONFIG` to a missing file, so no `init.lua` runs). Four
+alternating rounds against the last pre-merge commit, in both orders, on a machine with a load
+average of 4 to 12:
+
+| | `cat` 100 MB (4 rounds) | `yes \| head` 100 MB | input latency p50 | round trip p50 |
+|---|---|---|---|---|
+| before the merge | 112.5, 111.1, 105.7, 108.9 MB/s | 2.5 MB/s | 0.024, 0.023, 0.038, 0.024 ms | 0.005–0.007 ms |
+| after the merge | 100.7, 109.9, 109.1, 116.7 MB/s | 2.3–2.5 MB/s | 0.030, 0.036, 0.029, 0.023 ms | 0.005–0.007 ms |
+
+Both builds' medians are about 110 MB/s for `cat`. Whichever build ran second in a round did
+better, so the spread is the machine's load, not the merge; nothing moved.
+
 ## Not measured yet
 
 - tmux, because it isn't installed here. The bench's tmux path drives tmux through a process per

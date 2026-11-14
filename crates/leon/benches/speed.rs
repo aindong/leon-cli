@@ -81,6 +81,7 @@ fn main() {
         .args(["server", "run", "--restore=false"])
         .env("LEON_RUNTIME_DIR", dir.path())
         .env("LEON_STATE_DIR", dir.path().join("state"))
+        .env("LEON_CONFIG", dir.path().join("no-init.lua")) // never the developer's own init.lua
         .env("SHELL", "/bin/sh")
         .env_remove("LEON_SESSION")
         .env_remove("LEON_BLOCK")
