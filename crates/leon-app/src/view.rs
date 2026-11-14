@@ -37,7 +37,8 @@ const PADDING: f32 = 10.;
 /// How often the poll looks for changes (about 120 Hz).
 const POLL: Duration = Duration::from_millis(8);
 
-/// The block a window shows. One per window until M3's splits; then the window's focused block.
+/// The block a window shows: its first (one per window until M3's splits; then the focused one,
+/// and the redraw signature must hash every visible block).
 pub fn window_block<'a>(s: &'a Session, window_id: &str) -> Option<&'a Block> {
     s.blocks.iter().find(|b| b.window_id == window_id)
 }
@@ -85,15 +86,13 @@ pub fn run(server: Embedded) {
                 ],
             },
         ]);
+        cx.on_action(|_: &Quit, cx| cx.quit());
+        cx.on_window_closed(|cx| cx.quit()).detach();
+        // However the app quits (menu, Dock, logout), end the programs and remove the socket.
         let on_quit = server.clone();
-        cx.on_action(move |_: &Quit, cx| {
+        cx.on_app_quit(move |_| {
             on_quit.stop();
-            cx.quit();
-        });
-        let on_close = server.clone();
-        cx.on_window_closed(move |cx| {
-            on_close.stop();
-            cx.quit();
+            async {}
         })
         .detach();
         let bounds = Bounds::centered(None, size(px(1100.), px(700.)), cx);
@@ -167,6 +166,8 @@ struct WindowRow {
 pub struct Workspace {
     app: Rc<Embedded>,
     session_id: Option<String>,
+    /// Where the selected session sat in the list when last seen.
+    selected_at: usize,
     sidebar: bool,
     collapsed: HashSet<String>,
     focus: FocusHandle,
@@ -206,6 +207,7 @@ impl Workspace {
         Workspace {
             app,
             session_id,
+            selected_at: 0,
             sidebar: true,
             collapsed: HashSet::new(),
             focus,
@@ -231,13 +233,15 @@ impl Workspace {
         Some(window_block(s, &s.windows.get(s.active)?.id)?.terminal.clone())
     }
 
-    /// Keep the selection on a live session: a closed one hands over to its neighbour.
-    fn settle(&mut self, rows: &[SessionRow], before: Option<usize>) {
-        if self.session_id.as_ref().is_some_and(|id| rows.iter().any(|r| &r.id == id)) {
+    /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
+    /// killed from the CLI) hands over to the session now in its place.
+    fn settle(&mut self, rows: &[SessionRow]) {
+        if let Some(i) = rows.iter().position(|r| Some(&r.id) == self.session_id.as_ref()) {
+            self.selected_at = i;
             return;
         }
-        let i = before.unwrap_or(0).min(rows.len().saturating_sub(1));
-        self.session_id = rows.get(i).map(|r| r.id.clone());
+        self.selected_at = self.selected_at.min(rows.len().saturating_sub(1));
+        self.session_id = rows.get(self.selected_at).map(|r| r.id.clone());
     }
 
     fn rows(&self) -> Vec<SessionRow> {
@@ -280,18 +284,28 @@ impl Workspace {
         h.finish()
     }
 
-    fn session_index(&self) -> Option<usize> {
-        let id = self.session_id.as_deref()?;
-        self.app.ctx().state().sessions.iter().position(|s| s.id == id)
+    /// (session id, window id) of the selected session's window `index`, or of its active one.
+    fn window_ref(&self, index: Option<usize>) -> Option<(String, String)> {
+        let sid = self.session_id.clone()?;
+        let st = self.app.ctx().state();
+        let s = st.session(&sid).ok()?;
+        let wid = s.windows.get(index.unwrap_or(s.active))?.id.clone();
+        Some((sid, wid))
     }
 
     fn focus_window(&mut self, index: usize, cx: &mut Context<Self>) {
-        let Some(sid) = self.session_id.clone() else { return };
-        let wid = self.app.ctx().state().session(&sid).ok().and_then(|s| s.windows.get(index).map(|w| w.id.clone()));
-        if let Some(wid) = wid {
+        if let Some((sid, wid)) = self.window_ref(Some(index)) {
             let _ = self.app.call("session.focus_window", json!({ "session_id": sid, "window_id": wid }));
             cx.notify();
         }
+    }
+
+    /// Close a window; if that ended its session, select a neighbouring one.
+    fn close_window(&mut self, (sid, wid): (String, String), cx: &mut Context<Self>) {
+        let _ = self.app.call("session.close_window", json!({ "session_id": sid, "window_id": wid }));
+        let rows = self.rows();
+        self.settle(&rows);
+        cx.notify();
     }
 
     fn step_tab(&mut self, by: isize, cx: &mut Context<Self>) {
@@ -313,15 +327,9 @@ impl Workspace {
     }
 
     fn close_tab(&mut self, _: &CloseTab, _: &mut Window, cx: &mut Context<Self>) {
-        let Some(sid) = self.session_id.clone() else { return };
-        let before = self.session_index();
-        let wid = self.app.ctx().state().session(&sid).ok().and_then(|s| s.windows.get(s.active).map(|w| w.id.clone()));
-        if let Some(wid) = wid {
-            let _ = self.app.call("session.close_window", json!({ "session_id": sid, "window_id": wid }));
+        if let Some(w) = self.window_ref(None) {
+            self.close_window(w, cx);
         }
-        let rows = self.rows();
-        self.settle(&rows, before);
-        cx.notify();
     }
 
     fn new_session(&mut self, _: &NewSession, _: &mut Window, cx: &mut Context<Self>) {
@@ -504,8 +512,8 @@ impl Workspace {
             .bg(rgb(t.chrome))
             .border_b_1()
             .border_color(rgb(t.border))
-            .when(!self.sidebar, |d| d.pl(px(78.))) // clear the traffic lights
             .px(px(6.))
+            .when(!self.sidebar, |d| d.pl(px(78.))) // clear the traffic lights (after px, which sets left too)
             .gap(px(2.));
         if let Some(row) = row {
             for (i, w) in row.windows.iter().enumerate() {
@@ -546,13 +554,8 @@ impl Workspace {
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |ws, _, _, cx| {
-                                        let p = json!({ "session_id": sid, "window_id": wid });
-                                        let before = ws.session_index();
-                                        let _ = ws.app.call("session.close_window", p);
-                                        let rows = ws.rows();
-                                        ws.settle(&rows, before);
+                                        ws.close_window((sid.clone(), wid.clone()), cx);
                                         cx.stop_propagation();
-                                        cx.notify();
                                     }),
                                 ),
                         )
@@ -585,7 +588,7 @@ impl Render for Workspace {
             stats.borrow_mut().render_start = Some(Instant::now());
         }
         let rows = self.rows();
-        self.settle(&rows, None);
+        self.settle(&rows);
         let current = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
         let terminal = self.terminal();
         let active = window.is_window_active();
@@ -680,16 +683,16 @@ fn paint_frame(
     for r in &f.backgrounds {
         window.paint_quad(fill(Bounds::new(at(r.line, r.col), size(cell_w * r.len as f32, line_h)), rgb(r.color)));
     }
-    let cursor_bounds = f.cursor.as_ref().map(|c| {
+    let mark = f.cursor.as_ref().map(|c| {
         let w = cell_w * if c.wide { 2. } else { 1. };
         let origin = at(c.line, c.col);
-        match (c.shape, active) {
-            (CursorShape::Beam, _) => (Bounds::new(origin, size(px(2.), line_h)), true),
-            (CursorShape::Underline, _) => {
-                (Bounds::new(point(origin.x, origin.y + line_h - px(2.)), size(w, px(2.))), true)
+        match c.shape {
+            CursorShape::Beam => Mark::Bar(Bounds::new(origin, size(px(2.), line_h))),
+            CursorShape::Underline => {
+                Mark::Bar(Bounds::new(point(origin.x, origin.y + line_h - px(2.)), size(w, px(2.))))
             }
-            (_, true) => (Bounds::new(origin, size(w, line_h)), false),
-            (_, false) => (Bounds::new(origin, size(w, line_h)), true),
+            CursorShape::Block if active => Mark::Block(Bounds::new(origin, size(w, line_h))),
+            _ => Mark::Hollow(Bounds::new(origin, size(w, line_h))), // also any block in an inactive window
         }
     });
     let mut paint_text =
@@ -704,12 +707,14 @@ fn paint_frame(
                 underline: underline.then(|| UnderlineStyle { thickness: px(1.), color: None, wavy: false }),
                 strikethrough: strike.then(|| StrikethroughStyle { thickness: px(1.), color: None }),
             };
+            // Pin glyph i to column i, so a fallback font's advance can't push text off the grid.
+            let grid = s.filter(|s| s.cells == s.text.chars().count()).map(|_| cell_w);
             let shaped =
-                window.text_system().shape_line(SharedString::from(text.to_string()), px(FONT_SIZE), &[run], None);
+                window.text_system().shape_line(SharedString::from(text.to_string()), px(FONT_SIZE), &[run], grid);
             let _ = shaped.paint(at(line, col), line_h, window, cx);
         };
     // A solid block cursor sits under the text; its cell's text is redrawn in the background color.
-    if let Some((b, false)) = cursor_bounds {
+    if let Some(Mark::Block(b)) = mark {
         window.paint_quad(fill(b, rgb(t.cursor)));
     }
     for (line, spans) in f.rows.iter().enumerate() {
@@ -717,12 +722,22 @@ fn paint_frame(
             paint_text(&s.text, line, s.col, s.fg, Some(s), window);
         }
     }
-    match (cursor_bounds, &f.cursor) {
-        (Some((_, false)), Some(c)) if c.text.trim() != "" => paint_text(&c.text, c.line, c.col, t.bg, None, window),
-        (Some((b, true)), Some(c)) if matches!(c.shape, CursorShape::Beam | CursorShape::Underline) => {
-            window.paint_quad(fill(b, rgb(t.cursor)))
+    match (mark, &f.cursor) {
+        (Some(Mark::Block(_)), Some(c)) if !c.text.trim().is_empty() => {
+            paint_text(&c.text, c.line, c.col, t.bg, None, window)
         }
-        (Some((b, true)), _) => window.paint_quad(outline(b, rgb(t.cursor), gpui::BorderStyle::Solid)),
+        (Some(Mark::Bar(b)), _) => window.paint_quad(fill(b, rgb(t.cursor))),
+        (Some(Mark::Hollow(b)), _) => window.paint_quad(outline(b, rgb(t.cursor), gpui::BorderStyle::Solid)),
         _ => {}
     }
+}
+
+/// How the cursor is drawn.
+enum Mark {
+    /// Filled, under the text.
+    Block(Bounds<Pixels>),
+    /// A beam or underline bar, over the text.
+    Bar(Bounds<Pixels>),
+    /// An outline: a hollow-block cursor, or the cursor of an inactive window.
+    Hollow(Bounds<Pixels>),
 }

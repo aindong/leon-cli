@@ -190,12 +190,13 @@ impl Terminal {
         (term.screen_lines() as u16, term.columns() as u16)
     }
 
-    /// Resize the grid and the PTY (which signals SIGWINCH to the program). Both are at least 1.
+    /// Resize the grid, then the PTY (which signals SIGWINCH), so the program's redraw is parsed
+    /// at the new size. At least 1 row and 2 columns: alacritty's wide-char path needs two.
     pub fn resize(&self, rows: u16, cols: u16) -> io::Result<()> {
-        let (rows, cols) = (rows.max(1), cols.max(1));
+        let (rows, cols) = (rows.max(1), cols.max(2));
+        lock(&self.term).resize(Size { rows, cols });
         let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
         lock(&self.master).resize(size).map_err(pty)?;
-        lock(&self.term).resize(Size { rows, cols });
         self.generation.fetch_add(1, Ordering::Release);
         Ok(())
     }

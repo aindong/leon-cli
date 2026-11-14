@@ -74,6 +74,10 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
         let col = cell.point.column.0;
         let flags = cell.flags;
         if flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+            // A program can park the cursor on the spacer a wrapped wide char left behind.
+            if let Some(c) = cursor.as_mut().filter(|_| cell.point == cursor_at) {
+                (c.line, c.text) = (line, " ".into());
+            }
             continue;
         }
         let mut fg = resolve(cell.fg, content.colors, theme);
@@ -113,13 +117,16 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
         };
         let blank = span.text == " " && !span.underline && !span.strikeout;
         let row = &mut f.rows[line];
-        // Wide chars get spans of their own, so the next span starts exactly two columns on.
+        // Spans hold one char per cell, so the painter can pin each glyph to its column. Wide chars
+        // and cells with combining marks get spans of their own. A plain blank joins any span whose
+        // style can't show on it (no underline or strikeout).
+        let one_char = !wide && span.text.chars().count() == 1;
         match row.last_mut() {
             Some(s)
-                if !wide
+                if one_char
                     && s.col + s.cells == col
                     && s.cells == s.text.chars().count()
-                    && (blank || same_style(s, &span)) =>
+                    && (same_style(s, &span) || blank && !s.underline && !s.strikeout) =>
             {
                 s.text.push_str(&span.text);
                 s.cells += 1;
@@ -129,7 +136,8 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
         }
     }
     for row in &mut f.rows {
-        for s in row.iter_mut() {
+        // Plain blanks merged in at the end draw nothing; underlined or struck blanks do.
+        for s in row.iter_mut().filter(|s| !s.underline && !s.strikeout) {
             let trimmed = s.text.trim_end_matches(' ').len();
             s.cells -= s.text.len() - trimmed;
             s.text.truncate(trimmed);

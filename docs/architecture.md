@@ -30,6 +30,12 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 - **Config.** `leon-lua` turns `init.lua` into a plain `Config` (bindings with modes and sequences,
   modes, actions, unbinds, diagnostics) and drops the Lua state; a prefix/sequence clash keeps the newest
   with a warning. `leon config check` exits 1 if the load fails or any `leon.*` call was skipped.
+- **The app owns its server.** `leon` (or `leon app`) serves the socket from the app process and
+  renders straight from the in-process grids. If a server with sessions already owns the socket,
+  the app exits 1 and says to run `leon server stop`; an idle one (no sessions) is stopped with
+  `server.stop {if_idle: true}` and replaced. Closing the window ends every program; `leon server
+  stop` from the CLI quits the app. The view polls each terminal's change counter (~8 ms) and
+  redraws only when something changed.
 - **Naming.** Method, action, event and flag names follow `docs/spec.md`, so scripts and agents written
   for that interface carry over. Env vars are `LEON_*`.
 

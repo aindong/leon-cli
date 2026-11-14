@@ -228,9 +228,11 @@ pub fn registry() -> Registry {
     });
     // The socket loop stops the server once this reply is written (serve.rs).
     r.add("server.stop", "Stop the server after replying; every session ends.", |ctx, p: Stop| {
-        if p.if_idle && !ctx.state().sessions.is_empty() {
+        let st = ctx.state(); // held while deciding, so no session is created in between
+        if p.if_idle && !st.sessions.is_empty() {
             return Err(ApiError::new(409, "conflict", "sessions exist; not stopping"));
         }
+        ctx.stopping.store(true, Ordering::SeqCst);
         Ok(Empty {})
     });
     r.add("session.list", "Every session in order, with its label and window count.", |ctx, _: NoParams| {
@@ -245,6 +247,9 @@ pub fn registry() -> Registry {
     });
     r.add("session.create", "Create a session with one window holding one terminal.", |ctx, p: CreateSession| {
         let mut st = ctx.state();
+        if ctx.stopping.load(Ordering::SeqCst) {
+            return Err(ApiError::new(503, "shutting_down", "the server is stopping"));
+        }
         let (session_id, window_id) = st.create_session(p.label.as_deref(), p.window_label.as_deref())?;
         match blocks::open(ctx, &mut st, &session_id, &window_id, Layout::block(p.layout)) {
             Ok(block_id) => Ok(Created { session_id, window_id, block_id }),
