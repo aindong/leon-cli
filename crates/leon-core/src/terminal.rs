@@ -32,6 +32,8 @@ use reading::Reading;
 pub const NAMESPACE: &str = "dev.leon.terminal";
 pub const ROWS: u16 = 24;
 pub const COLS: u16 = 80;
+/// The largest grid (rows, cols): more than a 6K display holds at 8 pt.
+pub const MAX_SIZE: (u16, u16) = (500, 1000);
 /// shortcut: scrollback is counted in lines, not the spec's ~64 MiB; revisit with M8's benchmarks.
 const SCROLLBACK: usize = 10_000;
 /// Answers to terminal queries waiting to be written; past this a program that queries but never
@@ -350,9 +352,10 @@ impl Terminal {
     }
 
     /// Resize the grid, then the PTY (which signals SIGWINCH), so the program's redraw is parsed
-    /// at the new size. At least 1 row and 2 columns: alacritty's wide-char path needs two.
+    /// at the new size. At least 1 row and 2 columns (alacritty's wide-char path needs two), at
+    /// most `MAX_SIZE`: any client can ask, and a grid's memory grows with rows × columns.
     pub fn resize(&self, rows: u16, cols: u16) -> io::Result<()> {
-        let (rows, cols) = (rows.max(1), cols.max(2));
+        let (rows, cols) = (rows.clamp(1, MAX_SIZE.0), cols.clamp(2, MAX_SIZE.1));
         lock(&self.term).resize(Size { rows, cols });
         let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
         lock(&self.master).resize(size).map_err(pty)?;

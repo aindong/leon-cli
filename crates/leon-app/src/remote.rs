@@ -163,6 +163,8 @@ impl Shared {
 
 /// The model, read with one call per session and per block (a session that vanishes meanwhile is
 /// left out; the event that says so brings another refetch).
+/// shortcut: every batch of events refetches every block's status records; fetch only the blocks
+/// the events name if a status flood ever shows up in a profile.
 fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
     let list = c.call("session.list", json!({}))?;
     let mut out = Vec::new();

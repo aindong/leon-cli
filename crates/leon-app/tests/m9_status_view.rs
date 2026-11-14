@@ -28,10 +28,9 @@ fn status_shows_in_tab_sidebar_and_corner_and_done_clears_on_focus(cx: &mut Test
 
     run_until(&term(&s.app, &b), DONE, "d-sent"); // b reports done while a has the focus
     run_until(&term(&s.app, &a), WORKING, "w-sent");
-    cx.run_until_parked();
-
-    let (sessions, tabs) = ws.read_with(cx, |ws, _| ws.indicators());
     let working = Some(Indicator::Working { progress: Some(40) });
+    shows(cx, |cx| ws.read_with(cx, |ws, _| ws.indicators()).1 == vec![working]);
+    let (sessions, tabs) = ws.read_with(cx, |ws, _| ws.indicators());
     assert_eq!(tabs, vec![working], "the tab shows its panes' highest state");
     assert_eq!(sessions, vec![working], "so does the session's sidebar row");
     let corner = ws.read_with(cx, |ws, _| ws.pane_caption(&a)).expect("a corner caption");
@@ -65,15 +64,18 @@ fn status_in_a_background_session_or_hidden_tab_redraws_and_shows(cx: &mut TestA
 
     let before = ws.read_with(cx, |ws, _| ws.signature());
     run_until(&term(&s.app, &other_block), DONE, "d-sent");
-    assert_ne!(ws.read_with(cx, |ws, _| ws.signature()), before, "a background session's status redraws");
+    let redraws = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.indicators()).0 == vec![None, Some(Indicator::Done)]);
+    assert!(redraws && ws.read_with(cx, |ws, _| ws.signature()) != before, "a background session's status redraws");
     let (sessions, _) = ws.read_with(cx, |ws, _| ws.indicators());
     assert_eq!(sessions, vec![None, Some(Indicator::Done)], "its sidebar row shows it");
 
     // an error in the shown tab keeps the session's row at error, so only the hidden tab's mark moves
     run_until(&focused(&s.app, &ws, cx), r"printf '\033]7501;state=error\007'; echo e-sent", "e-sent");
+    shows(cx, |cx| ws.read_with(cx, |ws, _| ws.indicators()).0[0] == Some(Indicator::Error));
     let before = ws.read_with(cx, |ws, _| ws.signature());
     run_until(&term(&s.app, &hidden), DONE, "d-sent");
-    assert_ne!(ws.read_with(cx, |ws, _| ws.signature()), before, "a hidden tab's status redraws");
+    let done = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.indicators()).1.get(1) == Some(&Some(Indicator::Done)));
+    assert!(done && ws.read_with(cx, |ws, _| ws.signature()) != before, "a hidden tab's status redraws");
     let (sessions, tabs) = ws.read_with(cx, |ws, _| ws.indicators());
     assert_eq!((sessions[0], tabs), (Some(Indicator::Error), vec![Some(Indicator::Error), Some(Indicator::Done)]));
     s.app.stop();

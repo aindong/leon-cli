@@ -12,7 +12,7 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 | `leon-server` | The API: a method registry where every method carries a description and JSON Schemas (`help.all`), served over a Unix socket. Also runnable in-process. |
 | `leon-lua` | Lua 5.1 (`mlua`): `init.lua` config (bindings, sequences, modes, actions), the live config `Runtime`, and `leon do` scripts (`leon.on`, `wait`, timers, `exec`). |
 | `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart. With no arguments it opens the app. |
-| `leon-app` | The GPUI client. It embeds the server in-process (no socket hop for rendering) and still listens on the socket, so the CLI and agents drive the same state. |
+| `leon-app` | The GPUI client. It attaches to the server over the socket like any client and paints the screens the server pushes, so programs outlive the app. |
 
 ## Decisions
 
@@ -53,21 +53,46 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   (also on every coroutine) raises past the deadline, `pcall`/`xpcall`/`coroutine.resume` re-raise it,
   and calls and `leon.exec` get only the time left; 256 MiB memory limit. A long C call (a pathological
   `string.find`) isn't interrupted: its caller still gets a timeout, and the next reload replaces the thread.
-- **The app owns its server.** `leon` (or `leon app`) serves the socket from the app process and
-  renders straight from the in-process grids. If a server with sessions already owns the socket,
-  the app exits 1 and says to run `leon server stop`; an idle one (no sessions) is stopped with
-  `server.stop {if_idle: true}` and replaced. Closing the window ends every program; `leon server
-  stop` from the CLI quits the app. The window shows the active tab's whole split tree; keys go to
-  the zoomed block, else the focused one. The view polls each visible pane's change counter and
-  each session's revision (~8 ms) and redraws only when something changed.
-- **App keys go through the keymap.** The embedded server loads `init.lua` like `leon server run`.
+- **The app attaches.** `leon` (or `leon app`) first does what `leon server start` does (a running
+  server, autostarted or not, is told to stay up; else one starts detached, persistent, restoring
+  the saved sessions), then attaches over the socket (`leon_app::remote`). Quitting the app (⌘Q,
+  the menu, closing the window) only closes its connections: every program keeps running, and the
+  next launch shows the same sessions and screens. "Quit and End All Sessions…" asks once, naming
+  how many sessions end, then calls `server.stop`; the app quits whenever the server goes away
+  (it re-attaches if only its event connection was dropped). The client uses three connections:
+  UI calls (keys, layout changes; one that changes the model refetches it before returning), model
+  refetches, and events plus screens, read on a thread. The client keeps a copy of the model
+  (sessions, windows, layout trees, blocks, program-status records), refetched after each batch of
+  events with `session.list`, `session.view`, `session.list_blocks` and `program_status` rather
+  than by applying events one by one. The window shows the active tab's whole split tree; keys go
+  to the zoomed block, else the focused one. The view redraws when the reader thread wakes it (or
+  every ~8 ms for the spinner and the keymap) and only when something drawn changed.
+- **Screen transport.** `block.watch {block_ids}` on a connection replaces the set of blocks whose
+  screens it gets; the app watches only the panes on screen. Each screen line is
+  `{"screen":{block_id, full, lines, cols, rows:[{line, spans, backgrounds}], cursor, app_cursor,
+  bracketed_paste}}`: spans are runs of same-styled text at their start column (fg as `0xRRGGBB`,
+  bold/italic/underline/strikeout), backgrounds are runs of cells. The first line for a block, and
+  any after a size change, is `full` (every row); later ones carry only the dirty rows, found by
+  diffing the frame against the last one sent on that connection (`leon_core::screen::diff`).
+  Screen lines have no `seq`: they are state, not events. Per watched block a task waits on the
+  terminal's change counter (a `tokio::sync::watch`) and only marks it dirty; the connection loop
+  builds the frame under the terminal's lock, between replies and events, so nothing queues per
+  connection beyond "dirty": a slow reader gets fewer, newer screens, never a backlog, and is
+  never dropped for them. One block's screens are at least 2 ms apart, so a flood costs at most 500
+  frame builds a second while a keystroke's echo after a quiet spell goes at once. The watcher
+  holds the terminal weakly, so watching a block never keeps its program alive.
+  `dev.leon.terminal.screen` returns the same whole screen once. Colours are resolved on the
+  server with leon's one theme (shortcut until themes exist: then the client sends its palette, the
+  spec's `set_theme`). Other block methods the app uses: `write`, `resize`, `pwd`, and
+  `block.event {type: focus}`, which clears `done`/`error` the way arriving at a pane does.
+- **App keys go through the keymap.** The server loads `init.lua` (`leon server run`).
   The app has no GPUI key table (only ⌘Q): every keystroke becomes an unshifted chord
   (`keymap::chord`) and is resolved against its built-in defaults (`keymap::DEFAULTS`) with the
   config's `client.keymap` on top, fetched off the UI thread about once a second. The app runs its
   own actions (`client.*`, `pane.*`, `session.*`); a config action or Lua function goes to the
   server (`client.action` / `client.key`) without waiting. A pending sequence shows a hint and has
-  no timeout; unbound keys go to the pane. Program status (OSC 7501) is read by reference from
-  each terminal's store on every poll; focusing a pane clears its `done`/`error` (reason `seen`).
+  no timeout; unbound keys go to the pane (`dev.leon.terminal.write`). Program status (OSC 7501)
+  comes with the model copy; arriving at a pane clears its `done`/`error` (reason `seen`).
 - **Agent skill.** `leon skill show` prints a guide compiled into the binary. `skill setup` installs a
   SKILL.md stub (marked `<!-- leon-skill: … -->`) that tells the agent to run `leon skill show`, so
   upgrades reach agents without a reinstall, plus a matcher-less SessionStart hook running
@@ -88,11 +113,9 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   flocked by another server, or nothing is saved (`server status` shows `state_file: null`); the file is 0600, written via a temp file and
   a rename. A file that is corrupt, from a newer version, or inconsistent is moved to
   `sessions.json.bad-<secs>-<n>` with a warning in the log, never replaced.
-  The app's embedded server does the same (`embedded::start`): quitting the app (window close,
-  the menu, logout) or `leon server stop` ends the socket loop, which saves before programs end,
-  and the next launch restores. Restoring is `serve::Listener::persist`, called before `serve_on`
-  and before the app looks at the state, so its "open a session when there is none" sees the
-  restored ones. Tests use `embedded::start_at`, which keeps nothing.
+  The app takes no part: the server it starts restores at start, before it accepts the app's
+  connection, so the app's "open a session when there is none" sees the restored ones. Tests and
+  benches use `embedded::start_at`, an in-process server that keeps nothing.
 - **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of
   up to 16 KiB); the parser thread feeds what has queued, up to 64 KiB, to the OSC 7501 tracker and
   the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread

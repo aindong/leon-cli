@@ -6,9 +6,10 @@
 server with a stable API. You drive them from a native app, from the `leon` command, from
 Lua, or let your coding agent drive them for you. It's built in Rust, with GPUI for the app.
 
-- **Persistent layout.** Sessions, tabs, splits and each pane's directory are saved when the server
-  or app stops and come back on the next start, with the same stable IDs you script against. Running
-  programs don't survive yet: quitting the app ends them.
+- **Persistent layout.** Programs keep running when the app quits: closing the window or ⌘Q only
+  detaches, and the app opens again on the same sessions, tabs, splits and live screens. When the
+  server itself stops, sessions, tabs, splits and each pane's directory are saved and come back on
+  its next start, with the same stable IDs you script against (the programs in them don't).
 - **Scriptable from the shell.** `leon run`, `send`, `capture` and `wait` open terminals, type into
   them, read their screens and wait for programs, with fixed exit codes and `--json` everywhere.
 - **Agent-ready.** One command teaches Claude Code and Codex to open panes beside themselves, run
@@ -40,9 +41,9 @@ is safe to run again, and refuses to replace anything at those paths that it did
 `scripts/install.sh --uninstall` removes both. Open **Leon** from Finder, Spotlight or the Dock, or
 type `leon`.
 
-The app runs the server itself. If a server you started from the shell already holds sessions,
-the app says so and doesn't open: run `leon server stop` (it ends those sessions' programs), then
-open the app again.
+The app is a client of the leon server: it attaches to the one running (from the shell or an
+earlier launch) or starts it. Quitting the app leaves the server and your programs running;
+`leon server stop`, or **Quit and End All Sessions…** in the leon menu, ends them.
 
 To build only the app: `scripts/bundle.sh` writes `target/release/Leon.app`.
 
@@ -109,7 +110,7 @@ what it created. See [docs/agents.md](docs/agents.md).
 | ⌘B | Show or hide the sidebar |
 | ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
 | ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
-| ⌘Q | Quit (ends every program) |
+| ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
 
 These are defaults: a `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
 removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow.

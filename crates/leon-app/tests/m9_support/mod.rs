@@ -73,6 +73,17 @@ pub fn focused(app: &Embedded, ws: &Entity<Workspace>, cx: &mut VisualTestContex
     term(app, &id)
 }
 
+/// Poll `pred` for up to 10 s, letting the window run between tries; returns whether it came
+/// true. The app hears of changes made outside it (a program's status) by events, a moment later.
+pub fn shows(cx: &mut VisualTestContext, mut pred: impl FnMut(&mut VisualTestContext) -> bool) -> bool {
+    let end = Instant::now() + Duration::from_secs(10);
+    while !pred(cx) && Instant::now() < end {
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    pred(cx)
+}
+
 /// Poll `pred` for up to 10 s; returns whether it came true.
 pub fn eventually(mut pred: impl FnMut() -> bool) -> bool {
     let end = Instant::now() + Duration::from_secs(10);

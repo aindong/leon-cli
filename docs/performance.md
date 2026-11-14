@@ -109,10 +109,46 @@ Both builds' medians are about 110 MB/s for `cat`. Whichever build ran first in 
 better (the pre-merge build ran first in rounds 1 and 2, the merged build in rounds 3 and 4), so
 the spread is the machine's load, not the merge; nothing moved.
 
+## M10: the attached app
+
+Since M10 the app is a socket client: the server pushes each visible pane's screen (a whole one,
+then the changed rows) and the app paints what it receives (docs/architecture.md, "Screen
+transport"). The bench now also measures that path with the app's own client
+(`leon_app::remote`) against the release server, and fails (exit 1) when the budget is missed:
+
+- **Keystroke to screen**: one `x` every 10 ms (faster than key repeat) into the raw-mode echo
+  program, timed from the write until the client has applied the pushed screen that shows it and
+  woken the UI. GPUI paints on the next display frame after that; `LEON_FRAME_STATS=1` measures
+  the paint itself. Budget: p50 < 4 ms, p99 < 16 ms.
+- **`seq 1 200000`** in a 40 × 110 pane (about the default window), from the keystroke that starts
+  it until the screen shows the end marker after it: attached (screens pushed over the socket)
+  against in-process (an embedded server whose grid is read every 8 ms, as the app did before
+  M10), three alternating runs each. Budget: attached at most 1.5x in-process.
+
+The old app path's time was also measured on `00e956d`, before any M10 change, with
+`frame_bench` (the same 8 ms poll, until the program exits): 181, 189, 190 ms with a load average
+of 13, and 184, 177, 177 ms in a later round. So the in-process numbers below are the old path's,
+not a slowed-down copy of it.
+
+| | `session.list` round trip p50 / p99 | input latency p50 / p99 | `yes \| head` 100 MB | `cat` 100 MB | keystroke to screen p50 / p99 | `seq 1 200000` in-process / attached |
+|---|---|---|---|---|---|---|
+| before (`00e956d`) | 0.010 / 0.033 ms | 0.024 / 0.048 ms | 2.5 MB/s | 123.6 MB/s | (no attached path) | 177–190 ms (frame_bench) |
+| after, run 1 | 0.005 / 0.023 ms | 0.024 / 0.057 ms | 2.6 MB/s | 125.6 MB/s | 0.420 / 0.784 ms | 194 / 165 ms (0.85x) |
+| after, run 2 (tests running alongside) | 0.004 / 0.013 ms | 0.029 / 0.055 ms | 2.6 MB/s | 123.5 MB/s | 0.237 / 0.734 ms | 178 / 169 ms (0.95x) |
+
+The budget holds with room to spare: a keystroke's echo is on the app's screen model in under a
+millisecond, and `seq` is no slower attached, a little faster even, because a pushed screen
+arrives as soon as the output is parsed instead of at the next 8 ms poll. The existing rows did
+not move beyond the noise: the change counter became a `tokio::sync::watch` (one more notify per
+parsed batch) without a cost `cat` can see. One block's screens are at least 2 ms apart, so a
+flood costs the server at most 500 frame builds a second under the terminal's lock; nothing else
+needed tuning, so there is no shared memory or extra coalescing.
+
 ## Not measured yet
 
 - tmux, because it isn't installed here. The bench's tmux path drives tmux through a process per
   command (`send-keys`, `capture-pane`, `list-sessions`), as a shell script would, so its round
   trip and latency include process start-up. Its throughput is timed until the writer finishes,
   not until tmux has drawn the output.
-- Latency through a real shell's line editor, and rendering in the app (M6).
+- Latency through a real shell's line editor, and GPUI's paint in the keystroke number (the
+  display's next frame comes after the measured point).

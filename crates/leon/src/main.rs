@@ -47,7 +47,7 @@ impl Cli {
 // A positional named `block` would shadow the global `-b`, so block positionals are `target`.
 #[derive(Subcommand)]
 pub enum Cmd {
-    /// Open the leon app; it runs the server in-process (also what `leon` alone does).
+    /// Open the leon app, attached to the server (started if none runs); also what `leon` alone does.
     App,
     /// Run, start, stop or check the server.
     #[command(subcommand)]

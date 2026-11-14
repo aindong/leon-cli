@@ -12,3 +12,4 @@ Each milestone is one run of the loop (plan, build test-first, verify, review), 
 | M6 | The app | GPUI window with sidebar sessions, tabs, split panes rendering live terminals, keyboard input, key bindings from Lua, command palette, status indicators from OSC 7501. |
 | M7 | Agents and shipping | `leon skill setup/status/remove/show` for Claude Code and Codex, docs, a `.app` bundle and an install script. |
 | M8 | Persistence and speed | Save/restore sessions across server restarts; measured input latency and throughput, with a benchmark in the repo. |
+| M10 | The app attaches | Opening the app attaches to the running server (starting one if needed); quitting it leaves every program running; "Quit and End All Sessions…" or `leon server stop` ends them; screens are pushed over the socket within the latency budget in docs/performance.md. |

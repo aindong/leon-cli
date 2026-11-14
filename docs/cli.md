@@ -48,9 +48,11 @@ These work with every command.
 
 ### `leon app`
 
-Open the leon app. It runs the server inside the app process, so the CLI and agents drive the
-same sessions you see. `leon` with no command does the same. If a server that holds sessions
-already owns the socket, the app exits 1 and tells you to run `leon server stop`.
+Open the leon app, attached to the server: the one already running (one the CLI started is
+fine), or one it starts first, as `leon server start` does. The CLI and agents drive the same
+sessions you see. `leon` with no command does the same. Quitting the app (⌘Q, closing the
+window) detaches and every program keeps running; the app's "Quit and End All Sessions…" or
+`leon server stop` ends them. With `--autostart=false` and no server it exits 4.
 
 ## Sessions
 
