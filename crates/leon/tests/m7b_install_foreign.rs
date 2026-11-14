@@ -42,3 +42,21 @@ fn a_foreign_symlink_or_app_stops_the_install() {
     let r = k.install(&["--uninstall"]);
     assert!(!r.ok && app.join("Contents/readme").exists(), "uninstall left the foreign app: {}", r.out);
 }
+
+/// Found in M7b's impact check: an empty HOME would make the app path /Applications/Leon.app.
+#[test]
+fn an_empty_home_is_refused() {
+    let k = Kit::new();
+    for args in [&[][..], &["--uninstall"][..]] {
+        let o = std::process::Command::new("bash")
+            .arg(install_kit::repo().join("scripts/install.sh"))
+            .arg("--app")
+            .arg(&k.app)
+            .args(args)
+            .env("HOME", "")
+            .output()
+            .unwrap();
+        assert!(!o.status.success(), "install.sh {args:?} ran with an empty HOME");
+        assert!(String::from_utf8_lossy(&o.stderr).contains("HOME"), "it says why");
+    }
+}

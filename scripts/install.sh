@@ -12,6 +12,8 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
+# an empty HOME would aim everything at /Applications and /.local
+: "${HOME:?install.sh needs HOME set}"
 prefix="$HOME/.local"
 src=""
 uninstall=0
