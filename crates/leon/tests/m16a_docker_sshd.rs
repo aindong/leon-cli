@@ -28,11 +28,12 @@ fn linux_bin(arch: &str) -> Option<PathBuf> {
         .find(|p| p.exists())
 }
 
-struct Container(String);
+/// `docker ARGS NAME` when dropped: removes the container, then the image.
+struct Cleanup(&'static [&'static str], String);
 
-impl Drop for Container {
+impl Drop for Cleanup {
     fn drop(&mut self) {
-        let _ = Command::new("docker").args(["rm", "-f", &self.0]).output();
+        let _ = Command::new("docker").args(self.0).arg(&self.1).output();
     }
 }
 
@@ -65,12 +66,13 @@ fn leon_over_real_ssh_to_a_linux_container() {
     )
     .unwrap();
     let tag = format!("leon-m16a-sshd-{}", std::process::id());
+    let _image = Cleanup(&["rmi", "-f"], tag.clone());
     if docker(&["build", "-q", "-t", &tag, ctx.to_str().unwrap()]).is_none() {
         eprintln!("skipped: the sshd image didn't build (offline?)");
         return;
     }
     let id = docker(&["run", "-d", "--rm", "-p", "127.0.0.1::22", &tag]).expect("docker run");
-    let _c = Container(id.clone());
+    let _container = Cleanup(&["rm", "-f"], id.clone());
     let port = docker(&["port", &id, "22"]).expect("a published port");
     let port = port.lines().next().unwrap().rsplit(':').next().unwrap().to_string();
 

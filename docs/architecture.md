@@ -12,6 +12,7 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 | `leon-server` | The API: a method registry where every method carries a description and JSON Schemas (`help.all`), served over a Unix socket. Also runnable in-process. |
 | `leon-lua` | Lua 5.1 (`mlua`): `init.lua` config (bindings, sequences, modes, actions), the live config `Runtime`, and `leon do` scripts (`leon.on`, `wait`, timers, `exec`). |
 | `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart, and `leon attach` (the terminal client). With no arguments it opens the app. |
+| `leon-hosts` | Other machines: `ssh://` endpoints, the hosts list, and the `Link` that reaches a host's server over ssh. No GPUI, so the CLI and (later) the app share it. |
 | `leon-app` | The GPUI client. It attaches to the server over the socket like any client and paints the screens the server pushes, so programs outlive the app. |
 
 ## Decisions
@@ -192,6 +193,46 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
   `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an
   older `leon` in `/usr/local/bin` can win there; the dir is still on PATH.
+- **Remote hosts.** `-H HOST` (a label from `leon hosts`, or `ssh://[USER@]HOST[:PORT]`) opens a
+  `Link` (`leon-hosts`): a Unix socket in a fresh private dir, `link-XXXXXX/s` under the runtime
+  dir (0700, socket 0600), served by threads in the client process. Each connection to it spawns
+  `$LEON_SSH` (default `ssh`) as argv, never through a local shell:
+  `-T -o ServerAliveInterval=15 -o ServerAliveCountMax=3 [-p PORT] -- [USER@]HOST CMD`, and copies
+  bytes both ways. So every client that takes a socket path works unchanged over ssh: the CLI,
+  `leon do` scripts, and `leon_app::remote::Remote` (`leon attach`, and the app in M16b). leon adds
+  only `-T` and the keepalives (a dead Wi-Fi link is noticed in about 45 s); everything else comes
+  from `~/.ssh/config`, and passwords stay between ssh and the terminal. CMD is one fixed string
+  with nothing from the endpoint in it: `sh -c '…'` finds `leon` on PATH, else
+  `$HOME/.local/bin/leon`, else exits 127, which the link reports as "install leon on HOST".
+  There `leon server proxy` does what `leon server start` does (a persistent server, restoring
+  saved sessions) and bridges stdin and stdout to `server.sock`; the server's peer-uid check holds
+  because ssh runs the proxy as the host's user. Only a link's connections until one reaches the
+  server may autostart; later ones pass `--autostart=false`, so a server stopped on purpose stays
+  stopped. Nothing listens on TCP. An endpoint is parsed into words of `[A-Za-z0-9._-]` (or an
+  IPv6 address in brackets) that can't start with `-`, a port 1–65535, and no path: anything that
+  could reach ssh as an option or a shell as code is a bad command line (exit 2). The hosts list is
+  `$LEON_STATE_DIR/hosts.json` (`{"version":1,"hosts":[{label, endpoints, icon}]}`, spec §2),
+  written 0600 via a temp file and a rename, read only from a private dir and a regular file of
+  ours, and each endpoint is parsed again when used. With `-H`, `LEON_SESSION`/`LEON_BLOCK` are
+  ignored. A killed client leaves its link dir; the next `Link::open` removes dirs whose socket
+  refuses connections. One ssh session per connection is the price of the simple design
+  (`leon attach` opens three); `ControlMaster auto` shares one login.
+- **Resume and reconnect.** `session.attach`/`session.attach_all` with `resumable: true` also
+  return a `resume` token. Such a stream keeps the last 1 MiB of lines it wrote (taken off the
+  queue before the write, so a line lost in a dying pipe is kept). When its connection ends it is
+  parked for 60 s, still queueing (the 8 MiB drop still applies). `session.resume {resume, seq}`
+  on a connection that hasn't attached moves the queue there under the state lock and puts the
+  kept lines after `seq` in front: every event after the last one the client saw comes once, with
+  the same seq counter. A resume while the old connection is still open (a half-dead link) takes
+  the stream over and the old connection ends. The token lasts for every later drop. An unknown
+  or expired token, a `seq` ahead of the stream or older than the kept lines fails with
+  `resume_failed` (410). `leon events -H` attaches resumable and, when the link drops, reconnects
+  with backoff (100 ms doubling to 5 s, for up to 60 s) and resumes; refused (the server
+  restarted), it attaches again and prints a new snapshot line. `leon attach -H` uses
+  `Remote::connect_retrying`: the reader reopens the fetch, call and event connections with the
+  same backoff, refetches the model and re-watches the screens, since its model is state, not a
+  log. Keys typed while the link is down are lost; while attached, stderr is /dev/null, so ssh's
+  errors during a reconnect aren't shown.
 - **Docs are tested.** `docs/cli.md` is checked against every `--help`; the `sh` blocks in the docs
   run against the real binary (a bad command line fails); `docs/lua.md`'s examples go through
   `leon config check` and `leon do -e`.

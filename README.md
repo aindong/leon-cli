@@ -99,6 +99,23 @@ change it):
 Your `init.lua` bindings work there too, except `cmd` keys (a terminal never sends them) and a
 binding on the prefix key itself.
 
+## Work on your devbox
+
+Any command takes `-H` to act on the leon server on another machine instead, through your own
+`ssh` (no account, relay or VPN; `~/.ssh/config` and `ProxyJump` work). Put `leon` on the other
+machine's PATH or in `~/.local/bin`; the first command there starts its server, and programs keep
+running after you disconnect.
+
+```text
+leon hosts add devbox ssh://me@devbox.example.com
+leon -H devbox run -- make test     # runs on the devbox
+leon -H devbox attach               # its sessions, in this terminal
+leon hosts check
+```
+
+A dropped Wi-Fi link is retried: `leon attach` and `leon events` reconnect and carry on without
+losing an event. Use ssh keys or an agent: each connection is its own ssh session.
+
 ## Let an agent drive it
 
 ```sh
