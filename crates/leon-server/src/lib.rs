@@ -2,14 +2,19 @@
 //! The socket loop (`serve`) takes a `Ctx` the caller built, so the app can embed the same state.
 
 mod blocks;
+pub mod events;
+mod layout;
 pub mod methods;
 pub mod registry;
 pub mod serve;
 
+use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use leon_core::State;
+
+use events::Subscriber;
 
 pub use registry::{Later, Registry};
 
@@ -30,6 +35,42 @@ pub struct Ctx {
     pub autostarted: AtomicBool,
     /// Bumped whenever a block's program exits; `block.wait` watches it.
     exited: tokio::sync::watch::Sender<u64>,
+    /// Attached connections. Only touched with the state lock held, so events and snapshots line up.
+    subscribers: Mutex<Vec<Weak<Subscriber>>>,
+}
+
+/// The locked state. Dropping it hands the events the holder caused to every subscriber while the
+/// lock is still held, so each subscriber gets them in the order of the changes.
+pub struct StateGuard<'a> {
+    state: MutexGuard<'a, State>,
+    subscribers: &'a Mutex<Vec<Weak<Subscriber>>>,
+}
+
+impl Deref for StateGuard<'_> {
+    type Target = State;
+    fn deref(&self) -> &State {
+        &self.state
+    }
+}
+
+impl DerefMut for StateGuard<'_> {
+    fn deref_mut(&mut self) -> &mut State {
+        &mut self.state
+    }
+}
+
+impl Drop for StateGuard<'_> {
+    fn drop(&mut self) {
+        let events = self.state.take_events();
+        if events.is_empty() {
+            return;
+        }
+        let mut subs = events::lock(self.subscribers);
+        subs.retain(|s| s.strong_count() > 0);
+        for sub in subs.iter().filter_map(Weak::upgrade) {
+            events.iter().for_each(|e| sub.offer(e));
+        }
+    }
 }
 
 impl Ctx {
@@ -40,12 +81,13 @@ impl Ctx {
             registry: methods::registry(),
             autostarted: AtomicBool::new(autostarted),
             exited: tokio::sync::watch::channel(0).0,
+            subscribers: Mutex::default(),
         }
     }
 
     /// The model. A handler that panicked mid-update leaves it usable, so a poisoned lock is taken anyway.
-    pub fn state(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|e| e.into_inner())
+    pub fn state(&self) -> StateGuard<'_> {
+        StateGuard { state: events::lock(&self.state), subscribers: &self.subscribers }
     }
 
     pub fn is_autostarted(&self) -> bool {

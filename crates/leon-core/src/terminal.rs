@@ -1,10 +1,12 @@
 //! A terminal: a program on a PTY, its output fed through alacritty's emulator on a reader
-//! thread so the screen and scrollback can be read back at any time.
+//! thread so the screen and scrollback can be read back at any time. The reader also tracks OSC
+//! 7501 program status and reports title, pwd, bell and status changes; the waiter reports the exit.
 
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::fd::FromRawFd;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -16,12 +18,37 @@ use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 
+use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
+
 /// The terminal block namespace (`<ns>.terminal` in docs/spec.md).
 pub const NAMESPACE: &str = "dev.leon.terminal";
 pub const ROWS: u16 = 24;
 pub const COLS: u16 = 80;
 /// shortcut: scrollback is counted in lines, not the spec's ~64 MiB; revisit with M8's benchmarks.
 const SCROLLBACK: usize = 10_000;
+/// Answers to terminal queries waiting to be written; past this a program that queries but never
+/// reads gets no more, so the writer queue can't grow without bound.
+const REPLY_BUDGET: usize = 64 << 10;
+/// Titles and pwds in events are cut to this many bytes.
+const MAX_TEXT: usize = 4096;
+/// How long the exit report waits for the last output (background jobs may hold the PTY open).
+const DRAIN_WAIT: Duration = Duration::from_secs(1);
+
+/// What a terminal reports, from its reader and waiter threads. Per PTY read there is at most one
+/// title, one pwd and one bell (the last title and pwd win, and only if they changed), reported in
+/// that order rather than stream order.
+#[derive(Debug)]
+pub enum Notice {
+    /// The program exited with this status (128 + signal), after its last output was read.
+    Exited(i32),
+    Title(String),
+    /// OSC 7: the working directory as a `file://host/path` URL.
+    Pwd(String),
+    Bell,
+    ProgramStatus(Change),
+}
+
+type Notify = Arc<dyn Fn(Notice) + Send + Sync>;
 
 /// What to run.
 pub struct Spec {
@@ -33,20 +60,55 @@ pub struct Spec {
 }
 
 /// Input for the program, written to the PTY by a thread of its own: a program that stops reading
-/// fills the PTY's queue, and a write then blocks until it reads again.
-type Writer = mpsc::Sender<Vec<u8>>;
+/// fills the PTY's queue, and a write then blocks until it reads again. Each chunk says whether it
+/// is a reply, so the thread can give the reply budget back.
+#[derive(Clone)]
+struct Writer {
+    tx: mpsc::Sender<(Vec<u8>, bool)>,
+    queued_replies: Arc<AtomicUsize>,
+}
+
+impl Writer {
+    fn input(&self, data: Vec<u8>) -> io::Result<()> {
+        self.tx.send((data, false)).map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "the terminal has closed"))
+    }
+
+    /// Queue an answer to a terminal query, unless the reply budget is spent.
+    fn reply(&self, data: Vec<u8>) {
+        let n = data.len();
+        if self.queued_replies.fetch_add(n, Ordering::SeqCst) + n > REPLY_BUDGET || self.tx.send((data, true)).is_err()
+        {
+            self.queued_replies.fetch_sub(n, Ordering::SeqCst);
+        }
+    }
+}
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Sends the emulator's answers to terminal queries (cursor position, device attributes) back to the program.
-struct Replies(Writer);
+/// What the emulator saw during one read, reported once the read is done.
+#[derive(Default)]
+struct Seen {
+    title: Option<String>,
+    bell: bool,
+}
 
-impl EventListener for Replies {
+/// Sends the emulator's answers to terminal queries (cursor position, device attributes) back to
+/// the program, and notes title changes and bells.
+struct Listener {
+    writer: Writer,
+    seen: Arc<Mutex<Seen>>,
+}
+
+impl EventListener for Listener {
     fn send_event(&self, event: Event) {
-        if let Event::PtyWrite(text) = event {
-            let _ = self.0.send(text.into_bytes());
+        match event {
+            Event::PtyWrite(text) => self.writer.reply(text.into_bytes()),
+            Event::Title(title) => lock(&self.seen).title = Some(title),
+            Event::ResetTitle => lock(&self.seen).title = Some(String::new()),
+            Event::Bell => lock(&self.seen).bell = true,
+            _ => {}
         }
     }
 }
@@ -66,7 +128,8 @@ impl Dimensions for Size {
 }
 
 pub struct Terminal {
-    term: Arc<Mutex<Term<Replies>>>,
+    term: Arc<Mutex<Term<Listener>>>,
+    tracker: Arc<Mutex<Tracker>>,
     writer: Writer,
     master: Mutex<Box<dyn MasterPty + Send>>,
     pid: i32,
@@ -83,9 +146,10 @@ impl std::fmt::Debug for Terminal {
 }
 
 impl Terminal {
-    /// Start `spec` on a new PTY. `on_exit` runs on a waiter thread with the exit status
-    /// (128 + signal for a killed program) once the child has been reaped.
-    pub fn spawn(spec: Spec, on_exit: impl FnOnce(i32) + Send + 'static) -> io::Result<Terminal> {
+    /// Start `spec` on a new PTY. `notify` gets what the terminal reports, on its reader and waiter
+    /// threads; `Notice::Exited` comes last, once the child has been reaped and its output read.
+    pub fn spawn(spec: Spec, notify: impl Fn(Notice) + Send + Sync + 'static) -> io::Result<Terminal> {
+        let notify: Notify = Arc::new(notify);
         let size = PtySize { rows: ROWS, cols: COLS, pixel_width: 0, pixel_height: 0 };
         let pair = native_pty_system().openpty(size).map_err(pty)?;
         let mut cmd = if spec.command.is_empty() {
@@ -118,14 +182,32 @@ impl Terminal {
             return Err(io::Error::last_os_error());
         }
         let mut pty_in = unsafe { File::from_raw_fd(dup) };
-        let (writer, input) = mpsc::channel::<Vec<u8>>();
+        let (tx, input) = mpsc::channel::<(Vec<u8>, bool)>();
+        let writer = Writer { tx, queued_replies: Arc::default() };
+        let queued = writer.queued_replies.clone();
         // Ends once every sender is gone, or when the PTY closes.
-        std::thread::spawn(move || input.iter().try_for_each(|data| pty_in.write_all(&data)));
+        std::thread::spawn(move || {
+            input.iter().try_for_each(|(data, reply)| {
+                let written = pty_in.write_all(&data);
+                if reply {
+                    queued.fetch_sub(data.len(), Ordering::SeqCst);
+                }
+                written
+            })
+        });
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
-        let term = Arc::new(Mutex::new(Term::new(config, &Size, Replies(writer.clone()))));
+        let seen = Arc::new(Mutex::new(Seen::default()));
+        let listener = Listener { writer: writer.clone(), seen: seen.clone() };
+        let term = Arc::new(Mutex::new(Term::new(config, &Size, listener)));
+        let tracker = Arc::new(Mutex::new(Tracker::default()));
 
-        let screen = term.clone();
-        std::thread::spawn(move || read_loop(reader, &screen));
+        let (drained, eof) = mpsc::channel::<()>();
+        let reading = Reading { term: term.clone(), tracker: tracker.clone(), seen, writer: writer.clone() };
+        let to_reader = notify.clone();
+        std::thread::spawn(move || {
+            reading.run(reader, &*to_reader);
+            drop(drained); // after the last output's notices
+        });
         let exited = Arc::new(Mutex::new(false));
         let done = exited.clone();
         std::thread::spawn(move || {
@@ -139,9 +221,10 @@ impl Terminal {
                 reap(pid)
             };
             drop(child); // reaped above; dropping std's Child neither waits nor kills
-            on_exit(status);
+            let _ = eof.recv_timeout(DRAIN_WAIT); // disconnects at the reader's EOF
+            notify(Notice::Exited(status));
         });
-        Ok(Terminal { term, writer, master: Mutex::new(pair.master), pid, exited, command })
+        Ok(Terminal { term, tracker, writer, master: Mutex::new(pair.master), pid, exited, command })
     }
 
     pub fn pid(&self) -> i32 {
@@ -150,9 +233,12 @@ impl Terminal {
 
     /// Queue input for the program; never blocks.
     pub fn write(&self, data: &[u8]) -> io::Result<()> {
-        self.writer
-            .send(data.to_vec())
-            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "the terminal has closed"))
+        self.writer.input(data.to_vec())
+    }
+
+    /// The program-status records (OSC 7501), least recently reported first.
+    pub fn program_status(&self) -> Vec<(Option<String>, Record)> {
+        lock(&self.tracker).store.records()
     }
 
     /// Press one key given in binding syntax (`enter`, `ctrl+c`, `up`).
@@ -235,16 +321,94 @@ impl Drop for Terminal {
     }
 }
 
-fn read_loop(mut reader: Box<dyn Read + Send>, term: &Mutex<Term<Replies>>) {
-    let mut parser: Processor = Processor::new();
-    let mut buf = [0u8; 8192];
-    loop {
-        match reader.read(&mut buf) {
-            // macOS reports a closed PTY as EIO rather than EOF.
-            Ok(0) | Err(_) => return,
-            Ok(n) => parser.advance(&mut *lock(term), &buf[..n]),
+/// The reader thread's share of a terminal.
+struct Reading {
+    term: Arc<Mutex<Term<Listener>>>,
+    tracker: Arc<Mutex<Tracker>>,
+    seen: Arc<Mutex<Seen>>,
+    writer: Writer,
+}
+
+impl Reading {
+    /// Feed output to the tracker and emulator until the PTY closes, reporting per read. Takes the
+    /// term and tracker locks only while feeding, never while notifying.
+    fn run(self, mut reader: Box<dyn Read + Send>, notify: &dyn Fn(Notice)) {
+        let mut parser: Processor = Processor::new();
+        let mut buf = [0u8; 8192];
+        // The last title and pwd reported: shells resend them at every prompt.
+        let (mut title, mut pwd) = (None, None);
+        loop {
+            let n = match reader.read(&mut buf) {
+                // macOS reports a closed PTY as EIO rather than EOF.
+                Ok(0) | Err(_) => break,
+                Ok(n) => n,
+            };
+            let fed = {
+                let mut term = lock(&self.term);
+                lock(&self.tracker).feed(&buf[..n], |bytes| parser.advance(&mut *term, bytes))
+            };
+            if !fed.reply.is_empty() {
+                self.writer.reply(fed.reply);
+            }
+            let seen = std::mem::take(&mut *lock(&self.seen));
+            if let Some(new) = seen.title.map(|t| clean(&t)).filter(|t| title.as_ref() != Some(t)) {
+                title = Some(new.clone());
+                notify(Notice::Title(new));
+            }
+            let new_pwd = fed.pwd.and_then(|p| pwd_url(&p));
+            if let Some(new) = new_pwd.filter(|p| pwd.as_ref() != Some(p)) {
+                pwd = Some(new.clone());
+                notify(Notice::Pwd(new));
+            }
+            if seen.bell {
+                notify(Notice::Bell);
+            }
+            coalesce(fed.changes).into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
+        }
+        let gone = lock(&self.tracker).store.process_exited();
+        gone.into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
+    }
+}
+
+/// An OSC 7 URL to report, or None. It is dropped whole when it isn't UTF-8 or when it, or its
+/// percent-decoding (which whoever shows the path does), holds anything `clean` would remove.
+fn pwd_url(raw: &[u8]) -> Option<String> {
+    let url = std::str::from_utf8(raw).ok()?;
+    let decoded = String::from_utf8(percent_decode(raw)).ok()?;
+    (clean(url) == url && clean(&decoded) == decoded).then(|| url.to_string())
+}
+
+/// `%XX` escapes as bytes; anything else (a stray `%` too) as is.
+fn percent_decode(s: &[u8]) -> Vec<u8> {
+    let hex = |b: u8| (b as char).to_digit(16);
+    let mut out = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        match (s[i], s.get(i + 1).copied().and_then(hex), s.get(i + 2).copied().and_then(hex)) {
+            (b'%', Some(hi), Some(lo)) => {
+                out.push((hi * 16 + lo) as u8);
+                i += 3;
+            }
+            (b, _, _) => {
+                out.push(b);
+                i += 1;
+            }
         }
     }
+    out
+}
+
+/// Program-supplied text for events: no control, bidi or invisible characters (they would reach
+/// whoever shows the event, docs/spec.md §5), at most `MAX_TEXT` bytes.
+fn clean(s: &str) -> String {
+    let mut out = String::new();
+    for c in strip_hidden(s).chars() {
+        if out.len() + c.len_utf8() > MAX_TEXT {
+            break;
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// Block until `pid` exits, leaving it unreaped (a zombie keeps its process group ID taken).
@@ -294,7 +458,13 @@ mod tests {
     fn spawn(command: &[&str]) -> (Terminal, mpsc::Receiver<i32>) {
         let (tx, rx) = mpsc::channel();
         let spec = Spec { command: command.iter().map(|s| s.to_string()).collect(), cwd: None, env: vec![] };
-        let t = Terminal::spawn(spec, move |code| tx.send(code).unwrap()).unwrap();
+        let tx = Mutex::new(tx);
+        let t = Terminal::spawn(spec, move |n| {
+            if let Notice::Exited(code) = n {
+                lock(&tx).send(code).unwrap();
+            }
+        })
+        .unwrap();
         (t, rx)
     }
 
