@@ -159,7 +159,8 @@ impl State {
 
     /// The exit status of a block's program, if it has exited (also after the block closed).
     pub fn exit_status(&self, block_id: &str) -> Option<i32> {
-        self.exits.iter().rev().find(|(id, _)| id == block_id).map(|&(_, code)| code)
+        let kept_open = || self.block(block_id).ok().and_then(|(_, b)| b.exit_code);
+        self.exits.iter().rev().find(|(id, _)| id == block_id).map(|&(_, code)| code).or_else(kept_open)
     }
 
     /// The session holding a block, and the block.

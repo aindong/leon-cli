@@ -2,14 +2,13 @@
 
 use std::time::Duration;
 
+use leon_core::terminal::NAMESPACE as TERMINAL;
 use leon_core::ApiError;
 use serde_json::{json, Value};
 
 use crate::client::{Client, Fail};
 use crate::commands::{label, pick_session, print_json, resolve};
 use crate::{BlockCmd, Cli, Cmd};
-
-const TERMINAL: &str = "dev.leon.terminal";
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
     match &cli.cmd {
@@ -51,7 +50,7 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
             println!("{}", r["text"].as_str().unwrap_or_default());
         }
         Cmd::Wait { block, timeout } => {
-            let query = block.clone().or_else(|| block_query(cli));
+            let query = block_query(cli, block.as_deref());
             let id = match pick_block(c, cli, block.as_deref()) {
                 Ok((_, bid)) => bid,
                 // A closed block no longer resolves, but the server still knows how it exited.
@@ -131,16 +130,27 @@ fn no_session_named(c: &mut Client, cli: &Cli) -> Result<bool, Fail> {
     Ok(c.call("session.list", json!({}))?["sessions"].as_array().is_some_and(Vec::is_empty))
 }
 
-fn block_query(cli: &Cli) -> Option<String> {
-    cli.block.clone().or_else(|| std::env::var("LEON_BLOCK").ok().filter(|s| !s.is_empty()))
+fn env(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|s| !s.is_empty())
 }
 
-/// The block a command acts on, as (session id, block id): an explicit target, then `-b`, then
-/// `$LEON_BLOCK` (searched in `-s` if given, else every session), then the active window's block.
+/// The block query a command names: an explicit target, then `-b`, then `$LEON_BLOCK` (only when
+/// `-s` names no session, since a name always beats the caller's own block).
+fn block_query(cli: &Cli, explicit: Option<&str>) -> Option<String> {
+    explicit
+        .or(cli.block.as_deref())
+        .map(str::to_string)
+        .or_else(|| cli.session.is_none().then(|| env("LEON_BLOCK")).flatten())
+}
+
+/// The block a command acts on, as (session id, block id). A query is looked up in `-s`, else
+/// `$LEON_SESSION`, else every session (full IDs always search every session unless `-s` is given);
+/// with no query it is the active window's block in the picked session.
 fn pick_block(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<(String, String), Fail> {
-    if let Some(q) = explicit.map(str::to_string).or_else(|| block_query(cli)) {
-        let scope = match &cli.session {
-            Some(s) => Some(resolve(c, "session", s, None)?),
+    if let Some(q) = block_query(cli, explicit) {
+        let session = cli.session.clone().or_else(|| if q.starts_with("block:") { None } else { env("LEON_SESSION") });
+        let scope = match session {
+            Some(s) => Some(resolve(c, "session", &s, None)?),
             None => None,
         };
         let r = c.call("target.resolve", json!({ "kind": "block", "query": q, "session_id": scope }))?;

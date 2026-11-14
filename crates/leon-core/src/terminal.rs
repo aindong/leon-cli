@@ -16,6 +16,8 @@ use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 
+/// The terminal block namespace (`<ns>.terminal` in docs/spec.md).
+pub const NAMESPACE: &str = "dev.leon.terminal";
 pub const ROWS: u16 = 24;
 pub const COLS: u16 = 80;
 /// shortcut: scrollback is counted in lines, not the spec's ~64 MiB; revisit with M8's benchmarks.
@@ -179,39 +181,56 @@ impl Terminal {
     }
 }
 
-impl Drop for Terminal {
+impl Terminal {
     /// Hang up a still-running program: its process group (portable-pty makes the child a session
-    /// leader) and the terminal's foreground job (e.g. vim started from a shell), then kill the
-    /// group if it is still running after a grace period. An exited program's group was already
-    /// hung up when it exited, and its ID may belong to someone else by now, so it gets nothing.
-    fn drop(&mut self) {
-        let pid = self.pid;
-        if pid <= 0 {
+    /// leader) and the terminal's foreground job (e.g. vim started from a shell). An exited
+    /// program's group was hung up when it exited, and its ID may belong to someone else by now,
+    /// so it gets nothing.
+    pub fn hang_up(&self) {
+        let fd = lock(&self.master).as_raw_fd();
+        let exited = lock(&self.exited);
+        if *exited || self.pid <= 0 {
             return;
         }
-        let fd = lock(&self.master).as_raw_fd();
-        let exited = self.exited.clone();
-        {
-            let running = lock(&exited);
-            if *running {
-                return;
+        // SAFETY: only signals; the held lock keeps the leader unreaped, so both IDs are still ours.
+        unsafe {
+            let fg = fd.map_or(-1, |fd| libc::tcgetpgrp(fd));
+            if fg > 0 && fg != self.pid {
+                libc::kill(-fg, libc::SIGHUP);
             }
-            // SAFETY: only signals; the lock keeps the leader unreaped, so both IDs are still ours.
-            unsafe {
-                let fg = fd.map_or(-1, |fd| libc::tcgetpgrp(fd));
-                if fg > 0 && fg != pid {
-                    libc::kill(-fg, libc::SIGHUP);
-                }
-                libc::kill(-pid, libc::SIGHUP);
-            }
+            libc::kill(-self.pid, libc::SIGHUP);
         }
+    }
+
+    /// SIGKILL the program's process group if the program still runs.
+    pub fn kill(&self) {
+        kill_group(self.pid, &self.exited);
+    }
+
+    pub fn has_exited(&self) -> bool {
+        *lock(&self.exited)
+    }
+}
+
+fn kill_group(pid: i32, exited: &Mutex<bool>) {
+    let exited = lock(exited);
+    if !*exited && pid > 0 {
+        // SAFETY: only signals; the held lock keeps the group ID ours.
+        unsafe { libc::kill(-pid, libc::SIGKILL) };
+    }
+}
+
+impl Drop for Terminal {
+    /// Hang up the program, and kill it if it still runs after a grace period.
+    fn drop(&mut self) {
+        if self.has_exited() {
+            return;
+        }
+        self.hang_up();
+        let (pid, exited) = (self.pid, self.exited.clone());
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(2));
-            let running = lock(&exited);
-            if !*running {
-                // SAFETY: as above, the held lock keeps the group ID ours.
-                unsafe { libc::kill(-pid, libc::SIGKILL) };
-            }
+            kill_group(pid, &exited);
         });
     }
 }

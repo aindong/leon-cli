@@ -101,6 +101,7 @@ pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
             }
         }
     }
+    shared.ctx.end_programs(Duration::from_secs(2)).await;
     // Only remove the socket if the path is still ours; a newer server may have bound it.
     if std::fs::symlink_metadata(&opts.socket).is_ok_and(|m| (m.dev(), m.ino()) == ours) {
         let _ = std::fs::remove_file(&opts.socket);

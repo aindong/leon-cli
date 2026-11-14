@@ -90,17 +90,18 @@ impl Registry {
         &self.methods
     }
 
-    /// Run a method. Missing (`null`) params mean `{}`.
+    /// Run a method.
     pub fn call(&self, ctx: &Arc<Ctx>, name: &str, params: Value) -> Later<Value> {
         let Some(m) = self.methods.iter().find(|m| m.name == name) else {
             return Box::pin(ready(Err(ApiError::method_not_found(name))));
         };
-        let params = if params.is_null() { Value::Object(Default::default()) } else { params };
         (m.handler)(ctx, params)
     }
 }
 
+/// Missing (`null`) params mean `{}`.
 pub(crate) fn parse<P: DeserializeOwned>(name: &str, params: Value) -> Result<P, ApiError> {
+    let params = if params.is_null() { Value::Object(Default::default()) } else { params };
     serde_json::from_value(params).map_err(|e| ApiError::bad_request(format!("{name}: {e}")))
 }
 

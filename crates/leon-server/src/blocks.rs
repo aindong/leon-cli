@@ -2,13 +2,14 @@
 //! the terminal's own block methods (`dev.leon.terminal.*`, called through `block.method`).
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use leon_core::model::clean_label;
-use leon_core::terminal::{Spec, Terminal};
+use leon_core::terminal::{Spec, Terminal, NAMESPACE as TERMINAL};
 use leon_core::{new_id, ApiError, Block, State};
 use schemars::JsonSchema;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -16,7 +17,6 @@ use crate::methods::{Empty, MethodDoc, SessionRef};
 use crate::registry::{parse, schema, to_value};
 use crate::{Ctx, Later, Registry};
 
-pub const TERMINAL: &str = "dev.leon.terminal";
 pub const SHELL_FLAVOR: &str = "dev.leon.terminal.shell";
 
 /// What a new window holds. Today one block; splits come with M3.
@@ -294,33 +294,54 @@ pub struct Process {
 #[serde(deny_unknown_fields)]
 pub struct NoArgs {}
 
-fn terminal_method(t: &Terminal, method: &str, args: Value) -> Result<Value, ApiError> {
-    let args = if args.is_null() { Value::Object(Default::default()) } else { args };
-    let name = method.strip_prefix(TERMINAL).and_then(|m| m.strip_prefix('.'));
-    Ok(match name {
-        Some("write") => {
-            let a: WriteArgs = parse(method, args)?;
+type TermFn = Box<dyn Fn(&Terminal, Value) -> Result<Value, ApiError> + Send + Sync>;
+
+/// A terminal block method: its docs for `help.all` and its handler, kept in one table.
+struct TermMethod {
+    doc: MethodDoc,
+    run: TermFn,
+}
+
+fn term_method<A, R>(name: &str, description: &str, f: fn(&Terminal, A) -> Result<R, ApiError>) -> TermMethod
+where
+    A: DeserializeOwned + JsonSchema + 'static,
+    R: Serialize + JsonSchema + 'static,
+{
+    let full = format!("{TERMINAL}.{name}");
+    let doc = MethodDoc {
+        name: full.clone(),
+        description: description.into(),
+        input_schema: schema::<A>(),
+        output_schema: schema::<R>(),
+    };
+    TermMethod { doc, run: Box::new(move |t, args| f(t, parse(&full, args)?).map(to_value)) }
+}
+
+static TERMINAL_METHODS: LazyLock<Vec<TermMethod>> = LazyLock::new(|| {
+    vec![
+        term_method("write", "Type text into the terminal.", |t, a: WriteArgs| {
             t.write(a.data.as_bytes()).map_err(|e| ApiError::new(500, "io", e.to_string()))?;
-            to_value(Empty {})
-        }
-        Some("format") => {
-            let a: FormatArgs = parse(method, args)?;
+            Ok(Empty {})
+        }),
+        term_method("format", "The screen and scrollback as text.", |t, a: FormatArgs| {
             if a.format.as_deref().is_some_and(|f| f != "text") {
                 return Err(ApiError::bad_request("only format \"text\" is supported"));
             }
-            to_value(Formatted { text: t.text(a.trim) })
-        }
-        Some("size") => {
-            let _: NoArgs = parse(method, args)?;
+            Ok(Formatted { text: t.text(a.trim) })
+        }),
+        term_method("size", "Rows and columns.", |t, _: NoArgs| {
             let (rows, cols) = t.size();
-            to_value(TermSize { rows, cols })
-        }
-        Some("process") => {
-            let _: NoArgs = parse(method, args)?;
-            to_value(Process { pid: t.pid(), command: t.command.clone() })
-        }
-        _ => return Err(ApiError::method_not_found(method)),
-    })
+            Ok(TermSize { rows, cols })
+        }),
+        term_method("process", "The program's pid and argv.", |t, _: NoArgs| {
+            Ok(Process { pid: t.pid(), command: t.command.clone() })
+        }),
+    ]
+});
+
+fn terminal_method(t: &Terminal, method: &str, args: Value) -> Result<Value, ApiError> {
+    let m = TERMINAL_METHODS.iter().find(|m| m.doc.name == method).ok_or_else(|| ApiError::method_not_found(method))?;
+    (m.run)(t, args)
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -331,22 +352,9 @@ pub struct BlockType {
 }
 
 pub fn block_types() -> Vec<BlockType> {
-    fn doc<A: JsonSchema, R: JsonSchema>(name: &str, description: &str) -> MethodDoc {
-        MethodDoc {
-            name: format!("{TERMINAL}.{name}"),
-            description: description.into(),
-            input_schema: schema::<A>(),
-            output_schema: schema::<R>(),
-        }
-    }
     vec![BlockType {
         creator: TERMINAL.into(),
         flavors: vec![SHELL_FLAVOR.into()],
-        methods: vec![
-            doc::<WriteArgs, Empty>("write", "Type text into the terminal."),
-            doc::<FormatArgs, Formatted>("format", "The screen and scrollback as text."),
-            doc::<NoArgs, TermSize>("size", "Rows and columns."),
-            doc::<NoArgs, Process>("process", "The program's pid and argv."),
-        ],
+        methods: TERMINAL_METHODS.iter().map(|m| m.doc.clone()).collect(),
     }]
 }

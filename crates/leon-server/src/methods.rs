@@ -22,7 +22,7 @@ pub struct SessionRef {
     pub session_id: String,
 }
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Serialize, JsonSchema, Clone)]
 pub struct MethodDoc {
     pub name: String,
     pub description: String,
