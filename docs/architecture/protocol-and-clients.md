@@ -177,3 +177,29 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   + `$CODEX_HOME` (`~/.codex`) `hooks.json`. Settings edits keep key order, back up once to
   `<file>.leon-backup`, write atomically through symlinks, and refuse files that aren't the expected
   JSON shape. Not yet: OpenCode/Pi, `--project`, `--session-naming`.
+
+- **Floating panes and drawers (M20a).** Terminal ownership stays in `Session.blocks`;
+  `Session.overlays` maps window IDs to floating and docked placements separately from
+  the tiled tree. This keeps the shared `Window` type compatible with the M20b app work.
+  Every window in `session.view` has `floating` (back to front; last is topmost) and
+  `docked` arrays. Floats have `block_id`, `bounds` in window fractions, and `hidden`;
+  docks have `block_id`, `side` (left/right/bottom), `size` and `hidden`. Each block is
+  placed exactly once; a window can have no tiled tree when all its blocks float.
+  Hiding never removes a block or stops its PTY. Showing/focusing raises a float;
+  hidden panes cannot retain focus or zoom. Dock collisions fail atomically.
+  Mutations emit the existing `session_view_changed` revision event; clients refetch
+  the full view. `block_ids` includes tiled leaves then overlays, including hidden ones.
+  Attach caches the raw window fields on revision changes while sharing the existing
+  screen/event transport. It reserves dock space (in list order, clamped to remaining
+  space), then paints bordered floats above tiles in z-order. Bounds are relative to
+  the whole window; borders reduce terminal content by one cell on each edge. Zero-size
+  content is clipped. GUI rendering/animation is M20b; no new transport is needed.
+
+  Focus next/previous walks tiles, visible docks, then visible floats in block creation
+  order (independent of z-order), honoring `wrap`.
+  Directional focus from an overlay returns to the first tiled pane (with only overlays,
+  it cycles). Attach retains session context with no visible focus, so shortcuts can
+  show hidden drawers or open tabs. The picker includes hidden and visible overlay blocks.
+
+  A focused overlay takes input above a zoomed tile; tile-only zoom keeps its existing
+  display/input behavior.

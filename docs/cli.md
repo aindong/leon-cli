@@ -522,3 +522,28 @@ leon skill setup --dry-run
 leon skill setup
 leon skill status
 ```
+
+### `leon float [--new [-- CMD]]`
+
+Float the block selected by `-b/--block` (default the focused block). `--new` opens a
+new terminal in the active window of `-s/--session`, running CMD or a login shell.
+`--label L` assigns a label; `--rect x,y,w,h` sets fractions of the whole window
+(default `0.1,0.1,0.8,0.8`). Rectangles must have positive width/height and fit inside
+the window. A float is shown, focused and raised above earlier floats. `--unfloat`
+returns a float or drawer to the tiled tree beside its root; its terminal keeps running.
+`--new` prints the new block ID; `--json` prints the API result.
+
+### `leon toggle LABEL`
+
+Show/hide a float or drawer by its exact, case-insensitive label within `-s/--session`.
+Labels must be unique there. Hidden terminals continue running and producing output.
+`--create` opens a scratch login shell docked to the bottom on first use; subsequent
+calls toggle it. A bottom panel already occupying that side makes creation fail.
+
+### `leon dock left|right|bottom`
+
+Pin `-b/--block` (default the focused block) to a side of its window. `--size F` is
+a fraction strictly between 0 and 1 (default 0.3). Each side holds at most one panel,
+including hidden panels; an occupied side fails without changes. `leon attach`
+reserves room for visible panels and draws visible floats above the tiled panes,
+with a border. The GPUI app's overlay drawing and animation arrive in M20b.

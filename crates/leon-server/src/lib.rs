@@ -7,6 +7,7 @@ pub mod events;
 mod layout;
 pub mod lua;
 pub mod methods;
+mod overlays;
 pub mod persist;
 pub mod registry;
 mod restore;

@@ -111,7 +111,10 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         | Cmd::Capture { .. }
         | Cmd::Wait { .. }
         | Cmd::Block(_) => crate::blocks::run(&mut c, cli)?,
-        Cmd::Split { .. }
+        Cmd::Float { .. }
+        | Cmd::Toggle { .. }
+        | Cmd::Dock { .. }
+        | Cmd::Split { .. }
         | Cmd::Focus { .. }
         | Cmd::Move { .. }
         | Cmd::Swap { .. }

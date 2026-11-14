@@ -148,7 +148,7 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   ids (shortcut). The palette lists New Session on each connected machine (`session.new {host}`)
   and Add Host… (`client.host.add`): a label, then an endpoint, each checked as `leon hosts add`
   checks them (`leon_hosts::hosts::add`), and saved through the hosts API.
-- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.1.0`), apart
+- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.2.0`), apart
   from the build's version. Each method doc carries `stability` (`stable`, `experimental`,
   `internal`), and optionally `deprecated` (`since`, `replacement`, `removal`) and the spec's
   `request_example`/`response_example`; all of it comes from one table,
@@ -165,3 +165,13 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   `leon config check` and `leon do -e`.
 - **Naming.** Method, action, event and flag names follow `docs/spec.md`, so scripts and agents written
   for that interface carry over. Env vars are `LEON_*`.
+
+- **Saved overlays (M20a).** State file version 3 adds per-window `floating` and `docked`
+  arrays and permits a null tiled layout. Versions 1 and 2 still load with empty overlays.
+  Save/restore preserves bounds, order, side, size and hidden flags. Validation checks
+  finite contained bounds, dock sizes/sides, unique placement and visible focus before
+  starting shells. Restart uses the existing fresh-shell/resume policy for hidden and
+  visible blocks alike; hiding during a live session leaves programs running.
+  `scripts/test-peer-uid.sh` uses the Linux test image to verify the peer uid check with
+  socket permissions opened deliberately, then disables the check in a disposable copy
+  and requires the rejection test to fail. The real source and server policy stay intact.

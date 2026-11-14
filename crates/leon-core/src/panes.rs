@@ -20,10 +20,14 @@ impl State {
         if block_id == anchor_id {
             return Err(ApiError::bad_request("a block can't move beside itself"));
         }
+        check_ratio(ratio)?;
         let s = self.session_mut(session_id)?;
         let (from, to, i) = (s.window_of(block_id)?, s.window_of(anchor_id)?, s.block_index(block_id)?);
+        if !s.windows[to].layout.as_ref().is_some_and(|t| t.contains(anchor_id)) {
+            return Err(ApiError::bad_request("anchor must be tiled"));
+        }
         let (focus, zoomed) = (s.windows[from].focus.clone(), s.windows[from].zoomed.clone());
-        s.windows[from].detach(block_id);
+        s.detach_placed(from, block_id);
         if from == to {
             // It never left the window, so its focus and zoom stay.
             (s.windows[to].focus, s.windows[to].zoomed) = (focus, zoomed);
@@ -31,7 +35,7 @@ impl State {
         let tree = s.windows[to].layout.as_mut().expect("the anchor is in it");
         assert!(tree.insert(anchor_id, block_id, direction, side, ratio), "the anchor is in it");
         s.blocks[i].window_id = s.windows[to].id.clone();
-        if s.windows[from].layout.is_none() {
+        if s.empty_window(from) {
             let emptied = s.windows[from].id.clone();
             self.close_window(session_id, &emptied)?;
         }
@@ -54,6 +58,14 @@ impl State {
                 *id = swapped(id, a, b).to_string();
             }
         }
+        for o in s.overlays.values_mut() {
+            for f in &mut o.floating {
+                f.block_id = swapped(&f.block_id, a, b).into();
+            }
+            for d in &mut o.docked {
+                d.block_id = swapped(&d.block_id, a, b).into();
+            }
+        }
         let wa = std::mem::take(&mut s.blocks[ia].window_id);
         s.blocks[ia].window_id = std::mem::replace(&mut s.blocks[ib].window_id, wa);
         self.touch(session_id);
@@ -64,6 +76,9 @@ impl State {
     pub fn zoom_block(&mut self, session_id: &str, block_id: &str, zoom: Option<bool>) -> Result<u64, ApiError> {
         let s = self.session_mut(session_id)?;
         let i = s.window_of(block_id)?;
+        if s.overlay(&s.windows[i].id).contains(block_id) {
+            return Err(ApiError::bad_request("unfloat a block before zooming it"));
+        }
         let w = &mut s.windows[i];
         let on = zoom.unwrap_or(w.zoomed.as_deref() != Some(block_id));
         let new = match (on, w.zoomed.as_deref() == Some(block_id)) {
@@ -93,7 +108,7 @@ impl State {
         if s.window_of(after_id)? != w {
             return Err(ApiError::bad_request(format!("{before_id} and {after_id} are in different windows")));
         }
-        let tree = s.windows[w].layout.as_mut().expect("it holds both");
+        let tree = s.windows[w].layout.as_mut().ok_or_else(|| ApiError::bad_request("blocks must be tiled"))?;
         tree.set_ratio(direction, before_id, after_id, ratio).map_err(ApiError::bad_request)?;
         self.touch(session_id);
         Ok(self.revision(session_id))
@@ -103,8 +118,13 @@ impl State {
     pub fn focus_block(&mut self, session_id: &str, block_id: &str) -> Result<u64, ApiError> {
         let s = self.session_mut(session_id)?;
         let w = s.window_of(block_id)?;
+        let overlay = s.overlay(&s.windows[w].id).contains(block_id);
+        if overlay {
+            s.overlays.get_mut(&s.windows[w].id).unwrap().show(block_id);
+            s.windows[w].zoomed = None;
+        }
         let window_changed = s.active != w;
-        if !window_changed && s.windows[w].focus.as_deref() == Some(block_id) {
+        if !overlay && !window_changed && s.windows[w].focus.as_deref() == Some(block_id) {
             return Ok(self.revision(session_id));
         }
         s.active = w;
@@ -119,12 +139,52 @@ impl State {
 
     /// Move focus in the active window by direction; returns (revision, focused block).
     pub fn focus_direction(&mut self, session_id: &str, toward: Toward, wrap: bool) -> Result<(u64, String), ApiError> {
+        let s = self.session(session_id)?;
+        let w = &s.windows[s.active];
+        if !w.layout.as_ref().is_some_and(|t| w.focus.as_ref().is_some_and(|f| t.contains(f))) {
+            if let Some(id) = w.layout.as_ref().and_then(|t| t.leaves().first().map(|id| id.to_string())) {
+                return Ok((self.focus_block(session_id, &id)?, id));
+            }
+            return self.focus_step(session_id, true, true);
+        }
         self.focus_with(session_id, |tree, from| tree.neighbor(from, toward, wrap).map(str::to_string))
     }
 
-    /// Move focus to the next (or previous) block of the active window, in leaf order.
+    /// Move focus through tiled leaves, visible docks and visible floats, in that order.
     pub fn focus_step(&mut self, session_id: &str, forward: bool, wrap: bool) -> Result<(u64, String), ApiError> {
-        self.focus_with(session_id, |tree, from| tree.step(from, forward, wrap).map(str::to_string))
+        let s = self.session(session_id)?;
+        let w = &s.windows[s.active];
+        let o = s.overlay(&w.id);
+        let mut ids = w.layout.as_ref().map_or(vec![], |t| t.leaves());
+        ids.extend(o.docked.iter().filter(|d| !d.hidden).map(|d| d.block_id.as_str()));
+        // Focus raises floats, so stacking order cannot also be keyboard traversal order.
+        ids.extend(
+            s.blocks
+                .iter()
+                .filter(|b| o.floating.iter().any(|f| f.block_id == b.id && !f.hidden))
+                .map(|b| b.id.as_str()),
+        );
+        if ids.is_empty() {
+            return Err(ApiError::not_found("the active window has no visible block"));
+        }
+        let from = w.focus.as_ref().and_then(|f| ids.iter().position(|id| *id == f)).unwrap_or(0);
+        let to = if forward {
+            if from + 1 < ids.len() {
+                from + 1
+            } else if wrap {
+                0
+            } else {
+                from
+            }
+        } else if from > 0 {
+            from - 1
+        } else if wrap {
+            ids.len() - 1
+        } else {
+            from
+        };
+        let id = ids[to].to_string();
+        Ok((self.focus_block(session_id, &id)?, id))
     }
 
     fn focus_with(
