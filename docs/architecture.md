@@ -48,7 +48,8 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   dropped. **Scripts** (`leon do SCRIPT|-e`) run in the `leon do` process on their own connection, so a
   script can never hang the server. Both sides share the `leon.*` code behind a `Host` trait.
 - **Lua bounds.** Every state: no `io.popen`/`os.execute`/`os.exit`, no C modules, `debug.traceback`
-  only. Server side: a config load gets 5 s and an action 30 s from its request; an instruction hook
+  only, text chunks only (Lua 5.1 doesn't verify bytecode), no `newproxy` (a `__gc` finalizer runs
+  with hooks off). `leon.exec` runs each program in its own process group and signals the group. Server side: a config load gets 5 s and an action 30 s from its request; an instruction hook
   (also on every coroutine) raises past the deadline, `pcall`/`xpcall`/`coroutine.resume` re-raise it,
   and calls and `leon.exec` get only the time left; 256 MiB memory limit. A long C call (a pathological
   `string.find`) isn't interrupted: its caller still gets a timeout, and the next reload replaces the thread.
