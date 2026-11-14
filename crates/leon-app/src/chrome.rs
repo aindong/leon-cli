@@ -58,13 +58,15 @@ pub struct Settings {
     /// Pane headers shown (`client.pane_header.reveal` toggles them).
     pub pane_headers: bool,
     pub sidebar_width: f32,
-    /// The window's last frame (its restored size, when it was zoomed or full screen).
+    /// The window's last frame (its restored size, when it was zoomed or full screen), relative to
+    /// its display, and that display's id.
     pub window: Option<Frame>,
+    pub display: Option<u32>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { tab_style: TabStyle::Sidebar, pane_headers: true, sidebar_width: 220., window: None }
+        Settings { tab_style: TabStyle::Sidebar, pane_headers: true, sidebar_width: 220., window: None, display: None }
     }
 }
 
@@ -81,10 +83,11 @@ impl Settings {
     /// check the server makes of the same state dir.
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         use std::os::unix::fs::OpenOptionsExt;
-        let dir = path.parent().ok_or_else(|| std::io::Error::other("no dir"))?;
-        leon_core::paths::ensure_private_dir(dir)?;
+        let dir = path.parent().filter(|d| d.is_dir()).ok_or_else(|| std::io::Error::other("no state dir"))?;
+        leon_core::paths::ensure_private_dir(dir)?; // never created here: the server makes it
         let tmp = path.with_extension("json.tmp");
-        let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)?;
+        let _ = std::fs::remove_file(&tmp); // a crash's leftover, so the new file gets 0600
+        let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
         f.write_all(&serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?)?;
         std::fs::rename(&tmp, path)
     }
@@ -98,7 +101,7 @@ pub fn clamp_width(w: f32) -> f32 {
     }
 }
 
-/// A window or screen rectangle in points, in the screens' shared space.
+/// A window or screen rectangle in points.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Frame {
     pub x: f32,

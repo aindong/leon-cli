@@ -16,7 +16,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let t = &DARK;
-        let frame = self.spinning(rows).unwrap_or(0);
+        let frame = self.pulse();
         let mut items = div().flex().flex_col().gap(px(1.)).px(px(8.)).pt(px(4.));
         for (i, row) in rows.iter().enumerate() {
             let selected = self.session_id.as_deref() == Some(row.id.as_str());
@@ -25,7 +25,7 @@ impl Workspace {
                 continue;
             }
             let open = !self.collapsed.contains(&row.id);
-            items = items.child(self.session_label(i, row, selected, open, frame, cx));
+            items = items.child(self.session_label(i, row, open, frame, cx));
             if !open {
                 continue;
             }
@@ -115,7 +115,6 @@ impl Workspace {
         &self,
         i: usize,
         row: &SessionRow,
-        selected: bool,
         open: bool,
         frame: u64,
         cx: &mut Context<Self>,
@@ -136,7 +135,7 @@ impl Workspace {
             .cursor_pointer()
             .text_size(px(SECONDARY_TEXT))
             .font_weight(FontWeight::MEDIUM)
-            .text_color(rgb(if selected { t.text } else { t.muted }))
+            .text_color(rgb(t.muted))
             .child(
                 div()
                     .flex_1()
@@ -154,12 +153,13 @@ impl Workspace {
             .child(
                 div()
                     .id(SharedString::from(format!("session-new-tab-{i}")))
+                    .group(SharedString::from(format!("session-new-tab-{i}")))
                     .px(px(4.))
                     .rounded(px(4.))
                     .invisible()
                     .group_hover(SharedString::from(format!("session-{i}")), |d| d.visible())
                     .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
-                    .child(Icon::Plus.at(ROW_ICON - 2., t.muted))
+                    .child(Icon::Plus.in_button(ROW_ICON, t.muted, t.title, format!("session-new-tab-{i}")))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |ws, _, window, cx| {

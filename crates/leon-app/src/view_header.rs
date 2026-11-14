@@ -8,7 +8,7 @@ impl Workspace {
         let t = &DARK;
         let shown = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
         let caption = self.header_caption(id);
-        let frame = shown.and_then(|_| self.spinning(&self.rows())).unwrap_or(0);
+        let frame = self.pulse();
         let title = self.pane_title(id).unwrap_or_default();
         let group = SharedString::from(format!("pane-{id}"));
         let control = |what: &'static str, icon: Icon, action: &'static str, cx: &mut Context<Self>| {
@@ -58,7 +58,7 @@ impl Workspace {
             .child(div().flex_none().text_color(rgb(t.muted)).child(Icon::Terminal.at(ROW_ICON, t.muted)))
             .child(
                 div()
-                    .flex_none()
+                    .flex_shrink()
                     .max_w(px(320.))
                     .overflow_hidden()
                     .whitespace_nowrap()
@@ -72,7 +72,6 @@ impl Workspace {
                 div()
                     .debug_selector(|| sel(format!("caption-{id}")))
                     .flex_1()
-                    .min_w(px(0.))
                     .overflow_hidden()
                     .whitespace_nowrap()
                     .min_w(px(0.))
@@ -86,9 +85,9 @@ impl Workspace {
     /// No session: the name, the tagline, and the three things to know, each one a click away.
     pub(super) fn render_empty(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &DARK;
-        let actions = ["session.new", "client.palette.toggle", ""];
+
         let mut hints = div().flex().flex_col().gap(px(4.)).mt(px(18.));
-        for (i, ((keys, what), action)) in self.empty_hints().into_iter().zip(actions).enumerate() {
+        for (i, (keys, what, action)) in self.empty_items().into_iter().enumerate() {
             hints = hints.child(
                 div()
                     .id(SharedString::from(format!("hint-{i}")))
@@ -98,7 +97,7 @@ impl Workspace {
                     .h(px(34.))
                     .px(px(10.))
                     .rounded(px(6.))
-                    .when(!action.is_empty(), |d| d.cursor_pointer().hover(|d| d.bg(rgb(t.hover))))
+                    .when(action.is_some(), |d| d.cursor_pointer().hover(|d| d.bg(rgb(t.hover))))
                     .child(
                         div()
                             .flex_none()
@@ -114,7 +113,7 @@ impl Workspace {
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |ws, _, window, cx| {
-                            if !action.is_empty() {
+                            if let Some(action) = action {
                                 ws.run_action(action, None, "empty_state", window, cx);
                             }
                         }),

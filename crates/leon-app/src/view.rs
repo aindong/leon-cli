@@ -139,17 +139,13 @@ pub fn run(server: Remote) {
     let server = Rc::new(server);
     Application::new().with_assets(crate::icons::Icons).run(move |cx: &mut App| {
         install(cx);
-        // the last frame when it still fits a screen, else most of the primary one
-        let saved = settings_path().map(|p| Settings::load(&p).window).unwrap_or_default();
-        let frame = |b: Bounds<Pixels>| chrome::Frame {
-            x: b.origin.x.into(),
-            y: b.origin.y.into(),
-            w: b.size.width.into(),
-            h: b.size.height.into(),
-        };
-        let screens: Vec<_> =
-            cx.primary_display().into_iter().chain(cx.displays()).map(|d| frame(d.bounds())).collect();
-        let f = chrome::window_frame(saved, &screens);
+        // the last frame, on its display, when it still fits there; else most of the primary one.
+        // A window's bounds are relative to its display, so the frame is too.
+        let saved = settings_path().map(|p| Settings::load(&p)).unwrap_or_default();
+        let on = saved.display.and_then(|id| cx.displays().into_iter().find(|d| u32::from(d.id()) == id));
+        let display = on.clone().or_else(|| cx.primary_display());
+        let screen = display.as_ref().map(|d| chrome::Frame { x: 0., y: 0., ..frame(d.bounds()) });
+        let f = chrome::window_frame(on.and(saved.window), screen.as_slice());
         let bounds = Bounds::new(point(px(f.x), px(f.y)), size(px(f.w), px(f.h)));
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -159,6 +155,7 @@ pub fn run(server: Remote) {
                 traffic_light_position: Some(point(px(14.), px(13.))),
             }),
             window_min_size: Some(size(px(chrome::MIN_WINDOW.0), px(chrome::MIN_WINDOW.1))),
+            display_id: display.map(|d| d.id()),
             ..WindowOptions::default()
         };
         let app = server.clone();
@@ -262,6 +259,11 @@ pub fn drawn() -> HashSet<String> {
     DRAWN.with(|d| d.borrow().clone())
 }
 
+/// A GPUI rectangle as a settings frame.
+fn frame(b: Bounds<Pixels>) -> chrome::Frame {
+    chrome::Frame { x: b.origin.x.into(), y: b.origin.y.into(), w: b.size.width.into(), h: b.size.height.into() }
+}
+
 /// Where the app keeps its settings: `$LEON_STATE_DIR/app.json` (next to the server's sessions).
 pub fn settings_path() -> Option<PathBuf> {
     leon_core::paths::state_dir().map(|d| d.join("app.json"))
@@ -298,6 +300,7 @@ pub struct Workspace {
     _activation: Subscription,
     _bounds: Subscription,
     _quit: Subscription,
+    _release: Subscription,
 }
 
 impl Workspace {
@@ -346,16 +349,17 @@ impl Workspace {
         let stats = Stats { enabled: std::env::var("LEON_FRAME_STATS").is_ok_and(|v| v == "1"), ..Stats::default() };
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |_, _, cx| cx.notify());
-        // the window's frame is kept with the settings, and saved when the app quits
-        let bounds = cx.observe_window_bounds(window, |ws, window, _| {
-            let b = window.window_bounds().get_bounds();
-            let (x, y, w, h) = (b.origin.x.into(), b.origin.y.into(), b.size.width.into(), b.size.height.into());
-            ws.settings.window = Some(chrome::Frame { x, y, w, h });
+        // the window's frame and display are kept with the settings, and saved when the app quits
+        // or the window closes (closing drops the workspace before the quit it asks for)
+        let bounds = cx.observe_window_bounds(window, |ws, window, cx| {
+            ws.settings.window = Some(frame(window.window_bounds().get_bounds()));
+            ws.settings.display = window.display(cx).map(|d| u32::from(d.id()));
         });
         let quit = cx.on_app_quit(|ws, _| {
             ws.save_settings();
             async {}
         });
+        let release = cx.on_release(|ws, _| ws.save_settings());
         Workspace {
             app,
             drag: None,
@@ -380,6 +384,7 @@ impl Workspace {
             _activation: activation,
             _bounds: bounds,
             _quit: quit,
+            _release: release,
         }
     }
 
@@ -468,7 +473,7 @@ impl Workspace {
     }
 }
 
-#[path = "view_chrome.rs"]
+#[path = "view_bars.rs"]
 mod bars;
 #[path = "view_handlers.rs"]
 mod handlers;

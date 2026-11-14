@@ -166,7 +166,7 @@ fn view(b: &Block) -> BlockView {
         keep_open: b.keep_open,
         exit_code: b.exit_code,
         title: b.terminal.title(),
-        cwd: b.terminal.cwd().map(|d| d.display().to_string()),
+        cwd: b.terminal.shown_cwd(),
     }
 }
 

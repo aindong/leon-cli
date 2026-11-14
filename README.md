@@ -116,8 +116,8 @@ what it created. See [docs/agents.md](docs/agents.md).
 
 These are defaults: a `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
 removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow.
-A pane whose program reports its status (OSC 7501, as agents do) shows a spinner, ⚠ / ? / ⚿ when
-it is blocked, ✓ when done or ✗ on an error, on its tab and in its pane header (a collapsed
+A pane whose program reports its status (OSC 7501, as agents do) shows a pulsing dot while working,
+a warning, question or key icon when it is blocked, a check when done or a cross on an error, on its tab and in its pane header (a collapsed
 session's label shows its most urgent one); done and error clear when you go to the pane. Pane
 headers name the program and where it is, and hold split, zoom and close buttons; "Show or Hide
 Pane Headers" in the palette turns them off. Every button names its action and shortcut on hover.

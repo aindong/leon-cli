@@ -68,7 +68,8 @@ impl Reading {
             let seen = std::mem::take(&mut *lock(&self.seen));
             if let Some(new) = seen.title.map(|t| clean(&t)).filter(|t| title.as_ref() != Some(t)) {
                 title = Some(new.clone());
-                lock(&self.reported).title = Some(new.clone());
+                // an empty title (a reset) gives the tab back its program's name
+                lock(&self.reported).title = Some(new.clone()).filter(|t| !t.is_empty());
                 notify(Notice::Title(new));
             }
             let new_pwd = fed.pwd.and_then(|p| pwd_url(&p));

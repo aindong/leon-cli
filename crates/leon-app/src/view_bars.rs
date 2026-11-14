@@ -53,12 +53,13 @@ impl Workspace {
     pub(super) fn render_titlebar(&self, row: Option<&SessionRow>, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &DARK;
         let places = self.places();
-        let frame = self.spinning(row.map(std::slice::from_ref).unwrap_or_default()).unwrap_or(0);
+        let frame = self.pulse();
         let hidden = places.sidebar.is_none();
         let mut bar = div()
             .debug_selector(|| sel("titlebar".into()))
             .flex()
             .flex_none()
+            .overflow_hidden()
             .items_center()
             .gap(px(4.))
             .h(px(TITLEBAR))
@@ -83,7 +84,8 @@ impl Workspace {
                 bar = bar.child(self.tool("new-tab", Icon::Plus, "client.tab.new", cx));
             } else if let Some(w) = row.windows.get(row.active) {
                 // sidebar style with the sidebar hidden: name the tab on screen, draw no tabs
-                bar = bar.child(div().text_color(rgb(t.muted)).child(format!("› {}", w.title)));
+                bar =
+                    bar.child(div().min_w(px(0.)).truncate().text_color(rgb(t.muted)).child(format!("› {}", w.title)));
             }
         }
         bar.child(div().flex_1()).when(hidden, |d| {
@@ -112,7 +114,8 @@ impl Workspace {
             .debug_selector(|| sel(format!("tab-{i}")))
             .group(SharedString::from(format!("tab-{i}")))
             .flex()
-            .flex_none()
+            .flex_shrink()
+            .min_w(px(96.))
             .items_center()
             .gap(px(8.))
             .h(px(26.))
@@ -139,13 +142,14 @@ impl Workspace {
             .child(
                 div()
                     .id(SharedString::from(format!("close-{i}")))
+                    .group(SharedString::from(format!("close-{i}")))
                     .px(px(4.))
                     .rounded(px(4.))
                     .text_color(rgb(t.muted))
                     .invisible()
                     .group_hover(SharedString::from(format!("tab-{i}")), |d| d.visible())
                     .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
-                    .child(Icon::Close.at(ROW_ICON - 2., t.muted))
+                    .child(Icon::Close.in_button(ROW_ICON, t.muted, t.title, format!("close-{i}")))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |ws, _, _, cx| {

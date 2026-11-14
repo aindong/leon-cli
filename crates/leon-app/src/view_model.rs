@@ -99,18 +99,43 @@ impl Workspace {
 
     /// The empty state's hints, (keys, what they do), with keys from the live keymap.
     pub fn empty_hints(&self) -> Vec<(String, String)> {
+        self.empty_items().into_iter().map(|(keys, what, _)| (keys, what)).collect()
+    }
+
+    /// The empty state's rows: (keys, what they do, the action a click runs).
+    pub(super) fn empty_items(&self) -> Vec<(String, String, Option<&'static str>)> {
         let key = |a: &str| self.keymap.shortcut(a).unwrap_or_else(|| a.to_string());
         vec![
-            (key("session.new"), "New session".into()),
-            (key("client.palette.toggle"), "Command palette: every action, yours too".into()),
-            ("leon skill setup".into(), "Let Claude Code and Codex open panes here".into()),
+            (key("session.new"), "New session".into(), Some("session.new")),
+            (
+                key("client.palette.toggle"),
+                "Command palette: every action, yours too".into(),
+                Some("client.palette.toggle"),
+            ),
+            ("leon skill setup".into(), "Let Claude Code and Codex open panes here".into(), None),
         ]
     }
 
-    /// The spinner frame, when anything is working (a session's status covers its tabs and panes).
+    /// The working pulse's frame, from the clock.
+    pub(super) fn pulse(&self) -> u64 {
+        (self.epoch.elapsed().as_millis() / SPIN.as_millis()) as u64
+    }
+
+    /// The pulse's frame while a working indicator is drawn: in the sidebar's rows, the top tabs,
+    /// or a visible pane's header (its own state, which a blocked pane beside it would hide).
     pub(super) fn spinning(&self, rows: &[SessionRow]) -> Option<u64> {
-        let working = rows.iter().any(|r| matches!(r.status, Some(Indicator::Working { .. })));
-        working.then(|| (self.epoch.elapsed().as_millis() / SPIN.as_millis()) as u64)
+        let working = |i: &Option<Indicator>| matches!(i, Some(Indicator::Working { .. }));
+        let places = self.places();
+        let sidebar = places.sidebar.is_some()
+            && rows.iter().any(|r| working(&r.status) || r.windows.iter().any(|w| working(&w.status)));
+        let selected = rows.iter().filter(|r| Some(&r.id) == self.session_id.as_ref());
+        let tabs = places.top_tabs && selected.flat_map(|r| &r.windows).any(|w| working(&w.status));
+        let headers = self.settings.pane_headers && {
+            let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
+            let m = self.app.model();
+            shown.iter().any(|id| m.block(id).is_some_and(|(_, b)| working(&status::indicator_of(&b.newest_first()))))
+        };
+        (sidebar || tabs || headers).then(|| self.pulse())
     }
 
     pub fn font_size(&self) -> f32 {
@@ -146,8 +171,10 @@ impl Workspace {
         let st = &self.settings;
         (st.tab_style, st.pane_headers, st.sidebar_width.to_bits()).hash(&mut h);
         self.session_id.hash(&mut h);
+        // each header draws its own pane's state, which its tab's may hide
         for id in &shown {
-            (self.pane_caption(id), self.pane_title(id)).hash(&mut h);
+            let state = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
+            (state, self.header_caption(id), self.pane_title(id)).hash(&mut h);
         }
         h.finish()
     }
