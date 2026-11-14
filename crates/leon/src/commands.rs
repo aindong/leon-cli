@@ -62,6 +62,12 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
             c.call("session.set_label", json!({ "session_id": sid, "label": label }))?;
         }
         Cmd::Window(cmd) => window(&mut c, cli, cmd)?,
+        Cmd::Run { .. }
+        | Cmd::Send { .. }
+        | Cmd::SendKey { .. }
+        | Cmd::Capture { .. }
+        | Cmd::Wait { .. }
+        | Cmd::Block(_) => crate::blocks::run(&mut c, cli)?,
         Cmd::Api(cmd) => api(&mut c, cli, cmd)?,
     }
     Ok(())
@@ -190,14 +196,14 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
     }
 }
 
-fn resolve(c: &mut Client, kind: &str, query: &str, session_id: Option<&str>) -> Result<String, Fail> {
+pub(crate) fn resolve(c: &mut Client, kind: &str, query: &str, session_id: Option<&str>) -> Result<String, Fail> {
     let r = c.call("target.resolve", json!({ "kind": kind, "query": query, "session_id": session_id }))?;
     Ok(r["id"].as_str().unwrap_or_default().to_string())
 }
 
 /// The session a command acts on: an explicit target, then `-s`, then `$LEON_SESSION`, then the
 /// only session if there is exactly one.
-fn pick_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<String, Fail> {
+pub(crate) fn pick_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<String, Fail> {
     let env = std::env::var("LEON_SESSION").ok().filter(|s| !s.is_empty());
     if let Some(q) = explicit.or(cli.session.as_deref()).or(env.as_deref()) {
         return resolve(c, "session", q, None);
@@ -228,7 +234,7 @@ fn print_windows(windows: &[Value]) {
     }
 }
 
-fn label(v: &Value) -> &str {
+pub(crate) fn label(v: &Value) -> &str {
     v.as_str().unwrap_or("-")
 }
 
@@ -236,6 +242,6 @@ fn pretty(v: &Value) -> String {
     serde_json::to_string_pretty(v).unwrap_or_default()
 }
 
-fn print_json(v: &Value) {
+pub(crate) fn print_json(v: &Value) {
     println!("{}", pretty(v));
 }

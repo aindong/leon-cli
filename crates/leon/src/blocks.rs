@@ -1,0 +1,190 @@
+//! Terminal commands: run, send, send-key, capture, wait, and `block ls|inspect|close`.
+
+use std::time::Duration;
+
+use leon_core::ApiError;
+use serde_json::{json, Value};
+
+use crate::client::{Client, Fail};
+use crate::commands::{label, pick_session, print_json, resolve};
+use crate::{BlockCmd, Cli, Cmd};
+
+const TERMINAL: &str = "dev.leon.terminal";
+
+pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
+    match &cli.cmd {
+        Cmd::Run { label, keep_open, wait, cwd, command } => {
+            let here = std::env::current_dir().map_err(|e| Fail::Other(format!("no current directory: {e}")))?;
+            let cwd = here.join(cwd.as_deref().unwrap_or(".".as_ref()));
+            let options = json!({ "command": command, "cwd": cwd, "exit": { "on_completion": !keep_open } });
+            let layout = json!({ "block": { "label": label, "options": options } });
+            let r = if no_session_named(c, cli)? {
+                c.call("session.create", json!({ "layout": layout }))?
+            } else {
+                let sid = pick_session(c, cli, None)?;
+                c.call("session.new_window", json!({ "session_id": sid, "layout": layout }))?
+            };
+            let block_id = r["block_id"].as_str().unwrap_or_default().to_string();
+            println!("{block_id}");
+            if *wait {
+                return wait_for(c, &block_id, None);
+            }
+        }
+        Cmd::Send { text } => {
+            let (sid, bid) = pick_block(c, cli, None)?;
+            let data = match text {
+                Some(t) => t.clone(),
+                None => std::io::read_to_string(std::io::stdin()).map_err(|e| Fail::Other(e.to_string()))?,
+            };
+            method(c, &sid, &bid, "write", json!({ "data": data }))?;
+        }
+        Cmd::SendKey { keys } => {
+            let (sid, bid) = pick_block(c, cli, None)?;
+            for key in keys {
+                let event = json!({ "type": "key", "key": key });
+                c.call("block.event", json!({ "session_id": sid, "block_id": bid, "event": event }))?;
+            }
+        }
+        Cmd::Capture { trim } => {
+            let (sid, bid) = pick_block(c, cli, None)?;
+            let r = method(c, &sid, &bid, "format", json!({ "format": "text", "trim": trim }))?;
+            println!("{}", r["text"].as_str().unwrap_or_default());
+        }
+        Cmd::Wait { block, timeout } => {
+            let query = block.clone().or_else(|| block_query(cli));
+            let id = match pick_block(c, cli, block.as_deref()) {
+                Ok((_, bid)) => bid,
+                // A closed block no longer resolves, but the server still knows how it exited.
+                Err(Fail::Api(e))
+                    if e.code == "not_found" && query.as_deref().is_some_and(|q| q.starts_with("block:")) =>
+                {
+                    query.unwrap_or_default()
+                }
+                Err(f) => return Err(f),
+            };
+            return wait_for(c, &id, *timeout);
+        }
+        Cmd::Block(cmd) => block(c, cli, cmd)?,
+        _ => unreachable!("commands::run routes only terminal commands here"),
+    }
+    Ok(())
+}
+
+fn block(c: &mut Client, cli: &Cli, cmd: &BlockCmd) -> Result<(), Fail> {
+    match cmd {
+        BlockCmd::Ls => {
+            let sid = pick_session(c, cli, None)?;
+            let r = c.call("session.list_blocks", json!({ "session_id": sid }))?;
+            let blocks = r["blocks"].as_array().cloned().unwrap_or_default();
+            if cli.json {
+                print_json(&Value::Array(blocks));
+            } else {
+                for (i, b) in blocks.iter().enumerate() {
+                    println!("{}  {}  {}", i + 1, summary(b), b["block_id"].as_str().unwrap_or(""));
+                }
+            }
+        }
+        BlockCmd::Inspect { target } => {
+            let (sid, bid) = pick_block(c, cli, target.as_deref())?;
+            let b = c.call("session.describe_block", json!({ "session_id": sid, "block_id": bid }))?;
+            if cli.json {
+                print_json(&b);
+            } else {
+                println!("{}  {}\n  window {}  session {sid}", summary(&b), bid, b["window_id"].as_str().unwrap_or(""));
+            }
+        }
+        BlockCmd::Close { target } => {
+            let (sid, bid) = pick_block(c, cli, target.as_deref())?;
+            c.call("block.close", json!({ "session_id": sid, "block_id": bid }))?;
+        }
+    }
+    Ok(())
+}
+
+/// `label  pid N  command…  [exited N]` for listings.
+fn summary(b: &Value) -> String {
+    let command: Vec<&str> = b["command"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+    let exited = b["exit_code"].as_i64().map(|c| format!("  exited {c}")).unwrap_or_default();
+    format!("{}  pid {}  {}{exited}", label(&b["label"]), b["pid"], command.join(" "))
+}
+
+fn wait_for(c: &mut Client, block_id: &str, timeout: Option<Duration>) -> Result<(), Fail> {
+    let timeout_ms = timeout.map(|d| d.as_millis() as u64);
+    let r = c.call("block.wait", json!({ "block_id": block_id, "timeout_ms": timeout_ms }))?;
+    match r["exit_code"].as_i64() {
+        Some(0) => Ok(()),
+        Some(code) => Err(Fail::Exit(code as i32)),
+        None => Err(Fail::Other("the server sent no exit code".into())),
+    }
+}
+
+fn method(c: &mut Client, sid: &str, bid: &str, name: &str, args: Value) -> Result<Value, Fail> {
+    let m = format!("{TERMINAL}.{name}");
+    c.call("block.method", json!({ "session_id": sid, "block_id": bid, "method": m, "args": args }))
+}
+
+/// True when nothing names a session and there is none, so `run` should create one.
+fn no_session_named(c: &mut Client, cli: &Cli) -> Result<bool, Fail> {
+    if cli.session.is_some() || std::env::var("LEON_SESSION").is_ok_and(|s| !s.is_empty()) {
+        return Ok(false);
+    }
+    Ok(c.call("session.list", json!({}))?["sessions"].as_array().is_some_and(Vec::is_empty))
+}
+
+fn block_query(cli: &Cli) -> Option<String> {
+    cli.block.clone().or_else(|| std::env::var("LEON_BLOCK").ok().filter(|s| !s.is_empty()))
+}
+
+/// The block a command acts on, as (session id, block id): an explicit target, then `-b`, then
+/// `$LEON_BLOCK` (searched in `-s` if given, else every session), then the active window's block.
+fn pick_block(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<(String, String), Fail> {
+    if let Some(q) = explicit.map(str::to_string).or_else(|| block_query(cli)) {
+        let scope = match &cli.session {
+            Some(s) => Some(resolve(c, "session", s, None)?),
+            None => None,
+        };
+        let r = c.call("target.resolve", json!({ "kind": "block", "query": q, "session_id": scope }))?;
+        let field = |k: &str| r[k].as_str().unwrap_or_default().to_string();
+        return Ok((field("session_id"), field("id")));
+    }
+    let sid = pick_session(c, cli, None)?;
+    let v = c.call("session.view", json!({ "session_id": sid }))?;
+    let windows = v["windows"].as_array().cloned().unwrap_or_default();
+    let active = windows.iter().find(|w| w["active"] == true);
+    match active.and_then(|w| w["block_ids"][0].as_str()) {
+        Some(bid) => Ok((sid, bid.to_string())),
+        None => Err(Fail::Api(ApiError::not_found("the active window has no block; pass -b"))),
+    }
+}
+
+/// `500ms`, `10s`, `2m`, `1h`, or bare seconds.
+pub fn parse_duration(s: &str) -> Result<Duration, String> {
+    let s = s.trim();
+    let split = s.find(|c: char| !c.is_ascii_digit() && c != '.').unwrap_or(s.len());
+    let (num, unit) = s.split_at(split);
+    let n: f64 = num.parse().map_err(|_| format!("not a duration: {s:?}"))?;
+    let secs = match unit {
+        "ms" => n / 1000.0,
+        "" | "s" => n,
+        "m" => n * 60.0,
+        "h" => n * 3600.0,
+        _ => return Err(format!("unknown unit in {s:?}; use ms, s, m or h")),
+    };
+    Duration::try_from_secs_f64(secs).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_duration;
+    use std::time::Duration;
+
+    #[test]
+    fn durations() {
+        assert_eq!(parse_duration("200ms"), Ok(Duration::from_millis(200)));
+        assert_eq!(parse_duration("10s"), Ok(Duration::from_secs(10)));
+        assert_eq!(parse_duration("3"), Ok(Duration::from_secs(3)));
+        assert_eq!(parse_duration("1.5m"), Ok(Duration::from_secs(90)));
+        assert!(parse_duration("5 parsecs").is_err());
+        assert!(parse_duration("").is_err());
+    }
+}

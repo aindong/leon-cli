@@ -1,8 +1,10 @@
 //! `leon`: the command-line client, and the server when run as `leon server run`.
 
+mod blocks;
 mod client;
 mod commands;
 
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::builder::BoolishValueParser;
@@ -23,6 +25,9 @@ pub struct Cli {
     /// Target session: an ID, label, position or ID suffix [default: $LEON_SESSION].
     #[arg(short = 's', long = "session", global = true)]
     pub session: Option<String>,
+    /// Target block: an ID, label, position or ID suffix [default: $LEON_BLOCK, else the active window's].
+    #[arg(short = 'b', long = "block", global = true)]
+    pub block: Option<String>,
     #[command(subcommand)]
     pub cmd: Cmd,
 }
@@ -47,9 +52,59 @@ pub enum Cmd {
     /// Manage windows (tabs) in a session.
     #[command(subcommand)]
     Window(WindowCmd),
+    /// Run a command in a new window and print its block ID.
+    Run {
+        /// Label for the new block.
+        #[arg(long)]
+        label: Option<String>,
+        /// Keep the block open after the program exits.
+        #[arg(long)]
+        keep_open: bool,
+        /// Wait for the program and exit with its status.
+        #[arg(long)]
+        wait: bool,
+        /// Working directory [default: the current directory].
+        #[arg(short = 'c', long = "cwd")]
+        cwd: Option<PathBuf>,
+        #[arg(last = true, required = true, value_name = "CMD")]
+        command: Vec<String>,
+    },
+    /// Type TEXT (or stdin) into a terminal; no Enter is added.
+    Send { text: Option<String> },
+    /// Press keys in binding syntax: enter, escape, tab, ctrl+c, up, alt+left, a…
+    SendKey {
+        #[arg(required = true)]
+        keys: Vec<String>,
+    },
+    /// Print a terminal's scrollback and screen.
+    Capture {
+        /// Drop trailing spaces and trailing blank lines.
+        #[arg(long)]
+        trim: bool,
+    },
+    /// Wait for a terminal's program to exit, and exit with its status.
+    Wait {
+        block: Option<String>,
+        /// Give up after this long (e.g. 500ms, 10s, 2m) and exit 1.
+        #[arg(long = "for", value_parser = blocks::parse_duration)]
+        timeout: Option<std::time::Duration>,
+    },
+    /// Manage blocks (terminals).
+    #[command(subcommand)]
+    Block(BlockCmd),
     /// List, describe and call server API methods.
     #[command(subcommand)]
     Api(ApiCmd),
+}
+
+#[derive(Subcommand)]
+pub enum BlockCmd {
+    /// List a session's blocks.
+    Ls,
+    /// Show a block: window, pid, command, exit status.
+    Inspect { target: Option<String> },
+    /// Close a block and end its program.
+    Close { target: Option<String> },
 }
 
 #[derive(Subcommand)]
@@ -115,12 +170,14 @@ fn main() -> ExitCode {
                 Fail::Api(e) if e.is_target_error() => 3,
                 Fail::Api(_) | Fail::Other(_) => 1,
                 Fail::Unreachable(_) => 4,
+                Fail::Exit(code) => *code,
             };
             match fail {
                 Fail::Api(e) => eprintln!("leon: {e}"),
                 Fail::Unreachable(m) | Fail::Other(m) => eprintln!("leon: {m}"),
+                Fail::Exit(_) => {}
             }
-            ExitCode::from(code)
+            ExitCode::from(code.clamp(0, 255) as u8)
         }
     }
 }
