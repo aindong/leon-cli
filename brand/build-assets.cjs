@@ -2,7 +2,8 @@
  * Needs Node, sharp, playwright, Google Chrome, and macOS iconutil.
  * Example: npm install --prefix /tmp/leon-brand-build sharp playwright
  * NODE_PATH=/tmp/leon-brand-build/node_modules node brand/build-assets.cjs
- * The hand-authored SVG master regenerates every raster icon, including the page embed.
+ * leon-1024.png is the canonical approved imagegen raster; never overwrite it here.
+ * Flat marks and the optical 16pt SVG are hand-authored, independent vector assets.
  */
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -13,16 +14,15 @@ const { chromium } = require('playwright');
 const root = __dirname;
 const png = { palette: true, colors: 256, effort: 10 };
 async function main() {
-  await sharp(path.join(root, 'icon/leon-1024.svg')).resize(1024, 1024).png(png)
-    .toFile(path.join(root, 'icon/leon-1024.png'));
-  // Review sheet: crop the original study without repainting it; compare the full icon.
-  const concept = await sharp(path.join(root, 'exploration/directions.png'))
-    .extract({ left: 65, top: 48, width: 430, height: 410 }).resize(500, 477).png().toBuffer();
-  const refined = await sharp(path.join(root, 'icon/leon-1024.png')).resize(640, 640).png().toBuffer();
-  const compare = `<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="800"><rect width="1400" height="800" fill="#F5F0E7"/><g fill="#292521" font-family="Arial,sans-serif"><text x="75" y="60" font-size="26">01 / Original Pane mane concept</text><text x="750" y="60" font-size="26">02 / Refined Fired mosaic icon</text><text x="75" y="730" font-size="19">Broad brow · closed eyes · wide muzzle · heart-shaped chin</text><text x="750" y="730" font-size="19">Same lion anatomy · distinct pane colours · deep Iron tile</text></g></svg>`;
-  await sharp(Buffer.from(compare)).composite([{ input: concept, left: 95, top: 160 }, { input: refined, left: 715, top: 75 }])
-    .png(png).toFile(path.join(root, 'exploration/refine-compare.png'));
+  // A standalone SVG wrapper is provided for consumers requiring SVG format.
+  // It embeds the canonical raster; it is not editable vector artwork.
+  const master = await fs.readFile(path.join(root, 'icon/leon-1024.png'));
+  await fs.writeFile(path.join(root, 'icon/leon-1024.svg'), `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="leon Pocket guardian app icon"><title>leon Pocket guardian — raster master wrapper</title><image width="1024" height="1024" href="data:image/png;base64,${master.toString('base64')}"/></svg>\n`);
   const pageIcon = await sharp(path.join(root, 'icon/leon-1024.png')).resize(580, 580).png(png).toBuffer();
+  const ogPath = path.join(root, 'marketing/og.svg');
+  const ogIcon = await sharp(master).resize(672, 672).png(png).toBuffer();
+  const ogSource = await fs.readFile(ogPath, 'utf8');
+  await fs.writeFile(ogPath, ogSource.replace(/<image id="app-icon"[^>]*\/>/, `<image id="app-icon" x="808" y="125" width="336" height="336" href="data:image/png;base64,${ogIcon.toString('base64')}"/>`));
   const htmlPath = path.join(root, 'marketing/index.html');
   const html = await fs.readFile(htmlPath, 'utf8');
   await fs.writeFile(htmlPath, html.replace(/data:image\/png;base64,[A-Za-z0-9+/=]+/g, `data:image/png;base64,${pageIcon.toString('base64')}`));
@@ -30,7 +30,7 @@ async function main() {
   await fs.mkdir(iconset, { recursive: true });
   for (const size of [16, 32, 128, 256, 512]) {
     for (const factor of [1, 2]) {
-      const source = size <= 32 ? 'leon-small.svg' : 'leon-1024.png';
+      const source = size === 16 ? 'leon-small.svg' : 'leon-1024.png';
       const output = `icon_${size}x${size}${factor === 2 ? '@2x' : ''}.png`;
       const input = path.join(root, 'icon', source);
       await sharp(input, source.endsWith('.svg') ? { density: 288 } : {})
@@ -54,14 +54,16 @@ async function main() {
       icons[size] = `data:image/png;base64,${bytes.toString('base64')}`;
     }
     const before = await sharp(path.join(root, 'icon/leon-1024.png')).resize(16).png().toBuffer();
-    await page.goto('about:blank');
-    await page.setViewportSize({ width: 960, height: 600 });
-    await page.setContent(`<!doctype html><style>*{box-sizing:border-box}body{margin:0;font:14px Menlo,monospace;background:#F5F0E7;color:#292521}h1{font:24px system-ui;margin:0 0 20px}main{padding:28px}.row{display:flex;gap:20px;padding:20px;border-radius:8px;align-items:center;margin-bottom:14px}.dark{background:#292521;color:#F5F0E7}.cell{width:150px;display:flex;align-items:center;justify-content:space-between;gap:20px}.cell img{flex-shrink:0}.caption{font-size:12px;max-width:250px;margin-left:20px;line-height:1.6}.zoom{image-rendering:pixelated}.zoomrow{display:flex;align-items:center;gap:26px;margin-top:20px}.label{font-size:12px}</style><main><h1>leon · optical size check</h1>${['light', 'dark'].map(theme => `<div class="row ${theme}">${[16, 32, 128].map(s => `<div class="cell"><span>${s}px</span><img width="${s}" height="${s}" src="${icons[s]}" alt="leon at ${s}px"></div>`).join('')}<div class="caption">${theme} background<br>Shown at native pixel size.</div></div>`).join('')}<div class="zoomrow"><img class="zoom" width="128" height="128" src="data:image/png;base64,${before.toString('base64')}" alt="Before: downsampled 16px icon"><div class="label">Before<br>16px enlarged 8×</div><img class="zoom" width="128" height="128" src="${icons[16]}" alt="After: optically adjusted 16px icon"><div class="label">After<br>16px enlarged 8×</div><div class="caption">Flat Iron field.<br>Six broad colour panes.<br>Wide muzzle; thicker closed eyes.</div></div></main>`);
-    await page.evaluate(() => Promise.all([...document.images].map(i => i.decode())));
-    await sharp(await page.screenshot()).png(png).toFile(path.join(root, 'icon/size-check.png'));
+    // Render the proof deterministically with Sharp, avoiding browser capture artefacts.
+    const zoomBefore = await sharp(before).resize(128, 128, { kernel: 'nearest' }).png().toBuffer();
+    const zoomAfter = await sharp(path.join(iconset, 'icon_16x16.png')).resize(128, 128, { kernel: 'nearest' }).png().toBuffer();
+    const row = (y, dark) => `<rect x="28" y="${y}" width="904" height="170" rx="8" fill="${dark ? '#292521' : '#F5F0E7'}"/><g fill="${dark ? '#F5F0E7' : '#292521'}">${[16,32,128].map((size, i) => `<text x="${48+i*170}" y="${y+90}">${size}px</text><image x="${183+i*150}" y="${y+(170-size)/2}" width="${size}" height="${size}" href="${icons[size]}"/>`).join('')}<text x="660" y="${y+78}" font-size="13">${dark ? 'Dark' : 'Light'} background</text><text x="660" y="${y+100}" font-size="13">Native pixel sizes</text></g>`;
+    const proof = `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600"><rect width="960" height="600" fill="#F5F0E7"/><g font-family="Arial,sans-serif" font-size="14" fill="#292521"><text x="28" y="42" font-size="24">leon · optical size check</text>${row(65,false)}${row(250,true)}<text x="174" y="492">Direct reduction</text><text x="174" y="514">16px enlarged 8×</text><text x="478" y="492">Optical source</text><text x="478" y="514">16px enlarged 8×</text><text x="660" y="480">One maroon field.</text><text x="660" y="503">One warm mane silhouette.</text><text x="660" y="526">Stronger lids, broad nose</text><text x="660" y="549">and half-smile.</text></g></svg>`;
+    await sharp(Buffer.from(proof)).composite([{input:zoomBefore,left:28,top:448},{input:zoomAfter,left:332,top:448}]).png(png).toFile(path.join(root, 'icon/size-check.png'));
+
   } finally {
     await browser.close();
   }
-  console.log('Built hero.png, og.png, 10 iconset PNGs, Leon.icns, size-check.png, and refine-compare.png.');
+  console.log('Built hero.png, og.png, 10 iconset PNGs, Leon.icns, size-check.png, page embed, and raster SVG wrapper.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
