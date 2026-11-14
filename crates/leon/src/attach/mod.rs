@@ -14,12 +14,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use leon_app::remote::Remote;
-use leon_core::paths::socket_path;
 use leon_lua::keys::Chord;
 use ratatui::crossterm::event::{self, Event, KeyEvent, KeyEventKind};
 use serde_json::json;
 
-use crate::client::{connect, Client, Fail};
+use crate::client::{Client, Fail, Server};
 use crate::commands::resolve;
 use draw::Colors;
 use keys::Keys;
@@ -50,7 +49,7 @@ enum Flow {
     Done(Result<(), Fail>),
 }
 
-pub fn run(target: Option<&str>, prefix: Option<&str>, autostart: bool) -> Result<(), Fail> {
+pub fn run(target: Option<&str>, prefix: Option<&str>, autostart: bool, server: &Server) -> Result<(), Fail> {
     use std::io::IsTerminal;
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         return Err(Fail::Other("leon attach needs a terminal; over ssh, run `ssh -t HOST leon attach`".into()));
@@ -58,14 +57,18 @@ pub fn run(target: Option<&str>, prefix: Option<&str>, autostart: bool) -> Resul
     if let Some(p) = prefix {
         keys::one_chord(p).map_err(|e| Fail::Other(format!("--prefix: {e}")))?;
     }
-    let socket = socket_path();
     // any server starts before the watchdog and the signal mask, which it must not inherit
-    let mut c = connect(&socket, autostart)?;
+    let mut c = server.connect(autostart)?;
     let start = target.map(|t| resolve_target(&mut c, t)).transpose()?;
     drop(c);
     host::watchdog().map_err(|e| Fail::Other(format!("can't take the terminal: {e}")))?;
     let signals = host::block_signals();
-    let remote = Remote::connect(&socket).map_err(|e| {
+    // over a link, a drop is retried for as long as the host keeps a dropped stream
+    let remote = match server.link {
+        Some(_) => Remote::connect_retrying(&server.socket, leon_server::resume::HOLD),
+        None => Remote::connect(&server.socket),
+    }
+    .map_err(|e| {
         host::restore();
         Fail::Unreachable(e)
     })?;
@@ -78,6 +81,9 @@ pub fn run(target: Option<&str>, prefix: Option<&str>, autostart: bool) -> Resul
             return Err(Fail::Other(format!("can't take the terminal: {e}")));
         }
     };
+    if let Some((_, link)) = &server.link {
+        link.never_prompt(); // the terminal is the TUI's now
+    }
     let woken = Arc::new(AtomicBool::new(false));
     let w = woken.clone();
     let wake = tx.clone();

@@ -44,7 +44,7 @@ pub fn record(agent: Agent) {
     }
     let socket = var("LEON_SERVER").map_or_else(leon_core::paths::socket_path, PathBuf::from);
     let Ok(mut c) = Client::connect(&socket) else { return };
-    if c.set_timeout(SERVER_WAIT).is_err() {
+    if c.set_timeout(Some(SERVER_WAIT)).is_err() {
         return;
     }
     let args = json!({ "command": command });

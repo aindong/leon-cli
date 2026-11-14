@@ -4,7 +4,8 @@
 //! snapshot, then every event with a higher seq, and misses nothing.
 //!
 //! A subscriber whose queue would pass `MAX_BACKLOG` is dropped and its queue freed (docs/spec.md
-//! §3). Queueing never waits, so a client that stops reading slows nobody else.
+//! §3). Queueing never waits, so a client that stops reading slows nobody else. A resumable one
+//! also keeps the lines it wrote last, for `session.resume` (resume.rs).
 
 use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -16,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Notify;
 
-use crate::methods::{session_list, view, SessionRef, SessionSummary, SessionView};
+use crate::methods::{session_list, view, SessionSummary, SessionView};
 use crate::registry::parse;
 use crate::{Ctx, Registry};
 
@@ -40,6 +41,19 @@ pub enum EventScope {
 #[serde(deny_unknown_fields)]
 pub struct AttachAll {
     pub event_scope: EventScope,
+    /// Also return a `resume` token: when this connection drops, `session.resume` on another one
+    /// carries on with the next seq.
+    #[serde(default)]
+    pub resumable: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AttachSession {
+    pub session_id: String,
+    /// As in `session.attach_all`.
+    #[serde(default)]
+    pub resumable: bool,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -47,6 +61,9 @@ pub struct Attached {
     /// The connection's event seq at this snapshot; every later event on it has a higher one.
     pub seq: u64,
     pub view: SessionView,
+    /// With `resumable`: the token `session.resume` takes, good for every later drop of this stream.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume: Option<String>,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -54,18 +71,28 @@ pub struct AttachedAll {
     /// As in `session.attach`.
     pub seq: u64,
     pub sessions: Vec<SessionSummary>,
+    /// As in `session.attach`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume: Option<String>,
 }
 
 #[derive(Default)]
-struct Queue {
-    all: bool,
-    lifecycle: bool,
-    sessions: HashSet<String>,
-    seq: u64,
-    lines: VecDeque<Vec<u8>>,
-    bytes: usize,
-    dropped: bool,
-    registered: bool,
+pub(crate) struct Queue {
+    pub(crate) all: bool,
+    pub(crate) lifecycle: bool,
+    pub(crate) sessions: HashSet<String>,
+    pub(crate) seq: u64,
+    /// Encoded lines not yet written, with their seq.
+    pub(crate) lines: VecDeque<(u64, Vec<u8>)>,
+    pub(crate) bytes: usize,
+    pub(crate) dropped: bool,
+    pub(crate) registered: bool,
+    /// A resumable stream's token.
+    pub(crate) resume: Option<String>,
+    /// A resumable stream's last written lines (up to `resume::KEEP` bytes): taken off `lines`
+    /// for writing, so a line whose write failed, or that the client never read, is here.
+    pub(crate) kept: VecDeque<(u64, Vec<u8>)>,
+    pub(crate) kept_bytes: usize,
 }
 
 impl Queue {
@@ -80,7 +107,7 @@ pub struct Dropped;
 
 #[derive(Default)]
 pub struct Subscriber {
-    queue: Mutex<Queue>,
+    pub(crate) queue: Mutex<Queue>,
     /// Woken when a line is queued or the subscriber is dropped.
     pub ready: Notify,
 }
@@ -100,7 +127,8 @@ impl Subscriber {
             q.dropped = true;
             q.lines = VecDeque::new();
         } else {
-            q.lines.push_back(line);
+            let seq = q.seq;
+            q.lines.push_back((seq, line));
         }
         drop(q);
         self.ready.notify_one();
@@ -112,9 +140,17 @@ impl Subscriber {
         if q.dropped {
             return Err(Dropped);
         }
-        let line = q.lines.pop_front();
-        q.bytes -= line.as_ref().map_or(0, Vec::len);
-        Ok(line)
+        let Some((seq, line)) = q.lines.pop_front() else { return Ok(None) };
+        q.bytes -= line.len();
+        if q.resume.is_some() {
+            q.kept_bytes += line.len();
+            q.kept.push_back((seq, line.clone()));
+            while q.kept_bytes > crate::resume::KEEP {
+                let (_, old) = q.kept.pop_front().expect("kept bytes are in kept lines");
+                q.kept_bytes -= old.len();
+            }
+        }
+        Ok(Some(line))
     }
 
     pub fn has_lines(&self) -> bool {
@@ -131,19 +167,21 @@ impl Ctx {
     pub fn attach(&self, sub: &Arc<Subscriber>, method: &str, params: Value) -> Result<Value, ApiError> {
         let r = match method {
             "session.attach" => serde_json::to_value(self.attach_session(sub, parse(method, params)?)?),
+            "session.resume" => serde_json::to_value(self.resume(sub, parse(method, params)?)?),
             _ => serde_json::to_value(self.attach_all(sub, parse(method, params)?)?),
         };
         Ok(r.expect("snapshots serialize"))
     }
 
     /// Snapshot one session, and have `sub` get its events from here on.
-    pub fn attach_session(&self, sub: &Arc<Subscriber>, p: SessionRef) -> Result<Attached, ApiError> {
+    pub fn attach_session(&self, sub: &Arc<Subscriber>, p: AttachSession) -> Result<Attached, ApiError> {
         let st = self.state();
         let view = view(st.session(&p.session_id)?);
         let seq = self.widen(sub, |q| {
             q.sessions.insert(p.session_id);
         });
-        Ok(Attached { seq, view })
+        let resume = p.resumable.then(|| self.make_resumable(sub));
+        Ok(Attached { seq, view, resume })
     }
 
     /// List the sessions, and have `sub` get the events of `event_scope` from here on.
@@ -154,7 +192,8 @@ impl Ctx {
             EventScope::Session => q.lifecycle = true,
             EventScope::All => q.all = true,
         });
-        Ok(AttachedAll { seq, sessions })
+        let resume = p.resumable.then(|| self.make_resumable(sub));
+        Ok(AttachedAll { seq, sessions, resume })
     }
 
     /// Change what `sub` gets and register it. Call with the state lock held. Returns its seq.
@@ -164,17 +203,22 @@ impl Ctx {
         let (seq, first) = (q.seq, !std::mem::replace(&mut q.registered, true));
         drop(q);
         if first {
-            let mut subs = lock(&self.subscribers);
-            subs.retain(|s| s.strong_count() > 0);
-            subs.push(Arc::downgrade(sub));
+            self.register(sub);
         }
         seq
+    }
+
+    /// Have `sub` get events. Call with the state lock held.
+    pub(crate) fn register(&self, sub: &Arc<Subscriber>) {
+        let mut subs = lock(&self.subscribers);
+        subs.retain(|s| s.strong_count() > 0);
+        subs.push(Arc::downgrade(sub));
     }
 }
 
 /// Whether the socket loop must route `method` through `Ctx::attach`.
 pub fn is_attach(method: &str) -> bool {
-    matches!(method, "session.attach" | "session.attach_all")
+    matches!(method, "session.attach" | "session.attach_all" | "session.resume")
 }
 
 pub(crate) fn add(r: &mut Registry) {
@@ -183,7 +227,7 @@ pub(crate) fn add(r: &mut Registry) {
         "session.attach",
         "Snapshot a session; on a socket connection, also receive its events (block events too) as \
          `{\"event\":…,\"seq\":N}` lines from now on, with seq above the snapshot's.",
-        |ctx, p: SessionRef| ctx.attach_session(&Arc::default(), p),
+        |ctx, p: AttachSession| ctx.attach_session(&Arc::default(), p),
     );
     r.add(
         "session.attach_all",

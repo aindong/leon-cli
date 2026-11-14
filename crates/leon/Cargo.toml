@@ -13,6 +13,7 @@ leon-core.workspace = true
 leon-server.workspace = true
 leon-lua.workspace = true
 leon-app.workspace = true
+leon-hosts.workspace = true
 clap.workspace = true
 libc.workspace = true
 ratatui.workspace = true

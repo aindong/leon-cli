@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 pub mod host;
+pub mod remote;
 
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
@@ -108,24 +109,29 @@ impl Env {
 
     /// Start `leon events ARGS --json` and wait for its snapshot line.
     pub fn events(&self, args: &[&str]) -> Stream {
-        let mut child = self.cmd().arg("events").args(args).arg("--json").stdout(Stdio::piped()).spawn().unwrap();
-        let stdout = child.stdout.take().unwrap();
-        let (tx, lines) = mpsc::channel();
-        std::thread::spawn(move || {
-            for line in BufReader::new(stdout).lines() {
-                let Ok(line) = line else { return };
-                if tx.send(line).is_err() {
-                    return;
-                }
-            }
-        });
-        let mut s = Stream { child, lines, seq: 0 };
-        let first = s.line(Duration::from_secs(10)).expect("leon events printed no snapshot");
-        let snap: Value = serde_json::from_str(&first).unwrap_or_else(|e| panic!("snapshot not JSON ({e}): {first}"));
-        assert!(snap.get("snapshot").is_some(), "the first line is the snapshot: {first}");
-        s.seq = snap["seq"].as_u64().unwrap_or_else(|| panic!("snapshot has a seq: {first}"));
-        s
+        stream(self.cmd(), args)
     }
+}
+
+/// Start `CMD events ARGS --json` and wait for its snapshot line.
+pub fn stream(mut cmd: Command, args: &[&str]) -> Stream {
+    let mut child = cmd.arg("events").args(args).arg("--json").stdout(Stdio::piped()).spawn().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let (tx, lines) = mpsc::channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            let Ok(line) = line else { return };
+            if tx.send(line).is_err() {
+                return;
+            }
+        }
+    });
+    let mut s = Stream { child, lines, seq: 0 };
+    let first = s.line(Duration::from_secs(10)).expect("leon events printed no snapshot");
+    let snap: Value = serde_json::from_str(&first).unwrap_or_else(|e| panic!("snapshot not JSON ({e}): {first}"));
+    assert!(snap.get("snapshot").is_some(), "the first line is the snapshot: {first}");
+    s.seq = snap["seq"].as_u64().unwrap_or_else(|| panic!("snapshot has a seq: {first}"));
+    s
 }
 
 impl Drop for Env {
