@@ -3,7 +3,7 @@
 //! colour, background and 16 combining marks) goes as several lines that rebuild it exactly.
 
 use leon_core::screen::{self, BgRect, Frame, Span, Update};
-use leon_server::screens::{encode, MAX_SCREEN_LINE};
+use leon_server::screens::{encode, within_line, MAX_SCREEN_LINE};
 
 fn worst() -> Frame {
     let (lines, cols) = (500, 1000);
@@ -65,4 +65,15 @@ fn a_small_update_is_one_line() {
     });
     let lines = encode("block:y", screen::diff(None, &f).unwrap());
     assert_eq!(lines.len(), 1);
+}
+
+#[test]
+fn a_lines_reply_keeps_to_the_same_bound() {
+    let rows = screen::diff(None, &worst()).unwrap().rows;
+    let kept = within_line(rows.clone());
+    assert!(!kept.is_empty() && kept.len() < rows.len(), "{} of {} rows", kept.len(), rows.len());
+    assert_eq!(kept[..], rows[..kept.len()], "the first rows, in order");
+    let bytes = serde_json::to_vec(&kept).unwrap().len();
+    assert!(bytes <= MAX_SCREEN_LINE + 1000 * 200, "{bytes} bytes");
+    assert_eq!(within_line(rows[..3].to_vec()).len(), 3, "a small reply is whole");
 }

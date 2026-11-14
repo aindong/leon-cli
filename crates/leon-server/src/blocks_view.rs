@@ -37,8 +37,13 @@ pub(super) fn methods() -> Vec<TermMethod> {
         term_method(
             "lines",
             "Rows by absolute line number, from the scrollback and the screen, as `block.watch` sends \
-             them; lines no longer kept are left out. With the numbering they were read under.",
-            |t, a: LinesArgs| -> Result<Lines, ApiError> { Ok(t.lines(a.from, a.count, &theme::DARK)) },
+             them; lines no longer kept are left out, and so are the last ones past 4 MiB (ask again for \
+             them). With the numbering they were read under.",
+            |t, a: LinesArgs| -> Result<Lines, ApiError> {
+                let mut lines = t.lines(a.from, a.count, &theme::DARK);
+                lines.rows = crate::screens::within_line(lines.rows);
+                Ok(lines)
+            },
         ),
         term_method(
             "find",

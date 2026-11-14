@@ -9,8 +9,9 @@ use serde_json::{json, Value};
 
 use super::{Block, Conn, Session};
 
-/// The longest line read from the server: a whole 500 × 1000 screen of one-cell spans fits.
-const MAX_LINE: u64 = 256 << 20;
+/// The longest line read from a server, which may be a box we don't control: the server splits
+/// a screen past `leon_server::screens::MAX_SCREEN_LINE` (4 MiB) and caps `lines` replies the same.
+const MAX_LINE: u64 = 16 << 20;
 
 /// One line, at most `MAX_LINE` bytes; 0 at the end of the stream.
 pub(super) fn read_line(r: &mut BufReader<UnixStream>, out: &mut String) -> io::Result<usize> {

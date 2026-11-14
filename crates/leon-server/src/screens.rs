@@ -26,6 +26,9 @@ use crate::{Ctx, Registry};
 const MIN_GAP: Duration = Duration::from_millis(2);
 /// The most blocks one connection may watch.
 const MAX_WATCHED: usize = 256;
+/// The longest screen line written, give or take one row: a client reads at most 16 MiB a line,
+/// so a bigger update (only a huge screen of styled cells gets there) goes as several.
+pub const MAX_SCREEN_LINE: usize = 4 << 20;
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -45,7 +48,7 @@ struct Line<'a> {
 struct Pushed<'a> {
     block_id: &'a str,
     #[serde(flatten)]
-    update: Update,
+    update: &'a Update,
 }
 
 struct Watched {
@@ -125,9 +128,7 @@ impl Screens {
             let Some(t) = w.term.upgrade() else { continue };
             let f = frame(&t);
             if let Some(update) = screen::diff(w.sent.as_ref(), &f) {
-                let mut line = serde_json::to_vec(&Line { screen: Pushed { block_id: id, update } }).expect("json");
-                line.push(b'\n');
-                out.push(line);
+                out.extend(encode(id, update));
                 w.last = Some(now);
             }
             w.sent = Some(f);
@@ -140,6 +141,45 @@ impl Screens {
         let held = self.watched.values().filter(|w| w.dirty.load(Ordering::Acquire)).filter_map(|w| w.last);
         held.min().map(|l| tokio::time::Instant::from_std(l + MIN_GAP))
     }
+}
+
+/// `update`'s screen lines for `block_id`: one, or when that would pass `MAX_SCREEN_LINE`, the
+/// rows in runs that fit, the first carrying `full` and the rest partial updates of the same size.
+pub fn encode(block_id: &str, mut update: Update) -> Vec<Vec<u8>> {
+    let line = |update: &Update| {
+        let mut line = serde_json::to_vec(&Line { screen: Pushed { block_id, update } }).expect("json");
+        line.push(b'\n');
+        line
+    };
+    let whole = line(&update);
+    if whole.len() <= MAX_SCREEN_LINE {
+        return vec![whole];
+    }
+    let mut rows = std::mem::take(&mut update.rows).into_iter().peekable();
+    let (mut out, mut part, mut size) = (Vec::new(), Vec::new(), 0);
+    while let Some(row) = rows.next() {
+        size += serde_json::to_vec(&row).map_or(0, |b| b.len());
+        part.push(row);
+        if size >= MAX_SCREEN_LINE || rows.peek().is_none() {
+            let full = update.full && out.is_empty();
+            out.push(line(&Update { full, rows: std::mem::take(&mut part), ..update.clone() }));
+            size = 0;
+        }
+    }
+    out
+}
+
+/// The first of `rows` that fit in `MAX_SCREEN_LINE` (at least one): a `lines` reply stays inside
+/// what a client reads, and the client asks again for the rest.
+pub fn within_line(rows: Vec<screen::Row>) -> Vec<screen::Row> {
+    let mut size = 0;
+    rows.into_iter()
+        .take_while(|r| {
+            let fits = size < MAX_SCREEN_LINE;
+            size += serde_json::to_vec(r).map_or(0, |b| b.len());
+            fits
+        })
+        .collect()
 }
 
 pub(crate) fn add(r: &mut Registry) {
