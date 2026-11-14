@@ -16,9 +16,14 @@ otherwise it prints `tmux: skipped (not installed)`.
   over N samples (N ≥ 200). The resolution is one poll, about one round trip (7 µs).
 - **Throughput**: a block runs a writer of 100 MB of `y\n`, then prints an end marker. The time runs
   from `session.create` until `block.wait` returns. The server reports the exit only after its
-  reader hits the PTY's EOF, so all 100 MB went through the emulator first; the bench then checks
-  the marker is on the screen. The median of 3 runs, in MB of program output per second (the PTY
-  turns each `\n` into `\r\n`, so 150 MB actually cross it). Two writers:
+  reader hits the PTY's EOF and its parser has caught up, so all 100 MB went through the emulator
+  first. The bench then checks the marker is on the screen and asks the server how many bytes it
+  parsed (`dev.leon.terminal.process` → `output_bytes`, printed as `server_parsed`): at least
+  150000009, or it fails. The PTY turns each `\n` into `\r\n`, so 150 MB cross it, plus the
+  9-byte marker. With `cat` the count is about 0.1% higher: when its output queue fills between
+  the `\r` and the `\n`, the macOS tty sends the `\r` again. A bare reader sees the same (50146520
+  `\r` against 50000000 `\n`), so the bench allows up to 1% over. The result is the median of
+  3 runs, in MB of program output per second. Two writers:
   - `yes | head -c 100000000`: the writer the task names.
   - `cat` of a file with the same 100 MB, written in big blocks.
 

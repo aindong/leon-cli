@@ -159,7 +159,7 @@ fn latency(c: &mut Conn, n: usize) -> (f64, f64) {
 
 /// `writer` (100 MB) then an end marker; timed from creating the block until the server reports
 /// the program exited, which it does only after parsing all its output. Then the marker must be on
-/// the screen and the server's count of parsed bytes exactly `PTY_BYTES`.
+/// the screen and the server's count of parsed bytes `PTY_BYTES` (a few more for `cat`, see below).
 fn throughput(c: &mut Conn, what: &str, writer: &str) -> f64 {
     let script = format!("{writer}; printf '{END}'");
     let mut parsed = Vec::new();
@@ -172,7 +172,12 @@ fn throughput(c: &mut Conn, what: &str, writer: &str) -> f64 {
             assert!(c.text(&sid, &bid).ends_with(END), "the end marker reached the grid");
             let args = json!({ "session_id": sid, "block_id": bid, "method": "dev.leon.terminal.process" });
             let seen = c.call("block.method", args)["output_bytes"].as_u64().unwrap();
-            assert_eq!(seen, PTY_BYTES, "the server parsed every byte (the tty sends each \\n as \\r\\n)");
+            // The macOS tty sends a \\r again when its queue fills between the \\r and \\n it makes of a
+            // \\n, so a big-block writer arrives with a few extra \\r (about one per 1 KiB read).
+            assert!(
+                (PTY_BYTES..PTY_BYTES + PTY_BYTES / 100).contains(&seen),
+                "the server parsed {seen} bytes, not {PTY_BYTES} (+ under 1% repeated \\r)"
+            );
             parsed.push(seen);
             c.call("session.destroy", json!({ "session_id": sid }));
             THROUGHPUT_BYTES as f64 / 1e6 / secs
