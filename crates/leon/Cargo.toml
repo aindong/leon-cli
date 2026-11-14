@@ -17,3 +17,8 @@ libc.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
+
+# `cargo bench -p leon --bench speed [-- --samples N]`; results in docs/performance.md.
+[[bench]]
+name = "speed"
+harness = false
