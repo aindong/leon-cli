@@ -2,6 +2,7 @@
 //! The socket loop (`serve`) takes a `Ctx` the caller built, so the app can embed the same state.
 
 mod blocks;
+pub mod contract;
 pub mod events;
 mod layout;
 pub mod lua;
@@ -21,6 +22,7 @@ use leon_core::State;
 
 use events::Subscriber;
 
+pub use contract::API_VERSION;
 pub use registry::{Later, Registry};
 
 /// Facts about this server process, reported by `server.status`.

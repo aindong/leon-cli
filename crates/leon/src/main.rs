@@ -1,5 +1,6 @@
 //! `leon`: the command-line client, and the server when run as `leon server run`.
 
+mod api;
 mod attach;
 mod blocks;
 mod client;
@@ -469,9 +470,9 @@ pub enum WindowCmd {
 
 #[derive(Subcommand)]
 pub enum ApiCmd {
-    /// List every method.
+    /// List every method with its stability (stable, experimental, internal).
     List,
-    /// Show a method's description and JSON Schemas.
+    /// Show a method's stability, description, JSON Schemas and examples.
     Describe {
         /// The method, e.g. `session.view`.
         method: String,
