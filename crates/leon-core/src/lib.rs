@@ -5,9 +5,10 @@ pub mod keys;
 pub mod model;
 pub mod paths;
 pub mod target;
+pub mod terminal;
 
 pub use error::ApiError;
-pub use model::{Session, State, Window};
+pub use model::{Block, Session, State, Window};
 
 /// A new, never-reused ID such as `session:7c9e…`.
 pub fn new_id(kind: &str) -> String {
