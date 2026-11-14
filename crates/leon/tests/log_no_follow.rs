@@ -1,6 +1,7 @@
+use std::os::unix::fs::PermissionsExt;
 #[test]
 fn server_log_does_not_follow_symlinks() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
     let victim = dir.path().join("victim");
     std::os::unix::fs::symlink(&victim, dir.path().join("server.log")).unwrap();
     let leon = || {

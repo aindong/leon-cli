@@ -1,5 +1,6 @@
 //! `server start` must make an already-running autostarted server persistent (docs/spec.md §1).
 
+use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Output};
 use std::time::Duration;
 
@@ -29,7 +30,8 @@ impl Drop for Env {
 
 #[test]
 fn server_start_makes_an_autostarted_server_persistent() {
-    let env = Env { dir: tempfile::tempdir().unwrap() };
+    let env =
+        Env { dir: tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap() };
     assert!(env.run(&["ls"]).status.success(), "ls autostarts a server");
     let started = env.run(&["server", "start"]);
     assert!(started.status.success(), "{}", String::from_utf8_lossy(&started.stderr));

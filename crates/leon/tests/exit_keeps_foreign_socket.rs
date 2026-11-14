@@ -1,3 +1,4 @@
+use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -24,7 +25,7 @@ fn wait_up(dir: &std::path::Path) {
 
 #[test]
 fn exiting_server_leaves_a_newer_servers_socket_alone() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
     let mut old =
         leon(dir.path()).env("LEON_IDLE_EXIT_SECS", "1").args(["server", "run", "--autostarted"]).spawn().unwrap();
     wait_up(dir.path());

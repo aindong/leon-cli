@@ -14,7 +14,7 @@ struct Env {
 
 impl Env {
     fn new() -> Self {
-        Env { dir: tempfile::tempdir().unwrap() }
+        Env { dir: tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap() }
     }
 
     fn cmd(&self) -> Command {
