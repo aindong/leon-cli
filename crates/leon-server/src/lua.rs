@@ -259,6 +259,11 @@ pub struct Keymap {
 pub struct ClientSettings {
     /// Copy a selection to the clipboard as it is made (default false).
     pub copy_on_select: bool,
+    /// Milliseconds after a repeatable binding (`repeats`) during which its keys work without the
+    /// prefix (default 500; 0 turns repeat off).
+    pub repeat_time: u64,
+    /// Regular expressions hints match besides the built-in ones (group 1, if any, is the text).
+    pub hint_patterns: Vec<String>,
 }
 
 #[derive(Serialize, JsonSchema, PartialEq)]
@@ -280,6 +285,8 @@ pub struct BindingView {
     /// Bound to a Lua function.
     #[serde(rename = "fn")]
     pub func: bool,
+    /// After the sequence, its last key works again without the prefix for `repeat_time`.
+    pub repeats: bool,
     /// `file:line`.
     pub source: String,
 }
@@ -318,6 +325,9 @@ pub struct Reloaded {
     pub logs: Vec<String>,
 }
 
+/// tmux's `repeat-time` default, in milliseconds.
+const REPEAT_TIME: u64 = 500;
+
 fn keymap(l: &Loaded) -> Keymap {
     let c = &l.cfg;
     Keymap {
@@ -338,6 +348,7 @@ fn keymap(l: &Loaded) -> Keymap {
                     action,
                     args,
                     func,
+                    repeats: b.repeats,
                     source: b.source.clone(),
                 }
             })
@@ -371,7 +382,11 @@ fn keymap(l: &Loaded) -> Keymap {
             .iter()
             .map(|u| UnbindView { key: u.key.sequence(), mode: u.key.mode.clone(), action: u.action.clone() })
             .collect(),
-        settings: ClientSettings { copy_on_select: c.copy_on_select.unwrap_or(false) },
+        settings: ClientSettings {
+            copy_on_select: c.copy_on_select.unwrap_or(false),
+            repeat_time: c.repeat_time.unwrap_or(REPEAT_TIME),
+            hint_patterns: c.hint_patterns.clone(),
+        },
     }
 }
 

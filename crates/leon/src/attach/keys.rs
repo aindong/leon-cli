@@ -145,8 +145,8 @@ pub struct Keys {
     pub prefix: Chord,
     /// The prefix as the status bar shows it (`ctrl+b`).
     pub prefix_name: String,
-    /// The config's `attach/KEY` bindings, newest last.
-    config_table: Vec<(Chord, String, Option<Value>)>,
+    /// The config's `attach/KEY` bindings (action, args, repeats), newest last.
+    config_table: Vec<(Chord, String, Option<Value>, bool)>,
     defaults: Vec<(Chord, String)>,
     pub config: Keymap,
 }
@@ -177,7 +177,7 @@ impl Keys {
             .filter_map(|b| {
                 let action = b["action"].as_str()?.to_string();
                 let args = b.get("args").filter(|a| !a.is_null()).cloned();
-                Some((one_chord(b["key"].as_str()?).ok()?, action, args))
+                Some((one_chord(b["key"].as_str()?).ok()?, action, args, b["repeats"] == true))
             })
             .collect();
         Ok(Keys { prefix, prefix_name, config_table, defaults, config: Keymap::new(km) })
@@ -186,7 +186,7 @@ impl Keys {
     /// The key after the prefix: the config's `attach/KEY`, else its `prefix>KEY` sequence, else
     /// the built-in table.
     pub fn after_prefix(&self, c: &Chord) -> After {
-        if let Some((_, a, args)) = self.config_table.iter().rev().find(|(k, ..)| k == c) {
+        if let Some((_, a, args, _)) = self.config_table.iter().rev().find(|(k, ..)| k == c) {
             return After::Run(a.clone(), args.clone());
         }
         match self.config.press(std::slice::from_ref(&self.prefix), c) {
@@ -203,6 +203,22 @@ impl Keys {
     }
 }
 
+impl Keys {
+    /// What the key after the prefix does when its binding has `repeats` (the built-in table never
+    /// does): it may run again without the prefix for `repeat_time`.
+    pub fn repeatable(&self, c: &Chord) -> Option<After> {
+        if let Some((_, a, args, repeats)) = self.config_table.iter().rev().find(|(k, ..)| k == c) {
+            return repeats.then(|| After::Run(a.clone(), args.clone()));
+        }
+        let b = self.config.repeatable(std::slice::from_ref(&self.prefix), c)?;
+        Some(After::Config(Pressed::Run(b)))
+    }
+}
+
 #[cfg(test)]
 #[path = "keys_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "m19_keys_tests.rs"]
+mod m19_tests;

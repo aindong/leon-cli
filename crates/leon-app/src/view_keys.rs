@@ -26,6 +26,15 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        if let Some(c) = chord.as_ref().filter(|_| self.pending.is_empty()) {
+            let now = Instant::now();
+            if let Some((b, prefix)) = self.repeat.press(c, now, |p, k| self.keymap.repeatable(p, k)) {
+                self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, now);
+                self.run_binding(b, prefix, c, window, cx);
+                cx.stop_propagation();
+                return;
+            }
+        }
         if let Some(c) = &chord {
             let escape = c.key == leon_lua::keys::Key::Named("escape") && c.mods == Default::default();
             if !self.pending.is_empty() && escape {
@@ -43,6 +52,7 @@ impl Workspace {
                 }
                 Pressed::Run(b) => {
                     let prefix = std::mem::take(&mut self.pending);
+                    self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, Instant::now());
                     self.run_binding(b, prefix, c, window, cx);
                     cx.stop_propagation();
                     return;

@@ -70,6 +70,8 @@ pub(crate) fn config(lua: &Lua) -> Config {
         logs: c.logs.clone(),
         resume: c.resume,
         copy_on_select: c.copy_on_select,
+        repeat_time: c.repeat_time,
+        hint_patterns: c.hint_patterns.clone(),
     }
 }
 
@@ -184,8 +186,36 @@ pub(crate) fn leon_table(lua: &Lua, script: bool) -> mlua::Result<Table> {
     Ok(leon)
 }
 
-fn bind(lua: &Lua, (key, target, args): (String, Value, Option<Value>)) -> Result<(), Bad> {
+/// `leon.bind`'s options (the 4th argument): `repeats` (tmux `bind -r`; `["repeat"]` too, since
+/// `repeat` is a Lua keyword).
+fn bind_options(opts: Option<Value>) -> Result<bool, Bad> {
+    let t = match opts {
+        None => return Ok(false),
+        Some(Value::Table(t)) => t,
+        Some(v) => {
+            return Err(format!("options must be a table like {{ repeats = true }}, got {}", v.type_name()).into())
+        }
+    };
+    for pair in t.pairs::<Value, Value>() {
+        let (k, _) = pair?;
+        let name = k.to_string().unwrap_or_default();
+        if name != "repeats" && name != "repeat" {
+            return Err(format!("unknown option {name:?}: the option is repeats").into());
+        }
+    }
+    Ok(flag(&t, "repeats")? || flag(&t, "repeat")?)
+}
+
+fn bind(lua: &Lua, (key, target, args, opts): (String, Value, Option<Value>, Option<Value>)) -> Result<(), Bad> {
     let key = keys::parse(&key)?;
+    if let Some(Value::Table(t)) = &args {
+        if t.contains_key("repeats")? || t.contains_key("repeat")? {
+            return Err(
+                "repeats is an option, the 4th argument: leon.bind(key, action, nil, { repeats = true })".into()
+            );
+        }
+    }
+    let repeats = bind_options(opts)?;
     let (target, func) = match target {
         Value::String(s) => {
             let name = s.to_string_lossy();
@@ -236,7 +266,7 @@ fn bind(lua: &Lua, (key, target, args): (String, Value, Option<Value>)) -> Resul
     }
     st.next_id += 1;
     let id = st.next_id;
-    st.entries.push(Entry { id, b: Binding { key, target, source }, func });
+    st.entries.push(Entry { id, b: Binding { key, target, source, repeats }, func });
     Ok(())
 }
 
@@ -314,16 +344,35 @@ fn mode(lua: &Lua, (name, opts): (String, Option<Table>)) -> Result<(), Bad> {
     Ok(())
 }
 
-/// `leon.set(name, value)`: a setting: `resume` (`"ask"`, `"always"`, `"never"`) or
-/// `copy_on_select` (a boolean).
+/// `leon.set(name, value)`: a setting: `resume` (`"ask"`, `"always"`, `"never"`),
+/// `copy_on_select` (a boolean), `repeat_time` (milliseconds) or `hint_patterns` (a list of
+/// regular expressions).
 fn set(lua: &Lua, (name, value): (String, Value)) -> Result<(), Bad> {
+    if name == "repeat_time" {
+        let ms = match value {
+            Value::Integer(i) => Some(i as f64),
+            Value::Number(n) => Some(n),
+            _ => None,
+        };
+        let ms = ms.filter(|ms| ms.fract() == 0. && (0. ..=10_000.).contains(ms));
+        let ms = ms.ok_or_else(|| Bad("repeat_time is whole milliseconds, 0 to 10000 (0 turns repeat off)".into()))?;
+        state(lua).cfg.repeat_time = Some(ms as u64);
+        return Ok(());
+    }
+    if name == "hint_patterns" {
+        state(lua).cfg.hint_patterns = hint_patterns(value)?;
+        return Ok(());
+    }
     if name == "copy_on_select" {
         let Value::Boolean(on) = value else { return Err("copy_on_select must be true or false".into()) };
         state(lua).cfg.copy_on_select = Some(on);
         return Ok(());
     }
     if name != "resume" {
-        return Err(format!("unknown setting {name:?}; the settings are \"resume\" and \"copy_on_select\"").into());
+        return Err(format!(
+            "unknown setting {name:?}; the settings are \"resume\", \"copy_on_select\", \"repeat_time\" and \"hint_patterns\""
+        )
+        .into());
     }
     let text = match &value {
         Value::String(s) => s.to_str().map(|s| s.to_string()).unwrap_or_default(),
@@ -333,6 +382,30 @@ fn set(lua: &Lua, (name, value): (String, Value)) -> Result<(), Bad> {
     let policy = policy.ok_or_else(|| Bad("resume must be \"ask\", \"always\" or \"never\"".into()))?;
     state(lua).cfg.resume = Some(policy);
     Ok(())
+}
+
+/// The config's hint patterns: a list of at most `MAX_PATTERNS` strings, each a regular expression
+/// leon_core::hints compiles.
+fn hint_patterns(value: Value) -> Result<Vec<String>, Bad> {
+    use leon_core::hints::{compile, MAX_PATTERNS};
+    let Value::Table(t) = value else {
+        return Err(format!("hint_patterns must be a list of regular expressions, got {}", value.type_name()).into());
+    };
+    let len = t.raw_len();
+    if t.pairs::<Value, Value>().count() != len {
+        return Err("hint_patterns must be a list of regular expressions, not a table with keys".into());
+    }
+    if len > MAX_PATTERNS {
+        return Err(format!("at most {MAX_PATTERNS} hint patterns, got {len}").into());
+    }
+    let mut out = Vec::new();
+    for v in t.sequence_values::<Value>() {
+        let Value::String(s) = v? else { return Err("hint_patterns holds strings only".into()) };
+        let p = s.to_str().map_err(|e| Bad(e.to_string()))?.to_string();
+        compile(&p).map_err(Bad)?;
+        out.push(p);
+    }
+    Ok(out)
 }
 
 fn bindings(lua: &Lua, filter: Option<Table>) -> Result<Table, Bad> {
@@ -359,6 +432,7 @@ fn bindings(lua: &Lua, filter: Option<Table>) -> Result<Table, Bad> {
         t.set("key", b.key.sequence())?;
         t.set("mode", b.key.mode)?;
         t.set("source", b.source)?;
+        t.set("repeats", b.repeats)?;
         match b.target {
             Target::Action { name, args } => {
                 t.set("action", name)?;

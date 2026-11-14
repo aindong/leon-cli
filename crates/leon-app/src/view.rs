@@ -232,6 +232,8 @@ pub struct Workspace {
     keymap_asked: Option<Instant>,
     /// The chords of a sequence typed so far (`ctrl+b`).
     pending: Vec<Chord>,
+    /// The window after a repeatable binding ran (tmux `bind -r`).
+    repeat: keymap::Repeat,
     palette: Option<Palette>,
     font_size: f32,
     /// Where the spinner's clock starts.
@@ -345,6 +347,7 @@ impl Workspace {
             inbox: Arc::default(),
             keymap_asked: None,
             pending: Vec::new(),
+            repeat: keymap::Repeat::default(),
             palette: None,
             font_size: FONT_SIZE,
             epoch: Instant::now(),
