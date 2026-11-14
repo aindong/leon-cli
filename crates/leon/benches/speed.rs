@@ -2,6 +2,8 @@
 //! round trip against a private leon server, and the same against tmux when it is installed.
 //! Results and method: docs/performance.md. Exits 1 when the attached app's budget is missed.
 
+// macOS only: the attached app's path needs the GPUI app crate (the `app` feature).
+#[cfg(all(feature = "app", target_os = "macos"))]
 #[path = "speed/attached.rs"]
 mod attached;
 
@@ -109,6 +111,7 @@ fn main() {
 
     let (rt, lat) = (round_trip(&mut c, samples * 5), latency(&mut c, samples));
     let leon = ("leon", rt, lat, throughput(&mut c, "yes | head", &yes), throughput(&mut c, "cat", &cat));
+    #[cfg(all(feature = "app", target_os = "macos"))]
     let app = attached::run(&socket, dir.path(), samples);
     c.call("server.stop", json!({ "discard": true }));
     let _ = server.0.wait();
@@ -125,18 +128,8 @@ fn main() {
     for (name, (rt50, rt99), (l50, l99), yes, cat) in rows {
         println!("| {name} | {rt50:.3} / {rt99:.3} ms | {l50:.3} / {l99:.3} ms | {yes:.1} MB/s | {cat:.1} MB/s |");
     }
-    println!("\n| attached app | keystroke to screen p50 / p99 | `seq 1 200000` in-process / attached |");
-    println!("|---|---|---|");
-    let ratio = app.seq_attached / app.seq_in_process;
-    println!(
-        "| leon | {:.3} / {:.3} ms | {:.0} / {:.0} ms ({ratio:.2}x) |",
-        app.key.0, app.key.1, app.seq_in_process, app.seq_attached
-    );
-    let verdict = if app.within_budget() { "met" } else { "MISSED" };
-    println!("\nbudget (p50 < 4 ms, p99 < 16 ms, seq at most 1.5x): {verdict}");
-    if !app.within_budget() {
-        std::process::exit(1);
-    }
+    #[cfg(all(feature = "app", target_os = "macos"))]
+    attached::report(&app);
 }
 
 fn round_trip(c: &mut Conn, n: usize) -> (f64, f64) {

@@ -12,9 +12,7 @@ use crate::{ApiCmd, Cli, Cmd, ConfigCmd, ServerCmd, SessionCmd, WindowCmd};
 pub fn run(cli: &Cli) -> Result<(), Fail> {
     let socket = socket_path();
     if let Cmd::App = cli.cmd() {
-        // the app is a client: the server comes first, as `leon server start` makes it
-        start_server(&socket, true, cli.autostart).inspect_err(|e| leon_app::alert(&message(e)))?;
-        return leon_app::run(&socket).map_err(Fail::Other);
+        return app(cli, &socket);
     }
     if let Cmd::Server(cmd) = cli.cmd() {
         return server(cli, cmd);
@@ -219,7 +217,25 @@ fn start_server(socket: &std::path::Path, restore: bool, may_start: bool) -> Res
     }
 }
 
+#[cfg(all(feature = "app", target_os = "macos"))]
+fn app(cli: &Cli, socket: &std::path::Path) -> Result<(), Fail> {
+    // the app is a client: the server comes first, as `leon server start` makes it
+    start_server(socket, true, cli.autostart).inspect_err(|e| leon_app::alert(&message(e)))?;
+    leon_app::run(socket).map_err(Fail::Other)
+}
+
+/// A headless build (Linux, or `--no-default-features`): `leon` alone prints the help instead.
+#[cfg(not(all(feature = "app", target_os = "macos")))]
+fn app(cli: &Cli, _socket: &std::path::Path) -> Result<(), Fail> {
+    if cli.cmd.is_none() {
+        <Cli as clap::CommandFactory>::command().print_help().map_err(|e| Fail::Other(e.to_string()))?;
+        return Ok(());
+    }
+    Err(Fail::Other("this leon was built without the app (the `app` feature, macOS only for now)".into()))
+}
+
 /// What a failure says, for the alert a Finder launch shows instead of stderr.
+#[cfg(all(feature = "app", target_os = "macos"))]
 fn message(f: &Fail) -> String {
     match f {
         Fail::Api(e) => e.to_string(),

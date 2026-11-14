@@ -1,6 +1,9 @@
 //! M7b criterion 1 (.agent/plans/2026-11-14-m7b-ship.md): `scripts/bundle.sh --bin --out` makes a
 //! valid Leon.app from the test binary, rebuilds over its own output, and refuses anything else.
 
+// macOS only: Leon.app bundles (plutil, codesign, ~/Applications).
+#![cfg(target_os = "macos")]
+
 mod help_walk;
 
 use std::path::Path;

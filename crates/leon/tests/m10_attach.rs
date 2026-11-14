@@ -3,6 +3,9 @@
 //! same layout and live screens, and only "Quit and End All Sessions" (or `leon server stop`)
 //! ends them. The window is GPUI's headless test window; the server is the real binary.
 
+// macOS only: drives the GPUI app (the `app` feature).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 mod support;
 
 use std::rc::Rc;

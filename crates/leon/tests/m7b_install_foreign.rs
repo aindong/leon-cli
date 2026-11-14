@@ -1,6 +1,9 @@
 //! M7b criterion 3 (.agent/plans/2026-11-14-m7b-ship.md): install.sh refuses to touch anything at
 //! its paths that isn't a leon install, and changes nothing when it refuses.
 
+// macOS only: Leon.app bundles (plutil, codesign, ~/Applications).
+#![cfg(target_os = "macos")]
+
 mod install_kit;
 
 use install_kit::Kit;

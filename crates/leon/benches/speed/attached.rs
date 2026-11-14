@@ -140,3 +140,19 @@ pub fn run(socket: &Path, dir: &Path, samples: usize) -> Results {
     );
     Results { key, seq_in_process, seq_attached }
 }
+
+/// The attached rows of the table, and exit 1 when the budget is missed.
+pub fn report(app: &Results) {
+    println!("\n| attached app | keystroke to screen p50 / p99 | `seq 1 200000` in-process / attached |");
+    println!("|---|---|---|");
+    let ratio = app.seq_attached / app.seq_in_process;
+    println!(
+        "| leon | {:.3} / {:.3} ms | {:.0} / {:.0} ms ({ratio:.2}x) |",
+        app.key.0, app.key.1, app.seq_in_process, app.seq_attached
+    );
+    let verdict = if app.within_budget() { "met" } else { "MISSED" };
+    println!("\nbudget (p50 < 4 ms, p99 < 16 ms, seq at most 1.5x): {verdict}");
+    if !app.within_budget() {
+        std::process::exit(1);
+    }
+}
