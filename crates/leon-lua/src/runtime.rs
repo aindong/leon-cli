@@ -3,7 +3,7 @@
 //! (`call`, `session.*`, `block.call`, `invoke`, `layout.*`).
 //!
 //! Time limits: an instruction hook raises once the deadline in [`Flags`] passes, and keeps raising
-//! while `abort` is set; the sandbox's `pcall` family re-raises it (api.rs), so Lua can't swallow it.
+//! while `abort` is set; the sandbox's `pcall` family re-raises it (sandbox.rs), so Lua can't swallow it.
 
 use std::cell::{Cell, RefCell};
 use std::path::Path;
@@ -23,6 +23,14 @@ pub const MAX_DEPTH: usize = 16;
 pub const LOAD_LIMIT: Duration = Duration::from_secs(5);
 /// The server's config state may use this much memory.
 const MEMORY_LIMIT: usize = 256 << 20;
+/// The error a run past its deadline fails with.
+pub const TIMED_OUT: &str = "timed out";
+
+/// Seconds from Lua as a `Duration`: negative or NaN is 0.
+/// shortcut: capped at ~9.5 years so `Instant + d` can't overflow; nobody waits longer.
+pub(crate) fn secs(s: f64) -> Duration {
+    Duration::from_secs_f64(if s > 0.0 { s.min(3e8) } else { 0.0 })
+}
 
 /// What a Lua state calls the server through: in process on the server, over the socket in `leon do`.
 pub trait Host {
@@ -96,7 +104,7 @@ pub(crate) fn new_state(dir: &Path, script: bool, host: Box<dyn Host>) -> mlua::
     let flags = Rc::new(Flags::default());
     lua.set_app_data(api::State { live: script, ..Default::default() });
     lua.set_app_data(Rt { host, ctx: CallCtx::default(), depth: 0, flags: flags.clone(), script, procs: vec![] });
-    api::sandbox(&lua, dir, &flags)?;
+    crate::sandbox::sandbox(&lua, dir, &flags)?;
     let leon = api::leon_table(&lua, script)?;
     shared(&lua, &leon)?;
     crate::exec::add(&lua, &leon)?;
@@ -134,7 +142,7 @@ fn hook(f: Rc<Flags>) -> impl Fn(&Lua, &mlua::debug::Debug) -> mlua::Result<VmSt
         if f.abort.borrow().is_none() && f.deadline.get().is_none_or(|d| Instant::now() < d) {
             return Ok(VmState::Continue);
         }
-        let why = f.abort.borrow().clone().unwrap_or_else(|| "timed out".into());
+        let why = f.abort.borrow().clone().unwrap_or_else(|| TIMED_OUT.into());
         Err(f.end(&why))
     }
 }
@@ -272,6 +280,12 @@ fn invoke(lua: &Lua, (name, args): (String, Value)) -> mlua::Result<MultiValue> 
     }
 }
 
+/// SIGKILL what `leon.exec.start` left running in the action (or load) that just ended.
+fn kill_procs(lua: &Lua) {
+    let procs = std::mem::take(&mut rt(lua).procs);
+    procs.iter().filter_map(std::sync::Weak::upgrade).for_each(|p| p.kill(libc::SIGKILL));
+}
+
 /// A loaded config whose Lua state stays alive to run its actions and function bindings.
 /// Not `Send`: keep it on one thread.
 pub struct Runtime {
@@ -289,6 +303,7 @@ impl Runtime {
         flags.deadline.set(Some(Instant::now() + LOAD_LIMIT));
         let r = api::exec_chunk(&lua, path, &src);
         flags.deadline.set(None);
+        kill_procs(&lua);
         if flags.abort.take().is_some() {
             let secs = LOAD_LIMIT.as_secs();
             return Err(LoadError(format!("{}: the config load timed out after {secs} s", path.display())));
@@ -341,11 +356,13 @@ impl Runtime {
             rt.ctx = ctx.clone();
             rt.depth = 1;
         }
+        if Instant::now() >= deadline {
+            return Err(TIMED_OUT.into()); // it waited in the queue too long: don't start it
+        }
         self.flags.deadline.set(Some(deadline));
         let r = f(&self.lua);
         self.flags.deadline.set(None);
-        let procs = std::mem::take(&mut rt(&self.lua).procs);
-        procs.iter().filter_map(std::sync::Weak::upgrade).for_each(|p| p.kill(libc::SIGKILL));
+        kill_procs(&self.lua);
         match (self.flags.abort.take(), r) {
             (Some(why), _) => Err(why),
             (None, r) => r.map_err(lua_message),

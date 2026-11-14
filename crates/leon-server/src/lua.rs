@@ -63,7 +63,8 @@ impl Host for InProc {
         let r = match deadline {
             None => self.rt.block_on(call),
             Some(d) => self.rt.block_on(async {
-                tokio::time::timeout_at(d.into(), call).await.unwrap_or_else(|_| Err(timed_out("the call")))
+                let late = || ApiError::new(504, "timeout", "the action ran out of time during this call");
+                tokio::time::timeout_at(d.into(), call).await.unwrap_or_else(|_| Err(late()))
             }),
         };
         r.map_err(|e| e.to_string())
@@ -92,7 +93,8 @@ async fn load(ctx: &Arc<Ctx>, path: PathBuf) -> Result<(leon_lua::Config, Option
             Ok((rt, cfg)) => {
                 let _ = loaded.send(Ok(cfg));
                 for job in queue {
-                    run(&rt, job);
+                    // A panicking job drops its reply (the caller gets "gone"); the thread lives on.
+                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&rt, job)));
                 }
             }
             Err(e) => drop(loaded.send(Err(e.to_string()))),
@@ -166,7 +168,7 @@ async fn ask<T: Send + 'static>(
     jobs.ok_or_else(gone)?.send(job(tx)).map_err(|_| gone())?;
     match tokio::time::timeout_at((deadline + Duration::from_secs(1)).into(), rx).await {
         Ok(Ok(Ok(v))) => Ok(v),
-        Ok(Ok(Err(msg))) if msg == "timed out" => Err(timed_out(what)),
+        Ok(Ok(Err(msg))) if msg == leon_lua::TIMED_OUT => Err(timed_out(what)),
         Ok(Ok(Err(msg))) => Err(ApiError::new(500, "action_failed", msg)),
         Ok(Err(_)) => Err(gone()),
         Err(_) => Err(timed_out(what)),

@@ -11,7 +11,7 @@ use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, UserData, UserDataMet
 use serde_json::json;
 
 use crate::lua_message;
-use crate::runtime::{ctx_table, flags, new_state, rt, to_lua, CallCtx, Host};
+use crate::runtime::{ctx_table, flags, new_state, rt, secs, to_lua, CallCtx, Host};
 
 /// Live timers a script may hold (spec §4).
 pub const MAX_TIMERS: usize = 1024;
@@ -72,16 +72,21 @@ pub fn run_script(src: &[u8], host: Box<dyn Host>, opts: ScriptOptions) -> Resul
         client_id: None,
         origin: "script".into(),
     };
-    let end = opts.run_for.map(|d| Instant::now() + d);
+    let end = opts.run_for.map(|d| Instant::now() + secs(d.as_secs_f64()));
     lua.set_app_data(Script { fail_fast: opts.fail_fast, end, ..Default::default() });
+    // `--for` is also the hook's deadline, so a script busy in Lua or in leon.exec stops too.
+    flags.deadline.set(end);
     let run = || -> mlua::Result<()> {
         functions(&lua, &leon, &opts)?;
-        lua.load(src).set_name(&opts.name).exec()?;
+        lua.load(src).set_name(&opts.name).set_mode(mlua::chunk::ChunkMode::Text).exec()?;
         pump(&lua, None, None).map(drop)
     };
     let r = run();
     if let Some(code) = flags.stop.get() {
         return Ok(code);
+    }
+    if end.is_some_and(|e| Instant::now() >= e) && flags.abort.borrow().is_some() {
+        return Ok(0); // --for ran out
     }
     r.map(|()| 0).map_err(lua_message)
 }
@@ -109,10 +114,6 @@ fn functions(lua: &Lua, leon: &Table, opts: &ScriptOptions) -> mlua::Result<()> 
         })?,
     )?;
     leon.set("wait", lua.create_function(wait)?)
-}
-
-fn secs(s: f64) -> Duration {
-    Duration::try_from_secs_f64(s.max(0.0)).unwrap_or(Duration::MAX / 2)
 }
 
 fn timer(lua: &Lua, s: f64, f: Function, repeat: bool) -> mlua::Result<TimerHandle> {

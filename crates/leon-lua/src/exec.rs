@@ -36,6 +36,8 @@ pub(crate) struct Proc {
     stdin: Mutex<Option<ChildStdin>>,
     out: Option<Arc<Pipe>>,
     err: Option<Arc<Pipe>>,
+    /// `exec.start`'s `timeout` stopped it.
+    timed_out: AtomicBool,
 }
 
 /// One output stream, filled by its reader thread.
@@ -92,6 +94,7 @@ impl Proc {
         while !pipes().all(|p| p.closed.load(Ordering::SeqCst)) && Instant::now() < cutoff {
             std::thread::sleep(Duration::from_millis(5));
         }
+        let timed_out = timed_out || self.timed_out.load(Ordering::SeqCst);
         let t = lua.create_table()?;
         let code = st.code().unwrap_or(-1);
         t.set("code", code)?;
@@ -190,14 +193,17 @@ fn spawn(lua: &Lua, argv: Value, opts: Option<&Table>, start: bool) -> mlua::Res
         child: Mutex::new(child),
         status: Mutex::new(None),
         stdin: Mutex::new(pipe),
+        timed_out: AtomicBool::new(false),
     });
-    rt(lua).procs.push(Arc::downgrade(&p));
+    let mut rt = rt(lua);
+    rt.procs.retain(|w| w.strong_count() > 0);
+    rt.procs.push(Arc::downgrade(&p));
     Ok(p)
 }
 
 /// The earlier of `secs` from now and the running action's deadline.
 fn until(lua: &Lua, secs: Option<f64>) -> Option<Instant> {
-    let t = secs.map(|s| Instant::now() + Duration::from_secs_f64(s.max(0.0)));
+    let t = secs.map(|s| Instant::now() + crate::runtime::secs(s));
     [t, flags(lua).deadline.get()].into_iter().flatten().min()
 }
 
@@ -251,7 +257,23 @@ pub(crate) fn add(lua: &Lua, leon: &Table) -> mlua::Result<()> {
     exec.set(
         "start",
         lua.create_function(|lua, (argv, opts): (Value, Option<Table>)| {
-            Ok(Handle(spawn(lua, argv, opts.as_ref(), true)?))
+            let timeout = opts.as_ref().map(|o| o.get::<Option<f64>>("timeout")).transpose()?.flatten();
+            let p = spawn(lua, argv, opts.as_ref(), true)?;
+            if let Some(end) = until(lua, timeout) {
+                let w = Arc::downgrade(&p);
+                std::thread::spawn(move || {
+                    while let Some(p) = w.upgrade().filter(|p| p.status().is_none()) {
+                        if Instant::now() >= end {
+                            p.timed_out.store(true, Ordering::SeqCst);
+                            p.stop();
+                            return;
+                        }
+                        drop(p);
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
+                });
+            }
+            Ok(Handle(p))
         })?,
     )?;
     let meta = lua.create_table()?;
