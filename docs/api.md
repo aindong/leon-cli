@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.0.0**. Every method is marked:
+API version **1.1.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -351,7 +351,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.0.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.1.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -614,6 +614,7 @@ same facts for the server you run.
 |---|---|---|---|
 | `label` | string \| null |  |  |
 | `window_label` | string \| null |  | Label for the session's first window. |
+| `cwd` | string \| null |  | Directory for the first terminal, overriding layout.block.options.cwd. Must exist; relative paths resolve against the server's cwd. Omitted preserves the layout default. |
 | `layout` | `Layout` \| null |  | What the first window holds; default a login shell. |
 
 **Output:** 
@@ -651,7 +652,7 @@ same facts for the server you run.
 **Example:**
 
 ```json
-{"id":1,"method":"session.create","params":{"label":"web","layout":{"block":{"options":{"command":["ls","-l"],"cwd":"/tmp","exit":{"on_completion":false}}}}}}
+{"id":1,"method":"session.create","params":{"label":"web","cwd":"/tmp","layout":{"block":{"options":{"command":["ls","-l"],"exit":{"on_completion":false}}}}}}
 {"id":1,"result":{"session_id":"session:5b1c2f0e-8d7a-4c39-9a61-2e4f7b0c9d13","window_id":"window:0f3e9a42-7c15-4b8e-a2d6-91c4e5b7f028","block_id":"block:c7d2e816-3a9f-4f05-8b1e-6d0a4c2f9b57"}}
 ```
 
@@ -672,6 +673,13 @@ same facts for the server you run.
       },
       "window_label": {
         "description": "Label for the session's first window.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "cwd": {
+        "description": "Directory for the first terminal, overriding layout.block.options.cwd. Must exist;\nrelative paths resolve against the server's cwd. Omitted preserves the layout default.",
         "type": [
           "string",
           "null"
