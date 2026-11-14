@@ -22,6 +22,15 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("client.font.reset", "Reset Font Size"),
     ("client.config.reload", "Reload Config"),
     ("pane.paste", "Paste"),
+    ("pane.copy", "Copy"),
+    ("pane.select_all", "Select All"),
+    ("client.find.open", "Find"),
+    ("client.find.next", "Find Next"),
+    ("client.find.previous", "Find Previous"),
+    ("client.scroll.page_up", "Scroll Up a Page"),
+    ("client.scroll.page_down", "Scroll Down a Page"),
+    ("client.scroll.top", "Scroll to the Top"),
+    ("client.scroll.bottom", "Scroll to the Bottom"),
 ];
 
 #[derive(Debug, Clone, PartialEq)]

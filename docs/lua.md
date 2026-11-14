@@ -133,7 +133,7 @@ any`, and a `?` suffix for optional ones.
 
 ## Settings
 
-`leon.set(name, value)` sets one of the server's settings. The only one so far is `resume`: what a
+`leon.set(name, value)` sets one of the server's settings. `resume` is what a
 block restored after a server restart does with the resume command its program registered for
 itself (`set_resume`, which leon's agent hook calls for Claude Code and Codex). `"ask"` (the
 default) types the command at the new prompt and waits for Enter; `"always"` runs it; `"never"`
@@ -142,6 +142,13 @@ second for the config, and past that offers nothing, as with `"never"`); `leon c
 
 ```lua
 leon.set("resume", "always")
+```
+
+`copy_on_select` (default `false`) makes the app copy a selection to the clipboard as soon as you
+make it, without ⌘C. The app reads it with the keymap, so a reload takes effect within a second.
+
+```lua
+leon.set("copy_on_select", true)
 ```
 
 ## Function bindings
@@ -240,7 +247,7 @@ print("timed out:", slow.timed_out)
 | `leon.unbind(key)` | config | Remove a key's bindings; returns the count. |
 | `leon.mode(name[, {exclusive, prefix}])` | config | Declare a mode; `prefix` (one key) is `leon attach`'s for the `attach` mode. |
 | `leon.bindings([filter])`, `leon.modes()` | config | List bindings and modes made so far. |
-| `leon.set(name, value)` | config | A setting: `resume` = `"ask"`, `"always"` or `"never"`. |
+| `leon.set(name, value)` | config | A setting: `resume` = `"ask"`, `"always"` or `"never"`; `copy_on_select` = `true` or `false`. |
 | `leon.action{name, title, run, description?, args?}` | both | Define an action. |
 | `leon.invoke(name[, args])` | both | Run an action (nested at most 16 deep). |
 | `leon.session.<method>(params)` | both | Call a session method; fills `session_id`. |

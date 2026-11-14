@@ -69,7 +69,7 @@ pub enum Kind {
     Block,
 }
 
-#[derive(Debug, Serialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct Selected {
     pub start: Pos,
     pub end: Pos,
@@ -77,7 +77,7 @@ pub struct Selected {
     pub text: Option<String>,
 }
 
-#[derive(Debug, Serialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Link {
     pub uri: String,
     pub start: Pos,

@@ -162,7 +162,7 @@ impl Workspace {
 }
 
 /// A tooltip: what a button does, and the keys that do it.
-struct Tip(SharedString);
+pub(super) struct Tip(pub(super) SharedString);
 
 impl Render for Tip {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {

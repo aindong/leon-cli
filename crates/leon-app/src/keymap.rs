@@ -28,6 +28,15 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+-", "client.font.decrease"),
     ("cmd+0", "client.font.reset"),
     ("cmd+shift+p", "client.palette.toggle"),
+    ("cmd+c", "pane.copy"),
+    ("cmd+a", "pane.select_all"),
+    ("cmd+f", "client.find.open"),
+    ("cmd+g", "client.find.next"),
+    ("cmd+shift+g", "client.find.previous"),
+    ("shift+pageup", "client.scroll.page_up"),
+    ("shift+pagedown", "client.scroll.page_down"),
+    ("cmd+up", "client.scroll.top"),
+    ("cmd+down", "client.scroll.bottom"),
 ];
 
 /// US-layout shifted symbols and the key they are on: macOS reports cmd+shift+= as `+`.
@@ -123,6 +132,8 @@ pub struct Keymap {
     pub generation: u64,
     bindings: Vec<Bound>,
     pub actions: Vec<ConfigAction>,
+    /// `leon.set("copy_on_select", true)` in the config.
+    pub copy_on_select: bool,
 }
 
 impl Keymap {
@@ -171,7 +182,8 @@ impl Keymap {
                 })
             })
             .collect();
-        Keymap { generation: km["generation"].as_u64().unwrap_or(0), bindings, actions }
+        let copy_on_select = km["settings"]["copy_on_select"] == true;
+        Keymap { generation: km["generation"].as_u64().unwrap_or(0), bindings, actions, copy_on_select }
     }
 
     /// Resolve `next` after the pending `prefix`.

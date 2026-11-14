@@ -79,6 +79,7 @@ impl Workspace {
                     .text_color(rgb(t.muted))
                     .children(caption),
             )
+            .children(self.render_find_bar(id, cx))
             .child(controls)
     }
 

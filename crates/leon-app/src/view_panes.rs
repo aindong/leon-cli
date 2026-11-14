@@ -30,13 +30,18 @@ impl Workspace {
             }
             let focused = target.as_deref() == Some(p.block_id.as_str());
             let id = p.block_id.clone();
+            let view = self.composed(&id);
+            let marks = self.pane_marks(&id, &view);
             let canvas = terminal_canvas(
                 self.app.clone(),
                 (sid.clone(), id.clone()),
+                (view.frame, marks),
                 active && focused,
                 font_size,
-                stats.clone(),
+                (stats.clone(), self.term.painted.clone()),
             );
+            let finding = self.term.find.as_ref().is_some_and(|f| f.block == id);
+            let on_link = self.term.hovered.as_ref().is_some_and(|(b, _)| *b == id);
             out = out.child(
                 div()
                     .id(SharedString::from(format!("pane-{id}")))
@@ -52,14 +57,9 @@ impl Workspace {
                     .rounded(px(6.))
                     .overflow_hidden()
                     .bg(rgb(t.bg))
-                    .when(headers, |d| d.child(self.render_header(&id, focused, cx)))
-                    .child(
-                        div()
-                            .debug_selector(|| sel(format!("terminal-{id}")))
-                            .flex_1()
-                            .p(px(panes::PADDING))
-                            .child(canvas),
-                    )
+                    .when(headers || finding, |d| d.child(self.render_header(&id, focused, cx)))
+                    .child(self.terminal_area(&id, on_link, cx).child(canvas))
+                    .children(self.render_jump(&id, cx))
                     // the focus mark: the tile's left edge, as the mark's rail holds its pane
                     .when(several && focused, |d| {
                         d.child(
@@ -106,6 +106,27 @@ impl Workspace {
         out
     }
 
+    /// A pane's terminal area: the mouse selects, reports to the program, scrolls, and opens links.
+    fn terminal_area(&self, id: &str, on_link: bool, cx: &mut Context<Self>) -> gpui::Div {
+        let mut d = div()
+            .debug_selector(|| sel(format!("terminal-{id}")))
+            .flex_1()
+            .p(px(panes::PADDING))
+            .when(on_link, |d| d.cursor(CursorStyle::PointingHand));
+        for b in [MouseButton::Left, MouseButton::Middle, MouseButton::Right] {
+            let (down, up) = (id.to_string(), id.to_string());
+            d = d
+                .on_mouse_down(
+                    b,
+                    cx.listener(move |ws, ev: &gpui::MouseDownEvent, w, cx| ws.mouse_down(&down, ev, w, cx)),
+                )
+                .on_mouse_up(b, cx.listener(move |ws, ev: &MouseUpEvent, _, cx| ws.mouse_up(&up, ev, cx)));
+        }
+        let (moved, wheel) = (id.to_string(), id.to_string());
+        d.on_mouse_move(cx.listener(move |ws, ev: &MouseMoveEvent, _, cx| ws.mouse_move(&moved, ev, cx)))
+            .on_scroll_wheel(cx.listener(move |ws, ev: &gpui::ScrollWheelEvent, _, cx| ws.wheel(&wheel, ev, cx)))
+    }
+
     /// The pane area's size (w, h): the window less the sidebar and the titlebar row.
     pub(super) fn pane_area(&self, window: &Window) -> (f32, f32) {
         let view = window.viewport_size();
@@ -142,6 +163,14 @@ impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.note_focus(window);
         DRAWN.with(|d| d.borrow_mut().clear());
+        let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
+        self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
+        for id in &shown {
+            self.sync_pane(id);
+        }
+        if self.find_due() {
+            self.run_find();
+        }
         let stats = self.stats.clone();
         if stats.borrow().enabled {
             stats.borrow_mut().render_start = Some(Instant::now());
@@ -181,6 +210,10 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_key_down(cx.listener(Self::key_down))
+            .on_modifiers_changed(cx.listener(Self::modifiers_changed))
+            .on_action(cx.listener(|ws, _: &Copy, w, cx| ws.run_action("pane.copy", None, "menu", w, cx)))
+            .on_action(cx.listener(|ws, _: &SelectAll, w, cx| ws.run_action("pane.select_all", None, "menu", w, cx)))
+            .on_action(cx.listener(|ws, _: &Find, w, cx| ws.run_action("client.find.open", None, "menu", w, cx)))
             .size_full()
             .flex()
             .bg(rgb(DARK.chrome))

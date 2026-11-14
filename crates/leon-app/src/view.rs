@@ -52,7 +52,10 @@ actions!(
         FocusRight,
         FocusUp,
         FocusDown,
-        ToggleZoom
+        ToggleZoom,
+        Copy,
+        SelectAll,
+        Find
     ]
 );
 
@@ -112,7 +115,16 @@ pub fn menus() -> Vec<Menu> {
                 MenuItem::action("Close Pane", ClosePane),
             ],
         },
-        Menu { name: "Edit".into(), items: vec![MenuItem::action("Paste", Paste)] },
+        Menu {
+            name: "Edit".into(),
+            items: vec![
+                MenuItem::action("Copy", Copy),
+                MenuItem::action("Paste", Paste),
+                MenuItem::action("Select All", SelectAll),
+                MenuItem::separator(),
+                MenuItem::action("Find…", Find),
+            ],
+        },
         Menu {
             name: "View".into(),
             items: vec![
@@ -299,6 +311,8 @@ pub struct Workspace {
     /// The pane last seen with the focus, and whether the window was active: a change is the user
     /// arriving at a pane, which clears its done/error.
     seen_focus: Option<(String, bool)>,
+    /// Scrollback, selection, find and links per pane.
+    term: scroll::TermUi,
     _poll: Task<()>,
     _activation: Subscription,
     _bounds: Subscription,
@@ -383,6 +397,7 @@ impl Workspace {
             font_size: FONT_SIZE,
             epoch: Instant::now(),
             seen_focus: None,
+            term: scroll::TermUi::default(),
             _poll: poll,
             _activation: activation,
             _bounds: bounds,
@@ -478,6 +493,8 @@ impl Workspace {
 
 #[path = "view_bars.rs"]
 mod bars;
+#[path = "view_find.rs"]
+mod find;
 #[path = "view_handlers.rs"]
 mod handlers;
 #[path = "view_header.rs"]
@@ -492,6 +509,10 @@ mod overlay;
 mod paint;
 #[path = "view_panes.rs"]
 mod panes_view;
+#[path = "view_scroll.rs"]
+mod scroll;
+#[path = "view_select.rs"]
+mod select;
 #[path = "view_sidebar.rs"]
 mod sidebar;
 use bars::status_mark;
