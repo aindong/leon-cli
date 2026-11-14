@@ -10,8 +10,8 @@ use gpui::TestAppContext;
 use serde_json::json;
 
 fn leaves(v: &serde_json::Value) -> usize {
-    match v.get("children") {
-        Some(c) => c.as_array().unwrap().iter().map(leaves).sum(),
+    match v.get("split") {
+        Some(s) => leaves(&s["before"]) + leaves(&s["after"]),
         None => 1,
     }
 }
@@ -26,21 +26,24 @@ fn actions_go_to_the_focused_panes_host(cx: &mut TestAppContext) {
     wait_connected(&ws, cx, "devbox");
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.host_rows()[1].sessions.iter().any(|s| s.id == sid))));
     select(&ws, cx, &sid);
-    let local_blocks = || h.local.ctx().state().sessions.iter().map(|s| s.windows.len()).sum::<usize>();
-    let (local_sessions, local_windows) = (h.local.ctx().state().sessions.len(), local_blocks());
+    let local_windows = || h.local.ctx().state().sessions.iter().map(|s| s.windows.len()).sum::<usize>();
+    let local_sessions = h.local.ctx().state().sessions.len();
+    let windows_before = local_windows();
 
+    // over a link the window doesn't wait for a change: it lands a moment later
     act(&ws, cx, "pane.split.right", None);
-    let view = h.r.remote.view(&sid);
-    assert_eq!(leaves(&view["windows"][0]["layout"]), 2, "the split is on devbox: {view}");
+    let ok = shows(cx, |_| leaves(&h.r.remote.view(&sid)["windows"][0]["layout"]) == 2);
+    assert!(ok, "the split is on devbox: {}", h.r.remote.view(&sid));
     act(&ws, cx, "client.tab.new", None);
-    assert_eq!(h.r.remote.view(&sid)["windows"].as_array().unwrap().len(), 2, "the tab is on devbox");
+    let ok = shows(cx, |_| h.r.remote.view(&sid)["windows"].as_array().unwrap().len() == 2);
+    assert!(ok, "the tab is on devbox");
     act(&ws, cx, "session.new", None);
+    assert!(shows(cx, |_| session_ids(&h.r.remote).len() == 2), "the session is on devbox");
     let remote_ids = session_ids(&h.r.remote);
-    assert_eq!(remote_ids.len(), 2, "the session is on devbox");
-    let selected = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
-    assert!(remote_ids.contains(&selected), "and selected");
+    let ok = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.session_id()).is_some_and(|s| remote_ids.contains(&s)));
+    assert!(ok, "and selected");
     assert_eq!(h.local.ctx().state().sessions.len(), local_sessions, "nothing new on This Mac");
-    assert_eq!(local_blocks(), local_windows);
+    assert_eq!(local_windows(), windows_before);
 
     let titles: Vec<String> = ws.read_with(cx, |ws, _| ws.palette_rows_for("")).into_iter().map(|(t, _)| t).collect();
     for want in ["New Session on This Mac", "New Session on devbox", "Add Host…"] {
@@ -49,10 +52,10 @@ fn actions_go_to_the_focused_panes_host(cx: &mut TestAppContext) {
 
     select(&ws, cx, &local_sid);
     act(&ws, cx, "session.new", Some(json!({ "host": "devbox" })));
+    assert!(shows(cx, |_| session_ids(&h.r.remote).len() == 3), "New Session on devbox, from This Mac");
     let remote_ids = session_ids(&h.r.remote);
-    assert_eq!(remote_ids.len(), 3, "New Session on devbox, from This Mac");
-    let selected = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
-    assert!(remote_ids.contains(&selected), "the new session is selected");
+    let ok = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.session_id()).is_some_and(|s| remote_ids.contains(&s)));
+    assert!(ok, "the new session is selected");
     act(&ws, cx, "session.new", Some(json!({ "host": "This Mac" })));
     assert_eq!(h.local.ctx().state().sessions.len(), local_sessions + 1, "New Session on This Mac");
     h.local.stop();

@@ -23,6 +23,7 @@ fn the_sidebar_lists_this_mac_then_each_host(cx: &mut TestAppContext) {
         assert_eq!(rows.len(), 1, "only This Mac: {rows:?}");
         assert!(!drawn(cx, "host-0"), "no host label without hosts (the M10b look)");
         assert!(drawn(cx, "session-0"));
+        cx.update(|window, _| window.remove_window()); // one window draws at a time: `drawn` is per thread
     }
 
     std::fs::write(h.r.fake.path().join("hold"), "").unwrap();

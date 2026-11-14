@@ -12,6 +12,7 @@ fn item(name: &str, title: &str, keywords: &[&str]) -> Item {
         title: title.into(),
         keywords: keywords.iter().map(|k| k.to_string()).collect(),
         shortcut: None,
+        args: None,
     }
 }
 

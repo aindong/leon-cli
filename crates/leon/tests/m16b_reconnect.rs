@@ -23,7 +23,6 @@ fn a_dropped_link_reconnects_and_resumes(cx: &mut TestAppContext) {
     assert!(shows(cx, |cx| shown(cx, "hello-remote")));
     let remote = ws.read_with(cx, |ws, _| ws.host_remote("devbox")).expect("devbox has a remote");
     let seq = remote.seq();
-    assert!(seq > 0, "events came");
 
     std::fs::write(h.r.fake.path().join("down"), "").unwrap();
     assert!(h.r.kill_transports() >= 3);

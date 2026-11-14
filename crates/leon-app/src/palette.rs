@@ -22,6 +22,7 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("client.font.reset", "Reset Font Size"),
     ("client.config.reload", "Reload Config"),
     ("pane.paste", "Paste"),
+    ("client.host.add", "Add Host…"),
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,6 +32,8 @@ pub struct Item {
     pub keywords: Vec<String>,
     /// The keys that run it (`⌘D`).
     pub shortcut: Option<String>,
+    /// What the action runs with (`session.new` on a host: `{"host": "devbox"}`).
+    pub args: Option<serde_json::Value>,
 }
 
 /// The indexes of the items matching `query`, best first; an empty query keeps every item in order.

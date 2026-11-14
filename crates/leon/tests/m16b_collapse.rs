@@ -34,6 +34,7 @@ fn hosts_collapse_and_stay_collapsed(cx: &mut TestAppContext) {
         assert_eq!(sessions_drawn(cx), 1, "devbox's session is hidden");
         let saved = std::fs::read_to_string(&settings).unwrap();
         assert!(saved.contains("devbox"), "kept in app.json: {saved}");
+        cx.update(|window, _| window.remove_window()); // one window draws at a time: `drawn` is per thread
     }
     let (ws, cx) = open(cx, &h, hosts, Some(settings.clone()));
     wait_connected(&ws, cx, "devbox");

@@ -67,6 +67,16 @@ impl Workspace {
                     .text_color(rgb(if focused { t.title } else { t.text }))
                     .child(title),
             )
+            .children(self.pane_host(id).map(|host| {
+                div()
+                    .debug_selector(|| sel(format!("header-host-{id}")))
+                    .flex_none()
+                    .px(px(5.))
+                    .rounded(px(4.))
+                    .bg(rgb(t.hover))
+                    .text_color(rgb(t.muted))
+                    .child(host)
+            }))
             .children(shown.map(|i| status_mark(i, frame).debug_selector(|| sel(format!("header-status-{id}")))))
             .child(
                 div()

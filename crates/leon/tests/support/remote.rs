@@ -32,7 +32,7 @@ while [ -e "$FAKE_SSH_DIR/hold" ]; do sleep 0.05; done
 if [ -e "$FAKE_SSH_DIR/down" ]; then
   echo "ssh: connect to host $host port 22: Network is unreachable" >&2; exit 255
 fi
-case $host in
+case ${host#*@} in
   login*) echo "me@$host: Permission denied (publickey,password)." >&2; exit 255 ;;
   unreachable*) echo "ssh: connect to host $host port 22: Connection refused" >&2; exit 255 ;;
 esac

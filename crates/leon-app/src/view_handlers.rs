@@ -15,7 +15,16 @@ impl Workspace {
     }
 
     /// A layout for a shell in the target pane's working directory (or the default, `$HOME`).
+    /// Over a link the model's cwd is used: no round trip on the UI thread, and the path is the
+    /// host's, so it can't be checked here.
     fn here(&self) -> Value {
+        if self.app.is_link() {
+            let cwd = self.target().and_then(|(_, id, _)| self.app.model().block(&id)?.1.cwd.clone());
+            return match cwd {
+                Some(d) => json!({ "block": { "options": { "cwd": d } } }),
+                None => json!({ "block": {} }),
+            };
+        }
         let pwd = |(sid, id, _): (String, String, bool)| {
             let p = json!({ "session_id": sid, "block_id": id, "method": "dev.leon.terminal.pwd" });
             self.app.call("block.method", p).ok()?["path"].as_str().map(std::path::PathBuf::from)
@@ -170,14 +179,14 @@ impl Workspace {
 
     pub(super) fn focus_window(&mut self, index: usize, cx: &mut Context<Self>) {
         if let Some((sid, wid)) = self.window_ref(Some(index)) {
-            let _ = self.app.act("session.focus_window", json!({ "session_id": sid, "window_id": wid }));
+            self.app.act_later("session.focus_window", json!({ "session_id": sid, "window_id": wid }), drop);
             cx.notify();
         }
     }
 
     /// Close a window; if that ended its session, select a neighbouring one.
     pub(super) fn close_window(&mut self, (sid, wid): (String, String), cx: &mut Context<Self>) {
-        let _ = self.app.act("session.close_window", json!({ "session_id": sid, "window_id": wid }));
+        self.app.act_later("session.close_window", json!({ "session_id": sid, "window_id": wid }), drop);
         let rows = self.rows();
         self.settle(&rows);
         cx.notify();
@@ -195,17 +204,17 @@ impl Workspace {
 
     pub(super) fn new_tab(&mut self, _: &NewTab, window: &mut Window, cx: &mut Context<Self>) {
         match self.session_id.clone() {
-            Some(sid) => drop(self.app.act("session.new_window", json!({ "session_id": sid, "layout": self.here() }))),
+            Some(sid) => {
+                self.app.act_later("session.new_window", json!({ "session_id": sid, "layout": self.here() }), drop)
+            }
             None => self.new_session(&NewSession, window, cx),
         }
         cx.notify();
     }
 
+    /// A new session on the selected session's machine.
     pub(super) fn new_session(&mut self, _: &NewSession, _: &mut Window, cx: &mut Context<Self>) {
-        if let Ok(r) = self.app.act("session.create", json!({})) {
-            self.session_id = r["session_id"].as_str().map(String::from);
-        }
-        cx.notify();
+        self.new_session_on(self.host, cx);
     }
 
     pub(super) fn next_tab(&mut self, _: &NextTab, _: &mut Window, cx: &mut Context<Self>) {
@@ -226,20 +235,18 @@ impl Workspace {
         }
         // the server wraps it by the program's mode now; the app's copy of the screen may be older
         let event = json!({ "session_id": sid, "block_id": id, "event": { "type": "paste", "data": text } });
-        if let Err(e) = self.app.call("block.event", event) {
-            eprintln!("leon: the paste failed: {}", e.message);
-        }
+        self.app.send("block.event", event);
     }
 
     /// Ask once, naming how many sessions end; on yes, stop the server (it saves, then every
     /// program ends) and quit. The app quits anyway when the server goes.
     pub(super) fn quit_and_end_all(&mut self, _: &QuitAndEndAll, window: &mut Window, cx: &mut Context<Self>) {
-        let n = self.app.model().sessions.len();
+        let app = self.hosts.local().clone(); // This Mac's server; hosts keep theirs
+        let n = app.model().sessions.len();
         let what = if n == 1 { "1 session".to_string() } else { format!("{n} sessions") };
         let detail = "Every program in them stops. Quit leon (⌘Q) instead to leave them running.";
         let buttons = [PromptButton::Ok("End All Sessions".into()), PromptButton::Cancel("Cancel".into())];
         let answer = window.prompt(PromptLevel::Warning, &format!("End {what} and quit?"), Some(detail), &buttons, cx);
-        let app = self.app.clone();
         cx.spawn(async move |_, cx| {
             if answer.await == Ok(0) {
                 if let Err(e) = app.call("server.stop", json!({})) {
@@ -277,10 +284,12 @@ impl Workspace {
         self.font_size = pt.clamp(FONT_SIZES.0, FONT_SIZES.1);
         let (cell_w, line_h) = cell_size(window, self.font_size);
         let area = self.pane_area(window);
-        // (session, block, its pane's text area) for every pane of every window, then resize off the lock
-        let fits: Vec<(String, String, panes::Rect)> = {
-            let m = self.app.model();
-            let mut out = Vec::new();
+        // (remote, session, block, its pane's text area) for every pane of every window on every
+        // machine, then resize off the lock
+        let mut fits: Vec<(Rc<Remote>, String, String, panes::Rect)> = Vec::new();
+        for (_, remote) in self.hosts.remotes() {
+            let m = remote.model();
+            let out = &mut fits;
             for s in &m.sessions {
                 for w in &s.windows {
                     let Some(tree) = &w.layout else { continue };
@@ -290,23 +299,26 @@ impl Workspace {
                         let rect =
                             zoomed.iter().flatten().find(|z| z.block_id == p.block_id).map_or(p.rect, |z| z.rect);
                         if s.blocks.iter().any(|b| b.id == p.block_id) {
-                            out.push((s.id.clone(), p.block_id.clone(), rect));
+                            out.push((remote.clone(), s.id.clone(), p.block_id.clone(), rect));
                         }
                     }
                 }
             }
-            out
-        };
-        for (sid, id, r) in fits {
+        }
+        for (remote, sid, id, r) in fits {
             let r = panes::text_rect(r, self.settings.pane_headers);
             let (rows, cols) = cells_in(px(r.w), px(r.h), cell_w, line_h);
-            self.app.fit(&sid, &id, rows, cols);
+            remote.fit(&sid, &id, rows, cols);
         }
         cx.notify();
     }
 
-    pub(super) fn select(&mut self, session: &str, window: Option<usize>, cx: &mut Context<Self>) {
+    /// Select a session (on whichever machine it is), and its tab `window` if given.
+    pub fn select(&mut self, session: &str, window: Option<usize>, cx: &mut Context<Self>) {
         self.session_id = Some(session.to_string());
+        if let Some(r) = self.rows().into_iter().find(|r| r.id == session) {
+            self.use_host(r.host);
+        }
         match window {
             Some(i) => self.focus_window(i, cx),
             None => cx.notify(),

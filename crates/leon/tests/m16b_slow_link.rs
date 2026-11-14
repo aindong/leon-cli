@@ -45,7 +45,7 @@ fn a_stalled_link_never_blocks_typing(cx: &mut TestAppContext) {
     let ok = shows(cx, |_| h.r.remote.view(&sid)["windows"].as_array().unwrap().len() == 2);
     assert!(ok, "the tab was opened on devbox: {}", h.r.remote.view(&sid));
     let layout = h.r.remote.view(&sid)["windows"][0]["layout"].clone();
-    assert!(layout.get("children").is_some(), "and the split made: {layout}");
+    assert!(layout.get("split").is_some(), "and the split made: {layout}");
 
     // stalled for good: the link is found dead and the stream resumed on new transports
     let remote = ws.read_with(cx, |ws, _| ws.host_remote("devbox")).unwrap();

@@ -15,7 +15,8 @@ fn rows(ws: &gpui::Entity<leon_app::view::Workspace>, cx: &mut gpui::VisualTestC
 #[gpui::test]
 fn add_host_validates_and_saves(cx: &mut TestAppContext) {
     let h = hosted();
-    std::fs::create_dir_all(h.r.local.state_dir()).unwrap();
+    use std::os::unix::fs::DirBuilderExt;
+    std::fs::DirBuilder::new().mode(0o700).create(h.r.local.state_dir()).unwrap();
     let (ws, cx) = open(cx, &h, vec![], None);
     act(&ws, cx, "client.host.add", None);
     assert!(ws.read_with(cx, |ws, _| ws.palette_open()), "the prompt opens in the palette");

@@ -23,7 +23,7 @@ fn unreachable_hosts_say_why(cx: &mut TestAppContext) {
     let (ws, cx) = open(cx, &h, hosts, None);
     wait_connected(&ws, cx, "devbox");
     let ok = shows(cx, |cx| matches!(state(&ws, cx, "unreachable-box"), Some(HostState::Unreachable(_))));
-    assert!(ok, "{:?}", state(&ws, cx, "unreachable-box"));
+    assert!(ok, "{:?} {:?}", state(&ws, cx, "unreachable-box"), h.r.ssh_calls());
     let rows = ws.read_with(cx, |ws, _| ws.host_rows());
     let note = rows[2].note.clone().unwrap_or_default();
     assert!(note.contains("Connection refused"), "the reason is ssh's: {note:?}");
