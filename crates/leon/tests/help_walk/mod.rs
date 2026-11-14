@@ -50,6 +50,9 @@ pub fn help(path: &[String]) -> Help {
     for line in text.lines() {
         if let Some(name) = line.strip_suffix(':').filter(|n| !n.starts_with(' ') && !n.contains(' ')) {
             section = name.to_string();
+        } else if line.starts_with("          ") && entries.last().is_some_and(|e: &Entry| e.desc.is_empty()) {
+            // clap's next-line layout: a long left column puts the description on the line below
+            entries.last_mut().unwrap().desc = line.trim().to_string();
         } else if line.starts_with("  ") && ["Commands", "Arguments", "Options"].contains(&section.as_str()) {
             // clap separates the left column from the description with two or more spaces
             let t = line.trim();

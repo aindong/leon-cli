@@ -17,7 +17,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use client::Fail;
 
 #[derive(Parser)]
-#[command(name = "leon", version, about = "A fast, scriptable terminal multiplexer.")]
+#[command(name = "leon", version, about = "A fast, scriptable terminal multiplexer.", after_help = EXIT_CODES)]
 pub struct Cli {
     /// Start a personal server when none is running.
     #[arg(long, global = true, env = "LEON_AUTOSTART", default_value = "true", num_args = 0..=1,
@@ -52,11 +52,15 @@ pub enum Cmd {
     #[command(subcommand)]
     Server(ServerCmd),
     /// Create a session and print its ID.
-    New { label: Option<String> },
+    New {
+        /// Name for the session.
+        label: Option<String>,
+    },
     /// List sessions.
     Ls,
     /// Destroy sessions.
     Kill {
+        /// Sessions to destroy: IDs, labels, positions or ID suffixes.
         #[arg(required = true)]
         sessions: Vec<String>,
     },
@@ -80,13 +84,18 @@ pub enum Cmd {
         /// Working directory [default: the current directory].
         #[arg(short = 'c', long = "cwd")]
         cwd: Option<PathBuf>,
+        /// The program and its arguments, after `--`; run directly, not through a shell.
         #[arg(last = true, required = true, value_name = "CMD")]
         command: Vec<String>,
     },
     /// Type TEXT (or stdin) into a terminal; no Enter is added.
-    Send { text: Option<String> },
+    Send {
+        /// The text to type [default: read stdin].
+        text: Option<String>,
+    },
     /// Press keys in binding syntax: enter, escape, tab, ctrl+c, up, alt+left, a…
     SendKey {
+        /// Keys to press, in order.
         #[arg(required = true)]
         keys: Vec<String>,
     },
@@ -98,6 +107,7 @@ pub enum Cmd {
     },
     /// Wait for a terminal's program to exit, and exit with its status.
     Wait {
+        /// The block to wait for [default: -b, else $LEON_BLOCK].
         block: Option<String>,
         /// Give up after this long (e.g. 500ms, 10s, 2m) and exit 1.
         #[arg(long = "for", value_parser = blocks::parse_duration)]
@@ -125,11 +135,13 @@ pub enum Cmd {
         #[arg(long, default_value = "true", num_args = 0..=1, require_equals = true,
               default_missing_value = "true", value_parser = BoolishValueParser::new())]
         focus: bool,
+        /// The program and its arguments, after `--` [default: a login shell].
         #[arg(last = true, value_name = "CMD")]
         command: Vec<String>,
     },
     /// Focus a block, or move focus left|right|up|down|next|prev in the active window.
     Focus {
+        /// A block, or a direction: left, right, up, down, next, prev.
         target: String,
         /// With nothing that way, go round to the far side.
         #[arg(long)]
@@ -137,24 +149,34 @@ pub enum Cmd {
     },
     /// Put a block beside ANCHOR: `move [BLOCK] right|left|above|below ANCHOR` (same session).
     Move {
-        #[arg(num_args = 2..=3, required = true, value_name = "[BLOCK] DIRECTION ANCHOR")]
+        /// [BLOCK] DIRECTION ANCHOR: the block to move (default: the focused one), right|left|above|below, and the block to put it beside.
+        #[arg(num_args = 2..=3, required = true, value_name = "ARG")]
         args: Vec<String>,
         /// The moved block's share of the space, in percent.
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u8).range(1..=99))]
         ratio: u8,
     },
     /// Two blocks trade places.
-    Swap { block: String, other: String },
+    Swap {
+        /// One block.
+        block: String,
+        /// The block it trades places with.
+        other: String,
+    },
     /// Show a block filling its window, or stop (toggles by default).
     Zoom {
+        /// The block to zoom [default: the focused one].
         block: Option<String>,
+        /// Zoom in, even if already zoomed.
         #[arg(long, conflicts_with = "off")]
         on: bool,
+        /// Zoom out, even if not zoomed.
         #[arg(long)]
         off: bool,
     },
     /// Set a block's share of the split it is in.
     Resize {
+        /// The block to resize [default: the focused one].
         block: Option<String>,
         /// The block's share, in percent.
         #[arg(long, required = true, value_parser = clap::value_parser!(u8).range(1..=99))]
@@ -163,6 +185,7 @@ pub enum Cmd {
     /// Stream events: session lifecycle by default, one session's (block events too) with -s,
     /// everything with --all. --json prints the snapshot, then one NDJSON line per event.
     Events {
+        /// Every session's events, and the server's.
         #[arg(long)]
         all: bool,
     },
@@ -192,6 +215,7 @@ pub enum SkillCmd {
     Show,
     /// Install the skill and a session-start hook [default: for each agent found].
     Setup {
+        /// Only this agent [default: each one found].
         #[arg(long, value_enum)]
         agent: Option<skill::Agent>,
         /// Print what would change; write nothing.
@@ -203,11 +227,13 @@ pub enum SkillCmd {
     },
     /// Show each agent's install: current, outdated, missing, foreign or unreadable.
     Status {
+        /// Only this agent [default: each one found].
         #[arg(long, value_enum)]
         agent: Option<skill::Agent>,
     },
     /// Remove what setup installed, and nothing else.
     Remove {
+        /// Only this agent [default: each one found].
         #[arg(long, value_enum)]
         agent: Option<skill::Agent>,
         /// Print what would change; write nothing.
@@ -251,7 +277,7 @@ pub struct DoArgs {
 pub enum ConfigCmd {
     /// Load a config without applying it: print counts and diagnostics, exit 1 on error. Needs no server.
     Check {
-        /// [default: $LEON_CONFIG, else $XDG_CONFIG_HOME/leon/init.lua, else ~/.config/leon/init.lua]
+        /// The config file [default: $LEON_CONFIG, else $XDG_CONFIG_HOME/leon/init.lua, else ~/.config/leon/init.lua].
         path: Option<std::path::PathBuf>,
     },
     /// Re-read the config on the server; a failed load keeps the last good one (exit 1).
@@ -263,11 +289,22 @@ pub enum BlockCmd {
     /// List a session's blocks.
     Ls,
     /// Show a block: window, pid, command, exit status.
-    Inspect { target: Option<String> },
+    Inspect {
+        /// The block [default: -b, else $LEON_BLOCK].
+        target: Option<String>,
+    },
     /// Close a block and end its program.
-    Close { target: Option<String> },
+    Close {
+        /// The block [default: -b, else $LEON_BLOCK].
+        target: Option<String>,
+    },
     /// Call a block method (`program_status`, or a full name) with JSON args (inline, @file, or -).
-    Call { method: String, args: Option<String> },
+    Call {
+        /// The method: a short name like `size`, or a full `dev.leon.terminal.size`.
+        method: String,
+        /// Arguments as a JSON object, @file, or - for stdin.
+        args: Option<String>,
+    },
 }
 
 /// Where a new or moved pane goes, beside its anchor.
@@ -300,15 +337,27 @@ pub enum ServerCmd {
 #[derive(Subcommand)]
 pub enum SessionCmd {
     /// Create a session and print its ID.
-    New { label: Option<String> },
+    New {
+        /// Name for the session.
+        label: Option<String>,
+    },
     /// List sessions.
     Ls,
     /// Show a session and its windows.
-    Inspect { target: Option<String> },
+    Inspect {
+        /// The session [default: -s, else $LEON_SESSION].
+        target: Option<String>,
+    },
     /// Rename a session.
-    Rename { target: String, label: String },
+    Rename {
+        /// The session to rename.
+        target: String,
+        /// Its new name.
+        label: String,
+    },
     /// Destroy sessions.
     Kill {
+        /// Sessions to destroy: IDs, labels, positions or ID suffixes.
         #[arg(required = true)]
         targets: Vec<String>,
     },
@@ -317,13 +366,24 @@ pub enum SessionCmd {
 #[derive(Subcommand)]
 pub enum WindowCmd {
     /// Add a window and print its ID.
-    New { label: Option<String> },
+    New {
+        /// Name for the window.
+        label: Option<String>,
+    },
     /// List windows in tab order.
     Ls,
     /// Rename a window.
-    Rename { target: String, label: String },
+    Rename {
+        /// The window: an ID, label, 1-based tab position or ID suffix.
+        target: String,
+        /// Its new name.
+        label: String,
+    },
     /// Close a window (closing the last one destroys the session).
-    Close { target: String },
+    Close {
+        /// The window: an ID, label, 1-based tab position or ID suffix.
+        target: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -331,10 +391,28 @@ pub enum ApiCmd {
     /// List every method.
     List,
     /// Show a method's description and JSON Schemas.
-    Describe { method: String },
+    Describe {
+        /// The method, e.g. `session.view`.
+        method: String,
+    },
     /// Call a method with JSON params (inline, @file, or - for stdin); -s fills session_id.
-    Call { method: String, args: Option<String> },
+    Call {
+        /// The method, e.g. `session.view`.
+        method: String,
+        /// Params as a JSON object, @file, or - for stdin.
+        args: Option<String>,
+    },
 }
+
+const EXIT_CODES: &str = "\
+Exit codes:
+  0    ok
+  1    failed
+  2    bad command line
+  3    target not found or ambiguous
+  4    server unreachable
+  130  interrupted (Ctrl-C)
+  `wait` and `run --wait` exit with the program's own status.";
 
 fn main() -> ExitCode {
     let cli = Cli::parse(); // usage errors exit 2 here
