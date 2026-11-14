@@ -75,7 +75,13 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   bold/italic/underline/strikeout), backgrounds are runs of cells. The first line for a block, and
   any after a size change, is `full` (every row); later ones carry only the dirty rows, found by
   diffing the frame against the last one sent on that connection (`leon_core::screen::diff`).
-  Screen lines have no `seq`: they are state, not events. Per watched block a task waits on the
+  Screen lines have no `seq`: they are state, not events. A client reads at most 16 MiB per line
+  (a server may be a box we don't control; the CLI's cap is 64 MiB), so an update whose line would
+  pass 4 MiB (only a huge screen of distinctly styled cells gets there) goes as several: the first
+  carries `full`, the rest are partial updates of the same size (`screens::encode`), and
+  `dev.leon.terminal.lines` replies keep the first rows that fit in 4 MiB. Applying an update
+  (`screen::apply`) is linear in the update and the frame: one row per line (the last wins), and a
+  row brings at most `cols` backgrounds. Per watched block a task waits on the
   terminal's change counter (a `tokio::sync::watch`) and only marks it dirty; the connection loop
   builds the frame under the terminal's lock, between replies and events, so nothing queues per
   connection beyond "dirty": a slow reader gets fewer, newer screens, never a backlog, and is
@@ -321,6 +327,36 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   ids (shortcut). The palette lists New Session on each connected machine (`session.new {host}`)
   and Add Host… (`client.host.add`): a label, then an endpoint, each checked as `leon hosts add`
   checks them (`leon_hosts::hosts::add`), and saved through the hosts API.
+- **Switcher and attention in the app.** The session switcher (`session.switch`, ⌘K) uses the
+  palette's box over `switcher::rank`: every tab of every connected machine as `host › session ›
+  tab` with its status glyph, plus a block when the query matches the title its program set; no
+  query lists the tabs most recently shown first (the window ids the app saw on screen), a query
+  runs the palette's fuzzy filter with recency breaking ties. ↩ goes there (`session.focus_block`
+  or `session.focus_window` on that machine); ⌘↩ moves the tab's shown block beside the focused
+  pane with `session.move_block` when both are in the selected session, else goes there. Activity
+  (`client.sidebar.activity.toggle`, ⌘⇧A, a toolbar button) takes the sidebar's place, shown even
+  in top style or with the sidebar hidden. `attention::Tracker` looks at every machine's model at
+  each poll: each block with a status becomes a row, blocked (its kind), error, done (unseen:
+  arriving at the pane sends the `focus` event that clears it on the server), working (its
+  progress), the longest-waiting first in a state, waiting since the app first saw that state; a
+  machine's first look reports no changes. The toolbar button and the Dock badge show the blocked
+  count, nothing at 0. `attention::Notifier` turns changes into notices: entering blocked or error
+  (not for a block on screen while the window is key), or done after at least 30 s of working while
+  the app is in the background; one per block and state a minute and four a minute in all, the rest
+  folded into one "N more" notice later; `leon.set("notify_blocked" | "notify_error" |
+  "notify_done", false)` turns a kind off (carried in `client.keymap`'s settings). Text is the
+  session › tab names and the record's caption with controls, bidi and invisible characters removed,
+  at most 120 chars. Notices go through `UNUserNotificationCenter` (`objc2`, already in GPUI's tree),
+  which applies Do Not Disturb and Focus itself; only a bundled app has the main-bundle identifier it
+  needs, so a bare `leon app` binary logs once and posts nothing. The center's delegate queues a
+  clicked notice's host label, session and block and wakes the poll, which goes there (the folded
+  notice opens Activity).
+- **`leon notify`.** `dev.leon.terminal.report_status {state, title, msg}` (experimental) builds an
+  OSC 7501 report (title and msg base64) and runs it through the same parser and store as PTY
+  output, so every limit applies; text the parser would drop is refused (400) instead. `leon notify`
+  calls it for `-b`, else `$LEON_BLOCK`, never the focused pane (exit 2 with neither), since a job
+  outside leon would light up whatever the user looks at. It writes no escape to a tty: agents' tool
+  shells and launchd jobs have none.
 - **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.0.0`), apart
   from the build's version. Each method doc carries `stability` (`stable`, `experimental`,
   `internal`), and optionally `deprecated` (`since`, `replacement`, `removal`) and the spec's
