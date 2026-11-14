@@ -5,23 +5,29 @@ use std::path::Path;
 
 use serde_json::{json, Value};
 
-use super::State;
+use super::{Agent, State};
 
-/// Runs `leon skill hook` when leon is on PATH, and never fails the agent's session start.
-pub const COMMAND: &str = "command -v leon >/dev/null 2>&1 && leon skill hook || true";
+/// Runs `leon skill hook --agent <agent>` when leon is on PATH, and never fails the agent's
+/// session start. The agent's name says which resume command the hook records.
+pub fn command(agent: Agent) -> String {
+    format!("command -v leon >/dev/null 2>&1 && leon skill hook --agent {} || true", agent.name())
+}
 
 /// Commands an older leon wrote, so setup can replace them and remove can find them. A command is
-/// ours only when it is one of these exactly: a user's hook that merely mentions `leon skill hook`
-/// is theirs.
-const OLD_COMMANDS: &[&str] = &["leon skill hook"];
+/// ours only when it is one of these, or `command` for an agent, exactly: a user's hook that
+/// merely mentions `leon skill hook` is theirs.
+const OLD_COMMANDS: &[&str] = &["leon skill hook", "command -v leon >/dev/null 2>&1 && leon skill hook || true"];
 
 fn is_ours(hook: &Value) -> bool {
-    hook["command"].as_str().is_some_and(|c| c.trim() == COMMAND || OLD_COMMANDS.contains(&c.trim()))
+    hook["command"].as_str().is_some_and(|c| {
+        let c = c.trim();
+        OLD_COMMANDS.contains(&c) || [Agent::Claude, Agent::Codex].iter().any(|a| command(*a) == c)
+    })
 }
 
 /// The group setup adds: no matcher, so it runs on startup, resume, clear and compact.
-fn our_group() -> Value {
-    json!({ "hooks": [{ "type": "command", "command": COMMAND }] })
+fn our_group(agent: Agent) -> Value {
+    json!({ "hooks": [{ "type": "command", "command": command(agent) }] })
 }
 
 /// The file's JSON (`None` if it doesn't exist), or why we won't edit it.
@@ -62,11 +68,11 @@ fn ours_count(v: &Value) -> usize {
     groups(v).iter().filter_map(|g| g["hooks"].as_array()).flatten().filter(|h| is_ours(h)).count()
 }
 
-/// Current means exactly one entry of ours, in exactly the group setup writes.
-pub fn state(v: &Value) -> State {
+/// Current means exactly one entry of ours, in exactly the group setup writes for `agent`.
+pub fn state(v: &Value, agent: Agent) -> State {
     match ours_count(v) {
         0 => State::Missing,
-        1 if groups(v).contains(&our_group()) => State::Current,
+        1 if groups(v).contains(&our_group(agent)) => State::Current,
         _ => State::Outdated,
     }
 }
@@ -105,12 +111,12 @@ fn strip(mut v: Value, prune: bool) -> Value {
 }
 
 /// `v` (or a new file) with exactly our group, appended after the user's own. Keys stay where they are.
-pub fn with_ours(v: Option<Value>) -> Value {
+pub fn with_ours(v: Option<Value>, agent: Agent) -> Value {
     let mut v = v.map_or_else(|| json!({}), |v| strip(v, false));
     let root = v.as_object_mut().expect("read() checked");
     let hooks = root.entry("hooks").or_insert_with(|| json!({}));
     let starts = hooks.as_object_mut().expect("read() checked").entry("SessionStart").or_insert_with(|| json!([]));
-    starts.as_array_mut().expect("read() checked").push(our_group());
+    starts.as_array_mut().expect("read() checked").push(our_group(agent));
     v
 }
 
@@ -121,28 +127,32 @@ mod tests {
     #[test]
     fn add_then_remove_round_trips() {
         let mine = json!({ "a": 1, "hooks": { "Stop": [], "SessionStart": [{ "matcher": "x", "hooks": [] }] } });
-        let added = with_ours(Some(mine.clone()));
-        assert_eq!(state(&added), State::Current);
+        let added = with_ours(Some(mine.clone()), Agent::Claude);
+        assert_eq!(state(&added, Agent::Claude), State::Current);
         assert_eq!(without_ours(added), mine, "an empty group the user wrote stays");
-        assert_eq!(without_ours(with_ours(None)), json!({}));
+        assert_eq!(without_ours(with_ours(None, Agent::Codex)), json!({}));
     }
 
     #[test]
     fn duplicates_and_old_commands_are_outdated_and_replaced() {
         let old = json!({ "type": "command", "command": "leon skill hook" });
         let v = json!({ "hooks": { "SessionStart": [{ "hooks": [old, { "type": "command", "command": "x" }] }] } });
-        assert_eq!(state(&v), State::Outdated);
-        let fixed = with_ours(Some(v));
-        assert_eq!(state(&fixed), State::Current);
+        assert_eq!(state(&v, Agent::Claude), State::Outdated);
+        let fixed = with_ours(Some(v), Agent::Claude);
+        assert_eq!(state(&fixed, Agent::Claude), State::Current);
         assert_eq!(fixed["hooks"]["SessionStart"][0]["hooks"], json!([{ "type": "command", "command": "x" }]));
-        assert_eq!(state(&with_ours(Some(fixed.clone()))), State::Current);
-        assert_eq!(state(&json!({ "hooks": { "SessionStart": [our_group(), our_group()] } })), State::Outdated);
+        assert_eq!(state(&with_ours(Some(fixed.clone()), Agent::Claude), Agent::Claude), State::Current);
+        assert_eq!(state(&fixed, Agent::Codex), State::Outdated, "the other agent's command is outdated here");
+        let twice = json!({ "hooks": { "SessionStart": [our_group(Agent::Codex), our_group(Agent::Codex)] } });
+        assert_eq!(state(&twice, Agent::Codex), State::Outdated);
     }
 
     #[test]
     fn ours_means_exactly_our_command() {
         let cmd = |c: &str| json!({ "command": c });
-        assert!(is_ours(&cmd(COMMAND)));
+        assert!(is_ours(&cmd(&command(Agent::Claude))));
+        assert!(is_ours(&cmd(&command(Agent::Codex))));
+        assert!(is_ours(&cmd(OLD_COMMANDS[1])));
         assert!(is_ours(&cmd("leon skill hook")));
         assert!(!is_ours(&cmd("~/bin/ctx.sh; leon skill hook --legacy")));
         assert!(!is_ours(&cmd("napoleon skill hook")));
@@ -151,8 +161,8 @@ mod tests {
     #[test]
     fn replacing_an_old_entry_keeps_key_order() {
         let old = json!({ "hooks": { "SessionStart": [{ "hooks": [{ "command": "leon skill hook" }] }] }, "z": 1 });
-        let new = with_ours(Some(old));
+        let new = with_ours(Some(old), Agent::Codex);
         assert_eq!(new.as_object().unwrap().keys().collect::<Vec<_>>(), ["hooks", "z"]);
-        assert_eq!(state(&new), State::Current);
+        assert_eq!(state(&new, Agent::Codex), State::Current);
     }
 }

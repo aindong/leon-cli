@@ -245,9 +245,14 @@ pub enum SkillCmd {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Print the agent's leon session and block (run by the session-start hook).
+    /// Print the agent's leon session and block, and record how to resume the agent's session
+    /// (run by the session-start hook, with the agent's SessionStart JSON on stdin).
     #[command(hide = true)]
-    Hook,
+    Hook {
+        /// The agent whose resume command to record for this block.
+        #[arg(long, value_enum)]
+        agent: Option<skill::Agent>,
+    },
 }
 
 #[derive(Args)]
