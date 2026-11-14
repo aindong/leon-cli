@@ -7,7 +7,7 @@ use leon_core::ApiError;
 use serde_json::{json, Value};
 
 use crate::client::{spawn_server, Client, Fail};
-use crate::{ApiCmd, Cli, Cmd, ConfigCmd, ServerCmd, SessionCmd, WindowCmd};
+use crate::{Cli, Cmd, ConfigCmd, ServerCmd, SessionCmd, WindowCmd};
 
 pub fn run(cli: &Cli) -> Result<(), Fail> {
     if let (Some(what), Some(_)) = (local_only(cli.cmd()), &cli.host) {
@@ -107,7 +107,7 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         | Cmd::Zoom { .. }
         | Cmd::Resize { .. } => crate::layout::run(&mut c, cli)?,
         Cmd::Events { all } => crate::events::run(c, cli, *all, &server)?,
-        Cmd::Api(cmd) => api(&mut c, cli, cmd)?,
+        Cmd::Api(cmd) => crate::api::run(&mut c, cli, cmd)?,
     }
     Ok(())
 }
@@ -184,53 +184,6 @@ fn window(c: &mut Client, cli: &Cli, cmd: &WindowCmd) -> Result<(), Fail> {
             let wid = resolve(c, "window", target, Some(&sid))?;
             let r = c.call("session.close_window", json!({ "session_id": sid, "window_id": wid }))?;
             json_out(cli, &r);
-        }
-    }
-    Ok(())
-}
-
-fn api(c: &mut Client, cli: &Cli, cmd: &ApiCmd) -> Result<(), Fail> {
-    let help = c.call("help.all", json!({}))?;
-    let methods = help["methods"].as_array().cloned().unwrap_or_default();
-    match cmd {
-        ApiCmd::List => {
-            if cli.json {
-                let brief: Vec<Value> =
-                    methods.iter().map(|m| json!({ "name": m["name"], "description": m["description"] })).collect();
-                print_json(&Value::Array(brief));
-            } else {
-                for m in &methods {
-                    println!("{:<28} {}", m["name"].as_str().unwrap_or(""), m["description"].as_str().unwrap_or(""));
-                }
-            }
-        }
-        ApiCmd::Describe { method } => {
-            let m = methods
-                .iter()
-                .find(|m| m["name"] == method.as_str())
-                .ok_or_else(|| Fail::Other(ApiError::method_not_found(method).to_string()))?;
-            if cli.json {
-                print_json(m);
-            } else {
-                println!("{}\n  {}\n", method, m["description"].as_str().unwrap_or(""));
-                println!("input:\n{}\n", pretty(&m["input_schema"]));
-                println!("output:\n{}", pretty(&m["output_schema"]));
-            }
-        }
-        ApiCmd::Call { method, args } => {
-            let mut params = read_args(args.as_deref())?;
-            if let Some(q) = &cli.session {
-                let sid = resolve(c, "session", q, None)?;
-                if let Some(obj) = params.as_object_mut() {
-                    obj.insert("session_id".into(), json!(sid));
-                }
-            }
-            // A failed call is a failed command (exit 1), even when the error is a missing target.
-            let r = c.call(method, params).map_err(|f| match f {
-                Fail::Api(e) => Fail::Other(e.to_string()),
-                f => f,
-            })?;
-            print_json(&r);
         }
     }
     Ok(())
@@ -401,7 +354,7 @@ pub(crate) fn label(v: &Value) -> &str {
     v.as_str().unwrap_or("-")
 }
 
-fn pretty(v: &Value) -> String {
+pub(crate) fn pretty(v: &Value) -> String {
     serde_json::to_string_pretty(v).unwrap_or_default()
 }
 

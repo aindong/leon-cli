@@ -11,7 +11,8 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// (file, the fewest `leon` calls its sh blocks must make)
-const DOCS: [(&str, usize); 4] = [("README.md", 8), ("docs/agents.md", 5), ("docs/lua.md", 2), ("docs/cli.md", 5)];
+const DOCS: [(&str, usize); 5] =
+    [("README.md", 8), ("docs/agents.md", 5), ("docs/lua.md", 2), ("docs/cli.md", 5), ("docs/integrators.md", 3)];
 
 /// The text of each fenced block tagged `sh`.
 fn sh_blocks(doc: &str) -> Vec<String> {

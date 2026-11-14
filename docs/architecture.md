@@ -290,6 +290,18 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   same backoff, refetches the model and re-watches the screens, since its model is state, not a
   log. Keys typed while the link is down are lost; while attached, stderr is /dev/null, so ssh's
   errors during a reconnect aren't shown.
+- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.0.0`), apart
+  from the build's version. Each method doc carries `stability` (`stable`, `experimental`,
+  `internal`), and optionally `deprecated` (`since`, `replacement`, `removal`) and the spec's
+  `request_example`/`response_example`; all of it comes from one table,
+  `leon_server::contract`, which must name every method and block method. Stable: help, server,
+  sessions, windows, targets, blocks, layout, events and the terminal's `write`, `format`, `size`,
+  `resize`, `pwd`, `process`, `program_status`, `set_resume`. Experimental: the screen transport
+  (`block.watch`, `screen`, `lines`, `find`, `selection`, `link_at`), `client.action`,
+  `client.key`; internal: `client.keymap`. `docs/api.md` is rendered from `help.all` and
+  `docs/api-snapshot.json` holds the stable schemas (prose dropped, refs inlined); tests fail when
+  either drifts, and the snapshot can only be re-blessed (`LEON_BLESS=1`) with a new
+  `API_VERSION`. The policy is in docs/integrators.md.
 - **Docs are tested.** `docs/cli.md` is checked against every `--help`; the `sh` blocks in the docs
   run against the real binary (a bad command line fails); `docs/lua.md`'s examples go through
   `leon config check` and `leon do -e`.

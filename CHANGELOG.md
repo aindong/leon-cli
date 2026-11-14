@@ -1,0 +1,190 @@
+# Changelog
+
+Everything that changes in leon, newest first. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the API follows
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html) through its `api_version`.
+
+leon has had no release yet: every build so far is version 0.1.0. Until the first release, each
+section is a milestone from [docs/roadmap.md](docs/roadmap.md) and
+[docs/research/next-for-leon.md](docs/research/next-for-leon.md), dated by when it landed on
+`main`. Milestones that haven't landed have no section: M12 (the session switcher; the command
+palette came with M9), M13 (Activity, notifications and `leon notify`; status in the app came with
+M9), M15 (Linux) and M16b (hosts in the app) are still to come.
+
+## Reading `api_version`
+
+`api_version` is the version of the socket API, separate from the build's version. `help.all`
+and `server.version` both report it, and `leon api call server.version` prints it. The current
+one is `1.0.0`.
+
+- **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
+  method removed or renamed, a type narrowed, a new required parameter, a different meaning.
+- **MINOR** goes up when the stable API grows: a new method, or a new optional parameter or result
+  field on an existing one.
+- **PATCH** goes up for fixes that keep every schema as it was.
+
+Only methods marked `stable` are covered. `experimental` and `internal` methods can change in any
+release. A client should check that the major version is the one it was written for and ignore
+fields it doesn't know. The full policy is in
+[docs/integrators.md](docs/integrators.md#compatibility).
+
+## [Unreleased]
+
+### M18: a promise for integrators
+
+#### Added
+
+- `api_version` (`1.0.0`) in `help.all` and `server.version`.
+- A stability marker on every method and block method (`stable`, `experimental` or `internal`),
+  shown by `leon api list` and `leon api describe`, which now also list the block methods.
+- A `deprecated` field (`since`, `replacement`, `removal`) for methods on their way out. None is
+  deprecated yet.
+- Request and response examples on the most-used methods (`request_example`, `response_example`).
+- [docs/api.md](docs/api.md), the API reference generated from `help.all`; a test fails when it
+  drifts from the server.
+- [docs/api-snapshot.json](docs/api-snapshot.json), the stable methods' schemas; a test fails on any
+  change to them until the snapshot is updated after a version bump.
+- [docs/integrators.md](docs/integrators.md): how to write a client in any language, with a
+  tested Python client.
+- This changelog.
+
+## M17: `leon attach`, the terminal client - 2026-11-15
+
+### Added
+
+- `leon attach [TARGET]`: a terminal UI client that runs in any terminal, locally or over ssh. It
+  picks a session with a preview, shows tabs and split panes, and detaches with `ctrl+b d`.
+- tmux-style keys after a prefix (`ctrl+b` by default, `--prefix` or the config's `attach` mode to
+  change it), with config bindings and sequences on top.
+- The host terminal is restored on detach, errors, panics, signals, and even when the client is
+  killed (a watchdog process).
+
+## M16a: remote sessions over SSH - 2026-11-15
+
+### Added
+
+- `-H HOST` on every command: reach a leon server on another machine through the system `ssh`,
+  with no forwarding and nothing listening on TCP.
+- `leon hosts` to keep a list of named hosts, and `leon server proxy`, which bridges ssh to the
+  remote server's socket (starting it if needed).
+- Resumable event streams: `session.attach`/`session.attach_all` with `resumable: true`, and
+  `session.resume` to pick up after the last `seq` seen. `leon events -H` and `leon attach -H`
+  reconnect on their own when the link drops.
+
+## M14: agents come back after a restart - 2026-11-15
+
+### Added
+
+- A block method, `dev.leon.terminal.set_resume`, that registers the command that resumes a
+  program. The agent skill's hook records `claude --resume …` or `codex resume …` with it.
+- The `resume` setting (`ask`, `always`, `never`): restored blocks type the resume command at the
+  new prompt, and with `always` press Enter too. Nothing else that ran is run again.
+- Each block's scrollback is saved (capped, control characters removed) and shown again after a
+  restart, dimmed, above a "restored from" line.
+
+## M11: scrollback, selection, copy, mouse and find - 2026-11-15
+
+### Added
+
+- Scrolling through scrollback with the wheel and trackpad, click-drag, double- and triple-click
+  selection, and copy with Cmd+C.
+- Mouse reporting to programs that ask for it, with Shift held to select anyway.
+- A find bar (Cmd+F) over scrollback and screen, and clickable links, OSC 8 included.
+- Block methods for clients: `lines` (history by absolute line number), `find`, `selection` and
+  `link_at`.
+
+## M10b: the UI pass - 2026-11-15
+
+### Changed
+
+- Tabs live in one place: as rows in the sidebar by default, or in the titlebar
+  (`client.tab_style.toggle`), remembered across launches.
+- leon's brand palette everywhere, inset pane tiles with headers and controls, one toolbar row,
+  titles set by programs, an empty state that teaches, and one icon set.
+
+## M10: the app attaches - 2026-11-14
+
+### Changed
+
+- The app connects to the running server, or starts one, instead of owning it. Quitting the app
+  leaves every program running; "Quit and End All Sessions…" or `leon server stop` ends them.
+
+### Added
+
+- The screen transport: `block.watch` pushes screens over the socket, and
+  `dev.leon.terminal.screen` returns one whole.
+
+## M9: app polish - 2026-11-14
+
+### Added
+
+- Program status (OSC 7501) in tabs, the sidebar and panes.
+- A command palette, the Lua keymap in the app, new panes in the current directory, and font size
+  keys.
+
+## M8: persistence and speed - 2026-11-14
+
+### Added
+
+- The server saves its sessions when it stops and restores them when it starts: windows, layouts,
+  labels and focus come back with the same IDs. Programs start fresh; saved commands are never
+  re-run.
+- Measured input latency and throughput, with a benchmark in the repo
+  ([docs/performance.md](docs/performance.md)).
+
+## M7: agents and shipping - 2026-11-14
+
+### Added
+
+- `leon skill setup|status|remove|show` for Claude Code and Codex (M7a).
+- `Leon.app` (`scripts/bundle.sh`), an install script (`scripts/install.sh`), tested docs, and
+  `LEON_BIN_DIR` so `leon` resolves inside the app's terminals (M7b).
+
+## M6: the app - 2026-11-14
+
+### Added
+
+- The GPUI app: a window with sessions in a sidebar, tabs, and live terminals, with keyboard input
+  (M6a).
+- Split panes with dividers you can drag, click to focus, zoom, and keys to split and move focus
+  (M6b).
+
+## M5: Lua - 2026-11-14
+
+### Added
+
+- `init.lua` config: key bindings, sequences, modes and actions, checked by `leon config check`
+  (M5a).
+- A live config the server keeps: `leon do` scripts with `leon.on`, `wait`, timers and `exec`,
+  `leon actions`, `leon keymap` and `leon config reload` (M5b).
+
+## M4: program status - 2026-11-14
+
+### Added
+
+- OSC 7501 program status: programs report working, done, blocked or error; leon parses it per
+  the spec, sends `program_status_changed` events, and answers
+  `leon block call … program_status`.
+
+## M3: layout and events - 2026-11-14
+
+### Added
+
+- `split`, `focus` by direction, `move`, `swap`, `zoom`, `resize` and closing panes.
+- `leon events`: an event stream with a gapless `seq`, starting from a snapshot.
+
+## M2: terminal blocks - 2026-11-14
+
+### Added
+
+- Real terminals in a PTY: `leon run`, `send`, `send-key`, `capture` and `wait`, and `run --wait`
+  with the program's exit status. Programs see `LEON_SESSION` and `LEON_BLOCK`.
+
+## M1: server, API and sessions - 2026-11-14
+
+### Added
+
+- `leon server run|start|stop|status`; any command starts the server when it isn't running.
+- Sessions and windows: create, list, rename and close them; targets by ID, label, position or ID
+  suffix.
+- The self-describing API: `help.all`, and `leon api list|describe|call`.

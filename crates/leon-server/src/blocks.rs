@@ -415,12 +415,7 @@ where
     R: Serialize + JsonSchema + 'static,
 {
     let full = format!("{TERMINAL}.{name}");
-    let doc = MethodDoc {
-        name: full.clone(),
-        description: description.into(),
-        input_schema: schema::<A>(),
-        output_schema: schema::<R>(),
-    };
+    let doc = crate::contract::doc(&full, description, schema::<A>(), schema::<R>());
     TermMethod { doc, run: Box::new(move |t, args| f(t, parse(&full, args)?).map(to_value)) }
 }
 

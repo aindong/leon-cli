@@ -1,0 +1,2405 @@
+{
+  "api_version": "1.0.0",
+  "methods": {
+    "help.all": {
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "stability": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "const": "stable"
+                    },
+                    {
+                      "type": "string",
+                      "const": "experimental"
+                    },
+                    {
+                      "type": "string",
+                      "const": "internal"
+                    }
+                  ]
+                },
+                "deprecated": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "since": {
+                          "type": "string"
+                        },
+                        "replacement": {
+                          "type": "string"
+                        },
+                        "removal": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "since",
+                        "replacement",
+                        "removal"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "input_schema": true,
+                "output_schema": true,
+                "request_example": {},
+                "response_example": {}
+              },
+              "required": [
+                "name",
+                "description",
+                "stability",
+                "input_schema",
+                "output_schema"
+              ]
+            }
+          },
+          "block_types": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "creator": {
+                  "type": "string"
+                },
+                "flavors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "methods": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "stability": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "const": "stable"
+                          },
+                          {
+                            "type": "string",
+                            "const": "experimental"
+                          },
+                          {
+                            "type": "string",
+                            "const": "internal"
+                          }
+                        ]
+                      },
+                      "deprecated": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "since": {
+                                "type": "string"
+                              },
+                              "replacement": {
+                                "type": "string"
+                              },
+                              "removal": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "since",
+                              "replacement",
+                              "removal"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "input_schema": true,
+                      "output_schema": true,
+                      "request_example": {},
+                      "response_example": {}
+                    },
+                    "required": [
+                      "name",
+                      "description",
+                      "stability",
+                      "input_schema",
+                      "output_schema"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "creator",
+                "flavors",
+                "methods"
+              ]
+            }
+          }
+        },
+        "required": [
+          "api_version",
+          "methods",
+          "block_types"
+        ]
+      }
+    },
+    "server.status": {
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "pid": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "version": {
+            "type": "string"
+          },
+          "socket": {
+            "type": "string"
+          },
+          "autostarted": {
+            "type": "boolean"
+          },
+          "sessions": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "state_file": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "pid",
+          "version",
+          "socket",
+          "autostarted",
+          "sessions"
+        ]
+      }
+    },
+    "server.persist": {
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "server.version": {
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "api_version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "api_version"
+        ]
+      }
+    },
+    "server.stop": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "if_idle": {
+            "type": "boolean",
+            "default": false
+          },
+          "discard": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "session.list": {
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "session_id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "windows": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "session_id",
+                "windows"
+              ]
+            }
+          }
+        },
+        "required": [
+          "sessions"
+        ]
+      }
+    },
+    "session.create": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "window_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "block": {
+                        "type": "object",
+                        "properties": {
+                          "flavor": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "label": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "options": {
+                            "type": "object",
+                            "properties": {
+                              "command": {
+                                "type": [
+                                  "array",
+                                  "null"
+                                ],
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "cwd": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "exit": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "on_completion": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "on_completion"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "block"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "window_id": {
+            "type": "string"
+          },
+          "block_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "window_id",
+          "block_id"
+        ]
+      }
+    },
+    "session.destroy": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "session.set_label": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "label"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      }
+    },
+    "session.view": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "window_id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "position": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "active": {
+                  "type": "boolean"
+                },
+                "block_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "layout": {
+                  "anyOf": [
+                    {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "block": {
+                              "type": "object",
+                              "properties": {
+                                "block_id": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "block_id"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "block"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "split": {
+                              "type": "object",
+                              "properties": {
+                                "split_id": {
+                                  "type": "string"
+                                },
+                                "direction": {
+                                  "oneOf": [
+                                    {
+                                      "type": "string",
+                                      "const": "horizontal"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "const": "vertical"
+                                    }
+                                  ]
+                                },
+                                "ratio": {
+                                  "type": "number",
+                                  "format": "double"
+                                },
+                                "before": {
+                                  "$ref": "Node"
+                                },
+                                "after": {
+                                  "$ref": "Node"
+                                }
+                              },
+                              "required": [
+                                "split_id",
+                                "direction",
+                                "ratio",
+                                "before",
+                                "after"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "split"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "focused_block_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "zoomed_block_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "window_id",
+                "position",
+                "active",
+                "block_ids"
+              ]
+            }
+          }
+        },
+        "required": [
+          "session_id",
+          "revision",
+          "windows"
+        ]
+      }
+    },
+    "session.new_window": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "window_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "block": {
+                        "type": "object",
+                        "properties": {
+                          "flavor": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "label": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "options": {
+                            "type": "object",
+                            "properties": {
+                              "command": {
+                                "type": [
+                                  "array",
+                                  "null"
+                                ],
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "cwd": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "exit": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "on_completion": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "on_completion"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "block"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "window_id": {
+            "type": "string"
+          },
+          "block_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "window_id",
+          "block_id",
+          "revision"
+        ]
+      }
+    },
+    "session.close_window": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "window_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "window_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      }
+    },
+    "session.focus_window": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "window_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "window_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      }
+    },
+    "session.set_window_label": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "window_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "window_id",
+          "label"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      }
+    },
+    "target.resolve": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "session",
+              "window",
+              "block"
+            ]
+          },
+          "query": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "query"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "session.list_blocks": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "block_id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "window_id": {
+                  "type": "string"
+                },
+                "pid": {
+                  "type": "integer",
+                  "format": "int32"
+                },
+                "command": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "keep_open": {
+                  "type": "boolean"
+                },
+                "exit_code": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int32"
+                },
+                "cwd": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "resume": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "block_id",
+                "window_id",
+                "pid",
+                "command",
+                "keep_open"
+              ]
+            }
+          }
+        },
+        "required": [
+          "blocks"
+        ]
+      }
+    },
+    "session.describe_block": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "block_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "block_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "window_id": {
+            "type": "string"
+          },
+          "pid": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "keep_open": {
+            "type": "boolean"
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "cwd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resume": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "block_id",
+          "window_id",
+          "pid",
+          "command",
+          "keep_open"
+        ]
+      }
+    },
+    "block.close": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "block_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "block_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      }
+    },
+    "block.method": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "block_id": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "args": {}
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "block_id",
+          "method"
+        ]
+      },
+      "output_schema": {}
+    },
+    "block.event": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "block_id": {
+            "type": "string"
+          },
+          "event": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "key"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "key"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "focus"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "paste"
+                  },
+                  "data": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "data"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "mouse"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "press",
+                      "release",
+                      "move"
+                    ]
+                  },
+                  "button": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "left",
+                          "middle",
+                          "right",
+                          "wheel_up",
+                          "wheel_down"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "line": {
+                    "type": "integer",
+                    "format": "uint",
+                    "minimum": 0
+                  },
+                  "col": {
+                    "type": "integer",
+                    "format": "uint",
+                    "minimum": 0
+                  },
+                  "mods": {
+                    "type": "object",
+                    "properties": {
+                      "shift": {
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "alt": {
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "ctrl": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "action",
+                  "line",
+                  "col"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "wheel"
+                  },
+                  "lines": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "line": {
+                    "type": "integer",
+                    "format": "uint",
+                    "minimum": 0
+                  },
+                  "col": {
+                    "type": "integer",
+                    "format": "uint",
+                    "minimum": 0
+                  },
+                  "mods": {
+                    "type": "object",
+                    "properties": {
+                      "shift": {
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "alt": {
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "ctrl": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "lines",
+                  "line",
+                  "col"
+                ]
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "block_id",
+          "event"
+        ]
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "block.wait": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "timeout_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "block_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "exit_code": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "required": [
+          "exit_code"
+        ]
+      }
+    },
+    "session.new_split": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "anchor_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "window_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direction": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "horizontal"
+              },
+              {
+                "type": "string",
+                "const": "vertical"
+              }
+            ]
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "before",
+              "after"
+            ]
+          },
+          "ratio": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "layout": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "block": {
+                    "type": "object",
+                    "properties": {
+                      "flavor": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "label": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "options": {
+                        "type": "object",
+                        "properties": {
+                          "command": {
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "cwd": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "exit": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "on_completion": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false,
+                                "required": [
+                                  "on_completion"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "block"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "focus": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "direction",
+          "side",
+          "layout"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "window_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "block_id",
+          "window_id",
+          "revision"
+        ]
+      }
+    },
+    "session.move_block": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "block_id": {
+            "type": "string"
+          },
+          "anchor_block_id": {
+            "type": "string"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "const": "horizontal"
+                  },
+                  {
+                    "type": "string",
+                    "const": "vertical"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "side": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "before",
+                  "after"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ratio": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "block_id",
+          "anchor_block_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      }
+    },
+    "session.swap_blocks": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "block_id": {
+            "type": "string"
+          },
+          "other_block_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "block_id",
+          "other_block_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      }
+    },
+    "session.zoom_block": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "block_id": {
+            "type": "string"
+          },
+          "zoom": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "toggle"
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "block_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      }
+    },
+    "session.resize_pane": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "direction": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "horizontal"
+              },
+              {
+                "type": "string",
+                "const": "vertical"
+              }
+            ]
+          },
+          "before_block_id": {
+            "type": "string"
+          },
+          "after_block_id": {
+            "type": "string"
+          },
+          "ratio": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "direction",
+          "before_block_id",
+          "after_block_id",
+          "ratio"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      }
+    },
+    "session.focus_block": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "block_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "block_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      }
+    },
+    "session.focus_direction": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right",
+              "up",
+              "down"
+            ]
+          },
+          "wrap": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "direction"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "block_id",
+          "revision"
+        ]
+      }
+    },
+    "session.focus_next_pane": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "wrap": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "block_id",
+          "revision"
+        ]
+      }
+    },
+    "session.focus_previous_pane": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "wrap": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "block_id",
+          "revision"
+        ]
+      }
+    },
+    "session.attach": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "resumable": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "view": {
+            "type": "object",
+            "properties": {
+              "session_id": {
+                "type": "string"
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "revision": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "windows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "window_id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "position": {
+                      "type": "integer",
+                      "format": "uint",
+                      "minimum": 0
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "block_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "layout": {
+                      "anyOf": [
+                        {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "block": {
+                                  "type": "object",
+                                  "properties": {
+                                    "block_id": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "block_id"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "block"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "split": {
+                                  "type": "object",
+                                  "properties": {
+                                    "split_id": {
+                                      "type": "string"
+                                    },
+                                    "direction": {
+                                      "oneOf": [
+                                        {
+                                          "type": "string",
+                                          "const": "horizontal"
+                                        },
+                                        {
+                                          "type": "string",
+                                          "const": "vertical"
+                                        }
+                                      ]
+                                    },
+                                    "ratio": {
+                                      "type": "number",
+                                      "format": "double"
+                                    },
+                                    "before": {
+                                      "$ref": "Node"
+                                    },
+                                    "after": {
+                                      "$ref": "Node"
+                                    }
+                                  },
+                                  "required": [
+                                    "split_id",
+                                    "direction",
+                                    "ratio",
+                                    "before",
+                                    "after"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "split"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "focused_block_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "zoomed_block_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "window_id",
+                    "position",
+                    "active",
+                    "block_ids"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "session_id",
+              "revision",
+              "windows"
+            ]
+          },
+          "resume": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "seq",
+          "view"
+        ]
+      }
+    },
+    "session.attach_all": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "event_scope": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "session"
+              },
+              {
+                "type": "string",
+                "const": "all"
+              }
+            ]
+          },
+          "resumable": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "event_scope"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "session_id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "windows": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "session_id",
+                "windows"
+              ]
+            }
+          },
+          "resume": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "seq",
+          "sessions"
+        ]
+      }
+    },
+    "session.resume": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "resume": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "resume",
+          "seq"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "seq"
+        ]
+      }
+    },
+    "server.config_reload": {
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "path": {
+            "type": "string"
+          },
+          "bindings": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "modes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "actions": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "logs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "generation",
+          "path",
+          "bindings",
+          "modes",
+          "actions",
+          "diagnostics",
+          "logs"
+        ]
+      }
+    },
+    "dev.leon.terminal.write": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ]
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "dev.leon.terminal.format": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trim": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    "dev.leon.terminal.size": {
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "cols": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          }
+        },
+        "required": [
+          "rows",
+          "cols"
+        ]
+      }
+    },
+    "dev.leon.terminal.resize": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "cols": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "rows",
+          "cols"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "cols": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          }
+        },
+        "required": [
+          "rows",
+          "cols"
+        ]
+      }
+    },
+    "dev.leon.terminal.pwd": {
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "dev.leon.terminal.process": {
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "pid": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "output_bytes": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "pid",
+          "command",
+          "output_bytes"
+        ]
+      }
+    },
+    "dev.leon.terminal.set_resume": {
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "dev.leon.terminal.program_status": {
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": true
+          }
+        },
+        "required": [
+          "records"
+        ]
+      }
+    }
+  }
+}

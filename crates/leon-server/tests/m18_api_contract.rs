@@ -108,7 +108,9 @@ async fn most_used_methods_have_examples_that_fit() {
         let resp = m.get("response_example").unwrap_or_else(|| panic!("{name}: a request example without a response"));
         let (props, required) = fields(&m["output_schema"]);
         let obj = resp.as_object().unwrap_or_else(|| panic!("{name}: the response example is an object"));
-        for k in obj.keys() {
+        // block.method's output is any (the block method's own), so it declares no fields.
+        let any = m["output_schema"]["properties"].is_null() && m["output_schema"]["type"] != "object";
+        for k in obj.keys().filter(|_| !any) {
             assert!(props.contains(k), "{name}: the response example has {k}, which the output schema lacks");
         }
         for k in &required {
