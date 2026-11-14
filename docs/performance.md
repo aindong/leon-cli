@@ -135,6 +135,7 @@ not a slowed-down copy of it.
 | before (`00e956d`) | 0.010 / 0.033 ms | 0.024 / 0.048 ms | 2.5 MB/s | 123.6 MB/s | (no attached path) | 177–190 ms (frame_bench) |
 | after, run 1 | 0.005 / 0.023 ms | 0.024 / 0.057 ms | 2.6 MB/s | 125.6 MB/s | 0.420 / 0.784 ms | 194 / 165 ms (0.85x) |
 | after, run 2 (tests running alongside) | 0.004 / 0.013 ms | 0.029 / 0.055 ms | 2.6 MB/s | 123.5 MB/s | 0.237 / 0.734 ms | 178 / 169 ms (0.95x) |
+| after the review fixes | 0.005 / 0.021 ms | 0.026 / 0.054 ms | 2.6 MB/s | 121.5 MB/s | 0.330 / 0.799 ms | 188 / 166 ms (0.88x) |
 
 The budget holds with room to spare: a keystroke's echo is on the app's screen model in under a
 millisecond, and `seq` is no slower attached, a little faster even, because a pushed screen
