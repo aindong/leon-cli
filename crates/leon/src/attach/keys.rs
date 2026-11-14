@@ -41,6 +41,10 @@ fn name(k: &KeyEvent) -> Option<(String, bool)> {
     }
     let (key, shift) = match k.code {
         KeyCode::Char(' ') => ("space".to_string(), m.contains(KeyModifiers::SHIFT)),
+        // crossterm reports ctrl+\ ] ^ _ (0x1c–0x1f) as ctrl+4…7
+        KeyCode::Char(c @ '4'..='7') if m.contains(KeyModifiers::CONTROL) => {
+            (["\\", "]", "^", "_"][(c as u8 - b'4') as usize].to_string(), false)
+        }
         KeyCode::Char(c) if c.is_uppercase() => (c.to_lowercase().to_string(), true),
         KeyCode::Char(c) => (c.to_string(), false), // a shifted symbol already says shift
         KeyCode::BackTab => ("tab".into(), true),
@@ -157,6 +161,9 @@ impl Keys {
             list("modes").iter().find(|m| m["name"] == "attach").and_then(|m| m["prefix"].as_str().map(String::from));
         let prefix_name = flag.map(String::from).or(from_config).unwrap_or_else(|| PREFIX.into());
         let prefix = one_chord(&prefix_name).map_err(|e| format!("bad prefix: {e}"))?;
+        if prefix.mods.cmd {
+            return Err(format!("bad prefix {prefix_name:?}: a terminal never sends cmd"));
+        }
         let gone: Vec<Chord> =
             list("unbinds").iter().filter(|u| attach(u)).filter_map(|u| one_chord(u["key"].as_str()?).ok()).collect();
         let defaults = DEFAULTS

@@ -113,8 +113,10 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   SIGINT, SIGQUIT: those are blocked in every thread (after any server autostart, so the server
   doesn't inherit the mask) and taken by a `sigwait` thread; the exit status is 128 + the signal.
   For SIGKILL a watchdog, forked before any thread starts, sits in its own process group with the
-  saved termios and a close-on-exec pipe: a byte means the client restored; EOF without one means
-  it died, and the watchdog restores. No tty (`ssh host leon attach` without `-t`) exits 1 and
+  saved termios and a close-on-exec pipe: `e` means the client entered the alt screen, `x` that it
+  restored; EOF without `x` means it died, and the watchdog restores (the escapes only after `e`).
+  While attached, stderr points at /dev/null, since the app's client code reports some failures
+  with `eprintln!` (which would scribble over the screen); restoring puts it back. No tty (`ssh host leon attach` without `-t`) exits 1 and
   writes nothing to stdout.
 - **App keys go through the keymap.** The server loads `init.lua` (`leon server run`).
   The app has no GPUI key table (only ⌘Q): every keystroke becomes an unshifted chord

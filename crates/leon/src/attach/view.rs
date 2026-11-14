@@ -37,6 +37,9 @@ impl Tui {
             *dirty = true;
         }
         let Some(c) = keys::chord(&k) else {
+            // a key binding syntax can't name ends any prefix or sequence, and goes to the pane
+            *dirty |= self.after_prefix || !self.pending.is_empty();
+            (self.after_prefix, self.pending) = (false, Vec::new());
             self.forward(&k);
             return Flow::Go;
         };
@@ -131,15 +134,23 @@ impl Tui {
 
     /// The actions `leon attach` runs itself, named as the app's.
     fn action(&mut self, name: &str, args: Option<&Value>) -> Flow {
-        if !name.contains('.') {
-            return self.config_action(name, args);
+        // these need no pane, so they work even while the tab has none
+        match (name, &self.mode) {
+            (n, _) if !n.contains('.') => return self.config_action(n, args),
+            ("client.detach", _) => return Flow::Done(Ok(())),
+            ("session.new", _) => {
+                self.attach(picker::Pick::New);
+                return Flow::Go;
+            }
+            ("client.picker", Mode::Attached(sid)) => {
+                self.mode = Mode::Picker(Picker::default(), Some(sid.clone()));
+                return Flow::Go;
+            }
+            _ => {}
         }
         let Some(t) = self.target() else { return Flow::Go };
         let sid = &t.sid;
         match name {
-            "client.detach" => return Flow::Done(Ok(())),
-            "client.picker" => self.mode = Mode::Picker(Picker::default(), Some(sid.clone())),
-            "session.new" => self.attach(picker::Pick::New),
             "client.tab.new" => {
                 drop(self.act("session.new_window", json!({ "session_id": sid, "layout": self.here(&t) })))
             }
@@ -207,6 +218,9 @@ impl Tui {
         term.autoresize()?;
         let size = term.size()?;
         let area = Rect::new(0, 0, size.width, size.height);
+        if area.is_empty() {
+            return Ok(true); // a 0-row or 0-column host: nothing fits
+        }
         let mut drawn = true;
         let colors = self.colors;
         if let Mode::Picker(p, _) = &self.mode {

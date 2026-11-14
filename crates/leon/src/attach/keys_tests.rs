@@ -38,6 +38,10 @@ fn keys_become_unshifted_chords() {
     assert_eq!(chord(&key(KeyCode::Char('b'), KeyModifiers::CONTROL)), Some(one_chord("ctrl+b").unwrap()));
     assert_eq!(chord(&key(KeyCode::Left, KeyModifiers::NONE)), Some(one_chord("left").unwrap()));
     assert_eq!(chord(&ch(' ')), Some(one_chord("space").unwrap()));
+    let ctrl = KeyModifiers::CONTROL;
+    assert_eq!(chord(&key(KeyCode::Char('5'), ctrl)), Some(one_chord("ctrl+]").unwrap()), "0x1d is ctrl+]");
+    assert_eq!(chord(&key(KeyCode::Char('4'), ctrl)), Some(one_chord("ctrl+\\").unwrap()));
+    assert_eq!(chord(&key(KeyCode::Char('7'), ctrl)), Some(one_chord("ctrl+_").unwrap()));
     assert_eq!(one_chord("%").unwrap(), one_chord("shift+5").unwrap(), "config keys are unshifted the same way");
     assert!(one_chord("ctrl+a>b").is_err());
 }
@@ -68,4 +72,5 @@ fn after_the_prefix_the_config_comes_first() {
     assert_eq!(Keys::new(&km, None).unwrap().prefix, one_chord("ctrl+a").unwrap());
     assert_eq!(Keys::new(&km, Some("alt+space")).unwrap().prefix_name, "alt+space", "the flag wins");
     assert!(Keys::new(&km, Some("ctrl+a>b")).is_err());
+    assert!(Keys::new(&km, Some("cmd+b")).is_err(), "a terminal never sends cmd");
 }

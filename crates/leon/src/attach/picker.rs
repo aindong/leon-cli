@@ -123,13 +123,20 @@ impl Picker {
         filter(&items, &self.query)
     }
 
+    /// The selected index, kept on a row when rows went away (a session closed).
+    fn at(&self, shown: usize) -> usize {
+        self.selected.min(shown.saturating_sub(1))
+    }
+
     pub fn selected_row<'a>(&self, rows: &'a [Row]) -> Option<&'a Row> {
-        self.shown(rows).get(self.selected).map(|&i| &rows[i])
+        let shown = self.shown(rows);
+        shown.get(self.at(shown.len())).map(|&i| &rows[i])
     }
 
     pub fn key(&mut self, k: &KeyEvent, rows: &[Row]) -> Picked {
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         let n = self.shown(rows).len();
+        self.selected = self.at(n);
         match k.code {
             KeyCode::Esc => return Picked::Leave,
             KeyCode::Char('c') if ctrl => return Picked::Leave,
@@ -191,14 +198,15 @@ impl Picker {
             buf.set_stringn(list.x, list.y, "No sessions. Enter starts one.", list.width as usize, base);
         }
         // keep the selected row in view
-        let skip = (self.selected + 1).saturating_sub(list.height as usize);
+        let sel = self.at(shown.len());
+        let skip = (sel + 1).saturating_sub(list.height as usize);
         for (n, &i) in shown.iter().enumerate().skip(skip).take(list.height as usize) {
             let r = &rows[i];
             let y = list.y + (n - skip) as u16;
             let indent = if self.query.is_empty() { r.depth * 2 } else { 0 };
             let text = if self.query.is_empty() { r.text.clone() } else { r.path.clone() };
             let mut style = if r.depth == 0 { base.add_modifier(Modifier::BOLD) } else { base };
-            if n == self.selected {
+            if n == sel {
                 style = Style::default()
                     .bg(colors.rgb(brand::AMBER))
                     .fg(colors.rgb(brand::IRON))
