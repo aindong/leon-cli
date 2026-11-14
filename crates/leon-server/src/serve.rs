@@ -15,7 +15,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::Notify;
 
 use crate::Ctx;
 
@@ -41,7 +40,6 @@ struct Shared {
     ctx: Arc<Ctx>,
     open: AtomicUsize,
     last_activity: Mutex<Instant>,
-    shutdown: Notify,
 }
 
 impl Shared {
@@ -81,12 +79,7 @@ pub async fn listen(socket: &Path) -> io::Result<Listener> {
 /// Serve `ctx` on a bound socket until stopped (`server.stop`, or idle when autostarted).
 pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Result<()> {
     let Listener { listener, ours } = bound;
-    let shared = Arc::new(Shared {
-        ctx,
-        open: AtomicUsize::new(0),
-        last_activity: Mutex::new(Instant::now()),
-        shutdown: Notify::new(),
-    });
+    let shared = Arc::new(Shared { ctx, open: AtomicUsize::new(0), last_activity: Mutex::new(Instant::now()) });
     let mut tick = tokio::time::interval(Duration::from_millis(200));
     loop {
         tokio::select! {
@@ -109,7 +102,7 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
                     drop(guard);
                 });
             }
-            _ = shared.shutdown.notified() => break,
+            _ = shared.ctx.shutdown.notified() => break,
             _ = tick.tick() => {
                 let idle = shared.ctx.is_autostarted()
                     && shared.open.load(Ordering::SeqCst) == 0
@@ -209,7 +202,7 @@ async fn connection(stream: UnixStream, shared: &Shared) -> io::Result<()> {
         };
         write_line(&mut write, &reply).await?;
         if stop {
-            shared.shutdown.notify_one(); // only after this connection's own stop reply is out
+            shared.ctx.shutdown.notify_one(); // only after this connection's own stop reply is out
         }
     }
 }

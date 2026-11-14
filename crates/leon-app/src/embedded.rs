@@ -1,7 +1,7 @@
 //! The server the app embeds: a `Ctx` served on the usual socket from a background tokio
 //! runtime, so the CLI and agents drive the state the app renders straight from memory.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,7 +16,6 @@ use serde_json::{json, Value};
 pub struct Embedded {
     ctx: Arc<Ctx>,
     rt: tokio::runtime::Runtime,
-    socket: PathBuf,
     /// Set once the socket loop has ended (stopped by us or by `leon server stop`).
     done: Arc<AtomicBool>,
 }
@@ -51,7 +50,7 @@ pub fn start_at(socket: PathBuf) -> Result<Embedded, String> {
         let _ = serve::serve_on(c, listener, opts).await;
         d.store(true, Ordering::SeqCst);
     });
-    Ok(Embedded { ctx, rt, socket, done })
+    Ok(Embedded { ctx, rt, done })
 }
 
 impl Embedded {
@@ -70,9 +69,7 @@ impl Embedded {
 
     /// Stop the way `leon server stop` does (programs end, the socket goes), and wait for it.
     pub fn stop(&self) {
-        if !self.stopped() {
-            let _ = request(&self.socket, "server.stop", json!({}));
-        }
+        self.ctx.shutdown.notify_one();
         let end = Instant::now() + Duration::from_secs(5);
         while !self.stopped() && Instant::now() < end {
             std::thread::sleep(Duration::from_millis(10));
@@ -90,10 +87,13 @@ fn busy(socket: &Path, status: Option<&Value>) -> String {
 
 /// Make the socket ours to bind: nothing answers, or an idle server stopped and exited.
 fn take_over(socket: &Path) -> Result<(), String> {
+    // Only talk to a socket in a dir only we can use; `listen` checks the same.
+    let dir = socket.parent().unwrap_or(Path::new("."));
+    leon_core::paths::ensure_private_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let Ok(status) = request(socket, "server.status", json!({})) else {
         return Ok(()); // nothing answers; `listen` clears a stale socket
     };
-    // The server checks for sessions itself, so one created a moment ago is never lost.
+    // The server checks for sessions itself, so one created before this call is never stopped.
     if request(socket, "server.stop", json!({ "if_idle": true })).is_err() {
         return Err(busy(socket, Some(&status)));
     }
@@ -109,16 +109,29 @@ fn take_over(socket: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// One NDJSON request on a fresh connection. Err covers "no server" and an error reply alike.
+/// One NDJSON request on a fresh connection, answered within 5 s in at most 64 KiB (whatever owns
+/// the socket may not be a leon server). Err covers "no server" and an error reply alike.
+/// shortcut: a small copy of the CLI's `Client::call`, which lives in the `leon` crate that depends on this one.
 fn request(socket: &Path, method: &str, params: Value) -> Result<Value, String> {
+    const MAX_REPLY: usize = 64 << 10;
     let mut s = UnixStream::connect(socket).map_err(|e| e.to_string())?;
-    s.set_read_timeout(Some(Duration::from_secs(5))).map_err(|e| e.to_string())?;
     let mut line = json!({ "id": 1, "method": method, "params": params }).to_string();
     line.push('\n');
     s.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
-    let mut reply = String::new();
-    BufReader::new(s).read_line(&mut reply).map_err(|e| e.to_string())?;
-    let v: Value = serde_json::from_str(&reply).map_err(|e| e.to_string())?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let (mut reply, mut buf) = (Vec::new(), [0u8; 4096]);
+    while !reply.contains(&b'\n') {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() || reply.len() > MAX_REPLY {
+            return Err("no reply from the socket's owner".into());
+        }
+        s.set_read_timeout(Some(left)).map_err(|e| e.to_string())?;
+        match s.read(&mut buf).map_err(|e| e.to_string())? {
+            0 => break,
+            n => reply.extend_from_slice(&buf[..n]),
+        }
+    }
+    let v: Value = serde_json::from_slice(&reply).map_err(|e| e.to_string())?;
     match v.get("result") {
         Some(r) => Ok(r.clone()),
         None => Err(v["error"].to_string()),

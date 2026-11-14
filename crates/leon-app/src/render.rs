@@ -79,7 +79,7 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
         let mut fg = resolve(cell.fg, content.colors, theme);
         let mut bg = resolve(cell.bg, content.colors, theme);
         if flags.contains(Flags::DIM) {
-            fg = mix(fg, bg, 0.35);
+            fg = mix(fg, bg, DIM);
         }
         if flags.contains(Flags::INVERSE) {
             std::mem::swap(&mut fg, &mut bg);
@@ -96,7 +96,8 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
             }
         }
         let mut text = String::from(if cell.c == '\0' { ' ' } else { cell.c });
-        text.extend(cell.zerowidth().into_iter().flatten());
+        // Bounded: a program can stack any number of marks on one cell, and each frame copies and shapes them.
+        text.extend(cell.zerowidth().into_iter().flatten().copied().filter(|&c| !is_bidi_control(c)).take(MAX_MARKS));
         if let Some(c) = cursor.as_mut().filter(|_| cell.point == cursor_at) {
             (c.line, c.wide, c.text) = (line, wide, text.clone());
         }
@@ -138,6 +139,16 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
     f
 }
 
+/// Combining marks drawn per cell.
+const MAX_MARKS: usize = 16;
+/// How far dim text fades toward the background.
+const DIM: f32 = 0.35;
+
+/// Bidi controls would let the shaper reorder text away from the cells it sits in.
+fn is_bidi_control(c: char) -> bool {
+    matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' | '\u{200e}' | '\u{200f}')
+}
+
 fn same_style(a: &Span, b: &Span) -> bool {
     (a.fg, a.bold, a.italic, a.underline, a.strikeout) == (b.fg, b.bold, b.italic, b.underline, b.strikeout)
 }
@@ -161,9 +172,9 @@ fn named(n: NamedColor, theme: &Theme) -> u32 {
         Foreground | BrightForeground => theme.fg,
         Background => theme.bg,
         Cursor => theme.cursor,
-        DimForeground => mix(theme.fg, theme.bg, 0.35),
+        DimForeground => mix(theme.fg, theme.bg, DIM),
         DimBlack | DimRed | DimGreen | DimYellow | DimBlue | DimMagenta | DimCyan | DimWhite => {
-            mix(theme.ansi[n as usize - DimBlack as usize], theme.bg, 0.35)
+            mix(theme.ansi[n as usize - DimBlack as usize], theme.bg, DIM)
         }
         _ => theme.ansi[n as usize],
     }

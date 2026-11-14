@@ -30,6 +30,8 @@ pub struct Ctx {
     pub autostarted: AtomicBool,
     /// Bumped whenever a block's program exits; `block.wait` watches it.
     exited: tokio::sync::watch::Sender<u64>,
+    /// Ends the socket loop (`serve_on`): `server.stop`, or an embedding app quitting.
+    pub shutdown: tokio::sync::Notify,
 }
 
 impl Ctx {
@@ -40,6 +42,7 @@ impl Ctx {
             registry: methods::registry(),
             autostarted: AtomicBool::new(autostarted),
             exited: tokio::sync::watch::channel(0).0,
+            shutdown: tokio::sync::Notify::new(),
         }
     }
 
