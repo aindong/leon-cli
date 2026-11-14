@@ -55,6 +55,14 @@ pub fn to_text(t: &Theme) -> String {
     out
 }
 
+/// `s` for an error message: a junk line can be a megabyte long.
+fn clip(s: &str) -> String {
+    match s.char_indices().nth(40) {
+        Some((at, _)) => format!("{}…", &s[..at]),
+        None => s.to_string(),
+    }
+}
+
 /// `#rrggbb` or `rrggbb`.
 fn hex(s: &str) -> Option<u32> {
     let digits = s.strip_prefix('#').unwrap_or(s);
@@ -71,17 +79,18 @@ fn ghostty(text: &str) -> Result<Given, String> {
             continue;
         }
         let at = |m: String| format!("line {}: {m}", n + 1);
-        let colour = |v: &str| hex(v).ok_or_else(|| at(format!("{v:?} is not a #rrggbb colour")));
-        let (key, value) = line.split_once('=').ok_or_else(|| at(format!("{line:?} is not `key = value`")))?;
+        let colour = |v: &str| hex(v).ok_or_else(|| at(format!("{:?} is not a #rrggbb colour", clip(v))));
+        let (key, value) = line.split_once('=').ok_or_else(|| at(format!("{:?} is not `key = value`", clip(line))))?;
         let (key, value) = (key.trim(), value.trim());
         if key == "palette" {
-            let (i, c) = value.split_once('=').ok_or_else(|| at(format!("palette {value:?} is not N=#rrggbb")))?;
+            let (i, c) =
+                value.split_once('=').ok_or_else(|| at(format!("palette {:?} is not N=#rrggbb", clip(value))))?;
             let i: usize = i
                 .trim()
                 .parse()
                 .ok()
                 .filter(|i| *i < 256)
-                .ok_or_else(|| at(format!("palette index {:?} is not a number from 0 to 255", i.trim())))?;
+                .ok_or_else(|| at(format!("palette index {:?} is not a number from 0 to 255", clip(i.trim()))))?;
             let c = colour(c.trim())?;
             if let Some(slot) = g.ansi.get_mut(i) {
                 *slot = Some(c); // 16 to 255 are valid Ghostty but leon computes those (theme::indexed)
@@ -92,8 +101,9 @@ fn ghostty(text: &str) -> Result<Given, String> {
             g.named.push((key.to_string(), colour(value)?));
         } else {
             return Err(at(format!(
-                "{key} is not a theme colour (a theme sets background, foreground, cursor-color, \
-                 selection-background and palette)"
+                "{} is not a theme colour (a theme sets background, foreground, cursor-color, \
+                 selection-background and palette)",
+                clip(key)
             )));
         }
     }
@@ -101,15 +111,19 @@ fn ghostty(text: &str) -> Result<Given, String> {
 }
 
 fn iterm(text: &str) -> Result<Given, String> {
-    // The DTD line every .itermcolors has needs allow_dtd; roxmltree never fetches it and bounds
-    // entity expansion, and the node limit bounds the rest.
+    // The DTD line every .itermcolors has needs allow_dtd (roxmltree never fetches it). Entities
+    // are refused outright: roxmltree bounds their nesting, not how often a file uses one, so a
+    // 1 MiB file could expand to gigabytes. With none, the parse is linear and the node limit holds.
+    if text.contains("<!ENTITY") {
+        return Err("not an iTerm2 colour file: it declares XML entities, which those never do".into());
+    }
     let opt = roxmltree::ParsingOptions { allow_dtd: true, nodes_limit: 100_000 };
     let doc = roxmltree::Document::parse_with_options(text, opt).map_err(|e| format!("not a valid XML plist: {e}"))?;
     let root = doc.root_element();
     if !root.has_tag_name("plist") {
         return Err(format!(
             "not an iTerm2 colour file: the root element is <{}>, not <plist>",
-            root.tag_name().name()
+            clip(root.tag_name().name())
         ));
     }
     let dict = root.children().find(|n| n.is_element()).filter(|n| n.has_tag_name("dict"));
@@ -118,11 +132,11 @@ fn iterm(text: &str) -> Result<Given, String> {
     let mut items = dict.children().filter(|n| n.is_element());
     while let Some(k) = items.next() {
         if !k.has_tag_name("key") {
-            return Err(format!("expected a <key> in the colour <dict>, found <{}>", k.tag_name().name()));
+            return Err(format!("expected a <key> in the colour <dict>, found <{}>", clip(k.tag_name().name())));
         }
-        let name = k.text().unwrap_or_default();
+        let name = &clip(k.text().unwrap_or_default());
         let value = items.next().ok_or_else(|| format!("{name} has no value"))?;
-        let key = match name {
+        let key = match name.as_str() {
             "Background Color" => "background",
             "Foreground Color" => "foreground",
             "Cursor Color" => "cursor-color",
@@ -150,7 +164,7 @@ fn iterm(text: &str) -> Result<Given, String> {
 /// An iTerm2 colour: a <dict> of `Red/Green/Blue Component` reals from 0 to 1.
 fn component_dict(d: roxmltree::Node) -> Result<u32, String> {
     if !d.has_tag_name("dict") {
-        return Err(format!("expected a colour <dict>, found <{}>", d.tag_name().name()));
+        return Err(format!("expected a colour <dict>, found <{}>", clip(d.tag_name().name())));
     }
     let els: Vec<_> = d.children().filter(|n| n.is_element()).collect();
     let mut rgb = 0;
