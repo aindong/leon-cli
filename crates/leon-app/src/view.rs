@@ -465,12 +465,12 @@ impl Workspace {
             .border_color(rgb(t.border))
             .child(
                 div()
-                    .h(px(TAB_BAR_HEIGHT + 6.))
+                    .mt(px(TAB_BAR_HEIGHT)) // the traffic lights' row
+                    .h(px(28.))
                     .flex()
-                    .items_end()
+                    .items_center()
                     .justify_between()
                     .px(px(14.))
-                    .pb(px(6.))
                     .text_xs()
                     .text_color(rgb(t.muted))
                     .child("SESSIONS")
@@ -489,7 +489,9 @@ impl Workspace {
                     ),
             )
             .child(div().flex_1().child(list))
-            .child(div().p(px(14.)).text_xs().text_color(rgb(t.muted)).child("⌘N session · ⌘T tab · ⌘B sidebar"))
+            .child(
+                div().p(px(14.)).text_xs().whitespace_nowrap().text_color(rgb(t.muted)).child("⌘N session  ·  ⌘T tab"),
+            )
     }
 
     fn render_tabs(&self, row: Option<&SessionRow>, cx: &mut Context<Self>) -> impl IntoElement {

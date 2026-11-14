@@ -4,6 +4,17 @@
 # frames draw (t < 3 s), the app is still alive at the end, and no stats line appears after 3 s.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# A locked screen marks every window occluded and GPUI stops drawing, so "no frames" would prove nothing.
+locked=$(swift - 2>/dev/null <<'SWIFT' || echo 0
+import CoreGraphics
+let d = CGSessionCopyCurrentDictionary() as? [String: Any] ?? [:]
+print(d["CGSSessionScreenIsLocked"] as? Int ?? 0)
+SWIFT
+)
+if [ "$locked" = 1 ]; then
+  echo "idle-frames: the screen is locked; can't measure drawing (exit 2)"
+  exit 2
+fi
 cargo build --release -q -p leon
 dir=$(mktemp -d)
 chmod 700 "$dir"
