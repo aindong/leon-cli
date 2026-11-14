@@ -1,31 +1,37 @@
-//! The `leon` table for config files, and the sandbox around it.
+//! The `leon` table's config functions, and the sandbox around every Lua state.
 
 use std::path::Path;
+use std::rc::Rc;
 
 use mlua::{FromLua, FromLuaMulti, Function, IntoLuaMulti, Lua, LuaSerdeExt, MultiValue, Table, Value};
 use serde_json::json;
 
 use crate::keys::{self, KeySpec};
+use crate::runtime::Flags;
 use crate::{Action, Binding, Config, Diagnostic, Level, Mode, Target, Unbind};
 
-/// Load-time state, kept in the Lua state's app data.
+/// The config (or script) declarations, kept in the Lua state's app data.
 #[derive(Default)]
-struct State {
-    entries: Vec<Entry>,
-    next_id: i64,
+pub(crate) struct State {
+    pub(crate) entries: Vec<Entry>,
+    pub(crate) next_id: i64,
     /// Everything but `bindings`, which come from `entries` at the end.
-    cfg: Config,
+    pub(crate) cfg: Config,
+    /// `run` functions of `leon.action`, by name.
+    pub(crate) runs: Vec<(String, Function)>,
+    /// Past the load (or in a script): config-only calls refuse, bad calls aren't diagnosed, logs go to stderr.
+    pub(crate) live: bool,
 }
 
-struct Entry {
+pub(crate) struct Entry {
     /// Lets `leon.unbind(binding)` find exactly one.
     id: i64,
-    b: Binding,
-    func: Option<Function>,
+    pub(crate) b: Binding,
+    pub(crate) func: Option<Function>,
 }
 
 /// Why a `leon.*` call was skipped.
-struct Bad(String);
+pub(crate) struct Bad(pub(crate) String);
 
 impl From<String> for Bad {
     fn from(s: String) -> Self {
@@ -45,24 +51,32 @@ impl From<mlua::Error> for Bad {
     }
 }
 
-pub(crate) fn run(path: &Path, src: &[u8]) -> mlua::Result<Config> {
-    let lua = Lua::new();
-    lua.set_app_data(State::default());
-    sandbox(&lua, path)?;
-    lua.globals().set("leon", leon_table(&lua)?)?;
+/// Run a config chunk into `lua`, whose `State` app data is already set.
+pub(crate) fn exec_chunk(lua: &Lua, path: &Path, src: &[u8]) -> mlua::Result<()> {
     // Like luaL_loadfile (which `require` uses), ignore a `#` first line but keep its newline.
     let src =
         if src.starts_with(b"#") { &src[src.iter().position(|&b| b == b'\n').unwrap_or(src.len())..] } else { src };
-    let result = lua.load(src).set_name(format!("@{}", path.display())).exec();
-    let st = lua.remove_app_data::<State>().expect("leon state");
-    result?;
-    let mut cfg = st.cfg;
-    cfg.bindings = st.entries.into_iter().map(|e| e.b).collect();
-    Ok(cfg)
+    lua.load(src).set_name(format!("@{}", path.display())).exec()
 }
 
-fn sandbox(lua: &Lua, path: &Path) -> mlua::Result<()> {
-    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+/// The bindings so far, as a `Config` would list them.
+pub(crate) fn config(lua: &Lua) -> Config {
+    let st = state(lua);
+    let c = &st.cfg;
+    Config {
+        bindings: st.entries.iter().map(|e| e.b.clone()).collect(),
+        modes: c.modes.clone(),
+        actions: c.actions.clone(),
+        unbinds: c.unbinds.clone(),
+        diagnostics: c.diagnostics.clone(),
+        logs: c.logs.clone(),
+    }
+}
+
+/// `require` finds siblings in `dir`; no C modules, no full debug library; `io.popen`, `os.execute`
+/// and `os.exit` raise; and `pcall`, `xpcall` and `coroutine.resume` re-raise once `flags` says the
+/// run is over (timed out or `leon.stop`), so Lua code can't catch its way past either.
+pub(crate) fn sandbox(lua: &Lua, dir: &Path, flags: &Rc<Flags>) -> mlua::Result<()> {
     let package: Table = lua.globals().get("package")?;
     // shortcut: a config dir whose path holds `?` or `;` breaks these templates; escape them if anyone hits it.
     package.set("path", format!("{0}/?.lua;{0}/?/init.lua", dir.display()))?;
@@ -78,21 +92,37 @@ fn sandbox(lua: &Lua, path: &Path) -> mlua::Result<()> {
         })?,
     )?;
     lua.globals().set("debug", debug)?;
+    let f = flags.clone();
+    let aborted = lua.create_function(move |_, ()| Ok(f.abort.borrow().clone()))?;
     lua.load(
-        r#"io.popen = function() error("io.popen is not available in leon; use leon.exec", 2) end
-           os.execute = function() error("os.execute is not available in leon; use leon.exec", 2) end"#,
+        r#"local aborted = ...
+           local function gone(name)
+             return function() error(name .. " is not available in leon; use leon.exec", 2) end
+           end
+           io.popen, os.execute, os.exit = gone("io.popen"), gone("os.execute"), gone("os.exit")
+           local function check(ok, ...)
+             if not ok then
+               local m = aborted()
+               if m then error(m, 0) end
+             end
+             return ok, ...
+           end
+           local pcall0, xpcall0, resume0 = pcall, xpcall, coroutine.resume
+           pcall = function(...) return check(pcall0(...)) end
+           xpcall = function(f, h) return check(xpcall0(f, h)) end
+           coroutine.resume = function(...) return check(resume0(...)) end"#,
     )
     .set_name("=sandbox")
-    .exec()
+    .call(aborted)
 }
 
-fn state(lua: &Lua) -> mlua::AppDataRefMut<'_, State> {
+pub(crate) fn state(lua: &Lua) -> mlua::AppDataRefMut<'_, State> {
     lua.app_data_mut::<State>().expect("leon state")
 }
 
 /// `file:line` of the Lua code calling the running `leon.*` function.
 /// Skips C frames, so `pcall(leon.bind, …)` still points at the config line.
-fn caller(lua: &Lua) -> String {
+pub(crate) fn caller(lua: &Lua) -> String {
     (1..)
         .map_while(|level| {
             lua.inspect_stack(level, |d| {
@@ -107,7 +137,11 @@ fn caller(lua: &Lua) -> String {
 
 /// A `leon.NAME` function that never raises: a bad call is recorded as an error diagnostic at the
 /// caller's line and returns `nil, message`.
-fn func<A, R>(lua: &Lua, name: &'static str, f: impl Fn(&Lua, A) -> Result<R, Bad> + 'static) -> mlua::Result<Function>
+pub(crate) fn func<A, R>(
+    lua: &Lua,
+    name: &'static str,
+    f: impl Fn(&Lua, A) -> Result<R, Bad> + 'static,
+) -> mlua::Result<Function>
 where
     A: FromLuaMulti,
     R: IntoLuaMulti,
@@ -116,21 +150,23 @@ where
         match A::from_lua_multi(args, lua).map_err(Bad::from).and_then(|a| f(lua, a)) {
             Ok(r) => r.into_lua_multi(lua),
             Err(Bad(msg)) => {
-                let at = caller(lua);
-                let message = format!("leon.{name}: {msg}");
-                state(lua).cfg.diagnostics.push(Diagnostic { level: Level::Error, at, message });
+                if !state(lua).live {
+                    let at = caller(lua);
+                    let message = format!("leon.{name}: {msg}");
+                    state(lua).cfg.diagnostics.push(Diagnostic { level: Level::Error, at, message });
+                }
                 (Value::Nil, msg).into_lua_multi(lua)
             }
         }
     })
 }
 
-fn field<T: FromLua>(t: &Table, k: &str) -> Result<Option<T>, Bad> {
+pub(crate) fn field<T: FromLua>(t: &Table, k: &str) -> Result<Option<T>, Bad> {
     t.get::<Option<T>>(k).map_err(|e| Bad(format!("{k}: {e}")))
 }
 
 /// A boolean option; Lua truthiness would turn `"false"` or `0` into true.
-fn flag(t: &Table, k: &str) -> Result<bool, Bad> {
+pub(crate) fn flag(t: &Table, k: &str) -> Result<bool, Bad> {
     match t.get::<Value>(k)? {
         Value::Nil => Ok(false),
         Value::Boolean(b) => Ok(b),
@@ -142,14 +178,30 @@ fn required<T: FromLua>(t: &Table, k: &str) -> Result<T, Bad> {
     field(t, k)?.ok_or_else(|| Bad(format!("{k} is required")))
 }
 
-fn leon_table(lua: &Lua) -> mlua::Result<Table> {
+/// A config-only call: refused once the config has loaded (from an action, say).
+fn loading<A, R>(f: impl Fn(&Lua, A) -> Result<R, Bad> + 'static) -> impl Fn(&Lua, A) -> Result<R, Bad> + 'static {
+    move |lua, a| {
+        if state(lua).live {
+            return Err("only works while the config loads".into());
+        }
+        f(lua, a)
+    }
+}
+
+/// The `leon` table's declaration functions: every config one, or the few a script also has.
+pub(crate) fn leon_table(lua: &Lua, script: bool) -> mlua::Result<Table> {
     let leon = lua.create_table()?;
-    leon.set("bind", func(lua, "bind", bind)?)?;
-    leon.set("unbind", func(lua, "unbind", unbind)?)?;
-    leon.set("mode", func(lua, "mode", mode)?)?;
-    leon.set("bindings", func(lua, "bindings", bindings)?)?;
-    leon.set("modes", func(lua, "modes", modes)?)?;
-    leon.set("action", func(lua, "action", action)?)?;
+    if script {
+        leon.set("action", func(lua, "action", action)?)?;
+    } else {
+        leon.set("bind", func(lua, "bind", loading(bind))?)?;
+        leon.set("unbind", func(lua, "unbind", loading(unbind))?)?;
+        leon.set("mode", func(lua, "mode", loading(mode))?)?;
+        leon.set("bindings", func(lua, "bindings", loading(bindings))?)?;
+        leon.set("modes", func(lua, "modes", loading(modes))?)?;
+        leon.set("action", func(lua, "action", loading(action))?)?;
+        leon.set("on", func(lua, "on", on_in_config)?)?;
+    }
     leon.set("log", func(lua, "log", log)?)?;
     let json = lua.create_table()?;
     json.set(
@@ -353,7 +405,7 @@ fn action(lua: &Lua, t: Table) -> Result<(), Bad> {
         return Err(format!("bad action name {name:?}: use [a-z0-9_], no dot").into());
     }
     let title: String = required(&t, "title")?;
-    let _run: Function = required(&t, "run")?;
+    let run: Function = required(&t, "run")?;
     let args = field::<Table>(&t, "args")?.map(args_schema).transpose()?;
     let source = caller(lua);
     let a = Action {
@@ -372,7 +424,17 @@ fn action(lua: &Lua, t: Table) -> Result<(), Bad> {
         let message = format!("action {:?} redefined (was {}), newest wins", a.name, old.source);
         st.cfg.diagnostics.push(Diagnostic { level: Level::Warning, at: a.source.clone(), message });
     }
+    st.runs.retain(|(n, _)| *n != a.name);
+    st.runs.push((a.name.clone(), run));
     st.cfg.actions.push(a);
+    Ok(())
+}
+
+/// `leon.on` in a config: there are no events at load time, so the handler would never fire.
+fn on_in_config(lua: &Lua, _: MultiValue) -> Result<(), Bad> {
+    let at = caller(lua);
+    let message = "leon.on: only scripts (`leon do`) get events; this handler never fires".into();
+    state(lua).cfg.diagnostics.push(Diagnostic { level: Level::Warning, at, message });
     Ok(())
 }
 
@@ -430,6 +492,10 @@ fn log(lua: &Lua, (a, b): (String, Option<String>)) -> Result<(), Bad> {
         }
     };
     let at = caller(lua);
-    state(lua).cfg.logs.push(Diagnostic { level, at, message });
+    if state(lua).live {
+        eprintln!("{at}: {}: {message}", level.as_str());
+    } else {
+        state(lua).cfg.logs.push(Diagnostic { level, at, message });
+    }
     Ok(())
 }
