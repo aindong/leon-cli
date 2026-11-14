@@ -20,6 +20,9 @@
                 "name": {
                   "type": "string"
                 },
+                "description": {
+                  "type": "string"
+                },
                 "stability": {
                   "oneOf": [
                     {
@@ -96,6 +99,9 @@
                     "type": "object",
                     "properties": {
                       "name": {
+                        "type": "string"
+                      },
+                      "description": {
                         "type": "string"
                       },
                       "stability": {
@@ -579,10 +585,10 @@
                                   "format": "double"
                                 },
                                 "before": {
-                                  "$ref": "Node"
+                                  "$ref": "#1"
                                 },
                                 "after": {
-                                  "$ref": "Node"
+                                  "$ref": "#1"
                                 }
                               },
                               "required": [
@@ -950,6 +956,12 @@
                   ],
                   "format": "int32"
                 },
+                "title": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "cwd": {
                   "type": [
                     "string",
@@ -1032,6 +1044,12 @@
               "null"
             ],
             "format": "int32"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "cwd": {
             "type": [
@@ -1230,7 +1248,12 @@
                         "default": false
                       }
                     },
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "default": {
+                      "shift": false,
+                      "alt": false,
+                      "ctrl": false
+                    }
                   }
                 },
                 "additionalProperties": false,
@@ -1278,7 +1301,12 @@
                         "default": false
                       }
                     },
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "default": {
+                      "shift": false,
+                      "alt": false,
+                      "ctrl": false
+                    }
                   }
                 },
                 "additionalProperties": false,
@@ -1968,10 +1996,10 @@
                                       "format": "double"
                                     },
                                     "before": {
-                                      "$ref": "Node"
+                                      "$ref": "#2"
                                     },
                                     "after": {
-                                      "$ref": "Node"
+                                      "$ref": "#2"
                                     }
                                   },
                                   "required": [

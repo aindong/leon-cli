@@ -361,6 +361,7 @@ and response example.
 ### `leon api call METHOD [ARGS]`
 
 Call a method with JSON params (inline, `@file`, or `-` for stdin). `-s` fills `session_id`.
+A block method isn't called here: it fails, pointing at `leon block call`.
 
 ```sh
 leon api list

@@ -15,25 +15,6 @@ fn guide() -> String {
     std::fs::read_to_string(help_walk::repo().join("docs/integrators.md")).expect("docs/integrators.md exists")
 }
 
-/// The text of each fenced block tagged `lang`.
-fn blocks(doc: &str, lang: &str) -> Vec<String> {
-    let mut out = vec![];
-    let mut cur: Option<(bool, String)> = None;
-    for line in doc.lines() {
-        if let Some(info) = line.trim_start().strip_prefix("```") {
-            match cur.take() {
-                Some((true, text)) => out.push(text),
-                Some(_) => {}
-                None => cur = Some((info.trim() == lang, String::new())),
-            }
-        } else if let Some((_, text)) = cur.as_mut() {
-            text.push_str(line);
-            text.push('\n');
-        }
-    }
-    out
-}
-
 /// Run the guide's client with `cmd`'s environment; return what it printed.
 fn run_client(code: &str, dir: &std::path::Path, mut cmd: Command) -> String {
     let script = dir.join("client.py");
@@ -80,7 +61,7 @@ fn check(out: &str, api_version: &str) {
 
 #[test]
 fn python_client_runs_against_a_real_server() {
-    let code = blocks(&guide(), "python");
+    let code = help_walk::blocks(&guide(), "python");
     assert_eq!(code.len(), 1, "the guide has exactly one python block");
     let lines = code[0].lines().count();
     assert!((30..=70).contains(&lines), "the example is about 50 lines, not {lines}");
@@ -103,10 +84,16 @@ fn python_client_runs_against_a_real_server() {
     };
     let out = leon(&["new", "already-here"]).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    // `home`'s own Drop stops the server at its LEON_RUNTIME_DIR, not this one: stop it even if the client fails.
+    struct Stop(Command);
+    impl Drop for Stop {
+        fn drop(&mut self) {
+            let _ = self.0.output();
+        }
+    }
+    let _stop = Stop(leon(&["--autostart=false", "server", "stop"]));
     assert!(home.dir.path().join(".local/state/leon/run/server.sock").exists(), "the server took the default path");
-    let printed = run_client(&code[0], home.dir.path(), python(&leon(&[])));
-    let _ = leon(&["--autostart=false", "server", "stop"]).output();
-    check(&printed, api_version);
+    check(&run_client(&code[0], home.dir.path(), python(&leon(&[]))), api_version);
 }
 
 #[test]

@@ -229,23 +229,38 @@ fn api_md_matches_the_registry() {
 
 // ---- docs/api-snapshot.json --------------------------------------------------------------------
 
-/// A schema without its prose and with its refs inlined (a recursive one stays a ref), so a doc
-/// edit or a renamed Rust type isn't an API change.
+/// A schema without its prose and with its refs inlined, so a doc edit or a renamed Rust type
+/// isn't an API change. A ref's sibling keywords (`default`) are kept; a recursive ref becomes
+/// `{"$ref": "#<depth>"}`, the level of the type it points back to.
 fn normal(s: &Value, defs: &Map<String, Value>, stack: &mut Vec<String>) -> Value {
     match s {
         Value::Object(o) => {
+            let mut out = Map::new();
             if let Some(r) = o.get("$ref").and_then(Value::as_str) {
                 let name = r.rsplit('/').next().unwrap().to_string();
-                if stack.contains(&name) {
-                    return json!({ "$ref": name });
+                if let Some(depth) = stack.iter().position(|n| *n == name) {
+                    out.insert("$ref".into(), json!(format!("#{depth}")));
+                } else {
+                    stack.push(name.clone());
+                    if let Value::Object(inlined) = normal(&defs[&name], defs, stack) {
+                        out = inlined;
+                    }
+                    stack.pop();
                 }
-                stack.push(name.clone());
-                let v = normal(&defs[&name], defs, stack);
-                stack.pop();
-                return v;
             }
-            let kept = o.iter().filter(|(k, _)| !matches!(k.as_str(), "description" | "title" | "$schema" | "$defs"));
-            Value::Object(kept.map(|(k, v)| (k.clone(), normal(v, defs, stack))).collect())
+            for (k, v) in o {
+                let v = match k.as_str() {
+                    "$ref" | "description" | "title" | "$schema" | "$defs" => continue,
+                    // field names, not keywords: every one is kept
+                    "properties" => match v.as_object() {
+                        Some(p) => Value::Object(p.iter().map(|(f, x)| (f.clone(), normal(x, defs, stack))).collect()),
+                        None => normal(v, defs, stack),
+                    },
+                    _ => normal(v, defs, stack),
+                };
+                out.insert(k.clone(), v);
+            }
+            Value::Object(out)
         }
         Value::Array(a) => Value::Array(a.iter().map(|v| normal(v, defs, stack)).collect()),
         v => v.clone(),
@@ -285,19 +300,33 @@ fn changes(old: &Value, new: &Value) -> Vec<String> {
     changed
 }
 
-/// Whether blessing may write `new` over `old`: a change to the stable methods needs a new
-/// api_version, so it can't be blessed in by accident.
+fn semver(v: &Value) -> (u64, u64, u64) {
+    let n: Vec<u64> = v.as_str().unwrap_or("").split('.').map(|p| p.parse().unwrap_or(0)).collect();
+    (n.first().copied().unwrap_or(0), n.get(1).copied().unwrap_or(0), n.get(2).copied().unwrap_or(0))
+}
+
+/// Whether blessing may write `new` over `old`. A change to the stable methods needs a higher
+/// api_version: a removal a major one, any other change at least a minor one (a patch changes no
+/// schema). It can't tell an added optional field from a breaking edit; that choice is the author's.
 fn may_bless(old: Option<&Value>, new: &Value) -> Result<(), String> {
     let Some(old) = old else { return Ok(()) };
     let changed = changes(&old["methods"], &new["methods"]);
-    if changed.is_empty() || old["api_version"] != new["api_version"] {
+    let (was, now) = (semver(&old["api_version"]), semver(&new["api_version"]));
+    if changed.is_empty() {
+        return if now >= was { Ok(()) } else { Err(format!("API_VERSION went down from {was:?} to {now:?}")) };
+    }
+    let removed = changed.iter().any(|c| c.starts_with("removed"));
+    let need = if removed { "a major" } else { "at least a minor" };
+    let ok = if removed { now.0 > was.0 } else { now > was && (now.0, now.1) != (was.0, was.1) };
+    if ok {
         return Ok(());
     }
     Err(format!(
-        "the stable API changed ({}) but API_VERSION is still {}: bump it first (major for a \
-         breaking change, minor for an addition; docs/integrators.md#compatibility)",
+        "the stable API changed ({}) but API_VERSION {} isn't {need} bump over {}; \
+         see docs/integrators.md#compatibility",
         changed.join(", "),
-        new["api_version"]
+        new["api_version"],
+        old["api_version"]
     ))
 }
 
@@ -310,7 +339,18 @@ fn bless_needs_a_new_version_for_a_changed_api() {
     assert!(may_bless(Some(&snap("1.0.0", a.clone())), &snap("1.0.0", a.clone())).is_ok(), "nothing changed");
     assert!(may_bless(Some(&snap("1.0.0", a.clone())), &snap("1.0.0", b.clone())).is_err(), "changed, same version");
     assert!(may_bless(Some(&snap("1.0.0", a.clone())), &snap("1.0.0", json!({}))).is_err(), "removed, same version");
-    assert!(may_bless(Some(&snap("1.0.0", a)), &snap("1.1.0", b)).is_ok(), "changed with a bump");
+    assert!(may_bless(Some(&snap("1.0.0", a.clone())), &snap("1.1.0", b.clone())).is_ok(), "changed with a minor bump");
+    assert!(
+        may_bless(Some(&snap("1.0.0", a.clone())), &snap("1.0.1", b.clone())).is_err(),
+        "a patch changes no schema"
+    );
+    assert!(may_bless(Some(&snap("1.1.0", a.clone())), &snap("1.0.0", b.clone())).is_err(), "a lower version");
+    assert!(may_bless(Some(&snap("1.0.0", a.clone())), &snap("1.1.0", json!({}))).is_err(), "a removal needs a major");
+    assert!(may_bless(Some(&snap("1.0.0", a.clone())), &snap("2.0.0", json!({}))).is_ok(), "removed with a major bump");
+    assert!(
+        may_bless(Some(&snap("1.1.0", a.clone())), &snap("1.0.0", a)).is_err(),
+        "no change, but the version went down"
+    );
 }
 
 #[test]
@@ -362,13 +402,13 @@ fn changelog_names_every_landed_milestone_and_the_api_version() {
     );
     assert!(log.contains("## [Unreleased]"), "an Unreleased section");
     let headings: Vec<&str> = log.lines().filter(|l| l.starts_with("## ")).collect();
-    for n in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 16, 17] {
-        let tag = format!("M{n}");
+    for tag in ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10", "M11", "M14", "M16a", "M17"] {
         let found = headings.iter().any(|h| {
-            h.match_indices(&tag).any(|(at, _)| !h[at + tag.len()..].starts_with(|c: char| c.is_ascii_digit()))
+            h.match_indices(tag).any(|(at, _)| !h[at + tag.len()..].starts_with(|c: char| c.is_ascii_alphanumeric()))
         });
         assert!(found, "no `## ` heading for {tag}");
     }
+    assert!(log.contains("haven't landed"), "says which milestones haven't landed yet");
     let v = help()["api_version"].as_str().unwrap().to_string();
     assert!(log.contains("api_version"), "says how to read api_version");
     assert!(log.contains(&format!("`{v}`")), "names the current api_version `{v}`");

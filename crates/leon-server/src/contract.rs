@@ -26,11 +26,11 @@ pub enum Stability {
 #[derive(Serialize, JsonSchema, Clone, Debug)]
 pub struct Deprecated {
     /// The api_version that deprecated the method.
-    pub since: String,
+    pub since: &'static str,
     /// The method to call instead.
-    pub replacement: String,
+    pub replacement: &'static str,
     /// The api_version that removes it (a major one).
-    pub removal: String,
+    pub removal: &'static str,
 }
 
 use Stability::{Experimental, Internal, Stable};
@@ -90,8 +90,8 @@ const STABILITY: &[(&str, Stability)] = &[
     ("dev.leon.terminal.link_at", Experimental),
 ];
 
-/// (method, since, replacement, removal). None yet.
-const DEPRECATED: &[(&str, &str, &str, &str)] = &[];
+/// Methods on their way out. None yet.
+const DEPRECATED: &[(&str, Deprecated)] = &[];
 
 /// Every method the table has a line for.
 pub fn named() -> impl Iterator<Item = &'static str> {
@@ -102,11 +102,7 @@ pub fn named() -> impl Iterator<Item = &'static str> {
 pub(crate) fn doc(name: &str, description: &str, input_schema: Value, output_schema: Value) -> MethodDoc {
     // A method missing from the table is promised nothing; the contract test fails on it anyway.
     let stability = STABILITY.iter().find(|(n, _)| *n == name).map_or(Experimental, |(_, s)| *s);
-    let deprecated = DEPRECATED.iter().find(|d| d.0 == name).map(|d| Deprecated {
-        since: d.1.into(),
-        replacement: d.2.into(),
-        removal: d.3.into(),
-    });
+    let deprecated = DEPRECATED.iter().find(|(n, _)| *n == name).map(|(_, d)| d.clone());
     let (request_example, response_example) = example(name).unzip();
     MethodDoc {
         name: name.into(),

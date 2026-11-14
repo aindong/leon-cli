@@ -71,13 +71,16 @@ for people:
 | `bad_request` | 400 | The params don't fit the method's input schema (unknown fields are refused), or a value is out of range. |
 | `not_found`, `session_not_found` | 404 | No such block, window or session. |
 | `method_not_found` | 404 | No such method (or block method). |
-| `timeout` | 408 | A wait ran past its `timeout_ms`. |
+| `timeout` | 408 | A wait ran past its `timeout_ms` (504 when a config action ran out of time). |
 | `ambiguous`, `conflict` | 409 | A query matches more than one target; or the state forbids it (`server.stop` with `if_idle` while sessions exist). |
 | `resume_failed` | 410 | The event stream to resume is gone; attach again. |
+| `request_too_large` | 413 | A request line over 1 MiB; the connection closes. |
 | `io` | 500 | Writing to a terminal or similar failed. |
 | `shutting_down` | 503 | The server is stopping. |
 
-Match on `code`, never on `message`, whose words may change. A line the server can't read as a
+The table isn't complete (config actions add `config_error`, `action_failed` and `unavailable`),
+and new codes may come in a minor release. Match on `code`, never on `message`, whose words may
+change, and treat a code you don't know by its `status`. A line the server can't read as a
 request gets an error with `"id": null`.
 
 IDs are opaque strings such as `session:…`, `window:…` and `block:…`. Keep them; they stay the
@@ -121,7 +124,10 @@ class Leon:
         self.file.write(json.dumps(request).encode() + b"\n")
         self.file.flush()
         while True:
-            reply = json.loads(self.file.readline())
+            line = self.file.readline()
+            if not line:
+                raise RuntimeError(f"{method}: the server closed the connection")
+            reply = json.loads(line)
             if reply.get("id") == self.last_id:
                 break  # other lines are events or screens, if this connection asked for them
         if "error" in reply:
@@ -137,7 +143,7 @@ if not api.startswith("1."):
 print("api_version", api)
 
 for s in leon.call("session.list")["sessions"]:
-    print("session", s["session_id"], s["label"] or "-", s["windows"], "windows")
+    print("session", s["session_id"], s.get("label") or "-", s["windows"], "windows")
 
 # Keep the block open when its program exits, so the session is still there to destroy.
 options = {"command": ["sh", "-c", "echo hello from leon; exit 3"], "exit": {"on_completion": False}}
@@ -252,8 +258,10 @@ today.
 
 **How it is held.** [api-snapshot.json](api-snapshot.json) keeps the input and output schemas of
 every stable method, block methods included. A test compares the server's schemas with it and
-fails on any difference; the snapshot can only be updated together with a new `API_VERSION`
-(`crates/leon-server/src/contract.rs`). Event bodies have no schema in the registry, so the event
+fails on any difference; the snapshot can only be updated together with a higher `API_VERSION`
+(`crates/leon-server/src/contract.rs`): a major one when a stable method is removed or stops
+being stable, at least a minor one for any other change. The test can't tell an added optional
+field from a breaking edit inside a method, so that choice stays with the author and reviewer. Event bodies have no schema in the registry, so the event
 names and fields shown in this guide are covered by the policy but not checked by that test.
 
 **Not covered:** the wording of descriptions and error messages, the order of keys in an object,
