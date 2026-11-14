@@ -10,6 +10,7 @@ license = "MIT"
 [workspace.dependencies]
 leon-core = { path = "crates/leon-core" }
 leon-server = { path = "crates/leon-server" }
+base64 = "0.22"
 clap = { version = "4.6", features = ["derive", "env"] }
 libc = "0.2"
 schemars = "1.2"

@@ -1,8 +1,9 @@
-//! leon's object model: sessions and windows with stable IDs, and target resolution.
+//! leon's object model: sessions and windows with stable IDs, target resolution, and OSC 7501 program status.
 
 pub mod error;
 pub mod model;
 pub mod paths;
+pub mod program_status;
 pub mod target;
 
 pub use error::ApiError;

@@ -95,9 +95,15 @@ fn grammar_rules() {
         ("state=idle:app=a/b".into(), set(None, rec(State::Idle))),
         ("state=idle:app=".into(), set(None, rec(State::Idle))),
         // title / msg: base64 UTF-8, padded or not
-        (format!("state=done:title={}", b64("hello")), set(None, Record { title: Some("hello".into()), ..rec(State::Done) })),
+        (
+            format!("state=done:title={}", b64("hello")),
+            set(None, Record { title: Some("hello".into()), ..rec(State::Done) }),
+        ),
         ("state=done:title=aGVsbG8".into(), set(None, Record { title: Some("hello".into()), ..rec(State::Done) })),
-        (format!("state=error:msg={}", b64("héllo")), set(None, Record { msg: Some("héllo".into()), ..rec(State::Error) })),
+        (
+            format!("state=error:msg={}", b64("héllo")),
+            set(None, Record { msg: Some("héllo".into()), ..rec(State::Error) }),
+        ),
         ("state=done:title=a".into(), set(None, rec(State::Done))),
         ("state=done:title=/w==".into(), set(None, rec(State::Done))),
         ("state=done:title=".into(), set(None, rec(State::Done))),
@@ -128,7 +134,10 @@ fn limits_discard_the_whole_report() {
         (format!("state=idle:{key17}=1"), Err(Ignored::TooLong("key"))),
         (format!("state=idle:app={app32}"), set(None, Record { app: Some(app32.clone()), ..rec(State::Idle) })),
         (format!("state=idle:app={app33}"), Err(Ignored::TooLong("app"))),
-        (format!("state=done:title={title192}"), set(None, Record { title: Some("t".repeat(192)), ..rec(State::Done) })),
+        (
+            format!("state=done:title={title192}"),
+            set(None, Record { title: Some("t".repeat(192)), ..rec(State::Done) }),
+        ),
         (format!("state=done:title={title193}"), Err(Ignored::TooLong("title"))),
         (format!("state=done:title={}", "A".repeat(257)), Err(Ignored::TooLong("title"))),
         (format!("state=done:msg={msg2048}"), set(None, Record { msg: Some("m".repeat(2048)), ..rec(State::Done) })),
@@ -168,9 +177,28 @@ fn sequence_limit_is_4096_bytes_including_esc_and_terminator() {
 #[test]
 fn unsafe_text_drops_the_field_and_emoji_survive() {
     let rejected = [
-        "a\nb", "a\rb", "tab\there", "\u{7f}", "\u{85}", "\u{9b}31m", "\u{1b}[31m", "\u{202e}evil", "\u{2066}x",
-        "\u{200e}", "\u{200f}", "\u{61c}", "\u{200b}", "\u{200c}", "\u{2060}", "\u{feff}", "\u{ad}", "\u{2028}",
-        "\u{2029}", "\u{180e}", "\u{3164}", "\u{e0041}",
+        "a\nb",
+        "a\rb",
+        "tab\there",
+        "\u{7f}",
+        "\u{85}",
+        "\u{9b}31m",
+        "\u{1b}[31m",
+        "\u{202e}evil",
+        "\u{2066}x",
+        "\u{200e}",
+        "\u{200f}",
+        "\u{61c}",
+        "\u{200b}",
+        "\u{200c}",
+        "\u{2060}",
+        "\u{feff}",
+        "\u{ad}",
+        "\u{2028}",
+        "\u{2029}",
+        "\u{180e}",
+        "\u{3164}",
+        "\u{e0041}",
     ];
     for text in rejected {
         for key in ["title", "msg"] {

@@ -75,7 +75,7 @@ fn app_is_inherited_from_the_nearest_ancestor() {
     assert_eq!(s.get(Some("a/z/c")).unwrap().app.as_deref(), Some("claude"), "skips the missing a/z");
     assert_eq!(s.get(Some("x")).unwrap().app.as_deref(), Some("claude"), "resolved when read");
     let listed = s.records();
-    assert_eq!(listed.len(), 5);
+    assert_eq!(listed.len(), 6, "x, root, a, a/b, a/b/c, a/z/c");
     assert!(listed.iter().all(|(_, r)| r.app.is_some()), "records() resolves app too: {listed:?}");
 }
 
@@ -141,7 +141,8 @@ fn lru_eviction_at_256_records() {
 #[test]
 fn lifetime_hooks() {
     let fill = |s: &mut Store| {
-        for p in ["state=working:id=a", "state=blocked:id=b", "state=idle:id=c", "state=done:id=d", "state=error:id=e"] {
+        for p in ["state=working:id=a", "state=blocked:id=b", "state=idle:id=c", "state=done:id=d", "state=error:id=e"]
+        {
             s.apply(msg(p));
         }
     };
