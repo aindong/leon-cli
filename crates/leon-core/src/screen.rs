@@ -11,11 +11,12 @@ use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::term::{Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::theme::{indexed, mix, Theme};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Span {
     pub col: usize,
     /// Columns covered (a wide char counts two, combining marks none).
@@ -29,7 +30,7 @@ pub struct Span {
 }
 
 /// A run of cells on one line with a non-default background.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct BgRect {
     pub line: usize,
     pub col: usize,
@@ -37,11 +38,13 @@ pub struct BgRect {
     pub color: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Cursor {
     pub line: usize,
     pub col: usize,
+    /// `block`, `underline`, `beam`, `hollow` or `hidden`.
     #[serde(with = "shape")]
+    #[schemars(with = "String")]
     pub shape: CursorShape,
     /// The cell is a wide char, so a block cursor covers two columns.
     pub wide: bool,
@@ -82,14 +85,14 @@ impl Frame {
 }
 
 /// One row of a screen update: its spans and its backgrounds (without the line).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Row {
     pub line: usize,
     pub spans: Vec<Span>,
     pub backgrounds: Vec<Bg>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Bg {
     pub col: usize,
     pub len: usize,
@@ -98,7 +101,7 @@ pub struct Bg {
 
 /// What a watcher is sent for one terminal: every row when `full` (the first screen, or a new
 /// size), else only the rows that changed. The cursor and modes always come along.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Update {
     pub full: bool,
     pub lines: usize,

@@ -22,6 +22,7 @@ use tokio::sync::mpsc;
 
 use crate::events::{is_attach, Subscriber};
 use crate::persist::{self, Persist};
+use crate::screens::Screens;
 use crate::{Ctx, Later};
 
 /// Event lines written between two looks at replies and requests.
@@ -227,7 +228,8 @@ async fn connection(stream: UnixStream, shared: &Shared) -> io::Result<()> {
     let (tx, mut lines) = mpsc::channel(1);
     let reader = tokio::spawn(read_lines(read, tx));
     let sub = Arc::new(Subscriber::default());
-    let result = serve_lines(&mut lines, &mut write, &sub, shared).await;
+    let mut screens = Screens::default();
+    let result = serve_lines(&mut lines, &mut write, &sub, &mut screens, shared).await;
     reader.abort();
     result
 }
@@ -253,13 +255,16 @@ async fn serve_lines(
     lines: &mut mpsc::Receiver<Line>,
     write: &mut OwnedWriteHalf,
     sub: &Arc<Subscriber>,
+    screens: &mut Screens,
     shared: &Shared,
 ) -> io::Result<()> {
-    // Order: a finished call's reply, then the next request, then events, so an event flood can't
-    // hold up replies and an attach reply precedes its events.
+    // Order: a finished call's reply, then the next request, then events, then screens, so an
+    // event flood can't hold up replies and an attach reply precedes its events.
     // The call being answered: its id, whether it stops the server, and its result.
     let mut pending: Option<(Value, bool, Later<Value>)> = None;
+    let screens_ready = screens.ready.clone();
     loop {
+        let due = screens.due();
         tokio::select! {
             biased;
             result = async { pending.as_mut().expect("guarded").2.as_mut().await }, if pending.is_some() => {
@@ -298,6 +303,8 @@ async fn serve_lines(
                         let later: Later<Value> = if is_attach(&req.method) {
                             // Here, not in the registry: attaching subscribes this connection.
                             Box::pin(std::future::ready(shared.ctx.attach(sub, &req.method, req.params)))
+                        } else if req.method == "block.watch" {
+                            Box::pin(std::future::ready(screens.watch(&shared.ctx, req.params)))
                         } else {
                             shared.ctx.call(&req.method, req.params)
                         };
@@ -326,6 +333,20 @@ async fn serve_lines(
                 }
                 if sub.has_lines() {
                     sub.ready.notify_one();
+                }
+            }
+            _ = screens_ready.notified() => {
+                for line in screens.take() {
+                    if !send(write, &line, sub).await? {
+                        return Ok(());
+                    }
+                }
+            }
+            _ = tokio::time::sleep_until(due.unwrap_or_else(tokio::time::Instant::now)), if due.is_some() => {
+                for line in screens.take() {
+                    if !send(write, &line, sub).await? {
+                        return Ok(());
+                    }
                 }
             }
         }

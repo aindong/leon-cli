@@ -8,6 +8,7 @@ pub mod lua;
 pub mod methods;
 pub mod persist;
 pub mod registry;
+pub mod screens;
 pub mod serve;
 
 use std::ops::{Deref, DerefMut};

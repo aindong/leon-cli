@@ -192,6 +192,8 @@ pub struct CallMethod {
 pub enum InputEvent {
     /// Press a key given in binding syntax (`enter`, `ctrl+c`, `alt+left`, `a`).
     Key { key: String },
+    /// The user arrived at the block: its `done` and `error` status records are cleared (reason `seen`).
+    Focus,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -253,6 +255,7 @@ pub fn add(r: &mut Registry) {
         let t = terminal(ctx, &BlockRef { session_id: p.session_id, block_id: p.block_id })?;
         match p.event {
             InputEvent::Key { key } => t.key(&key).map_err(ApiError::bad_request)?,
+            InputEvent::Focus => t.acknowledge(), // the state lock is free here; the notice takes it
         }
         Ok(Empty {})
     });
@@ -330,6 +333,19 @@ pub struct Process {
 #[serde(deny_unknown_fields)]
 pub struct NoArgs {}
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ResizeArgs {
+    pub rows: u16,
+    pub cols: u16,
+}
+
+#[derive(Serialize, JsonSchema)]
+pub struct Pwd {
+    /// The program's working directory, else the last OSC 7 path, else where it started; null if unknown.
+    pub path: Option<String>,
+}
+
 #[derive(Serialize, JsonSchema)]
 pub struct ProgramStatus {
     /// `{id, record}` per record, least recently reported first; `id` null is the root record.
@@ -376,6 +392,26 @@ static TERMINAL_METHODS: LazyLock<Vec<TermMethod>> = LazyLock::new(|| {
             let (rows, cols) = t.size();
             Ok(TermSize { rows, cols })
         }),
+        term_method(
+            "resize",
+            "Resize the grid and the PTY (at least 1 row, 2 columns); returns the new size.",
+            |t, a: ResizeArgs| {
+                t.resize(a.rows, a.cols).map_err(|e| ApiError::new(500, "io", e.to_string()))?;
+                let (rows, cols) = t.size();
+                Ok(TermSize { rows, cols })
+            },
+        ),
+        term_method("pwd", "Where the program is: its working directory, else its last OSC 7 path.", |t, _: NoArgs| {
+            Ok(Pwd { path: t.cwd().map(|p| p.display().to_string()) })
+        }),
+        term_method(
+            "screen",
+            "The screen as `block.watch` pushes it, whole: styled spans with RGB colours per row, \
+             backgrounds, the cursor, and the input modes.",
+            |t, _: NoArgs| {
+                Ok(leon_core::screen::diff(None, &crate::screens::frame(t)).expect("a first screen is whole"))
+            },
+        ),
         term_method("process", "The program's pid, argv, and how much output was parsed.", |t, _: NoArgs| {
             Ok(Process { pid: t.pid(), command: t.command.clone(), output_bytes: t.output_bytes() })
         }),
