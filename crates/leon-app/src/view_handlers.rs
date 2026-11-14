@@ -80,40 +80,50 @@ impl Workspace {
 
     pub(super) fn start_drag(&mut self, divider: Divider, at: gpui::Point<Pixels>, cx: &mut Context<Self>) {
         let from = if divider.direction == Direction::Horizontal { at.x } else { at.y };
-        self.drag = Some(Drag { divider, from, last: None });
+        self.drag = Some(Drag::Divider { divider, from, last: None });
         cx.notify(); // the next frame installs the window-wide drag listeners
         cx.stop_propagation();
     }
 
-    /// While dragging, the split's ratio follows the mouse: the start ratio plus the distance moved
-    /// over the room the split shares out.
+    /// While dragging, a split's ratio follows the mouse (the start ratio plus the distance moved
+    /// over the room the split shares out), or the sidebar's width does.
     pub(super) fn drag_to(&mut self, ev: &MouseMoveEvent, cx: &mut Context<Self>) {
-        let Some(drag) = &self.drag else { return };
         if ev.pressed_button != Some(MouseButton::Left) {
-            self.drag = None;
+            self.end_drag();
             return;
         }
-        let d = &drag.divider;
-        let (at, room) = match d.direction {
-            Direction::Horizontal => (ev.position.x, d.split.w - DIVIDER),
-            Direction::Vertical => (ev.position.y, d.split.h - DIVIDER),
+        let (d, from, last) = match &self.drag {
+            Some(Drag::Divider { divider, from, last }) => (divider, *from, *last),
+            Some(Drag::Sidebar { from, width }) => {
+                self.settings.sidebar_width = chrome::clamp_width(width + f32::from(ev.position.x - *from));
+                cx.notify();
+                return;
+            }
+            None => return,
         };
-        let moved = f32::from(at - drag.from) as f64;
+        let (at, room) = match d.direction {
+            Direction::Horizontal => (ev.position.x, d.split.w - GAP),
+            Direction::Vertical => (ev.position.y, d.split.h - GAP),
+        };
+        let moved = f32::from(at - from) as f64;
         // Keep a ratio set elsewhere (say 0.01 from the CLI) where it is until the drag moves it.
         let ratio = (d.ratio + moved / room.max(1.) as f64).clamp(d.ratio.min(0.05), d.ratio.max(0.95));
-        if drag.last == Some(ratio) {
+        if last == Some(ratio) {
             return; // each call is a layout change with events for every subscriber
         }
         let p =
             json!({ "direction": d.direction, "before_block_id": d.before, "after_block_id": d.after, "ratio": ratio });
-        if let Some(d) = self.drag.as_mut() {
-            d.last = Some(ratio);
+        if let Some(Drag::Divider { last, .. }) = self.drag.as_mut() {
+            *last = Some(ratio);
         }
         self.call("session.resize_pane", p, cx);
     }
 
+    /// The drag ended; a sidebar drag saves its width.
     pub(super) fn end_drag(&mut self) {
-        self.drag = None;
+        if matches!(self.drag.take(), Some(Drag::Sidebar { .. })) {
+            self.save_settings();
+        }
     }
 
     /// While a divider is dragged, follow the mouse anywhere in the window: element listeners only
@@ -136,7 +146,11 @@ impl Workspace {
                 let up = ws.clone();
                 window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
                     if phase == gpui::DispatchPhase::Capture {
-                        up.update(cx, |ws, _| ws.end_drag()).ok();
+                        up.update(cx, |ws, cx| {
+                            ws.end_drag();
+                            cx.notify();
+                        })
+                        .ok();
                     }
                 });
             },
@@ -243,6 +257,20 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Tabs in the sidebar or in the titlebar (`client.tab_style.toggle`); saved for the next launch.
+    pub(super) fn toggle_tab_style(&mut self, cx: &mut Context<Self>) {
+        self.settings.tab_style = self.settings.tab_style.toggled();
+        self.save_settings();
+        cx.notify();
+    }
+
+    /// Pane headers shown or hidden (`client.pane_header.reveal`); saved for the next launch.
+    pub(super) fn toggle_pane_headers(&mut self, cx: &mut Context<Self>) {
+        self.settings.pane_headers = !self.settings.pane_headers;
+        self.save_settings();
+        cx.notify();
+    }
+
     /// Set the terminal font size (clamped) and fit every terminal to it at once, hidden tabs too, so
     /// `capture` and agents see the new size before the tab is shown.
     pub(super) fn set_font_size(&mut self, pt: f32, window: &mut Window, cx: &mut Context<Self>) {
@@ -257,8 +285,8 @@ impl Workspace {
                 for w in &s.windows {
                     let Some(tree) = &w.layout else { continue };
                     // panes a zoom hides keep their split size; the zoomed one fills the area
-                    let zoomed = w.zoomed.as_deref().map(|z| panes::layout(tree, Some(z), area, DIVIDER).panes);
-                    for p in panes::layout(tree, None, area, DIVIDER).panes {
+                    let zoomed = w.zoomed.as_deref().map(|z| panes::tiles(tree, Some(z), area).panes);
+                    for p in panes::tiles(tree, None, area).panes {
                         let rect =
                             zoomed.iter().flatten().find(|z| z.block_id == p.block_id).map_or(p.rect, |z| z.rect);
                         if s.blocks.iter().any(|b| b.id == p.block_id) {
@@ -270,7 +298,8 @@ impl Workspace {
             out
         };
         for (sid, id, r) in fits {
-            let (rows, cols) = cells_in(px(r.w - 2. * PADDING), px(r.h - 2. * PADDING), cell_w, line_h);
+            let r = panes::text_rect(r, self.settings.pane_headers);
+            let (rows, cols) = cells_in(px(r.w), px(r.h), cell_w, line_h);
             self.app.fit(&sid, &id, rows, cols);
         }
         cx.notify();

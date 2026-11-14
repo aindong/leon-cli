@@ -1,8 +1,10 @@
 //! The leon app: a GPUI window attached to a leon server over its socket (docs/architecture.md).
 
-use std::path::Path;
-
+pub mod chrome;
 pub mod embedded;
+#[cfg(all(feature = "gui", target_os = "macos"))]
+pub mod icons;
+#[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod input;
 pub mod keymap;
 pub mod palette;
@@ -11,10 +13,12 @@ pub mod remote;
 pub mod render;
 pub mod status;
 pub mod theme;
+#[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod view;
 
 /// Attach to the server on `socket` and run the app until it quits; the server keeps running.
-pub fn run(socket: &Path) -> Result<(), String> {
+#[cfg(all(feature = "gui", target_os = "macos"))]
+pub fn run(socket: &std::path::Path) -> Result<(), String> {
     view::run(remote::Remote::connect(socket).inspect_err(|e| alert(e))?);
     Ok(())
 }

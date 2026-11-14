@@ -8,10 +8,24 @@ pub(super) struct Reading {
     pub(super) tracker: Arc<Mutex<Tracker>>,
     pub(super) seen: Arc<Mutex<Seen>>,
     pub(super) writer: Writer,
-    pub(super) pwd: Arc<Mutex<Option<String>>>,
+    pub(super) reported: Arc<Mutex<Reported>>,
     pub(super) output: Arc<AtomicU64>,
     /// Bumped after each read is fed, so a renderer can skip unchanged frames.
     pub(super) changes: Arc<watch::Sender<u64>>,
+}
+
+/// The last pwd and title a program reported.
+#[derive(Default)]
+pub(super) struct Reported {
+    pub(super) pwd: Option<String>,
+    pub(super) title: Option<String>,
+}
+
+impl Terminal {
+    /// The last title the program set (OSC 0/2), cleaned as the `title_changed` event carries it.
+    pub fn title(&self) -> Option<String> {
+        lock(&self.reported).title.clone()
+    }
 }
 
 impl Reading {
@@ -54,12 +68,14 @@ impl Reading {
             let seen = std::mem::take(&mut *lock(&self.seen));
             if let Some(new) = seen.title.map(|t| clean(&t)).filter(|t| title.as_ref() != Some(t)) {
                 title = Some(new.clone());
+                // an empty title (a reset) gives the tab back its program's name
+                lock(&self.reported).title = Some(new.clone()).filter(|t| !t.is_empty());
                 notify(Notice::Title(new));
             }
             let new_pwd = fed.pwd.and_then(|p| pwd_url(&p));
             if let Some(new) = new_pwd.filter(|p| pwd.as_ref() != Some(p)) {
                 pwd = Some(new.clone());
-                *lock(&self.pwd) = Some(new.clone());
+                lock(&self.reported).pwd = Some(new.clone());
                 notify(Notice::Pwd(new));
             }
             if seen.bell {

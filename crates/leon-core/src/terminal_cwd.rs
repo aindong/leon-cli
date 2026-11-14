@@ -57,6 +57,15 @@ pub(super) fn process_cwd(_pid: i32) -> Option<PathBuf> {
     None
 }
 
+impl super::Terminal {
+    /// `cwd` as text to show, or None when the path holds anything `clean` would remove: a
+    /// directory's name may carry bidi or control characters, and a UI must not show them.
+    pub fn shown_cwd(&self) -> Option<String> {
+        let d = self.cwd()?.display().to_string();
+        (clean(&d) == d).then_some(d)
+    }
+}
+
 /// An OSC 7 URL to report, or None. It is dropped whole when it isn't UTF-8 or when it, or its
 /// percent-decoding (which whoever shows the path does), holds anything `clean` would remove.
 pub(super) fn pwd_url(raw: &[u8]) -> Option<String> {

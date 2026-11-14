@@ -6,10 +6,13 @@ use leon_core::paths::socket_path;
 use leon_core::ApiError;
 use serde_json::{json, Value};
 
-use crate::client::{connect, spawn_server, Client, Fail};
+use crate::client::{spawn_server, Client, Fail};
 use crate::{ApiCmd, Cli, Cmd, ConfigCmd, ServerCmd, SessionCmd, WindowCmd};
 
 pub fn run(cli: &Cli) -> Result<(), Fail> {
+    if let (Some(what), Some(_)) = (local_only(cli.cmd()), &cli.host) {
+        return Err(Fail::Usage(format!("`leon {what}` is about this machine; it doesn't take -H")));
+    }
     let socket = socket_path();
     if let Cmd::App = cli.cmd() {
         return app(cli, &socket);
@@ -23,11 +26,24 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
     if let Cmd::Skill(cmd) = cli.cmd() {
         return crate::skill::run(cli, cmd);
     }
-    let mut c = connect(&socket, cli.autostart)?;
+    if let Cmd::Hosts(cmd) = cli.cmd() {
+        return crate::hosts::run(cli, cmd);
+    }
+    let server = crate::hosts::server(cli, cli.autostart)?;
+    if let Cmd::Attach { target, prefix } = cli.cmd() {
+        let target = target.as_deref().or(cli.session.as_deref());
+        return crate::attach::run(target, prefix.as_deref(), cli.autostart, &server);
+    }
+    let mut c = server.connect(cli.autostart)?;
     match cli.cmd() {
-        Cmd::App | Cmd::Server(_) | Cmd::Config(ConfigCmd::Check { .. }) | Cmd::Skill(_) => unreachable!(),
+        Cmd::App
+        | Cmd::Attach { .. }
+        | Cmd::Server(_)
+        | Cmd::Config(ConfigCmd::Check { .. })
+        | Cmd::Skill(_)
+        | Cmd::Hosts(_) => unreachable!(),
         Cmd::Config(ConfigCmd::Reload) => crate::script::reload(&mut c, cli)?,
-        Cmd::Do(args) => crate::script::run(&mut c, cli, args, &socket)?,
+        Cmd::Do(args) => crate::script::run(&mut c, cli, args, &server.socket)?,
         Cmd::Actions => crate::script::actions(&mut c, cli)?,
         Cmd::Keymap => crate::script::keymap(&mut c, cli)?,
         Cmd::New { label } | Cmd::Session(SessionCmd::New { label }) => {
@@ -88,10 +104,24 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         | Cmd::Swap { .. }
         | Cmd::Zoom { .. }
         | Cmd::Resize { .. } => crate::layout::run(&mut c, cli)?,
-        Cmd::Events { all } => crate::events::run(&mut c, cli, *all)?,
+        Cmd::Events { all } => crate::events::run(c, cli, *all, &server)?,
         Cmd::Api(cmd) => api(&mut c, cli, cmd)?,
     }
     Ok(())
+}
+
+/// The commands about this machine, which refuse -H: their name.
+fn local_only(cmd: &Cmd) -> Option<&'static str> {
+    Some(match cmd {
+        Cmd::App => "app",
+        Cmd::Server(ServerCmd::Run { .. }) => "server run",
+        Cmd::Server(ServerCmd::Start { .. }) => "server start",
+        Cmd::Server(ServerCmd::Proxy) => "server proxy",
+        Cmd::Config(ConfigCmd::Check { .. }) => "config check",
+        Cmd::Skill(_) => "skill",
+        Cmd::Hosts(_) => "hosts",
+        _ => return None,
+    })
 }
 
 /// Exit 1 when the load fails or a `leon.*` call was skipped; warnings and logs don't fail it.
@@ -224,22 +254,26 @@ fn app(cli: &Cli, socket: &std::path::Path) -> Result<(), Fail> {
     leon_app::run(socket).map_err(Fail::Other)
 }
 
-/// A headless build (Linux, or `--no-default-features`): `leon` alone prints the help instead.
+/// A headless build (Linux, or `--no-default-features`): `leon` alone is `leon attach` in a
+/// terminal, and prints the help anywhere else (a pipe or a script, where attach can't run).
 #[cfg(not(all(feature = "app", target_os = "macos")))]
 fn app(cli: &Cli, _socket: &std::path::Path) -> Result<(), Fail> {
-    if cli.cmd.is_none() {
-        <Cli as clap::CommandFactory>::command().print_help().map_err(|e| Fail::Other(e.to_string()))?;
-        return Ok(());
+    use std::io::IsTerminal;
+    if cli.cmd.is_some() {
+        return Err(Fail::Other("this leon was built without the app (the `app` feature, macOS only for now)".into()));
     }
-    Err(Fail::Other("this leon was built without the app (the `app` feature, macOS only for now)".into()))
+    if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+        let server = crate::hosts::server(cli, cli.autostart)?;
+        return crate::attach::run(cli.session.as_deref(), None, cli.autostart, &server);
+    }
+    <Cli as clap::CommandFactory>::command().print_help().map_err(|e| Fail::Other(e.to_string()))
 }
 
 /// What a failure says, for the alert a Finder launch shows instead of stderr.
-#[cfg(all(feature = "app", target_os = "macos"))]
-fn message(f: &Fail) -> String {
+pub(crate) fn message(f: &Fail) -> String {
     match f {
         Fail::Api(e) => e.to_string(),
-        Fail::Unreachable(m) | Fail::Other(m) => m.clone(),
+        Fail::Unreachable(m) | Fail::Other(m) | Fail::Usage(m) => m.clone(),
         Fail::Exit(code) => format!("exit status {code}"),
     }
 }
@@ -281,11 +315,16 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
             }
             start_server(&socket, *restore, true)
         }
+        ServerCmd::Proxy => proxy(&socket, cli.autostart),
         ServerCmd::Stop { discard } => {
-            let mut c = connect(&socket, false)?;
+            let server = crate::hosts::server(cli, false)?;
+            let mut c = server.connect(false)?;
             // Plain stops send no params, which servers from before `discard` also take.
             let params = if *discard { json!({ "discard": true }) } else { json!({}) };
             c.call("server.stop", params)?;
+            if server.link.is_some() {
+                return Ok(()); // a link always answers: polling it would only reach ssh
+            }
             let end = Instant::now() + Duration::from_secs(5);
             while Instant::now() < end && Client::connect(&socket).is_ok() {
                 std::thread::sleep(Duration::from_millis(20));
@@ -293,7 +332,7 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
             Ok(())
         }
         ServerCmd::Status => {
-            let mut c = connect(&socket, false)?;
+            let mut c = crate::hosts::server(cli, false)?.connect(false)?;
             let st = c.call("server.status", json!({}))?;
             if cli.json {
                 print_json(&st);
@@ -309,6 +348,26 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
             Ok(())
         }
     }
+}
+
+/// `leon server proxy`: this machine's server on stdin and stdout, for a client's link over ssh.
+/// The server's peer-uid check passes because ssh runs this as the host's user.
+fn proxy(socket: &std::path::Path, autostart: bool) -> Result<(), Fail> {
+    if autostart {
+        start_server(socket, true, true)?; // persistent: it outlives this ssh session
+    }
+    let dir = socket.parent().unwrap_or(std::path::Path::new("."));
+    leon_core::paths::ensure_private_dir(dir).map_err(|e| Fail::Unreachable(e.to_string()))?;
+    let stream = std::os::unix::net::UnixStream::connect(socket)
+        .map_err(|e| Fail::Unreachable(format!("no leon server at {}: {e}", socket.display())))?;
+    let mut up = stream.try_clone().map_err(|e| Fail::Other(e.to_string()))?;
+    std::thread::spawn(move || {
+        leon_hosts::pump(&mut std::io::stdin().lock(), &mut up);
+        // the client is done: the server answers what it sent, then closes (its events park)
+        let _ = up.shutdown(std::net::Shutdown::Write);
+    });
+    leon_hosts::pump(&mut &stream, &mut std::io::stdout().lock());
+    Ok(())
 }
 
 pub(crate) fn resolve(c: &mut Client, kind: &str, query: &str, session_id: Option<&str>) -> Result<String, Fail> {

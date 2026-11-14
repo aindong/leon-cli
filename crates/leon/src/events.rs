@@ -1,35 +1,61 @@
-//! `leon events`: attach, print the snapshot, then every event as it comes.
+//! `leon events`: attach, print the snapshot, then every event as it comes. Over a link (-H) the
+//! attach is resumable: when the link drops, it reconnects and resumes after the last seq printed,
+//! or, if the server can't resume (it restarted), prints a fresh snapshot.
 
 use std::io::Write;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
-use crate::client::{Client, Fail};
+use crate::client::{Client, Fail, Server};
 use crate::commands::pick_session;
 use crate::Cli;
 
-pub fn run(c: &mut Client, cli: &Cli, all: bool) -> Result<(), Fail> {
-    let (method, params, session) = match (&cli.session, all) {
+/// How long a dropped link is retried: as long as the server keeps a dropped stream.
+const GIVE_UP: Duration = leon_server::resume::HOLD;
+
+pub fn run(mut c: Client, cli: &Cli, all: bool, server: &Server) -> Result<(), Fail> {
+    let (method, mut params, session) = match (&cli.session, all) {
         (Some(_), false) => {
-            let sid = pick_session(c, cli, None)?;
+            let sid = pick_session(&mut c, cli, None)?;
             ("session.attach", json!({ "session_id": sid }), Some(sid))
         }
         (_, true) => ("session.attach_all", json!({ "event_scope": "all" }), None),
         (None, false) => ("session.attach_all", json!({ "event_scope": "session" }), None),
     };
-    let snapshot = c.call(method, params)?;
+    if server.link.is_some() {
+        params["resumable"] = json!(true);
+    }
+    let snapshot = c.call(method, params.clone())?;
+    let mut resume = snapshot["resume"].as_str().map(String::from);
+    let mut seq = snapshot["seq"].as_u64().unwrap_or(0);
     let mut out = std::io::stdout().lock();
-    let first = if cli.json {
-        json!({ "snapshot": snapshot, "seq": snapshot["seq"] }).to_string()
-    } else {
-        format!("attached at seq {}", snapshot["seq"])
-    };
+    let first = if cli.json { header(&snapshot) } else { format!("attached at seq {seq}") };
     // A closed stdout (`leon events | head`) ends the stream quietly.
     if writeln!(out, "{first}").is_err() {
         return Ok(());
     }
     loop {
-        let line = c.next_event()?;
+        let line = match (c.next_event(), &resume) {
+            (Ok(line), _) => line,
+            (Err(f), None) => return Err(f),
+            (Err(_), Some(token)) => {
+                let (again, fresh) = reconnect(server, token, seq, method, &params)?;
+                c = again;
+                let Some(snapshot) = fresh else { continue };
+                resume = snapshot["resume"].as_str().map(String::from);
+                seq = snapshot["seq"].as_u64().unwrap_or(0);
+                let text = match cli.json {
+                    true => header(&snapshot),
+                    false => format!("re-attached at seq {seq}; events while the link was down are not shown"),
+                };
+                if writeln!(out, "{text}").is_err() {
+                    return Ok(());
+                }
+                continue;
+            }
+        };
+        seq = line["seq"].as_u64().unwrap_or(seq);
         let text = if cli.json { line.to_string() } else { text(&line) };
         if writeln!(out, "{text}").is_err() {
             return Ok(());
@@ -41,6 +67,58 @@ pub fn run(c: &mut Client, cli: &Cli, all: bool) -> Result<(), Fail> {
         {
             return Ok(());
         }
+    }
+}
+
+/// The `--json` snapshot line, without the resume token: it lets whoever reads the log take the
+/// stream over.
+fn header(snapshot: &Value) -> String {
+    let mut shown = snapshot.clone();
+    if let Some(o) = shown.as_object_mut() {
+        o.remove("resume");
+    }
+    json!({ "snapshot": shown, "seq": snapshot["seq"] }).to_string()
+}
+
+/// Get a dropped link back (backing off from 100 ms to 5 s) and resume after `seq`; when the
+/// server refuses the resume, attach again and return the new snapshot.
+fn reconnect(
+    server: &Server,
+    token: &str,
+    seq: u64,
+    method: &str,
+    params: &Value,
+) -> Result<(Client, Option<Value>), Fail> {
+    let end = Instant::now() + GIVE_UP;
+    let mut wait = Duration::from_millis(100);
+    // One try, which may not outlast `end`: an ssh that hangs (a blackholed network, a prompt
+    // nobody answers) would otherwise hold it for minutes.
+    let attempt = || -> Result<(Client, Option<Value>), Fail> {
+        let lost = |e: std::io::Error| Fail::Unreachable(e.to_string());
+        let c = Client::connect(&server.socket).map_err(lost)?;
+        c.set_timeout(Some(end.saturating_duration_since(Instant::now()).max(Duration::from_millis(500))))
+            .map_err(lost)?;
+        let mut c = c;
+        let fresh = match c.call("session.resume", json!({ "resume": token, "seq": seq })) {
+            Ok(_) => None,
+            Err(Fail::Api(e)) if e.code == "resume_failed" => Some(c.call(method, params.clone())?),
+            Err(f) => return Err(f),
+        };
+        c.set_timeout(None).map_err(lost)?;
+        Ok((c, fresh))
+    };
+    loop {
+        match attempt() {
+            Ok(done) => return Ok(done),
+            Err(Fail::Unreachable(_)) => {}
+            Err(f) => return Err(f),
+        }
+        if Instant::now() + wait > end {
+            let name = server.link.as_ref().map_or("the host", |(n, _)| n.as_str());
+            return Err(Fail::Unreachable(format!("lost the link to {name} for {} s", GIVE_UP.as_secs())));
+        }
+        std::thread::sleep(wait);
+        wait = (wait * 2).min(Duration::from_secs(5));
     }
 }
 

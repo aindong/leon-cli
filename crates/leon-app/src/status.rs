@@ -41,11 +41,21 @@ impl Indicator {
 
     pub fn color(self, t: &Theme) -> u32 {
         match self {
-            Indicator::Working { .. } => t.accent,
-            Indicator::Blocked(_) => t.ansi[3],
-            Indicator::Done => t.ansi[2],
-            Indicator::Error => t.ansi[1],
+            Indicator::Working { .. } => t.working,
+            Indicator::Blocked(_) => t.blocked,
+            Indicator::Done => t.done,
+            Indicator::Error => t.error,
         }
+    }
+}
+
+/// The state in a word, for where the program gave no caption.
+pub fn word(i: Indicator) -> &'static str {
+    match i {
+        Indicator::Working { .. } => "working",
+        Indicator::Blocked(_) => "needs you",
+        Indicator::Done => "done",
+        Indicator::Error => "error",
     }
 }
 

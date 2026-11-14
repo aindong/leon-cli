@@ -280,6 +280,8 @@ pub struct BindingView {
 pub struct ModeView {
     pub name: String,
     pub exclusive: bool,
+    /// The chord that enters the mode for one key (`leon attach`'s prefix), if set.
+    pub prefix: Option<String>,
     pub source: String,
 }
 
@@ -335,7 +337,12 @@ fn keymap(l: &Loaded) -> Keymap {
         modes: c
             .modes
             .iter()
-            .map(|m| ModeView { name: m.name.clone(), exclusive: m.exclusive, source: m.source.clone() })
+            .map(|m| ModeView {
+                name: m.name.clone(),
+                exclusive: m.exclusive,
+                prefix: m.prefix.clone(),
+                source: m.source.clone(),
+            })
             .collect(),
         server_actions: c
             .actions

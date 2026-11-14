@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Linux release packages, built in the pinned Rust image (scripts/linux-image.sh): a tarball
-# (leon, README.md, LICENSE, docs/) and a .deb, both in target/linux/<arch>/. Then each is installed
+# (leon, README.md, LICENSE, docs/), a .deb and the bare binary, in target/linux/<arch>/. Then each is installed
 # in a clean container and must answer `leon --version`. Needs Docker.
 #   scripts/package-linux.sh [--arch arm64|amd64]
 set -euo pipefail
@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 [ ${#ARGS[@]} -eq 0 ] || { echo "usage: scripts/package-linux.sh [--arch arm64|amd64]" >&2; exit 2; }
 out="$PWD/target/linux/$ARCH"
 mkdir -p "$out"
-rm -f "$out"/leon[-_]* # only this run's packages, so the checks below can't pick up an old one
+rm -f "$out"/leon "$out"/leon[-_]* # only this run's files, so the checks below can't pick up an old one
 DOCKER_ARGS=(-v "$out":/out)
 
 in_image bash -c '
@@ -26,6 +26,7 @@ in_image bash -c '
     cp "$bin" README.md LICENSE "$stage/$name/"
     cp -R docs "$stage/$name/docs"
     tar -C "$stage" -czf "/out/$name.tar.gz" --owner=0 --group=0 "$name"
+    cp "$bin" /out/leon # the bare binary too, for tests that run it in a container (m16a_docker_sshd)
 
     arch=$(dpkg --print-architecture)
     root="$stage/deb"

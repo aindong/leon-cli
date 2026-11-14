@@ -11,7 +11,8 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 | `leon-core` | The object model (server state, sessions, windows, layout tree, blocks), stable IDs and target resolution, terminal blocks (PTY via `portable-pty`, emulation via `alacritty_terminal`), the OSC 7501 program-status parser, and the event log with gapless `seq`. No I/O policy, no sockets. |
 | `leon-server` | The API: a method registry where every method carries a description and JSON Schemas (`help.all`), served over a Unix socket. Also runnable in-process. |
 | `leon-lua` | Lua 5.1 (`mlua`): `init.lua` config (bindings, sequences, modes, actions), the live config `Runtime`, and `leon do` scripts (`leon.on`, `wait`, timers, `exec`). |
-| `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart. With no arguments it opens the app; a build without the app prints the help. |
+| `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart, and `leon attach` (the terminal client). With no arguments it opens the app; a build without the app runs `leon attach` in a terminal and prints the help elsewhere. |
+| `leon-hosts` | Other machines: `ssh://` endpoints, the hosts list, and the `Link` that reaches a host's server over ssh. No GPUI, so the CLI and (later) the app share it. |
 | `leon-app` | The GPUI client (macOS for now). It attaches to the server over the socket like any client and paints the screens the server pushes, so programs outlive the app. |
 
 ## Platforms
@@ -19,23 +20,28 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 | | macOS | Linux (x86_64, aarch64) |
 |---|---|---|
 | Server, CLI, Lua, agent skill | yes | yes |
-| The app (`leon app`, `leon` alone) | yes | not yet (M15 part 2): `leon` alone prints the help, `leon app` exits 1 |
+| The app (`leon app`, `leon` alone) | yes | not yet (M15 part 2): `leon` alone is `leon attach` in a terminal, else the help; `leon app` exits 1 |
 | Tested | everything, `cargo test` | everything but the app, `scripts/linux-test.sh` in Docker |
 | Packages | `Leon.app` (`scripts/bundle.sh`, `scripts/install.sh`) | tarball and `.deb` (`scripts/package-linux.sh`) |
 
-The app is the `leon` crate's `app` feature, on by default, and `leon-app` is a macOS-only
-dependency; the code that calls it is behind `cfg(all(feature = "app", target_os = "macos"))`.
+The app is the `leon` crate's `app` feature, on by default, which turns on `leon-app`'s `gui`
+feature; gpui is a macOS-only dependency of `leon-app`, and the code that needs it is behind
+`cfg(all(feature = "app"|"gui", target_os = "macos"))`. Without `gui`, `leon-app` is the GPUI-free
+part `leon attach` shares on every platform: the client (`remote`), keymap, palette and pane layout.
 Cargo has no per-platform default features, so the pair is the per-platform default: `cargo build`
 gives the app on macOS and a headless binary on Linux with no flags, and `--no-default-features`
-gives a headless macOS build. `leon-app` stays a workspace member, so Linux commands pass
+gives a headless macOS build. `leon-app`'s own tests need the window, so Linux commands pass
 `--workspace --exclude leon-app`. Tests of the app and of `Leon.app` are gated to macOS with a
 `// macOS only: <reason>` line, which `scripts/linux-test.sh` requires and lists.
 
 Platform code: the socket goes under `$XDG_RUNTIME_DIR/leon` when that is set (Linux desktops set
 it; the dir must still be private); the peer check is tokio's `peer_cred` (`SO_PEERCRED` on Linux,
-`getpeereid` on macOS); a program's cwd is `/proc/<pid>/cwd` on Linux (a removed dir, which reads `<path> (deleted)`, is
-dropped for the next fallback) and `proc_pidinfo` on macOS;
-the skill hook reads `/proc/<pid>/stat` for the process tree there. Signals, process groups,
+`getpeereid` on macOS); a program's cwd is `/proc/<pid>/cwd` on Linux (a removed dir, which reads
+`<path> (deleted)`, is dropped for the next fallback) and `proc_pidinfo` on macOS; the skill hook
+reads `/proc/<pid>/stat` for the process tree there. `leon server proxy` and the `Link` copy
+between a socket and ssh's pipes with `leon_hosts::pump`, a plain read/write loop: `std::io::copy`
+splices on Linux, and a splice from a socket into a pipe holds the pipe locked while it waits, so
+sshd couldn't read the proxy's stdout and stopped forwarding the request. Signals, process groups,
 `flock`, PTYs (`portable-pty`) and the state dir are the same POSIX code on both.
 
 `scripts/linux-test.sh [--arch arm64|amd64]` runs clippy, `cargo test --no-fail-fast` and
@@ -43,8 +49,8 @@ the skill hook reads `/proc/<pid>/stat` for the process tree there. Signals, pro
 the socket through `XDG_RUNTIME_DIR`) for the non-app crates in the pinned official image
 `rust:1.100.0-bookworm` (tag and digest in `scripts/linux-image.sh`), as your own uid (1000 when
 you're root) rather than root, so the private-dir and peer checks are real and what it writes to
-the repo stays yours, with the cargo registry in the named volume
-`leon-cargo-registry` and each arch's target dir in `leon-linux-target-<arch>`. The source is
+the repo stays yours, with the cargo registry in the named volume `leon-cargo-registry` and each
+arch's target dir in `leon-linux-target-<arch>`. The source is
 mounted read-only. CI (`.github/workflows/ci.yml`) runs the full macOS gate and the Linux script
 and packages on x86_64 and aarch64 runners. On an Apple Silicon Mac `--arch amd64` runs under
 Rosetta, which leaks its own fds into children (tests that spawn from several threads deadlock on
@@ -53,171 +59,18 @@ each other's pipes: pass `--test-threads=1`) and writes `$HOME/.cache/rosetta` (
 
 ## Decisions
 
-- **Wire protocol.** Newline-delimited JSON over a Unix socket. Request `{"id","method","params"}`,
-  response `{"id","result"}` or `{"id","error":{"status","code","message"}}`. Events are pushed on
-  the same connection as `{"event":{...},"seq":N}` after a subscribe call. The spec leaves framing
-  unspecified; NDJSON is the simplest thing that streams and is easy to debug with `nc -U`.
-- **Events.** `session.attach {session_id}` (that session, block events too) and
-  `session.attach_all {event_scope: session|all}` subscribe the connection and return a snapshot with
-  its `seq`. `seq` is per connection and gapless; events are queued while the state lock is held and
-  the snapshot is taken under it, so the snapshot sits exactly between two events. Event bodies use
-  the spec's CLI JSON shape (`session_event` → `block_event`). A connection more than 8 MiB behind
-  is dropped. Each call that changes a session's view bumps its `revision` once and emits one
-  `session_view_changed`.
-- **Layout.** A window's tiled layout is a tree of `split` nodes (`horizontal` = side by side,
-  `ratio` = the before side's share) with block leaves; focus and zoom are per window. CLI ratios
-  (`--ratio PCT`) are the new or moved pane's share.
-- **Socket path.** `$LEON_RUNTIME_DIR/server.sock`, else `$XDG_RUNTIME_DIR/leon/server.sock`, else
-  `~/.local/state/leon/run/server.sock`. Mode 0600.
-- **Terminal emulation.** `alacritty_terminal` (battle-tested, used by Zed). leon scans the PTY byte
-  stream for OSC 7501 itself before handing bytes to the emulator, since unknown OSCs are dropped.
-- **GPUI build.** `gpui` 0.2.2 with the `runtime_shaders` feature, so building does not need Xcode's
-  separate Metal Toolchain download.
-- **Async.** `tokio` in the server; PTY readers on their own threads feeding the emulator.
-- **Config.** `leon-lua` turns `init.lua` into a plain `Config` (bindings with modes and sequences,
-  modes, actions, unbinds, diagnostics); a prefix/sequence clash keeps the newest with a warning.
-  `leon config check` exits 1 if the load fails or any `leon.*` call was skipped.
-- **Lua at runtime.** The server loads `init.lua` at start (`--config`, else `$LEON_CONFIG`, XDG,
-  `~/.config`; a missing file is an empty config) and keeps its Lua state on a thread of its own, one
-  per good load. Actions (`client.action`, `leon do ACTION`) and function bindings (`client.key`) are
-  jobs on that thread; Lua calls server methods in process. `server.config_reload` loads on a fresh
-  thread and swaps only on success, so a failed reload keeps the last good keymap and a wedged thread is
-  dropped. **Scripts** (`leon do SCRIPT|-e`) run in the `leon do` process on their own connection, so a
-  script can never hang the server. Both sides share the `leon.*` code behind a `Host` trait.
-- **Lua bounds.** Every state: no `io.popen`/`os.execute`/`os.exit`, no C modules, `debug.traceback`
-  only, text chunks only (Lua 5.1 doesn't verify bytecode), no `newproxy` (a `__gc` finalizer runs
-  with hooks off). `leon.exec` runs each program in its own process group and signals the group. Server side: a config load gets 5 s and an action 30 s from its request; an instruction hook
-  (also on every coroutine) raises past the deadline, `pcall`/`xpcall`/`coroutine.resume` re-raise it,
-  and calls and `leon.exec` get only the time left; 256 MiB memory limit. A long C call (a pathological
-  `string.find`) isn't interrupted: its caller still gets a timeout, and the next reload replaces the thread.
-- **The app attaches.** `leon` (or `leon app`) first does what `leon server start` does (a running
-  server, autostarted or not, is told to stay up; else one starts detached, persistent, restoring
-  the saved sessions), then attaches over the socket (`leon_app::remote`). Quitting the app (⌘Q,
-  the menu, closing the window) only closes its connections: every program keeps running, and the
-  next launch shows the same sessions and screens. "Quit and End All Sessions…" asks once, naming
-  how many sessions end, then calls `server.stop`; the app quits whenever the server goes away
-  (it re-attaches if only its event connection was dropped). The client uses three connections:
-  UI calls (keys, layout changes; one that changes the model refetches it before returning), model
-  refetches, and events plus screens, read on a thread. The client keeps a copy of the model
-  (sessions, windows, layout trees, blocks, program-status records), refetched after each batch of
-  events with `session.list`, `session.view`, `session.list_blocks` and `program_status` rather
-  than by applying events one by one. The window shows the active tab's whole split tree; keys go
-  to the zoomed block, else the focused one. The view redraws when the reader thread wakes it (or
-  every ~8 ms for the spinner and the keymap) and only when something drawn changed.
-- **Screen transport.** `block.watch {block_ids}` on a connection replaces the set of blocks whose
-  screens it gets; the app watches only the panes on screen. Each screen line is
-  `{"screen":{block_id, full, lines, cols, rows:[{line, spans, backgrounds}], cursor, app_cursor,
-  bracketed_paste}}`: spans are runs of same-styled text at their start column (fg as a 24-bit RGB integer,
-  bold/italic/underline/strikeout), backgrounds are runs of cells. The first line for a block, and
-  any after a size change, is `full` (every row); later ones carry only the dirty rows, found by
-  diffing the frame against the last one sent on that connection (`leon_core::screen::diff`).
-  Screen lines have no `seq`: they are state, not events. Per watched block a task waits on the
-  terminal's change counter (a `tokio::sync::watch`) and only marks it dirty; the connection loop
-  builds the frame under the terminal's lock, between replies and events, so nothing queues per
-  connection beyond "dirty": a slow reader gets fewer, newer screens, never a backlog, and is
-  never dropped for them. One block's screens are at least 2 ms apart, so a flood costs at most 500
-  frame builds a second while a keystroke's echo after a quiet spell goes at once. The watcher
-  holds the terminal weakly, so watching a block never keeps its program alive.
-  `dev.leon.terminal.screen` returns the same whole screen once. Colours are resolved on the
-  server with leon's one theme (shortcut until themes exist: then the client sends its palette, the
-  spec's `set_theme`). Other block methods the app uses: `write`, `resize`, `pwd`, and
-  `block.event` with `event: {type: "focus"}`, which clears `done`/`error` the way arriving at a
-  pane does, and `event: {type: "paste", data}`, which the server wraps by the program's
-  bracketed-paste mode at that moment (the app's copy of the screen may be older). `block.watch`
-  and `dev.leon.terminal.screen` are leon's own: the spec's screen stream is `data.connect` over a
-  WebSocket, which leon doesn't serve. The app attaches only to a socket in a private dir.
-- **App keys go through the keymap.** The server loads `init.lua` (`leon server run`).
-  The app has no GPUI key table (only ⌘Q): every keystroke becomes an unshifted chord
-  (`keymap::chord`) and is resolved against its built-in defaults (`keymap::DEFAULTS`) with the
-  config's `client.keymap` on top, fetched off the UI thread about once a second. The app runs its
-  own actions (`client.*`, `pane.*`, `session.*`); a config action or Lua function goes to the
-  server (`client.action` / `client.key`) without waiting. A pending sequence shows a hint and has
-  no timeout; unbound keys go to the pane (`dev.leon.terminal.write`). Program status (OSC 7501)
-  comes with the model copy; arriving at a pane clears its `done`/`error` (reason `seen`).
-- **Agent skill.** `leon skill show` prints a guide compiled into the binary. `skill setup` installs a
-  SKILL.md stub (marked `<!-- leon-skill: … -->`) that tells the agent to run `leon skill show`, so
-  upgrades reach agents without a reinstall, plus a matcher-less SessionStart hook running
-  `leon skill hook --agent claude|codex` (prints `LEON_SESSION`/`LEON_BLOCK`, and records the agent's
-  resume command, below; outside leon nothing and no server call). Claude
-  Code: `$CLAUDE_CONFIG_DIR` (`~/.claude`) `skills/leon` + `settings.json`; Codex: `~/.agents/skills/leon`
-  + `$CODEX_HOME` (`~/.codex`) `hooks.json`. Settings edits keep key order, back up once to
-  `<file>.leon-backup`, write atomically through symlinks, and refuse files that aren't the expected
-  JSON shape. Not yet: OpenCode/Pi, `--project`, `--session-naming`.
-- **Persistence.** The server saves its sessions to `$LEON_STATE_DIR/sessions.json` (default
-  `~/.local/state/leon`) on every exit through the socket loop (`server stop`, SIGTERM, SIGINT,
-  SIGHUP, idle exit) and restores them after binding (`--restore`, default true; `server stop --discard`
-  skips the save and deletes the file). Saved: sessions, windows, layout trees (split IDs and
-  ratios), labels, focus, zoom, the active tab, revisions, and per block its label, keep-open, cwd,
-  command, scrollback and resume command. IDs come back unchanged. Programs don't survive: a
-  restored block runs a fresh login shell in its cwd (the shell process's cwd, else the last OSC 7
-  path, else where it started); the saved command is never re-run, since repeating `make deploy` on
-  a restart would be a surprise and would make the file a place that runs code. The dir must be private (0700, ours) and not
-  flocked by another server, or nothing is saved (`server status` shows `state_file: null`); the file is 0600, written via a temp file and
-  a rename. A file that is corrupt, from a newer version, or inconsistent is moved to
-  `sessions.json.bad-<secs>-<n>` with a warning in the log, never replaced.
-  The app takes no part: the server it starts restores at start, before it accepts the app's
-  connection, so the app's "open a session when there is none" sees the restored ones. Tests and
-  benches use `embedded::start_at`, an in-process server that keeps nothing.
-- **Scrollback on restore.** Each block's scrollback and screen (`capture`'s text; for an alt-screen
-  app, its screen) is saved as text, capped at 2 MiB per block and 8 MiB over all blocks (each gets
-  `min(2 MiB, 8 MiB / blocks)`), newest whole lines kept. Every control character but `\n` (C0, DEL,
-  C1) is removed when it is saved and again when it is restored, since the file is outside the
-  server's hands in between; so a snapshot can't send an escape, a query or a carriage return. The
-  new terminal's emulator is fed the text, then a dim `— restored from <time> —` line, before the
-  shell's first output: the text is shown, never sent to the shell. Whatever a terminal showed (a
-  printed token too) is on disk in the private 0600 file until the next save replaces it;
-  `server stop --discard` forgets it.
-- **Resume commands.** A program registers the argv that resumes it with
-  `dev.leon.terminal.set_resume {command}` (1 to 64 args, at most 8 KiB of printable ASCII, no
-  backslash; null clears it). Under "ask" the user agrees to what they see typed, so it must be what
-  runs: no control key, no bidi or invisible character, no byte readline could read as Meta, no
-  backslash (fish reads `\'` inside single quotes). The skill hook records `claude --resume
-  <session_id>` or `codex resume <session_id>` from the agent's SessionStart JSON (an id of
-  `[A-Za-z0-9._-]`, no leading `-`), and only when the hook, its parent or its grandparent is its
-  terminal's foreground process group: the interactive agent, not a nested `claude -p` that an
-  agent's tool started without a terminal. Restored blocks follow the config's
-  `leon.set("resume", …)`, read once the start-up config has loaded and before restoring (the
-  restore waits at most 1 s for it, since nothing is served until the restore is done; past that
-  nothing is offered, as with `"never"`): `"ask"` (default) types Ctrl-U and the shell-quoted command
-  at the new prompt and shows a dim hint, so Enter runs it; `"always"` adds the Enter; `"never"`
-  types nothing. Typing waits (up to 60 s, then gives up) until the shell is the PTY's foreground
-  process group with canonical mode off, so neither an rc file's picker nor typeahead gets it; zsh
-  and fish must also have turned bracketed paste on, which their line editors do and a key an rc
-  file reads (oh-my-zsh's update question, compinit's `read -q`) doesn't. bash and sh are taken at
-  canonical mode alone. dash (Debian's `sh`) has no line editor and never turns canonical mode
-  off, so a dash login shell is offered nothing: the wait gives up and types nothing. The command stays registered until replaced or cleared; with `"always"` the
-  private state file is a place that runs the commands programs registered, which is why `"ask"` is
-  the default.
-- **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of
-  up to 16 KiB); the parser thread feeds what has queued, up to 64 KiB, to the OSC 7501 tracker and
-  the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread
-  stalled the program while it parsed (docs/performance.md).
-- **Packaging.** `scripts/bundle.sh` wraps the one `leon` binary in `Leon.app` (bundle id
-  `dev.leon.app`, version from `leon --version`, the brand icon `brand/icon/Leon.icns`, ad-hoc
-  signed); opened from Finder it runs with no arguments, which opens the app. `scripts/install.sh`
-  copies the app to `~/Applications` and links `~/.local/bin/leon` to the binary inside it. Both
-  replace only what they made: an app with our bundle id, or a link whose text is our binary's path.
-- **Linux packages.** `scripts/package-linux.sh [--arch arm64|amd64]` builds a release binary
-  (symbols stripped) in the same pinned image and writes, to `target/linux/<arch>/` (emptied
-  first), `leon-<version>-<uname -m>-linux.tar.gz` (`leon`, `README.md`, `LICENSE`, `docs/`) and
-  `leon_<version>_<arch>.deb` (hand-built with `dpkg-deb`: `/usr/bin/leon`, docs in
-  `/usr/share/doc/leon`, `Depends: libc6 (>= …)` from the newest glibc symbol the binary uses, a
-  fixed placeholder maintainer). It then installs the `.deb` in a clean `debian:bookworm-slim` and
-  unpacks the tarball in `ubuntu:24.04` (both pinned by digest), and fails unless each `leon
-  --version` prints the version. Rust links glibc dynamically: the binary needs glibc 2.34 or newer
-  (measured on arm64 and amd64; no musl build yet).
-- **`LEON_BIN_DIR`.** Every terminal gets the server binary's directory as `LEON_BIN_DIR` and at
-  the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
-  `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an
-  older `leon` in `/usr/local/bin` can win there; the dir is still on PATH.
-- **Docs are tested.** `docs/cli.md` is checked against every `--help`; the `sh` blocks in the docs
-  run against the real binary (a bad command line fails); `docs/lua.md`'s examples go through
-  `leon config check` and `leon do -e`.
-- **Naming.** Method, action, event and flag names follow `docs/spec.md`, so scripts and agents written
-  for that interface carry over. Env vars are `LEON_*`.
+The decisions, in two parts:
+
+- [Protocol and clients](architecture/protocol-and-clients.md): the wire protocol, events, layout,
+  the socket path, terminal emulation, Lua (config, runtime, bounds), the app, the screen transport,
+  `leon attach`, the app keymap and look, and the agent skill.
+- [State, packaging and hosts](architecture/state-and-hosts.md): persistence, scrollback and resume
+  after a restart, terminal reads, packaging (Leon.app, Linux packages), `LEON_BIN_DIR`, remote
+  hosts and reconnects, tested docs, and naming.
 
 ## Verification
 
 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (the loop's
-`the verify script` runs all three); on Linux, `scripts/linux-test.sh` (Platforms, above). Terminal behaviour is tested end to end: spawn a real shell in a PTY,
-send input, wait for the screen, assert on `capture`. The GUI is checked by window-only screenshots.
+`the verify script` runs all three); on Linux, `scripts/linux-test.sh` (Platforms, above). Terminal
+behaviour is tested end to end: spawn a real shell in a PTY, send input, wait for the screen, assert
+on `capture`. The GUI is checked by window-only screenshots.

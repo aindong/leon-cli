@@ -16,10 +16,11 @@ Lua, or let your coding agent drive them for you. It's built in Rust, with GPUI 
   your tests there and read the results.
 - **Lua inside.** Key bindings, modes, your own actions, and scripts that react to events.
 
-![The leon app: sessions in the sidebar, a split window, and an agent's progress in its tab, its sidebar row and its pane](docs/images/app-status.png)
+![The leon app: three sessions in the sidebar with their tabs as rows, a tab split into three panes, and an agent's progress on its tab row and its pane header](docs/images/app-status.png)
 
-Programs report what they're doing (working, blocked, done) and the app shows it on the tab, the
-session's sidebar row and the pane. The command palette (⌘⇧P) runs any action, yours included:
+Programs report what they're doing (working, blocked, done) and the app shows it once in each
+place: a symbol on the tab's row, and the symbol with the program's own words in the pane's header.
+Tabs take the title the program set. The command palette (⌘⇧P) runs any action, yours included:
 
 ![The command palette, filtered to "log", listing a config action with its shortcut](docs/images/app-palette.png)
 
@@ -51,8 +52,9 @@ To build only the app: `scripts/bundle.sh` writes `target/release/Leon.app`.
 
 ### Linux
 
-On Linux leon is the server and the CLI (agents and Lua scripts too); the app isn't there yet, so
-`leon` alone prints the help. Build the packages with Docker, from a checkout:
+On Linux leon is the server, the CLI and `leon attach` (agents and Lua scripts too); the app isn't
+there yet, so `leon` alone in a terminal runs `leon attach`. Build the packages with Docker, from a
+checkout:
 
 ```sh
 scripts/package-linux.sh                 # or --arch amd64 / --arch arm64
@@ -103,6 +105,49 @@ leon -s demo zoom                                            # fill the window; 
 In the app: ⌘D splits right, ⌘⇧D splits down, ⌘⌥ and an arrow moves between panes, and dragging a
 divider resizes.
 
+## In any terminal: `leon attach`
+
+```text
+leon attach                  # pick a session, tab or block (type to filter), Enter attaches
+leon attach demo             # straight to the session "demo"
+ssh -t box leon attach       # the same, on another machine's leon
+```
+
+`leon attach` shows the tab's split panes and a status bar, and sends your keys to the focused
+pane. After the prefix, ctrl+b (`--prefix` or the config's `leon.mode("attach", { prefix })` to
+change it):
+
+| Keys | Action |
+|---|---|
+| ctrl+b d | Detach; every program keeps running |
+| ctrl+b ←↑↓→, ctrl+b h/j/k/l | Focus the pane that way |
+| ctrl+b %, ctrl+b " | Split right, split down |
+| ctrl+b z | Zoom the pane (again to undo) |
+| ctrl+b c | New tab |
+| ctrl+b n, ctrl+b p | Next, previous tab |
+| ctrl+b s | Back to the picker |
+
+Your `init.lua` bindings work there too, except `cmd` keys (a terminal never sends them) and a
+binding on the prefix key itself.
+
+## Work on your devbox
+
+Commands that talk to the server take `-H` to act on the leon server on another machine instead, through your own
+`ssh` (no account, relay or VPN; `~/.ssh/config` and `ProxyJump` work). Put `leon` on the other
+machine's PATH or in `~/.local/bin`; the first command there starts its server, and programs keep
+running after you disconnect.
+
+```text
+leon hosts add devbox ssh://me@devbox.example.com
+leon -H devbox run -- make test     # runs on the devbox
+leon -H devbox attach               # its sessions, in this terminal
+leon hosts check
+```
+
+A dropped Wi-Fi link is retried for a minute: `leon events` resumes without losing or repeating
+an event, and `leon attach` reconnects and redraws (keys typed while the link is down are lost).
+Use ssh keys or an agent: each connection is its own ssh session.
+
 ## Let an agent drive it
 
 ```sh
@@ -137,15 +182,29 @@ what it created. See [docs/agents.md](docs/agents.md).
 | ⌘1 … ⌘9 | Go to tab 1–9 |
 | ⌘V | Paste |
 | ⌘B | Show or hide the sidebar |
+| ⌘⇧S | Tabs in the sidebar or in the titlebar (saved for the next launch) |
 | ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
 | ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
 
 These are defaults: a `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
 removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow.
-A pane whose program reports its status (OSC 7501, as agents do) shows a spinner, ⚠ / ? / ⚿ when
-it is blocked, ✓ when done or ✗ on an error, on its tab and its session in the sidebar; done and
-error clear when you go to the pane.
+A pane whose program reports its status (OSC 7501, as agents do) shows a pulsing dot while working,
+a warning, question or key icon when it is blocked, a check when done or a cross on an error, on its tab and in its pane header (a collapsed
+session's label shows its most urgent one); done and error clear when you go to the pane. Pane
+headers name the program and where it is, and hold split, zoom and close buttons; "Show or Hide
+Pane Headers" in the palette turns them off. Every button names its action and shortcut on hover.
+Drag the sidebar's edge to resize it. The window opens at most of the screen the first time, then
+where you left it.
+
+Tabs live in one place. ⌘⇧S moves them from the sidebar to the titlebar, beside the session's name,
+and the sidebar then lists only sessions; the app remembers the choice:
+
+![Top tab style: the session's tabs in the titlebar row, the sidebar listing only sessions](docs/images/app-top.png)
+
+With no session open, the app says what to do next:
+
+![The empty state: leon's icon, the tagline, and the keys for a new session and the palette, plus leon skill setup](docs/images/app-empty.png)
 
 ## Script it in Lua
 

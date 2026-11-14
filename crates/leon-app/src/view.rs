@@ -1,5 +1,6 @@
-//! The window: a sidebar of sessions, a tab bar of the selected session's windows, and the active
-//! window's split layout, each pane a terminal painted from the screen the server pushes. A task
+//! The window: a sidebar of sessions (with their tabs as rows, or in top tab style only the
+//! sessions, the tabs then in the titlebar), and the active window's split layout as tiles, each a
+//! pane header over a terminal painted from the screen the server pushes. A task
 //! on the GPUI executor redraws when the model or a screen changed, woken by the reader thread
 //! (or every `POLL`, for the spinner and the keymap).
 
@@ -7,6 +8,7 @@ use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -23,12 +25,14 @@ use leon_core::layout::Direction;
 use leon_lua::keys::Chord;
 use serde_json::{json, Value};
 
+use crate::chrome::{self, Places, Settings, SidebarList};
+use crate::icons::{Icon, ROW_ICON, TOOLBAR_ICON, TOOLBAR_TARGET};
 use crate::keymap::{self, Bound, Keymap, Pressed};
-use crate::panes::{self, Divider};
+use crate::panes::{self, Divider, GAP};
 use crate::remote::Remote;
 use crate::render::{self, Frame};
 use crate::status::{self, Indicator};
-use crate::theme::{Theme, DARK};
+use crate::theme::{Theme, DARK, SECONDARY_TEXT, UI_TEXT};
 
 actions!(
     leon,
@@ -57,13 +61,10 @@ const FONT_FAMILY: &str = "Menlo";
 const FONT_SIZE: f32 = 13.;
 const FONT_SIZES: (f32, f32) = (8., 32.);
 const LINE_HEIGHT: f32 = 1.3;
-const SIDEBAR_WIDTH: f32 = 220.;
-const TAB_BAR_HEIGHT: f32 = 38.;
-/// Space between a pane's edge and its text.
-const PADDING: f32 = 8.;
-/// The divider line between panes, and how far either side of it a drag can start.
-const DIVIDER: f32 = 1.;
-const DIVIDER_GRAB: f32 = 3.;
+/// The titlebar row: the traffic lights, the toolbar, and in top style the tabs.
+const TITLEBAR: f32 = 38.;
+/// Room for the traffic lights at the left of the titlebar row.
+const TRAFFIC_LIGHTS: f32 = 78.;
 /// How often the poll looks for changes (about 120 Hz).
 const POLL: Duration = Duration::from_millis(8);
 /// The spinner's frame time: at most 8 redraws a second for it.
@@ -136,9 +137,16 @@ pub fn install(cx: &mut App) {
 /// Open the app window on `server` and run until it quits.
 pub fn run(server: Remote) {
     let server = Rc::new(server);
-    Application::new().run(move |cx: &mut App| {
+    Application::new().with_assets(crate::icons::Icons).run(move |cx: &mut App| {
         install(cx);
-        let bounds = Bounds::centered(None, size(px(1100.), px(700.)), cx);
+        // the last frame, on its display, when it still fits there; else most of the primary one.
+        // A window's bounds are relative to its display, so the frame is too.
+        let saved = settings_path().map(|p| Settings::load(&p)).unwrap_or_default();
+        let on = saved.display.and_then(|id| cx.displays().into_iter().find(|d| u32::from(d.id()) == id));
+        let display = on.clone().or_else(|| cx.primary_display());
+        let screen = display.as_ref().map(|d| chrome::Frame { x: 0., y: 0., ..frame(d.bounds()) });
+        let f = chrome::window_frame(on.and(saved.window), screen.as_slice());
+        let bounds = Bounds::new(point(px(f.x), px(f.y)), size(px(f.w), px(f.h)));
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions {
@@ -146,11 +154,12 @@ pub fn run(server: Remote) {
                 appears_transparent: true,
                 traffic_light_position: Some(point(px(14.), px(13.))),
             }),
-            window_min_size: Some(size(px(480.), px(260.))),
+            window_min_size: Some(size(px(chrome::MIN_WINDOW.0), px(chrome::MIN_WINDOW.1))),
+            display_id: display.map(|d| d.id()),
             ..WindowOptions::default()
         };
         let app = server.clone();
-        cx.open_window(options, move |window, cx| cx.new(|cx| Workspace::new(app, window, cx)))
+        cx.open_window(options, move |window, cx| cx.new(|cx| Workspace::for_app(app, window, cx)))
             .expect("open the leon window");
         cx.activate(true);
     });
@@ -224,12 +233,43 @@ struct KeymapInbox {
 /// The blocks on screen, in leaf order.
 type Panes = Vec<String>;
 
-/// A divider being dragged: the split it sets, and where the drag started.
-struct Drag {
-    divider: Divider,
-    from: Pixels,
-    /// The ratio last sent, so a move that changes nothing sends nothing.
-    last: Option<f64>,
+/// Something being dragged.
+enum Drag {
+    /// A divider: the split it sets, where the drag started, and the ratio last sent, so a move
+    /// that changes nothing sends nothing.
+    Divider { divider: Divider, from: Pixels, last: Option<f64> },
+    /// The sidebar's edge: where the drag started and the width then.
+    Sidebar { from: Pixels, width: f32 },
+}
+
+thread_local! {
+    /// The debug selectors the last frame drew. Only test builds name elements, and GPUI keeps a
+    /// selector's bounds after its element is gone, so tests ask this what is on screen.
+    static DRAWN: RefCell<HashSet<String>> = RefCell::default();
+}
+
+/// `name`, noted as drawn this frame: what each `debug_selector` closure returns.
+fn sel(name: String) -> String {
+    DRAWN.with(|d| d.borrow_mut().insert(name.clone()));
+    name
+}
+
+/// The debug selectors of the elements the last frame drew (empty outside test builds).
+pub fn drawn() -> HashSet<String> {
+    DRAWN.with(|d| d.borrow().clone())
+}
+
+// Truncating text cells use `line_clamp(1)`, not `whitespace_nowrap`: GPUI 0.2.2 caches a no-wrap
+// text's size from its first layout (before its width is known) and never adds the ellipsis.
+
+/// A GPUI rectangle as a settings frame.
+fn frame(b: Bounds<Pixels>) -> chrome::Frame {
+    chrome::Frame { x: b.origin.x.into(), y: b.origin.y.into(), w: b.size.width.into(), h: b.size.height.into() }
+}
+
+/// Where the app keeps its settings: `$LEON_STATE_DIR/app.json` (next to the server's sessions).
+pub fn settings_path() -> Option<PathBuf> {
+    leon_core::paths::state_dir().map(|d| d.join("app.json"))
 }
 
 pub struct Workspace {
@@ -239,6 +279,9 @@ pub struct Workspace {
     /// Where the selected session sat in the list when last seen.
     selected_at: usize,
     sidebar: bool,
+    settings: Settings,
+    /// Where `settings` are saved; None keeps them in memory (tests).
+    settings_path: Option<PathBuf>,
     collapsed: HashSet<String>,
     focus: FocusHandle,
     stats: Rc<RefCell<Stats>>,
@@ -258,10 +301,24 @@ pub struct Workspace {
     seen_focus: Option<(String, bool)>,
     _poll: Task<()>,
     _activation: Subscription,
+    _bounds: Subscription,
+    _quit: Subscription,
+    _release: Subscription,
 }
 
 impl Workspace {
+    /// A workspace whose settings live in memory only.
     pub fn new(app: Rc<Remote>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::with_settings(app, None, window, cx)
+    }
+
+    /// The app's own workspace: settings from `settings_path()`, saved there on each change.
+    pub fn for_app(app: Rc<Remote>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::with_settings(app, settings_path(), window, cx)
+    }
+
+    /// A workspace with the settings in `path` (the defaults when it is None or unreadable).
+    pub fn with_settings(app: Rc<Remote>, path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         if app.model().sessions.is_empty() {
             let _ = app.act("session.create", json!({}));
         }
@@ -295,12 +352,25 @@ impl Workspace {
         let stats = Stats { enabled: std::env::var("LEON_FRAME_STATS").is_ok_and(|v| v == "1"), ..Stats::default() };
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |_, _, cx| cx.notify());
+        // the window's frame and display are kept with the settings, and saved when the app quits
+        // or the window closes (closing drops the workspace before the quit it asks for)
+        let bounds = cx.observe_window_bounds(window, |ws, window, cx| {
+            ws.settings.window = Some(frame(window.window_bounds().get_bounds()));
+            ws.settings.display = window.display(cx).map(|d| u32::from(d.id()));
+        });
+        let quit = cx.on_app_quit(|ws, _| {
+            ws.save_settings();
+            async {}
+        });
+        let release = cx.on_release(|ws, _| ws.save_settings());
         Workspace {
             app,
             drag: None,
             session_id,
             selected_at: 0,
             sidebar: true,
+            settings: path.as_deref().map(Settings::load).unwrap_or_default(),
+            settings_path: path,
             collapsed: HashSet::new(),
             focus,
             stats: Rc::new(RefCell::new(stats)),
@@ -315,6 +385,9 @@ impl Workspace {
             seen_focus: None,
             _poll: poll,
             _activation: activation,
+            _bounds: bounds,
+            _quit: quit,
+            _release: release,
         }
     }
 
@@ -392,95 +465,6 @@ impl Workspace {
         self.session_id = rows.get(self.selected_at).map(|r| r.id.clone());
     }
 
-    fn rows(&self) -> Vec<SessionRow> {
-        let m = self.app.model();
-        m.sessions
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                let shows = |b: &crate::remote::Block| status::indicator_of(&b.newest_first());
-                let windows: Vec<WindowRow> = s
-                    .windows
-                    .iter()
-                    .map(|w| WindowRow {
-                        id: w.id.clone(),
-                        title: w.label.clone().unwrap_or_else(|| {
-                            let shown = target(w).and_then(|id| s.blocks.iter().find(|b| b.id == id));
-                            shown.map_or("empty".into(), |b| program_name(&b.command))
-                        }),
-                        status: status::aggregate(s.blocks.iter().filter(|b| b.window_id == w.id).map(shows)),
-                    })
-                    .collect();
-                SessionRow {
-                    id: s.id.clone(),
-                    title: s.label.clone().unwrap_or_else(|| format!("Session {}", i + 1)),
-                    status: status::aggregate(windows.iter().map(|w| w.status)),
-                    windows,
-                    active: s.active,
-                }
-            })
-            .collect()
-    }
-
-    /// (each session's indicator, each tab's of the selected session), as the sidebar and tab bar show.
-    pub fn indicators(&self) -> (Vec<Option<Indicator>>, Vec<Option<Indicator>>) {
-        let rows = self.rows();
-        let tabs = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
-        let tabs = tabs.map(|r| r.windows.iter().map(|w| w.status).collect()).unwrap_or_default();
-        (rows.iter().map(|r| r.status).collect(), tabs)
-    }
-
-    /// The status caption in a pane's corner.
-    pub fn pane_caption(&self, block_id: &str) -> Option<String> {
-        status::caption_of(&self.app.model().block(block_id)?.1.newest_first())
-    }
-
-    /// The spinner frame, when a working indicator is on screen (a sidebar row or a tab).
-    fn spinning(&self, rows: &[SessionRow]) -> Option<u64> {
-        let working = |i: &Option<Indicator>| matches!(i, Some(Indicator::Working { .. }));
-        let selected = rows.iter().filter(|r| Some(&r.id) == self.session_id.as_ref());
-        let on_screen = (self.sidebar && rows.iter().any(|r| working(&r.status)))
-            || selected.flat_map(|r| &r.windows).any(|w| working(&w.status));
-        on_screen.then(|| (self.epoch.elapsed().as_millis() / SPIN.as_millis()) as u64)
-    }
-
-    pub fn font_size(&self) -> f32 {
-        self.font_size
-    }
-
-    /// Changes worth a redraw: every session's view (its revision moves with layout, focus, zoom
-    /// and labels) and the screen of every pane on screen (only those are watched, so hidden tabs
-    /// and panes hidden by a zoom don't count).
-    pub fn signature(&self) -> u64 {
-        let mut h = DefaultHasher::new();
-        let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
-        {
-            let m = self.app.model();
-            for s in &m.sessions {
-                (&s.id, &s.label, s.active, s.revision).hash(&mut h);
-                for w in &s.windows {
-                    (&w.id, &w.label).hash(&mut h);
-                }
-            }
-            for id in &shown {
-                (id, m.screen_updates.get(id)).hash(&mut h);
-            }
-        }
-        // status shows for every tab and session, shown or not
-        let rows = self.rows();
-        for r in &rows {
-            r.status.hash(&mut h);
-            r.windows.iter().for_each(|w| w.status.hash(&mut h));
-        }
-        self.spinning(&rows).hash(&mut h);
-        (self.sidebar, self.font_size.to_bits(), self.pending.len(), self.palette.is_some()).hash(&mut h);
-        self.session_id.hash(&mut h);
-        for id in &shown {
-            self.pane_caption(id).hash(&mut h);
-        }
-        h.finish()
-    }
-
     /// Run a layout method on the selected session; redraw.
     fn call(&mut self, method: &str, mut params: serde_json::Value, cx: &mut Context<Self>) {
         let Some(sid) = self.session_id.clone() else { return };
@@ -492,14 +476,24 @@ impl Workspace {
     }
 }
 
-#[path = "view_chrome.rs"]
-mod chrome;
+#[path = "view_bars.rs"]
+mod bars;
 #[path = "view_handlers.rs"]
 mod handlers;
+#[path = "view_header.rs"]
+mod header;
 #[path = "view_keys.rs"]
 mod keys;
+#[path = "view_model.rs"]
+mod model;
 #[path = "view_overlay.rs"]
 mod overlay;
+#[path = "view_paint.rs"]
+mod paint;
 #[path = "view_panes.rs"]
 mod panes_view;
+#[path = "view_sidebar.rs"]
+mod sidebar;
+use bars::status_mark;
+use paint::*;
 use panes_view::*;

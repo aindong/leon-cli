@@ -77,3 +77,35 @@ fn place(node: &Node, r: Rect, gap: f32, out: &mut Layout) {
     place(before, b, gap, out);
     place(after, a, gap, out);
 }
+
+/// The channel between two pane tiles, and between the tiles and the pane area's edge.
+pub const GAP: f32 = 6.;
+pub const INSET: f32 = 6.;
+/// A pane header's height, and the space between a tile's edge (or its header) and its text.
+pub const HEADER: f32 = 24.;
+pub const PADDING: f32 = 8.;
+
+/// `tree` laid out as tiles in an area of `size`: inset from its edge and `GAP` apart. The gaps
+/// are the dividers a drag resizes.
+pub fn tiles(tree: &Node, zoomed: Option<&str>, size: (f32, f32)) -> Layout {
+    let inner = ((size.0 - 2. * INSET).max(0.), (size.1 - 2. * INSET).max(0.));
+    let mut l = layout(tree, zoomed, inner, GAP);
+    let shift = |r: &mut Rect| (r.x, r.y) = (r.x + INSET, r.y + INSET);
+    l.panes.iter_mut().for_each(|p| shift(&mut p.rect));
+    for d in &mut l.dividers {
+        shift(&mut d.rect);
+        shift(&mut d.split);
+    }
+    l
+}
+
+/// Where a tile's terminal text goes: below its header (when headers show), less the padding.
+pub fn text_rect(tile: Rect, header: bool) -> Rect {
+    let top = if header { HEADER } else { 0. };
+    Rect {
+        x: tile.x + PADDING,
+        y: tile.y + top + PADDING,
+        w: (tile.w - 2. * PADDING).max(0.),
+        h: (tile.h - top - 2. * PADDING).max(0.),
+    }
+}

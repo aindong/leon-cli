@@ -113,6 +113,8 @@ impl Workspace {
             "pane.close" => self.close_pane(&ClosePane, window, cx),
             "pane.paste" => self.paste(&Paste, window, cx),
             "client.sidebar.toggle" => self.toggle_sidebar(&ToggleSidebar, window, cx),
+            "client.tab_style.toggle" => self.toggle_tab_style(cx),
+            "client.pane_header.reveal" => self.toggle_pane_headers(cx),
             "client.font.increase" => self.set_font_size(self.font_size + 1., window, cx),
             "client.font.decrease" => self.set_font_size(self.font_size - 1., window, cx),
             "client.font.reset" => self.set_font_size(FONT_SIZE, window, cx),
@@ -153,6 +155,15 @@ impl Workspace {
     /// The open palette's rows, filtered: (title, shortcut).
     pub fn palette_rows(&self) -> Vec<(String, Option<String>)> {
         self.palette_matches().into_iter().map(|it| (it.title, it.shortcut)).collect()
+    }
+
+    /// The palette's rows for `query`, as if typed into it: (title, shortcut).
+    pub fn palette_rows_for(&self, query: &str) -> Vec<(String, Option<String>)> {
+        let items = self.palette_items();
+        palette::filter(&items, query)
+            .into_iter()
+            .map(|i| (items[i].title.clone(), items[i].shortcut.clone()))
+            .collect()
     }
 
     pub(super) fn palette_matches(&self) -> Vec<Item> {

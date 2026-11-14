@@ -17,6 +17,8 @@ panes) in a split layout. Every object has a stable ID such as `block:91c0…`.
 - **The server.** Any command that needs the server starts a personal one if none runs
   (`--autostart=false` or `LEON_AUTOSTART=0` turns that off). The socket lives in
   `$LEON_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/leon`, else `~/.local/state/leon/run`.
+- **Another machine.** `-H HOST` sends any client command to the leon server on another machine,
+  through your own `ssh` (see [Hosts](#hosts)).
 
 ## Global flags
 
@@ -28,6 +30,7 @@ These work with every command.
 | `--json` | Print JSON instead of text. |
 | `-s, --session SESSION` | Target session (default `$LEON_SESSION`). |
 | `-b, --block BLOCK` | Target block (default `$LEON_BLOCK`, else the active window's focused block). |
+| `-H, --host HOST` | Act on another machine's leon server, over ssh: a label from `leon hosts`, or `ssh://[USER@]HOST[:PORT]`. Also `-S, --server`. With it, `$LEON_SESSION` and `$LEON_BLOCK` are ignored (they name this machine's objects). |
 | `-h, --help` | Print help. |
 | `-V, --version` | Print the version. |
 
@@ -55,7 +58,42 @@ window) detaches and every program keeps running; the app's "Quit and End All Se
 `leon server stop` ends them. With `--autostart=false` and no server it exits 4.
 
 A build without the app (Linux for now, or macOS with `--no-default-features`) has no window:
-`leon` alone prints the help and exits 0, and `leon app` exits 1 saying so.
+`leon` alone runs `leon attach` when stdin and stdout are a terminal and otherwise prints the help
+and exits 0, and `leon app` exits 1 saying so.
+
+## In a terminal
+
+### `leon attach [TARGET]`
+
+Use leon inside any terminal, locally or over ssh (`ssh -t HOST leon attach`; without `-t` there is
+no terminal and it exits 1). With no TARGET (and no `-s`) it opens a picker of every session, its
+tabs and their blocks, with the selected block's screen previewed live: type to filter (letters in
+order, as the command palette matches), ↑ and ↓ (or ctrl+p, ctrl+n) move, Enter attaches, Esc goes
+back or quits. TARGET is a session, or a block, whose tab then opens with it focused. With no
+session at all, Enter starts one.
+
+Attached, it shows the session's active tab: every pane of the split layout with borders between
+them, and a status bar with the session and its tabs. Keys go to the focused pane, except the
+prefix key and your config's bindings (`init.lua`; a `cmd` key never arrives from a terminal).
+After the prefix (`--prefix KEY`, else the config's `leon.mode("attach", { prefix = … })`, else
+ctrl+b):
+
+| Key | Does |
+|---|---|
+| `d` | Detach: `leon attach` exits 0 and every program keeps running |
+| ←↑↓→ or `h` `j` `k` `l` | Focus the pane that way |
+| `%`, `"` | Split the pane right, down |
+| `z` | Zoom the pane (again to undo) |
+| `c` | New tab |
+| `n`, `p` | Next, previous tab |
+| `s` | Back to the picker |
+| the prefix again | Type the prefix key into the pane |
+
+Panes are sized to fit this terminal whenever its own layout of them changes (attaching, a resize,
+a split or zoom, a pane coming back on screen); a pane another client resized since is clipped or
+padded. On exit
+(detach, the server stopping, SIGHUP, SIGTERM, SIGINT, SIGQUIT) the terminal is given back as it was; a
+watchdog process does it even after SIGKILL. Killed by a signal, it exits 128 + the signal.
 
 ## Sessions
 
@@ -272,6 +310,10 @@ block events too. With `--all`: everything.
 With `--json` it prints a snapshot first, then one JSON line per event, each with a `seq` that
 rises by exactly one.
 
+With `-H`, a dropped link is retried for up to 60 s and the stream resumes after the last event
+printed: nothing is lost or printed twice. If the host's server restarted meanwhile, it prints a
+new snapshot line and goes on from there.
+
 ### `leon do ACTION|SCRIPT|-e CODE [k=v…]`
 
 Run a config action on the server, or a Lua script in this process. A word that looks like a path
@@ -378,6 +420,57 @@ with the text each terminal shows (in the private state dir, 0600).
 ### `leon server status`
 
 Show whether a server runs; exit 4 if not.
+
+### `leon server proxy`
+
+Connect stdin and stdout to this machine's server, starting a persistent one first unless
+`--autostart=false`. This is what `leon -H` runs on the other machine over ssh; you don't run it
+yourself.
+
+## Hosts
+
+`-H HOST` reaches the leon server on another machine (a devbox, a cloud VM, another Mac) through
+the system `ssh`, so `~/.ssh/config`, `ProxyJump`, keys and agents all work, and leon never sees a
+password. Nothing listens on a network port: leon runs `ssh -T … -- [USER@]HOST` and, on the
+host, `leon server proxy` (found on `PATH`, else in `~/.local/bin`), which starts the host's
+server if none runs. `LEON_SSH` names another ssh program. An endpoint is only
+`ssh://[USER@]HOST[:PORT]` with plain names; anything else is refused (exit 2). Each connection is
+one ssh session (`leon attach` opens three), so use keys or an agent, and `ControlMaster auto` in
+`~/.ssh/config` to share one login.
+
+```text
+leon -H ssh://me@devbox ls
+leon hosts add devbox ssh://me@devbox
+leon -H devbox attach
+```
+
+`leon server run|start|proxy`, `leon app`, `leon config check`, `leon skill` and `leon hosts` are
+about this machine and refuse `-H`; `leon server status` and `leon server stop` work over it.
+
+### `leon hosts`
+
+Name other machines for `-H`, and check that they answer. The list is
+`$LEON_STATE_DIR/hosts.json` (mode 0600, in the private state dir).
+
+### `leon hosts list`
+
+List the hosts; `--json` prints `[{"label", "endpoints", "icon"}]`.
+
+### `leon hosts add LABEL ENDPOINT…`
+
+Add a host: a label (letters, digits, `.`, `_`, `-`) and its `ssh://` endpoints. `-H LABEL` uses
+the first. A label is added once (exit 1 if it exists).
+
+- `--icon NAME`: an icon name for the app to show.
+
+### `leon hosts remove LABEL…`
+
+Remove hosts (exit 3 if one isn't there).
+
+### `leon hosts check [LABEL…]`
+
+Reach each host (default: every one) as a command would, and print `ok` with its leon version,
+or why not. Exit 4 if any host failed.
 
 ## Agents
 
