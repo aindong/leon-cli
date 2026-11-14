@@ -25,17 +25,23 @@ pub struct Embedded {
 /// saved sessions and saving them when the app quits, as `leon server run` does.
 pub fn start() -> Result<Embedded, String> {
     let persist = leon_core::paths::state_dir().map(|d| Persist { file: d.join(persist::FILE), restore: true });
-    start_with(leon_core::paths::socket_path(), persist)
+    start_with(leon_core::paths::socket_path(), persist, leon_lua::config_path())
 }
 
-/// Serve on `socket`, keeping no sessions across runs.
+/// Serve on `socket`, keeping no sessions across runs and loading no config.
 pub fn start_at(socket: PathBuf) -> Result<Embedded, String> {
-    start_with(socket, None)
+    start_with(socket, None, None)
 }
 
-/// Serve on `socket`. A live server already there is stopped if it holds no sessions; one with
-/// sessions is left alone and the error says how to stop it.
-pub fn start_with(socket: PathBuf, persist: Option<Persist>) -> Result<Embedded, String> {
+/// Serve on `socket` with `config` as init.lua, keeping no sessions across runs.
+pub fn start_configured(socket: PathBuf, config: PathBuf) -> Result<Embedded, String> {
+    start_with(socket, None, Some(config))
+}
+
+/// Serve on `socket`, loading `config` (a missing file is an empty config). A live server already
+/// there is stopped if it holds no sessions; one with sessions is left alone and the error says how
+/// to stop it.
+pub fn start_with(socket: PathBuf, persist: Option<Persist>, config: Option<PathBuf>) -> Result<Embedded, String> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .thread_name("leon-server")
@@ -55,6 +61,10 @@ pub fn start_with(socket: PathBuf, persist: Option<Persist>) -> Result<Embedded,
     if let Some(p) = &persist {
         listener.persist(&ctx, p); // before the app looks: it opens a session only when there is none
     }
+    if let Some(path) = config {
+        let _in_rt = rt.enter(); // the load runs on the runtime while the socket serves
+        ctx.start_config(Some(path));
+    }
     let opts = Options { socket: socket.clone(), idle_exit: Duration::from_secs(10) };
     let (c, d) = (ctx.clone(), done.clone());
     rt.spawn(async move {
@@ -72,6 +82,13 @@ impl Embedded {
     /// Run a method in-process. Only for methods that answer at once (not `block.wait`).
     pub fn call(&self, method: &str, params: Value) -> Result<Value, ApiError> {
         self.rt.block_on(self.ctx.call(method, params))
+    }
+
+    /// Run a method on the server's runtime without waiting: config actions and key bindings run
+    /// Lua for up to 30 s, which must not stall the UI. `done` gets the reply on a runtime thread.
+    pub fn spawn(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
+        let (ctx, method) = (self.ctx.clone(), method.to_string());
+        self.rt.spawn(async move { done(ctx.call(&method, params).await) });
     }
 
     pub fn stopped(&self) -> bool {

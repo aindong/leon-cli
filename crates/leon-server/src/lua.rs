@@ -234,6 +234,17 @@ pub struct Keymap {
     pub bindings: Vec<BindingView>,
     pub modes: Vec<ModeView>,
     pub server_actions: Vec<ActionView>,
+    /// `leon.unbind` calls, for a client to apply to its own default bindings.
+    pub unbinds: Vec<UnbindView>,
+}
+
+#[derive(Serialize, JsonSchema, PartialEq)]
+pub struct UnbindView {
+    /// The chords, without the mode.
+    pub key: String,
+    pub mode: Option<String>,
+    /// Only bindings to this action; none = every binding of the key.
+    pub action: Option<String>,
 }
 
 #[derive(Serialize, JsonSchema, PartialEq)]
@@ -324,6 +335,11 @@ fn keymap(l: &Loaded) -> Keymap {
                 repeats: a.repeats,
                 source: a.source.clone(),
             })
+            .collect(),
+        unbinds: c
+            .unbinds
+            .iter()
+            .map(|u| UnbindView { key: u.key.sequence(), mode: u.key.mode.clone(), action: u.action.clone() })
             .collect(),
     }
 }

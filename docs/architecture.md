@@ -60,6 +60,14 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   stop` from the CLI quits the app. The window shows the active tab's whole split tree; keys go to
   the zoomed block, else the focused one. The view polls each visible pane's change counter and
   each session's revision (~8 ms) and redraws only when something changed.
+- **App keys go through the keymap.** The embedded server loads `init.lua` like `leon server run`.
+  The app has no GPUI key table (only ⌘Q): every keystroke becomes an unshifted chord
+  (`keymap::chord`) and is resolved against its built-in defaults (`keymap::DEFAULTS`) with the
+  config's `client.keymap` on top, fetched off the UI thread about once a second. The app runs its
+  own actions (`client.*`, `pane.*`, `session.*`); a config action or Lua function goes to the
+  server (`client.action` / `client.key`) without waiting. A pending sequence shows a hint and has
+  no timeout; unbound keys go to the pane. Program status (OSC 7501) is read by reference from
+  each terminal's store on every poll; focusing a pane clears its `done`/`error` (reason `seen`).
 - **Agent skill.** `leon skill show` prints a guide compiled into the binary. `skill setup` installs a
   SKILL.md stub (marked `<!-- leon-skill: … -->`) that tells the agent to run `leon skill show`, so
   upgrades reach agents without a reinstall, plus a matcher-less SessionStart hook running

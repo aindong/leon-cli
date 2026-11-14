@@ -18,6 +18,8 @@ pub enum Reason {
     Exited,
     Prompt,
     Reset,
+    /// The user looked at the terminal (the app focused its pane).
+    Seen,
 }
 
 /// What M3 forwards as `terminal.program_status_changed` / `terminal.program_status_removed`.
@@ -69,6 +71,11 @@ impl Store {
         self.by_tick().into_iter().map(|(k, e)| (public(k), self.resolved(k, &e.record))).collect()
     }
 
+    /// Every record as reported (`app` not resolved), most recently reported first, uncopied.
+    pub fn newest_first(&self) -> Vec<&Record> {
+        self.by_tick().into_iter().rev().map(|(_, e)| &e.record).collect()
+    }
+
     /// Applies one report.
     pub fn apply(&mut self, message: Message) -> Vec<Change> {
         match message {
@@ -89,6 +96,11 @@ impl Store {
     /// A new shell prompt (OSC 133 A): same rule as exit.
     pub fn prompt(&mut self) -> Vec<Change> {
         self.drop_live(Reason::Prompt)
+    }
+
+    /// The user returned to the terminal: `done` and `error` have been seen.
+    pub fn acknowledge(&mut self) -> Vec<Change> {
+        self.remove_where(Reason::Seen, |_, r| matches!(r.state, State::Done | State::Error))
     }
 
     /// RIS wipes every record.

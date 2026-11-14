@@ -37,24 +37,28 @@ backspace delete left right up down home end pageup pagedown f1`–`f12`. Write 
 
 ```lua
 leon.bind("cmd+t", "client.tab.new")
-leon.bind("ctrl+b>c", "session.new_window")
+leon.bind("ctrl+b>c", "client.tab.new")
 leon.bind("ctrl+b>%", "pane.split", { direction = "right" })
 leon.bind("ctrl+b>\"", "pane.split", { direction = "down" })
 leon.bind("ctrl+b>z", "pane.zoom")
 ```
 
-**Today** the server resolves these bindings (`leon keymap` shows them, and the `client.key` API
-method runs them), but the app doesn't send its keys through them yet: its own shortcuts are fixed
-(see the README). Actions you define work everywhere, through `leon do`.
+The app sends every key through these bindings, on top of its own defaults (the README's
+shortcut table): a binding replaces the default on the same key, and a sequence whose first key
+is a default turns that key into its prefix. While a sequence is half typed the app shows what can
+follow; Escape, or a key that continues nothing, cancels it. Keys nothing binds go to the pane.
+The app runs its own actions (`client.*`, `pane.*`, `session.*`, listed in its command palette,
+⌘⇧P); your actions and function bindings run in the server. `leon keymap` shows what is bound.
 
 `leon.unbind(key)` removes a key's bindings, including the app's defaults, and returns how many it
 removed. `leon.bindings()` lists the bindings made so far.
 
 ## Modes
 
-A mode is a set of keys that only work while the mode is on. Enter it with `client.mode.enter`;
-Escape leaves it. An **exclusive** mode swallows keys it doesn't bind, so stray typing doesn't
-reach the terminal.
+Modes are read by the server, but neither the app nor `client.key` acts on them yet. A mode is a
+set of keys that only work while the mode is on. Enter it with `client.mode.enter`; Escape leaves
+it. An **exclusive** mode swallows keys it doesn't bind, so stray typing doesn't reach the
+terminal.
 
 ```lua
 leon.mode("resize", { exclusive = true })

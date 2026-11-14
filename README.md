@@ -12,8 +12,16 @@ Lua, or let your coding agent drive them for you. It's built in Rust, with GPUI 
   your tests there and read the results.
 - **Lua inside.** Key bindings, modes, your own actions, and scripts that react to events.
 
-<!-- screenshot: the app with a sidebar of sessions, tabs, and a split pane (to be added as docs/screenshot.png) -->
-> _Screenshot placeholder: the leon app with sessions in the sidebar and a split window._
+![The leon app: sessions in the sidebar, a split window, and an agent's progress in its tab, its sidebar row and its pane](docs/images/app-status.png)
+
+Programs report what they're doing (working, blocked, done) and the app shows it on the tab, the
+session's sidebar row and the pane. The command palette (⌘⇧P) runs any action, yours included:
+
+![The command palette, filtered to "log", listing a config action with its shortcut](docs/images/app-palette.png)
+
+Key bindings from your `init.lua` work in the app, sequences too, with a hint of what can follow:
+
+![A ctrl+b key sequence in progress, with a hint listing the keys that can follow](docs/images/app-sequence.png)
 
 ## Install
 
@@ -96,7 +104,15 @@ what it created. See [docs/agents.md](docs/agents.md).
 | ⌘1 … ⌘9 | Go to tab 1–9 |
 | ⌘V | Paste |
 | ⌘B | Show or hide the sidebar |
+| ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
+| ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
 | ⌘Q | Quit (ends every program) |
+
+These are defaults: a `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
+removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow.
+A pane whose program reports its status (OSC 7501, as agents do) shows a spinner, ⚠ / ? / ⚿ when
+it is blocked, ✓ when done or ✗ on an error, on its tab and its session in the sidebar; done and
+error clear when you go to the pane.
 
 ## Script it in Lua
 

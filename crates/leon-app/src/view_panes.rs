@@ -14,10 +14,9 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let t = &DARK;
-        let view = window.viewport_size();
-        let sidebar = if self.sidebar { SIDEBAR_WIDTH } else { 0. };
-        let size = ((f32::from(view.width) - sidebar).max(0.), (f32::from(view.height) - TAB_BAR_HEIGHT).max(0.));
+        let size = self.pane_area(window);
         let active = window.is_window_active();
+        let font_size = self.font_size;
         let l =
             w.layout.as_ref().map(|tree| panes::layout(tree, w.zoomed.as_deref(), size, DIVIDER)).unwrap_or_default();
         let target = target(w).map(str::to_string);
@@ -27,6 +26,26 @@ impl Workspace {
             let Some((_, term)) = terms.iter().find(|(id, _)| *id == p.block_id) else { continue };
             let focused = target.as_deref() == Some(p.block_id.as_str());
             let id = p.block_id.clone();
+            let (caption, shown) = term.with_program_status(|r| (status::caption_of(r), status::indicator_of(r)));
+            let caption = caption.map(|c| {
+                let color = shown.map_or(t.muted, |i| i.color(t));
+                div()
+                    .absolute()
+                    .top(px(4.))
+                    .right(px(6.))
+                    .max_w(px((p.rect.w * 0.6).max(40.)))
+                    .px(px(6.))
+                    .rounded(px(4.))
+                    .bg(gpui::Hsla::from(rgb(t.chrome)).opacity(0.9))
+                    .text_xs()
+                    .text_color(rgb(t.text))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .border_l_2()
+                    .border_color(rgb(color))
+                    .child(c)
+            });
             out = out.child(
                 div()
                     .id(SharedString::from(format!("pane-{}", p.block_id)))
@@ -43,7 +62,8 @@ impl Workspace {
                     } else {
                         gpui::transparent_black()
                     })
-                    .child(terminal_canvas(term.clone(), active && focused, stats.clone()))
+                    .child(terminal_canvas(term.clone(), active && focused, font_size, stats.clone()))
+                    .children(caption)
                     .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.focus_block(&id, cx))),
             );
         }
@@ -84,8 +104,36 @@ impl Workspace {
     }
 }
 
+impl Workspace {
+    /// The pane area's size (w, h): the window less the sidebar and the tab bar.
+    pub(super) fn pane_area(&self, window: &Window) -> (f32, f32) {
+        let view = window.viewport_size();
+        let sidebar = if self.sidebar { SIDEBAR_WIDTH } else { 0. };
+        ((f32::from(view.width) - sidebar).max(0.), (f32::from(view.height) - TAB_BAR_HEIGHT).max(0.))
+    }
+
+    /// The user arriving at a pane (another pane, tab or session selected, or the window made active)
+    /// has seen its done and error: clear them (spec §5 lifetime). Not while they stay on it, so a
+    /// finish in the pane they are looking at still shows until they come back.
+    fn note_focus(&mut self, window: &Window) {
+        let now = self.target().map(|(_, id, _)| (id, window.is_window_active()));
+        let arrived = match (&self.seen_focus, &now) {
+            (_, None) => false,
+            (Some((was, was_active)), Some((id, active))) => was != id || (*active && !was_active),
+            (None, Some(_)) => true,
+        };
+        self.seen_focus = now;
+        if arrived {
+            if let Some(t) = self.terminal() {
+                t.acknowledge();
+            }
+        }
+    }
+}
+
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.note_focus(window);
         let stats = self.stats.clone();
         if stats.borrow().enabled {
             stats.borrow_mut().render_start = Some(Instant::now());
@@ -133,6 +181,8 @@ impl Render for Workspace {
             .text_color(rgb(DARK.text))
             .when(self.sidebar, |d| d.child(self.render_sidebar(&rows, cx)))
             .child(div().flex_1().flex().flex_col().min_w(px(0.)).child(self.render_tabs(current, cx)).child(body))
+            // last, so it paints over the panes: GPUI paints children in order
+            .children(self.render_overlay(cx))
     }
 }
 
@@ -150,28 +200,41 @@ pub(super) fn terminal_font(bold: bool, italic: bool) -> Font {
     }
 }
 
+/// A terminal cell's (width, height) at `pt`.
+pub(super) fn cell_size(window: &Window, pt: f32) -> (Pixels, Pixels) {
+    let ts = window.text_system();
+    let font_id = ts.resolve_font(&terminal_font(false, false));
+    let cell_w = ts.advance(font_id, px(pt), 'm').map(|s| s.width).ok().filter(|w| *w > px(0.)).unwrap_or(px(8.));
+    (cell_w, (px(pt) * LINE_HEIGHT).round())
+}
+
+/// Resize `term` to the cells that fit in (w, h), if that changes its size.
+pub(super) fn fit(term: &Terminal, w: Pixels, h: Pixels, cell_w: Pixels, line_h: Pixels) {
+    let cells = |len: Pixels, unit: Pixels, least: u16| ((len / unit).floor().max(0.) as u16).max(least);
+    // At least what `Terminal::resize` clamps to, or every frame would resize again.
+    let (rows, cols) = (cells(h, line_h, 1), cells(w, cell_w, 2));
+    if term.size() != (rows, cols) {
+        let _ = term.resize(rows, cols);
+    }
+}
+
 /// Paints one terminal. Prepaint fits the grid to the bounds (resizing the PTY when rows or
 /// columns change) and builds the render model under the terminal's lock; paint draws it.
-pub(super) fn terminal_canvas(term: Arc<Terminal>, active: bool, stats: Rc<RefCell<Stats>>) -> impl IntoElement {
-    let font_size = px(FONT_SIZE);
+pub(super) fn terminal_canvas(
+    term: Arc<Terminal>,
+    active: bool,
+    font_size: f32,
+    stats: Rc<RefCell<Stats>>,
+) -> impl IntoElement {
     canvas(
         move |bounds, window, _| {
-            let ts = window.text_system();
-            let font_id = ts.resolve_font(&terminal_font(false, false));
-            let cell_w =
-                ts.advance(font_id, font_size, 'm').map(|s| s.width).ok().filter(|w| *w > px(0.)).unwrap_or(px(8.));
-            let line_h = (font_size * LINE_HEIGHT).round();
-            let fit = |len: Pixels, unit: Pixels, least: u16| ((len / unit).floor() as u16).max(least);
-            // At least what `Terminal::resize` clamps to, or every frame would resize again.
-            let (rows, cols) = (fit(bounds.size.height, line_h, 1), fit(bounds.size.width, cell_w, 2));
-            if term.size() != (rows, cols) {
-                let _ = term.resize(rows, cols);
-            }
+            let (cell_w, line_h) = cell_size(window, font_size);
+            fit(&term, bounds.size.width, bounds.size.height, cell_w, line_h);
             let frame = term.with_term(|t| render::frame(t, &DARK));
             (frame, cell_w, line_h)
         },
         move |bounds, (frame, cell_w, line_h), window, cx| {
-            paint_frame(&frame, &DARK, bounds, cell_w, line_h, active, window, cx);
+            paint_frame(&frame, &DARK, bounds, cell_w, line_h, font_size, active, window, cx);
             stats.borrow_mut().painted();
         },
     )
@@ -185,6 +248,7 @@ pub(super) fn paint_frame(
     bounds: Bounds<Pixels>,
     cell_w: Pixels,
     line_h: Pixels,
+    font_size: f32,
     active: bool,
     window: &mut Window,
     cx: &mut App,
@@ -221,7 +285,7 @@ pub(super) fn paint_frame(
             // Pin glyph i to column i, so a fallback font's advance can't push text off the grid.
             let grid = s.filter(|s| s.cells == s.text.chars().count()).map(|_| cell_w);
             let shaped =
-                window.text_system().shape_line(SharedString::from(text.to_string()), px(FONT_SIZE), &[run], grid);
+                window.text_system().shape_line(SharedString::from(text.to_string()), px(font_size), &[run], grid);
             let _ = shaped.paint(at(line, col), line_h, window, cx);
         };
     // A solid block cursor sits under the text; its cell's text is redrawn in the background color.
