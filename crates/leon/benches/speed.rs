@@ -1,6 +1,9 @@
 //! `cargo bench -p leon --bench speed [-- --samples N]`: input latency, output throughput and API
 //! round trip against a private leon server, and the same against tmux when it is installed.
-//! Results and method: docs/performance.md.
+//! Results and method: docs/performance.md. Exits 1 when the attached app's budget is missed.
+
+#[path = "speed/attached.rs"]
+mod attached;
 
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -106,6 +109,7 @@ fn main() {
 
     let (rt, lat) = (round_trip(&mut c, samples * 5), latency(&mut c, samples));
     let leon = ("leon", rt, lat, throughput(&mut c, "yes | head", &yes), throughput(&mut c, "cat", &cat));
+    let app = attached::run(&socket, dir.path(), samples);
     c.call("server.stop", json!({ "discard": true }));
     let _ = server.0.wait();
 
@@ -120,6 +124,18 @@ fn main() {
     println!("|---|---|---|---|---|");
     for (name, (rt50, rt99), (l50, l99), yes, cat) in rows {
         println!("| {name} | {rt50:.3} / {rt99:.3} ms | {l50:.3} / {l99:.3} ms | {yes:.1} MB/s | {cat:.1} MB/s |");
+    }
+    println!("\n| attached app | keystroke to screen p50 / p99 | `seq 1 200000` in-process / attached |");
+    println!("|---|---|---|");
+    let ratio = app.seq_attached / app.seq_in_process;
+    println!(
+        "| leon | {:.3} / {:.3} ms | {:.0} / {:.0} ms ({ratio:.2}x) |",
+        app.key.0, app.key.1, app.seq_in_process, app.seq_attached
+    );
+    let verdict = if app.within_budget() { "met" } else { "MISSED" };
+    println!("\nbudget (p50 < 4 ms, p99 < 16 ms, seq at most 1.5x): {verdict}");
+    if !app.within_budget() {
+        std::process::exit(1);
     }
 }
 
