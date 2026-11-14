@@ -10,9 +10,12 @@ use crate::{ApiCmd, Cli};
 pub(crate) fn run(c: &mut Client, cli: &Cli, cmd: &ApiCmd) -> Result<(), Fail> {
     let help = c.call("help.all", json!({}))?;
     let mut methods = help["methods"].as_array().cloned().unwrap_or_default();
+    let registry = methods.len(); // after these come the block methods
     for t in help["block_types"].as_array().into_iter().flatten() {
         methods.extend(t["methods"].as_array().into_iter().flatten().cloned());
     }
+    let is_block = |name: &str| methods[registry..].iter().any(|m| m["name"] == name);
+    let through = |name: &str| format!("{name} is a block method: call it with `leon block call {name} [ARGS]`");
     let text = |m: &Value, k: &str| m[k].as_str().unwrap_or("").to_string();
     match cmd {
         ApiCmd::List => {
@@ -44,9 +47,15 @@ pub(crate) fn run(c: &mut Client, cli: &Cli, cmd: &ApiCmd) -> Result<(), Fail> {
                 print_json(m);
             } else {
                 print!("{}", describe(m));
+                if is_block(method) {
+                    println!("\n{} (or `block.method`)", through(method));
+                }
             }
         }
         ApiCmd::Call { method, args } => {
+            if is_block(method) {
+                return Err(Fail::Other(through(method)));
+            }
             let mut params = read_args(args.as_deref())?;
             if let Some(q) = &cli.session {
                 let sid = resolve(c, "session", q, None)?;
