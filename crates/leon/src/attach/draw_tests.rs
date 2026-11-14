@@ -55,3 +55,50 @@ fn a_screen_is_painted_clipped_to_its_pane() {
     assert_eq!(buf[(9, 2)].bg, Color::Reset, "backgrounds clip too");
     assert_eq!(row(3), "            ", "rows below the pane aren't drawn");
 }
+
+#[test]
+fn a_split_tab_draws_at_any_size() {
+    use leon_core::layout::Node;
+    let leaf = |id: &str| Box::new(Node::Block { block_id: id.into() });
+    let split = |d, b, a| Node::Split { split_id: "split:x".into(), direction: d, ratio: 0.5, before: b, after: a };
+    let tree = split(Direction::Horizontal, leaf("a"), Box::new(split(Direction::Vertical, leaf("b"), leaf("c"))));
+    let line = Span {
+        col: 0,
+        cells: 30,
+        text: "x".repeat(30),
+        fg: 0xff0000,
+        bold: true,
+        italic: false,
+        underline: false,
+        strikeout: false,
+    };
+    let f = Frame {
+        lines: 30,
+        cols: 30,
+        rows: vec![vec![line]; 30],
+        backgrounds: vec![BgRect { line: 29, col: 0, len: 30, color: 1 }],
+        ..Frame::default()
+    };
+    let status = Bar {
+        session: "a-long-session-name",
+        tabs: vec![("sh".into(), true); 3],
+        pending: true,
+        prefix: "ctrl+b",
+        note: None,
+    };
+    for w in 0..40 {
+        for h in 0..8 {
+            let area = Rect::new(0, 0, w, h);
+            let panes_area = Rect { height: h.saturating_sub(1), ..area };
+            let laid = leon_app::panes::layout(&tree, None, (panes_area.width as f32, panes_area.height as f32), 1.);
+            let mut buf = Buffer::empty(area);
+            for p in &laid.panes {
+                screen(&mut buf, cells(&p.rect, panes_area), &f, Colors { truecolor: true });
+            }
+            borders(&mut buf, panes_area, &laid.dividers, &laid.panes, Some("c"), Colors { truecolor: false });
+            if h > 0 {
+                bar(&mut buf, Rect { y: h - 1, height: 1, ..area }, &status, Colors { truecolor: true });
+            }
+        }
+    }
+}

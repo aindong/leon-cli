@@ -207,6 +207,9 @@ impl Picker {
             width: area.width.saturating_sub(list.width + 1),
             height: list.height,
         };
+        if preview.width == 0 {
+            return; // too narrow for a preview
+        }
         let line = Style::default().fg(colors.rgb(brand::UMBER));
         for y in preview.y..preview.y + preview.height {
             buf[(preview.x - 1, y)].set_symbol("│").set_style(line);
@@ -217,3 +220,7 @@ impl Picker {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "picker_tests.rs"]
+mod tests;
