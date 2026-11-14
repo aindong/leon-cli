@@ -37,7 +37,9 @@ case ${host#*@} in
   unreachable*) echo "ssh: connect to host $host port 22: Connection refused" >&2; exit 255 ;;
 esac
 cd "$FAKE_HOME" || exit 255
-exec env HOME="$FAKE_HOME" PATH="$FAKE_PATH" LEON_RUNTIME_DIR="$FAKE_RUNTIME" LEON_STATE_DIR="$FAKE_STATE" sh -c "$*"
+# bash, not sh: it execs the command in place, as macOS's sh does and Debian's dash doesn't, so the
+# pid logged above ends up as the remote leon and killing it drops the link like a dead ssh
+exec env HOME="$FAKE_HOME" PATH="$FAKE_PATH" LEON_RUNTIME_DIR="$FAKE_RUNTIME" LEON_STATE_DIR="$FAKE_STATE" bash -c "$*"
 "#;
 
 pub struct Remote {

@@ -1,8 +1,10 @@
 //! `cargo bench -p leon --bench speed [-- --samples N]`: input latency, output throughput and API
 //! round trip against a private leon server, and the same against tmux when it is installed.
-//! Results and method: docs/performance.md. Exits 1 when the attached app's budget is missed, or
-//! `cat` throughput is under `--cat-floor MBPS`.
+//! Results and method: docs/performance.md. Exits 1 when the attached app's budget is missed (macOS),
+//! or `cat` throughput is under `--cat-floor MBPS`.
 
+// macOS only: the attached app's path needs the GPUI app crate (the `app` feature).
+#[cfg(all(feature = "app", target_os = "macos"))]
 #[path = "speed/attached.rs"]
 mod attached;
 
@@ -113,6 +115,8 @@ fn main() {
 
     let (rt, lat) = (round_trip(&mut c, samples * 5), latency(&mut c, samples));
     let leon = ("leon", rt, lat, throughput(&mut c, "yes | head", &yes), throughput(&mut c, "cat", &cat));
+    // macOS only: the attached app's run (mod attached, above).
+    #[cfg(all(feature = "app", target_os = "macos"))]
     let app = attached::run(&socket, dir.path(), samples);
     c.call("server.stop", json!({ "discard": true }));
     let _ = server.0.wait();
@@ -130,22 +134,16 @@ fn main() {
     for (name, (rt50, rt99), (l50, l99), yes, cat) in rows {
         println!("| {name} | {rt50:.3} / {rt99:.3} ms | {l50:.3} / {l99:.3} ms | {yes:.1} MB/s | {cat:.1} MB/s |");
     }
-    println!(
-        "\n| attached app | keystroke to screen p50 / p99 | through a link p50 / p99 | `seq 1 200000` in-process / attached |"
-    );
-    println!("|---|---|---|---|");
-    let ratio = app.seq_attached / app.seq_in_process;
-    println!(
-        "| leon | {:.3} / {:.3} ms | {:.3} / {:.3} ms | {:.0} / {:.0} ms ({ratio:.2}x) |",
-        app.key.0, app.key.1, app.key_link.0, app.key_link.1, app.seq_in_process, app.seq_attached
-    );
-    let verdict = if app.within_budget() { "met" } else { "MISSED" };
-    println!("\nbudget (p50 < 4 ms, p99 < 16 ms, seq at most 1.5x): {verdict}");
+    // macOS only: the attached app's rows and budget (mod attached, above).
+    #[cfg(all(feature = "app", target_os = "macos"))]
+    let app_ok = attached::report(&app);
+    #[cfg(not(all(feature = "app", target_os = "macos")))]
+    let app_ok = true;
     if let Some(floor) = cat_floor {
         let verdict = if cat_mbps >= floor { "met" } else { "MISSED" };
         println!("cat throughput floor ({floor:.1} MB/s): {cat_mbps:.1} MB/s, {verdict}");
     }
-    if !app.within_budget() || cat_floor.is_some_and(|f| cat_mbps < f) {
+    if !app_ok || cat_floor.is_some_and(|f| cat_mbps < f) {
         std::process::exit(1);
     }
 }

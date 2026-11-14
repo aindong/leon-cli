@@ -1,6 +1,9 @@
 //! M16b criterion 2: a pane on a host renders the host's screen, names the host in its header, and
 //! takes typed keys like a local pane.
 
+// macOS only: drives the GPUI app through support/app.rs (the `app` feature).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 #[path = "support/app.rs"]
 mod app;
 mod support;

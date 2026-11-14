@@ -1,6 +1,9 @@
 //! M16b criterion 5: a host that can't be reached says why; one that needs a password says to log
 //! in from a terminal; the app's ssh never prompts; everything else keeps working.
 
+// macOS only: drives the GPUI app through support/app.rs (the `app` feature).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 #[path = "support/app.rs"]
 mod app;
 mod support;

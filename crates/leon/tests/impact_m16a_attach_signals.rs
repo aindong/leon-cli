@@ -1,7 +1,8 @@
 //! M16a impact: `-H` starts the link's threads before `leon attach` blocks its exit signals and
 //! takes them with sigwait. Those threads block the signals themselves, so SIGTERM and SIGHUP
 //! still reach attach's handler and the host terminal comes back cooked; and ssh, spawned from
-//! those threads, starts with no signal blocked (Rust's Command resets the mask).
+//! those threads, starts with no signal blocked (the link empties the mask in the child; on Linux
+//! Rust's Command would keep the thread's).
 
 mod support;
 
@@ -28,7 +29,9 @@ fn killed_by(signal: i32) {
         let out = std::process::Command::new("ps").args(["-o", "sigmask=,command=", "-p", pid]).output().unwrap();
         let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if line.contains("server proxy") {
-            assert!(line.starts_with("0 "), "ssh inherited a blocked signal: {line}");
+            // macOS prints the mask as `0`, Linux as sixteen hex digits
+            let mask = line.split_whitespace().next().unwrap_or("x");
+            assert!(mask.chars().all(|c| c == '0'), "ssh inherited a blocked signal: {line}");
         }
     }
 

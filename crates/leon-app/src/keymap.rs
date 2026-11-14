@@ -1,6 +1,7 @@
 //! The app's key bindings: built-in defaults with the config's (`client.keymap`) on top, chords
 //! from GPUI keystrokes, and sequence resolution (`ctrl+b>c`).
 
+#[cfg(all(feature = "gui", target_os = "macos"))]
 use gpui::Keystroke;
 use leon_lua::keys::{parse, Chord, Key};
 use serde_json::{json, Value};
@@ -72,6 +73,7 @@ const SHIFTED: [(char, char); 21] = [
 /// A keystroke as a binding chord, written unshifted (spec §4), or None for a key binding syntax
 /// has no name for. shortcut: assumes a US layout for shifted symbols; physical keys (`[KeyA]`)
 /// never match since GPUI keystrokes carry no key code.
+#[cfg(all(feature = "gui", target_os = "macos"))]
 pub fn chord(ks: &Keystroke) -> Option<Chord> {
     let m = &ks.modifiers;
     let mut mods = leon_lua::keys::Mods { cmd: m.platform, ctrl: m.control, alt: m.alt, shift: m.shift };

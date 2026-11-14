@@ -2,6 +2,9 @@
 //! CLI, `session.focus_window`, and the `leon app` entry point. (The socket takeover rule went with
 //! M10: the app attaches to whatever server owns the socket, tests/m10_attach.rs.)
 
+// A headless build has only the CLI tests here; the embedded-server helpers go unused.
+#![cfg_attr(not(all(feature = "app", target_os = "macos")), allow(dead_code, unused_imports))]
+
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -62,6 +65,8 @@ fn wait_for(what: &str, mut f: impl FnMut() -> bool) {
     panic!("timed out waiting for {what}");
 }
 
+// macOS only: the embedded server is the GPUI app crate's (the `app` feature).
+#[cfg(all(feature = "app", target_os = "macos"))]
 #[test]
 fn the_embedded_server_answers_the_cli() {
     let env = Env::new();
@@ -81,6 +86,8 @@ fn the_embedded_server_answers_the_cli() {
     assert_ne!(env.run(&["--autostart=false", "ls"]).status.code(), Some(0));
 }
 
+// macOS only: the embedded server is the GPUI app crate's (the `app` feature).
+#[cfg(all(feature = "app", target_os = "macos"))]
 #[test]
 fn leon_server_stop_ends_the_embedded_server() {
     let env = Env::new();

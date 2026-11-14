@@ -186,3 +186,19 @@ fn through_link(dir: &Path, n: usize) -> (f64, f64) {
     });
     key_latency(&r, &changed, n, "through a link")
 }
+
+/// The attached rows of the table and the budget's verdict; whether it was met.
+pub fn report(app: &Results) -> bool {
+    println!(
+        "\n| attached app | keystroke to screen p50 / p99 | through a link p50 / p99 | `seq 1 200000` in-process / attached |"
+    );
+    println!("|---|---|---|---|");
+    let ratio = app.seq_attached / app.seq_in_process;
+    println!(
+        "| leon | {:.3} / {:.3} ms | {:.3} / {:.3} ms | {:.0} / {:.0} ms ({ratio:.2}x) |",
+        app.key.0, app.key.1, app.key_link.0, app.key_link.1, app.seq_in_process, app.seq_attached
+    );
+    let verdict = if app.within_budget() { "met" } else { "MISSED" };
+    println!("\nbudget (p50 < 4 ms, p99 < 16 ms, seq at most 1.5x): {verdict}");
+    app.within_budget()
+}

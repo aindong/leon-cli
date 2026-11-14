@@ -8,7 +8,10 @@ fn doc(path: &str) -> String {
 fn the_docs_cover_m11() {
     let lua = doc("docs/lua.md");
     assert!(lua.contains("copy_on_select"), "lua.md documents the copy_on_select setting");
-    let arch = doc("docs/architecture.md");
+    let arch =
+        ["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/state-and-hosts.md"]
+            .map(doc)
+            .concat();
     for topic in [
         "dev.leon.terminal.lines",
         "scrolled",

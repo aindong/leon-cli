@@ -16,7 +16,9 @@ fn restored(policy: Option<&str>) -> (Env, String) {
         std::fs::write(&cfg, format!("leon.set(\"resume\", \"{p}\")\n")).unwrap();
     }
     let start = || {
-        let o = env.cmd().env("LEON_CONFIG", &cfg).args(["server", "start"]).output().unwrap();
+        // bash: the restored login shell needs a line editor (dash, Linux's sh, is never offered one)
+        let o =
+            env.cmd().env("LEON_CONFIG", &cfg).env("SHELL", "/bin/bash").args(["server", "start"]).output().unwrap();
         assert!(o.status.success(), "server start: {}", String::from_utf8_lossy(&o.stderr));
     };
     start();

@@ -17,7 +17,10 @@ fn docs_cover_attach() {
     for key in ["ctrl+b d", "ctrl+b %", "ctrl+b \"", "ctrl+b z", "ctrl+b c", "ctrl+b s"] {
         assert!(readme.contains(key), "README lists {key}");
     }
-    let arch = doc("docs/architecture.md");
+    let arch =
+        ["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/state-and-hosts.md"]
+            .map(doc)
+            .concat();
     let part = arch.split("**The terminal client.**").nth(1).expect("architecture.md has a terminal-client decision");
     for word in ["block.watch", "ratatui", "SIGHUP", "own size", "prefix"] {
         assert!(part.contains(word), "architecture.md's terminal-client paragraph mentions {word}");

@@ -46,17 +46,24 @@ fn text_stays_readable() {
 /// No colour literal outside the theme: a 24-bit hex, or a colour built or named in place.
 #[test]
 fn no_hard_coded_colours_in_the_app() {
-    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    for e in std::fs::read_dir(&src).unwrap() {
-        let p = e.unwrap().path();
-        let text = std::fs::read_to_string(&p).unwrap();
-        for (i, line) in text.lines().enumerate() {
-            let hex = line.match_indices("0x").any(|(at, _)| {
-                let digits: String = line[at + 2..].chars().take_while(|c| c.is_ascii_hexdigit()).collect();
-                digits.len() == 6
-            });
-            let named = ["hsla(", "rgba(", "Rgba {", "white()", "black()", "rgb(0x"].iter().any(|n| line.contains(n));
-            assert!(!named && !hex, "{}:{}: a colour literal: {line}", p.display(), i + 1);
+    let mut dirs = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+    while let Some(dir) = dirs.pop() {
+        for e in std::fs::read_dir(&dir).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                dirs.push(p); // a module's own folder (src/remote/)
+                continue;
+            }
+            let text = std::fs::read_to_string(&p).unwrap();
+            for (i, line) in text.lines().enumerate() {
+                let hex = line.match_indices("0x").any(|(at, _)| {
+                    let digits: String = line[at + 2..].chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+                    digits.len() == 6
+                });
+                let named =
+                    ["hsla(", "rgba(", "Rgba {", "white()", "black()", "rgb(0x"].iter().any(|n| line.contains(n));
+                assert!(!named && !hex, "{}:{}: a colour literal: {line}", p.display(), i + 1);
+            }
         }
     }
 }

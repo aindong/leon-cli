@@ -1,6 +1,9 @@
 //! M16b criterion 7: a host's group collapses and expands from its label, the choice is kept in
 //! app.json for the next launch, and top tab style lists hosts › sessions.
 
+// macOS only: drives the GPUI app through support/app.rs (the `app` feature).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 #[path = "support/app.rs"]
 mod app;
 mod support;

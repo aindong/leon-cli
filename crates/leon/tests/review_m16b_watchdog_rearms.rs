@@ -2,6 +2,9 @@
 //! within seconds (nothing watched on it), so its first ping comes early; a stall after that must
 //! still be found and resumed in about 15 s, not ssh's 45.
 
+// macOS only: drives the GPUI app through support/app.rs (the `app` feature).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 #[path = "support/app.rs"]
 mod app;
 mod support;

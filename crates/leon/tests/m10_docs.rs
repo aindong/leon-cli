@@ -18,7 +18,11 @@ fn the_docs_say_programs_outlive_the_app() {
     let bullet = bullet.split("- **").next().unwrap();
     assert!(bullet.contains("keep running when the app quits"), "the bullet: {bullet}");
 
-    let arch = flat(&doc("docs/architecture.md"));
+    let arch = flat(
+        &["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/state-and-hosts.md"]
+            .map(doc)
+            .concat(),
+    );
     assert!(arch.contains("**the app attaches.**"), "architecture.md has an 'The app attaches' decision");
     assert!(arch.contains("block.watch") && arch.contains("dirty"), "and describes the screen transport");
     let cli = flat(&doc("docs/cli.md"));

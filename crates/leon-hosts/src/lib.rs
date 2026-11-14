@@ -11,6 +11,21 @@ use std::str::FromStr;
 pub use hosts::Host;
 pub use link::Link;
 
+/// Copy `from` into `to` until `from` ends or either side fails. Not `std::io::copy`: on Linux it
+/// splices, and a splice from a socket into a pipe holds the pipe locked while it waits for data,
+/// so the process at the pipe's other end (sshd, ssh) can't even do a non-blocking read of it.
+pub fn pump(from: &mut impl std::io::Read, to: &mut impl std::io::Write) {
+    let mut buf = vec![0; 64 << 10];
+    loop {
+        match from.read(&mut buf) {
+            Ok(0) => return,
+            Ok(n) if to.write_all(&buf[..n]).and_then(|()| to.flush()).is_ok() => {}
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            _ => return,
+        }
+    }
+}
+
 /// `ssh://[USER@]HOST[:PORT]`. Parsing is the guard: every part is a plain word that can't start
 /// with `-`, so nothing in an endpoint reaches ssh as an option or a shell as code.
 #[derive(Debug, Clone, PartialEq, Eq)]

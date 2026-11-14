@@ -2,6 +2,9 @@
 //! remote pane queue off the UI thread and happen once the link moves again; a link that stays
 //! stalled is found dead and resumed.
 
+// macOS only: drives the GPUI app through support/app.rs (the `app` feature).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 #[path = "support/app.rs"]
 mod app;
 mod support;
