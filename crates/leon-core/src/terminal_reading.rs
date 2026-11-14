@@ -12,6 +12,8 @@ pub(super) struct Reading {
     pub(super) output: Arc<AtomicU64>,
     /// Bumped after each read is fed, so a renderer can skip unchanged frames.
     pub(super) changes: Arc<watch::Sender<u64>>,
+    pub(super) scrolled: Arc<AtomicUsize>,
+    pub(super) x10: Arc<AtomicBool>,
 }
 
 /// The last pwd and title a program reported.
@@ -49,6 +51,7 @@ impl Reading {
         let mut parser: Processor = Processor::new();
         // The last title and pwd reported: shells resend them at every prompt.
         let (mut title, mut pwd) = (None, None);
+        let mut x10 = crate::mouse::X10Scanner::default();
         while let Ok(mut batch) = reads.recv() {
             while batch.len() < BATCH {
                 match reads.try_recv() {
@@ -58,8 +61,12 @@ impl Reading {
             }
             let fed = {
                 let mut term = lock(&self.term);
-                lock(&self.tracker).feed(&batch, |bytes| parser.advance(&mut *term, bytes))
+                lock(&self.tracker).feed(&batch, |bytes| {
+                    x10.feed(bytes);
+                    super::view::feed(&mut term, &mut parser, bytes, &self.scrolled)
+                })
             };
+            self.x10.store(x10.on(), Ordering::SeqCst);
             self.output.fetch_add(batch.len() as u64, Ordering::SeqCst);
             self.changes.send_modify(|g| *g += 1);
             if !fed.reply.is_empty() {

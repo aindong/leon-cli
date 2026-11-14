@@ -6,7 +6,8 @@
 
 use alacritty_terminal::event::EventListener;
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::term::cell::Flags;
+use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::term::{Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
@@ -14,6 +15,7 @@ use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::mouse::Report;
 use crate::terminal::MAX_SIZE;
 use crate::theme::{indexed, mix, Theme};
 
@@ -64,25 +66,45 @@ pub struct Frame {
     pub app_cursor: bool,
     /// The program asked for bracketed paste.
     pub bracketed_paste: bool,
+    /// The scrolling state and the mouse modes (`View`).
+    pub view: View,
+}
+
+/// Where the screen sits in the terminal's history, and what the program asked of the mouse.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct View {
+    /// The absolute number of the screen's top row: how many lines were ever pushed into the
+    /// scrollback. History line `scrolled - 1` is just above the screen; appended output never
+    /// renumbers a line (docs/architecture.md, "Scrollback in the app").
+    pub scrolled: usize,
+    /// Lines kept in the scrollback: the oldest is `scrolled - history`.
+    pub history: usize,
+    pub alt_screen: bool,
+    /// `?1007`: on the alternate screen the wheel becomes arrow keys.
+    pub alternate_scroll: bool,
+    /// The mouse events the program asked for, if any.
+    pub mouse: Option<Report>,
 }
 
 impl Frame {
     /// The screen as text, a line per row, spans placed at their columns.
     pub fn text(&self) -> String {
-        let mut out = String::new();
-        for row in &self.rows {
-            let mut line = String::new();
-            let mut at = 0;
-            for s in row {
-                line.extend(std::iter::repeat_n(' ', s.col.saturating_sub(at)));
-                line.push_str(&s.text);
-                at = s.col + s.cells;
-            }
-            out.push_str(line.trim_end());
-            out.push('\n');
-        }
-        out
+        self.rows.iter().map(|r| row_text(r) + "\n").collect()
     }
+}
+
+/// A row's text, its spans placed at their columns, trailing blanks dropped.
+pub fn row_text(spans: &[Span]) -> String {
+    let mut line = String::new();
+    let mut at = 0;
+    for s in spans {
+        line.extend(std::iter::repeat_n(' ', s.col.saturating_sub(at)));
+        line.push_str(&s.text);
+        at = s.col + s.cells;
+    }
+    line.truncate(line.trim_end().len());
+    line
 }
 
 /// One row of a screen update: its spans and its backgrounds (without the line).
@@ -91,6 +113,14 @@ pub struct Row {
     pub line: usize,
     pub spans: Vec<Span>,
     pub backgrounds: Vec<Bg>,
+}
+
+/// History rows by absolute number (`Terminal::lines`), with the numbering they were read under.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Lines {
+    pub scrolled: usize,
+    pub history: usize,
+    pub rows: Vec<Row>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -111,6 +141,8 @@ pub struct Update {
     pub cursor: Option<Cursor>,
     pub app_cursor: bool,
     pub bracketed_paste: bool,
+    #[serde(flatten)]
+    pub view: View,
 }
 
 fn row(f: &Frame, line: usize) -> Row {
@@ -127,14 +159,15 @@ pub fn diff(old: Option<&Frame>, new: &Frame) -> Option<Update> {
         Some(o) => (0..new.lines).map(|l| (row(o, l), row(new, l))).filter(|(a, b)| a != b).map(|(_, b)| b).collect(),
     };
     let same_rest = old.is_some_and(|o| {
-        (&o.cursor, o.app_cursor, o.bracketed_paste) == (&new.cursor, new.app_cursor, new.bracketed_paste)
+        (&o.cursor, o.app_cursor, o.bracketed_paste, o.view)
+            == (&new.cursor, new.app_cursor, new.bracketed_paste, new.view)
     });
     if !full && rows.is_empty() && same_rest {
         return None;
     }
     let f = new;
-    let (cursor, app_cursor, bracketed_paste) = (f.cursor.clone(), f.app_cursor, f.bracketed_paste);
-    Some(Update { full, lines: f.lines, cols: f.cols, rows, cursor, app_cursor, bracketed_paste })
+    let (cursor, app_cursor, bracketed_paste, view) = (f.cursor.clone(), f.app_cursor, f.bracketed_paste, f.view);
+    Some(Update { full, lines: f.lines, cols: f.cols, rows, cursor, app_cursor, bracketed_paste, view })
 }
 
 /// Apply `u` to `frame`. Rows outside the screen are ignored, so a bad update can't grow it.
@@ -151,7 +184,8 @@ pub fn apply(frame: &mut Frame, u: Update) {
         frame.backgrounds.extend(r.backgrounds.iter().map(|b| BgRect { line, col: b.col, len: b.len, color: b.color }));
         frame.rows[line] = r.spans;
     }
-    (frame.cursor, frame.app_cursor, frame.bracketed_paste) = (u.cursor, u.app_cursor, u.bracketed_paste);
+    (frame.cursor, frame.app_cursor, frame.bracketed_paste, frame.view) =
+        (u.cursor, u.app_cursor, u.bracketed_paste, u.view);
 }
 
 /// Cursor shapes on the wire: `block`, `underline`, `beam`, `hollow` (alacritty's type has no serde).
@@ -198,84 +232,128 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
         if line >= lines {
             continue;
         }
-        let col = cell.point.column.0;
-        let flags = cell.flags;
-        if flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+        if cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
             // A program can park the cursor on the spacer a wrapped wide char left behind.
             if let Some(c) = cursor.as_mut().filter(|_| cell.point == cursor_at) {
                 (c.line, c.text) = (line, " ".into());
             }
             continue;
         }
-        let mut fg = resolve(cell.fg, content.colors, theme);
-        let mut bg = resolve(cell.bg, content.colors, theme);
-        if flags.contains(Flags::DIM) {
-            fg = mix(fg, bg, DIM);
-        }
-        if flags.contains(Flags::INVERSE) {
-            std::mem::swap(&mut fg, &mut bg);
-        }
-        if flags.contains(Flags::HIDDEN) {
-            fg = bg;
-        }
-        let wide = flags.contains(Flags::WIDE_CHAR);
-        let cells = if wide { 2 } else { 1 };
-        if bg != theme.bg {
-            match f.backgrounds.last_mut() {
-                Some(r) if r.line == line && r.col + r.len == col && r.color == bg => r.len += cells,
-                _ => f.backgrounds.push(BgRect { line, col, len: cells, color: bg }),
-            }
-        }
-        let mut text = String::from(if cell.c == '\0' { ' ' } else { cell.c });
-        // Bounded: a program can stack any number of marks on one cell, and each frame copies and shapes them.
-        text.extend(cell.zerowidth().into_iter().flatten().copied().filter(|&c| !is_bidi_control(c)).take(MAX_MARKS));
+        let (span, bg) = cell_span(&cell, cell.point.column.0, content.colors, theme);
         if let Some(c) = cursor.as_mut().filter(|_| cell.point == cursor_at) {
             // Concealed text stays concealed under a block cursor too.
-            let shown = if flags.contains(Flags::HIDDEN) { " ".to_string() } else { text.clone() };
-            (c.line, c.wide, c.text) = (line, wide, shown);
+            let shown = if cell.flags.contains(Flags::HIDDEN) { " ".to_string() } else { span.text.clone() };
+            (c.line, c.wide, c.text) = (line, span.cells == 2, shown);
         }
-        let span = Span {
-            col,
-            cells,
-            text,
-            fg,
-            bold: flags.contains(Flags::BOLD),
-            italic: flags.contains(Flags::ITALIC),
-            underline: flags.intersects(Flags::ALL_UNDERLINES),
-            strikeout: flags.contains(Flags::STRIKEOUT),
-        };
-        let blank = span.text == " " && !span.underline && !span.strikeout;
-        let row = &mut f.rows[line];
-        // Spans hold one char per cell, so the painter can pin each glyph to its column. Wide chars
-        // and cells with combining marks get spans of their own. A plain blank joins any span whose
-        // style can't show on it (no underline or strikeout).
-        let one_char = !wide && span.text.chars().count() == 1;
-        match row.last_mut() {
-            Some(s)
-                if one_char
-                    && s.col + s.cells == col
-                    && s.cells == s.text.chars().count()
-                    && (same_style(s, &span) || blank && !s.underline && !s.strikeout) =>
-            {
-                s.text.push_str(&span.text);
-                s.cells += 1;
-            }
-            _ if blank => {}
-            _ => row.push(span),
-        }
+        push_cell(&mut f.rows[line], &mut f.backgrounds, line, span, bg, theme);
     }
-    for row in &mut f.rows {
-        // Plain blanks merged in at the end draw nothing; underlined or struck blanks do.
-        for s in row.iter_mut().filter(|s| !s.underline && !s.strikeout) {
-            let trimmed = s.text.trim_end_matches(' ').len();
-            s.cells -= s.text.len() - trimmed;
-            s.text.truncate(trimmed);
-        }
+    for r in &mut f.rows {
+        trim(r);
     }
     f.cursor = cursor.filter(|c| c.line < lines);
-    f.app_cursor = term.mode().contains(TermMode::APP_CURSOR);
-    f.bracketed_paste = term.mode().contains(TermMode::BRACKETED_PASTE);
+    let mode = *term.mode();
+    f.app_cursor = mode.contains(TermMode::APP_CURSOR);
+    f.bracketed_paste = mode.contains(TermMode::BRACKETED_PASTE);
+    f.view = View {
+        history: term.grid().history_size(),
+        alt_screen: mode.contains(TermMode::ALT_SCREEN),
+        alternate_scroll: mode.contains(TermMode::ALTERNATE_SCROLL),
+        mouse: crate::mouse::report(mode, false),
+        ..View::default()
+    };
     f
+}
+
+/// The rows of grid lines `from..from + count` (alacritty's numbering: 0 is the screen's top,
+/// history is negative), as `frame` builds a screen row; lines outside the grid are left out.
+pub fn grid_rows<T>(term: &Term<T>, theme: &Theme, from: i32, count: usize) -> Vec<(i32, Vec<Span>, Vec<Bg>)> {
+    let colors = term.colors();
+    let (top, bottom) = (term.topmost_line().0, term.bottommost_line().0);
+    let mut out = Vec::new();
+    for l in (from.max(top)..from.saturating_add(count as i32).min(bottom + 1)).map(Line) {
+        let (mut spans, mut bgs) = (Vec::new(), Vec::new());
+        let row = &term.grid()[l];
+        for col in 0..term.columns() {
+            let cell = &row[Column(col)];
+            if cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+                continue;
+            }
+            let (span, bg) = cell_span(cell, col, colors, theme);
+            push_cell(&mut spans, &mut bgs, 0, span, bg, theme);
+        }
+        trim(&mut spans);
+        out.push((l.0, spans, bgs.iter().map(|b| Bg { col: b.col, len: b.len, color: b.color }).collect()));
+    }
+    out
+}
+
+/// One cell as a span, with its background.
+fn cell_span(cell: &Cell, col: usize, colors: &Colors, theme: &Theme) -> (Span, u32) {
+    let flags = cell.flags;
+    let mut fg = resolve(cell.fg, colors, theme);
+    let mut bg = resolve(cell.bg, colors, theme);
+    if flags.contains(Flags::DIM) {
+        fg = mix(fg, bg, DIM);
+    }
+    if flags.contains(Flags::INVERSE) {
+        std::mem::swap(&mut fg, &mut bg);
+    }
+    if flags.contains(Flags::HIDDEN) {
+        fg = bg;
+    }
+    let cells = if flags.contains(Flags::WIDE_CHAR) { 2 } else { 1 };
+    let mut text = String::from(if cell.c == '\0' { ' ' } else { cell.c });
+    // Bounded: a program can stack any number of marks on one cell, and each frame copies and shapes them.
+    text.extend(cell.zerowidth().into_iter().flatten().copied().filter(|&c| !is_bidi_control(c)).take(MAX_MARKS));
+    let span = Span {
+        col,
+        cells,
+        text,
+        fg,
+        bold: flags.contains(Flags::BOLD),
+        italic: flags.contains(Flags::ITALIC),
+        underline: flags.intersects(Flags::ALL_UNDERLINES),
+        strikeout: flags.contains(Flags::STRIKEOUT),
+    };
+    (span, bg)
+}
+
+/// Add a cell to its row: its background run, and its text joined to the last span when it can.
+fn push_cell(row: &mut Vec<Span>, bgs: &mut Vec<BgRect>, line: usize, span: Span, bg: u32, theme: &Theme) {
+    let (col, cells) = (span.col, span.cells);
+    if bg != theme.bg {
+        match bgs.last_mut() {
+            Some(r) if r.line == line && r.col + r.len == col && r.color == bg => r.len += cells,
+            _ => bgs.push(BgRect { line, col, len: cells, color: bg }),
+        }
+    }
+    let blank = span.text == " " && !span.underline && !span.strikeout;
+    // Spans hold one char per cell, so the painter can pin each glyph to its column. Wide chars
+    // and cells with combining marks get spans of their own. A plain blank joins any span whose
+    // style can't show on it (no underline or strikeout).
+    let one_char = cells == 1 && span.text.chars().count() == 1;
+    match row.last_mut() {
+        Some(s)
+            if one_char
+                && s.col + s.cells == col
+                && s.cells == s.text.chars().count()
+                && (same_style(s, &span) || blank && !s.underline && !s.strikeout) =>
+        {
+            s.text.push_str(&span.text);
+            s.cells += 1;
+        }
+        _ if blank => {}
+        _ => row.push(span),
+    }
+}
+
+/// Plain blanks merged in at the end draw nothing; underlined or struck blanks do.
+fn trim(row: &mut [Span]) {
+    for s in row.iter_mut().filter(|s| !s.underline && !s.strikeout) {
+        let trimmed = s.text.trim_end_matches(' ').len();
+        s.cells -= s.text.len() - trimmed;
+        s.text.truncate(trimmed);
+    }
 }
 
 /// Combining marks drawn per cell.

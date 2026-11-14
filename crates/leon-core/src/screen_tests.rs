@@ -15,7 +15,16 @@ fn frame(lines: usize, cols: usize, text: &[&str], cursor_line: usize) -> Frame 
     }
     let cursor = Cursor { line: cursor_line, col: 1, shape: CursorShape::Beam, wide: false, text: " ".into() };
     let backgrounds = vec![BgRect { line: 0, col: 2, len: 3, color: 0x112233 }];
-    Frame { lines, cols, rows, backgrounds, cursor: Some(cursor), app_cursor: false, bracketed_paste: true }
+    Frame {
+        lines,
+        cols,
+        rows,
+        backgrounds,
+        cursor: Some(cursor),
+        app_cursor: false,
+        bracketed_paste: true,
+        ..Frame::default()
+    }
 }
 
 fn through_the_wire(u: Update) -> Update {

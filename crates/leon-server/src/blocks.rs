@@ -6,6 +6,7 @@ use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use leon_core::model::clean_label;
+use leon_core::mouse;
 use leon_core::terminal::{Notice, Spec, Terminal, NAMESPACE as TERMINAL};
 use leon_core::{new_id, ApiError, Block, Place, State};
 use schemars::JsonSchema;
@@ -16,6 +17,9 @@ use serde_json::Value;
 use crate::methods::{revision, Empty, MethodDoc, SessionRef};
 use crate::registry::{parse, schema, to_value};
 use crate::{Ctx, Later, Registry};
+
+#[path = "blocks_view.rs"]
+mod view;
 
 pub const SHELL_FLAVOR: &str = "dev.leon.terminal.shell";
 
@@ -207,6 +211,26 @@ pub enum InputEvent {
     /// Paste text: line breaks become Enter, and if the program asked for bracketed paste the text
     /// is wrapped in its markers (with ESC and C1 controls removed), by the mode it has now.
     Paste { data: String },
+    /// A mouse press, release or move on a screen cell (0-based), reported to the program in the
+    /// mode and encoding it asked for now (X10, 1000, 1002, 1003; SGR, UTF-8 or legacy); nothing
+    /// when it asked for none. `button` null is a move with no button down.
+    Mouse {
+        action: mouse::Action,
+        button: Option<mouse::Button>,
+        line: usize,
+        col: usize,
+        #[serde(default)]
+        mods: mouse::Mods,
+    },
+    /// The wheel, `lines` notches up (down when negative, at most 100): reported as buttons 64/65,
+    /// or on the alternate screen with no mouse mode as arrow keys.
+    Wheel {
+        lines: i32,
+        line: usize,
+        col: usize,
+        #[serde(default)]
+        mods: mouse::Mods,
+    },
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -270,6 +294,7 @@ pub fn add(r: &mut Registry) {
             InputEvent::Key { key } => t.key(&key).map_err(ApiError::bad_request)?,
             InputEvent::Focus => t.acknowledge(), // the state lock is free here; the notice takes it
             InputEvent::Paste { data } => t.paste(&data).map_err(|e| ApiError::new(500, "io", e.to_string()))?,
+            mouse @ (InputEvent::Mouse { .. } | InputEvent::Wheel { .. }) => view::mouse_event(&t, mouse)?,
         }
         Ok(Empty {})
     });
@@ -400,7 +425,7 @@ where
 }
 
 static TERMINAL_METHODS: LazyLock<Vec<TermMethod>> = LazyLock::new(|| {
-    vec![
+    let mut methods = vec![
         term_method("write", "Type text into the terminal.", |t, a: WriteArgs| {
             t.write(a.data.as_bytes()).map_err(|e| ApiError::new(500, "io", e.to_string()))?;
             Ok(Empty {})
@@ -456,7 +481,9 @@ static TERMINAL_METHODS: LazyLock<Vec<TermMethod>> = LazyLock::new(|| {
                 t.program_status().into_iter().map(|(id, record)| serde_json::json!({ "id": id, "record": record }));
             Ok(ProgramStatus { records: records.collect() })
         }),
-    ]
+    ];
+    methods.extend(view::methods());
+    methods
 });
 
 fn terminal_method(t: &Terminal, method: &str, args: Value) -> Result<Value, ApiError> {

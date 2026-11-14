@@ -251,6 +251,14 @@ pub struct Keymap {
     pub server_actions: Vec<ActionView>,
     /// `leon.unbind` calls, for a client to apply to its own default bindings.
     pub unbinds: Vec<UnbindView>,
+    /// The config's client settings (`leon.set`).
+    pub settings: ClientSettings,
+}
+
+#[derive(Serialize, JsonSchema, PartialEq)]
+pub struct ClientSettings {
+    /// Copy a selection to the clipboard as it is made (default false).
+    pub copy_on_select: bool,
 }
 
 #[derive(Serialize, JsonSchema, PartialEq)]
@@ -363,6 +371,7 @@ fn keymap(l: &Loaded) -> Keymap {
             .iter()
             .map(|u| UnbindView { key: u.key.sequence(), mode: u.key.mode.clone(), action: u.action.clone() })
             .collect(),
+        settings: ClientSettings { copy_on_select: c.copy_on_select.unwrap_or(false) },
     }
 }
 

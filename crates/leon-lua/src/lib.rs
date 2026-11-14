@@ -34,6 +34,8 @@ pub struct Config {
     pub logs: Vec<Diagnostic>,
     /// `leon.set("resume", …)`; None leaves the default (`Resume::Ask`).
     pub resume: Option<Resume>,
+    /// `leon.set("copy_on_select", true)`: the app copies a selection as it is made. None is off.
+    pub copy_on_select: Option<bool>,
 }
 
 /// What a restored block does with the resume command a program registered for itself.
