@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+pub mod attention;
 pub mod chrome;
 pub mod embedded;
 pub mod hosts;

@@ -91,7 +91,8 @@ fn a_storm_is_four_a_minute_and_the_rest_fold_into_one() {
 #[test]
 fn each_kind_can_be_turned_off() {
     let now = Instant::now();
-    let mut n = Notifier { settings: Settings { blocked: false, error: true, done: true }, ..Notifier::default() };
+    let mut n = Notifier::default();
+    n.settings = Settings { blocked: false, error: true, done: true };
     assert!(!offer(&mut n, &change("b1", Indicator::Blocked(None)), now, AWAY));
     assert!(offer(&mut n, &change("b2", Indicator::Error), now, AWAY));
     n.settings = Settings { blocked: true, error: false, done: false };
