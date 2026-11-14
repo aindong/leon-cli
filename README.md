@@ -197,7 +197,7 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 
 ![The session switcher over the panes, filtered to "api", with each row's host, session and tab](docs/images/app-switcher.png)
 
-![The Activity list in the sidebar: a blocked agent with its question, a failed deploy, finished tests and a build at 40%, and the blocked count on the toolbar](docs/images/app-activity.png)
+![The Activity list in the sidebar: two blocked agents with their questions, a failed deploy, a finished README review and builds in progress, and the blocked count on the toolbar](docs/images/app-activity.png)
 
 ## App shortcuts
 

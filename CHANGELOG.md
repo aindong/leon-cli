@@ -53,7 +53,10 @@ fields it doesn't know. The full policy is in
   splits a screen update past 4 MiB into several lines and trims `dev.leon.terminal.lines` replies
   to 4 MiB of rows (ask again for the rest).
 - Applying a screen update is linear in its size, whatever a server sends; a line given twice
-  takes its last row, and a row brings at most a line's worth of backgrounds.
+  takes its last row, and a row keeps at most a line's worth of spans, text and backgrounds.
+- A line past the cap ends the connection instead of re-attaching to it; event and screen lines
+  are parsed into their types, so a server gets about a byte of the app's memory per byte it sends.
+  Names and status text from a server are stripped of hidden characters before they are shown.
 - The docs' screenshots are retaken with a neutral demo (`scripts/demo-shots.sh`), and a test keeps
   the user's login and machine name out of them.
 

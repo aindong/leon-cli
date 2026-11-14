@@ -31,6 +31,11 @@ impl Terminal {
     pub fn report_status(&self, state: &str, title: Option<&str>, msg: Option<&str>) -> Result<(), String> {
         use base64::Engine as _;
         let b64 = |t: &str| base64::engine::general_purpose::STANDARD.encode(t);
+        // a word, never pairs: `done:id=x` would reach another record than the root
+        let words = ["working", "blocked", "done", "error", "idle", "clear"];
+        if !words.contains(&state) {
+            return Err(format!("{state:?} is not a state: working, blocked, done, error, idle or clear"));
+        }
         let mut payload = format!("state={state}");
         for (key, text) in [("title", title), ("msg", msg)] {
             if let Some(t) = text {

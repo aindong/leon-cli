@@ -67,9 +67,13 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   (a server may be a box we don't control; the CLI's cap is 64 MiB), so an update whose line would
   pass 4 MiB (only a huge screen of distinctly styled cells gets there) goes as several: the first
   carries `full`, the rest are partial updates of the same size (`screens::encode`), and
-  `dev.leon.terminal.lines` replies keep the first rows that fit in 4 MiB. Applying an update
+  `dev.leon.terminal.lines` replies keep the first rows that fit in 4 MiB (the app asks again from
+  the first row it lacks). A line past the cap ends the connection for good rather than re-attaching
+  to the same line. Event and screen lines are parsed into their types, not a JSON tree, so memory
+  stays near a byte per byte read (replies still become a `Value`: a shortcut). Applying an update
   (`screen::apply`) is linear in the update and the frame: one row per line (the last wins), and a
-  row brings at most `cols` backgrounds. Per watched block a task waits on the Per watched block a task waits on the
+  row keeps at most `cols` spans and backgrounds inside the line, each span at most a cell's text
+  per column. Per watched block a task waits on the
   terminal's change counter (a `tokio::sync::watch`) and only marks it dirty; the connection loop
   builds the frame under the terminal's lock, between replies and events, so nothing queues per
   connection beyond "dirty": a slow reader gets fewer, newer screens, never a backlog, and is
@@ -174,36 +178,6 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   tab, Copper/Sage/Wheat/Rose for working/done/blocked/error. The server keeps each terminal's last
   OSC 0/2 title, and `session.list_blocks` reports it with the block's cwd, so tabs and pane headers
   name what the program set.
-- **Switcher and attention in the app.** The session switcher (`session.switch`, ⌘K) uses the
-  palette's box over `switcher::rank`: every tab of every connected machine as `host › session ›
-  tab` with its status glyph, plus a block when the query matches the title its program set; no
-  query lists the tabs most recently shown first (the window ids the app saw on screen), a query
-  runs the palette's fuzzy filter with recency breaking ties. ↩ goes there (`session.focus_block`
-  or `session.focus_window` on that machine); ⌘↩ moves the tab's shown block beside the focused
-  pane with `session.move_block` when both are in the selected session, else goes there. Activity
-  (`client.sidebar.activity.toggle`, ⌘⇧A, a toolbar button) takes the sidebar's place, shown even
-  in top style or with the sidebar hidden. `attention::Tracker` looks at every machine's model at
-  each poll: each block with a status becomes a row, blocked (its kind), error, done (unseen:
-  arriving at the pane sends the `focus` event that clears it on the server), working (its
-  progress), the longest-waiting first in a state, waiting since the app first saw that state; a
-  machine's first look reports no changes. The toolbar button and the Dock badge show the blocked
-  count, nothing at 0. `attention::Notifier` turns changes into notices: entering blocked or error
-  (not for a block on screen while the window is key), or done after at least 30 s of working while
-  the app is in the background; one per block and state a minute and four a minute in all, the rest
-  folded into one "N more" notice later; `leon.set("notify_blocked" | "notify_error" |
-  "notify_done", false)` turns a kind off (carried in `client.keymap`'s settings). Text is the
-  session › tab names and the record's caption with controls, bidi and invisible characters removed,
-  at most 120 chars. Notices go through `UNUserNotificationCenter` (`objc2`, already in GPUI's tree),
-  which applies Do Not Disturb and Focus itself; only a bundled app has the main-bundle identifier it
-  needs, so a bare `leon app` binary logs once and posts nothing. The center's delegate queues a
-  clicked notice's host label, session and block and wakes the poll, which goes there (the folded
-  notice opens Activity).
-- **`leon notify`.** `dev.leon.terminal.report_status {state, title, msg}` (experimental) builds an
-  OSC 7501 report (title and msg base64) and runs it through the same parser and store as PTY
-  output, so every limit applies; text the parser would drop is refused (400) instead. `leon notify`
-  calls it for `-b`, else `$LEON_BLOCK`, never the focused pane (exit 2 with neither), since a job
-  outside leon would light up whatever the user looks at. It writes no escape to a tty: agents' tool
-  shells and launchd jobs have none.
 - **Agent skill.** `leon skill show` prints a guide compiled into the binary. `skill setup` installs a
   SKILL.md stub (marked `<!-- leon-skill: … -->`) that tells the agent to run `leon skill show`, so
   upgrades reach agents without a reinstall, plus a matcher-less SessionStart hook running

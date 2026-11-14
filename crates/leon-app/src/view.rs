@@ -278,6 +278,7 @@ impl Workspace {
         });
         let mut ws = Self::with_hosts(app, settings_path(), hosts, window, cx);
         ws.platform = true;
+        crate::notify::prepare();
         ws
     }
 

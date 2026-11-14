@@ -32,7 +32,7 @@ fn many_rows_over_many_backgrounds_apply_in_linear_time() {
         apply(&mut f, update(rows));
         let _ = tx.send(f);
     });
-    let f = rx.recv_timeout(Duration::from_secs(2)).expect("apply finished within the deadline");
+    let f = rx.recv_timeout(Duration::from_secs(1)).expect("apply finished within the deadline");
     let line0: Vec<&BgRect> = f.backgrounds.iter().filter(|b| b.line == 0).collect();
     assert_eq!(line0.len(), 1, "line 0 keeps only its last row's backgrounds");
     assert_eq!((line0[0].col, line0[0].color), (99_999 % 1000, 2));

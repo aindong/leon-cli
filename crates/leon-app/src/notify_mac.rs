@@ -96,6 +96,11 @@ fn center() -> Option<Retained<AnyObject>> {
     Some(center)
 }
 
+/// Ask for permission now, so the first notice isn't dropped while macOS waits for the answer.
+pub(super) fn prepare() {
+    center();
+}
+
 pub(super) fn post(n: &Notice) {
     let Some(center) = center() else { return };
     unsafe {
@@ -113,7 +118,7 @@ pub(super) fn post(n: &Notice) {
         ];
         let _: () = msg_send![&*content, setUserInfo: &*dict];
         // one per block: a newer notice for it replaces the one still showing
-        let id = ns_string(&format!("leon-{}-{}", n.host_label, n.block_id));
+        let id = ns_string(&format!("leon\u{1f}{}\u{1f}{}", n.host_label, n.block_id)); // a separator no label or id holds
         let request: Retained<AnyObject> = msg_send![
             AnyClass::get(c"UNNotificationRequest").expect("UserNotifications"),
             requestWithIdentifier: &*id, content: &*content, trigger: std::ptr::null::<AnyObject>()

@@ -52,6 +52,13 @@ pub fn post(n: &Notice) {
     let _ = n; // shortcut: notifications are macOS only; Linux (M15) can post through D-Bus later
 }
 
+/// Set up notifications at launch: macOS asks the user once, and a notice posted before the
+/// answer is lost.
+pub fn prepare() {
+    #[cfg(target_os = "macos")]
+    mac::prepare();
+}
+
 /// The Dock icon's badge: `text`, or none.
 pub fn set_badge(text: Option<&str>) {
     #[cfg(target_os = "macos")]

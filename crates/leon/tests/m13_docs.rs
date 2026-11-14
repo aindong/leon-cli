@@ -20,10 +20,14 @@ fn the_docs_cover_m12_and_m13() {
         assert!(lua.contains(s), "lua.md documents {s}");
     }
     // main split the decisions into docs/architecture/ (M15)
-    let arch =
-        ["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/state-and-hosts.md"]
-            .map(doc)
-            .join("\n");
+    let arch = [
+        "docs/architecture.md",
+        "docs/architecture/protocol-and-clients.md",
+        "docs/architecture/state-and-hosts.md",
+        "docs/architecture/attention.md",
+    ]
+    .map(doc)
+    .join("\n");
     for topic in
         ["session.switch", "client.sidebar.activity.toggle", "UNUserNotificationCenter", "16 MiB", "report_status"]
     {

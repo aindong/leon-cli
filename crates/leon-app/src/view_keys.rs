@@ -245,10 +245,22 @@ impl Workspace {
     ) {
         let m = &ks.modifiers;
         let named = |name: &str| ks.key == name && !m.platform && !m.control;
-        let toggle = chord.is_some_and(|c| {
-            let toggles = ["client.palette.toggle", "session.switch"];
-            matches!(self.keymap.press(&[], c), Pressed::Run(b) if b.action.as_deref().is_some_and(|a| toggles.contains(&a)))
+        let bound = chord.and_then(|c| match self.keymap.press(&[], c) {
+            Pressed::Run(b) => b.action,
+            _ => None,
         });
+        // the key of the list on screen closes it; the other one's key changes to that list
+        let want_switch = match bound.as_deref() {
+            Some("session.switch") => Some(true),
+            Some("client.palette.toggle") => Some(false),
+            _ => None,
+        };
+        let toggle = want_switch.is_some_and(|w| self.palette.as_ref().is_some_and(|p| p.switch == w));
+        if let (Some(w), false, Some(p)) = (want_switch, toggle, self.palette.as_mut()) {
+            (p.switch, p.query, p.selected, p.ask) = (w, String::new(), 0, None);
+            cx.notify();
+            return;
+        }
         let matches = self.palette_matches();
         let Some(p) = self.palette.as_mut() else { return };
         if named("escape") || toggle {

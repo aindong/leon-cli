@@ -5,7 +5,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
-use leon_core::program_status::Kind;
+use leon_core::program_status::{strip_hidden, Kind};
 
 use crate::remote::Model;
 use crate::status::{self, Indicator};
@@ -255,13 +255,15 @@ impl Notifier {
             return None;
         }
         self.posted.push_back(now);
+        let state = state_text(t.to);
+        // the caption gives way, so the state always shows
         let body = match &t.caption {
-            Some(c) => format!("{} ({})", clean(c), state_text(t.to)),
-            None => state_text(t.to),
+            Some(c) => format!("{} ({state})", cut(&clean(c), NOTICE_TEXT - state.chars().count() - 3)),
+            None => state,
         };
         Some(Notice {
             title: clean(&t.place),
-            body: clean(&body),
+            body,
             host_label: t.host_label.clone(),
             session_id: t.session_id.clone(),
             block_id: t.block_id.clone(),
@@ -286,6 +288,7 @@ impl Notifier {
 
     /// Whether another notice fits in the last minute's `BURST`.
     fn room(&mut self, now: Instant) -> bool {
+        self.last.retain(|_, at| now.saturating_duration_since(*at) < QUIET); // only what can still hold one back
         while self.posted.front().is_some_and(|at| now.saturating_duration_since(*at) >= QUIET) {
             self.posted.pop_front();
         }
@@ -293,19 +296,20 @@ impl Notifier {
     }
 }
 
-/// Program text made safe to show outside leon: no controls, bidi controls or invisible
-/// characters, at most `NOTICE_TEXT` chars.
+/// Program text made safe to show outside leon: on one line, nothing hidden (OSC 7501's own rule,
+/// `strip_hidden`: controls, bidi controls, invisible and tag characters), at most `NOTICE_TEXT`
+/// chars. Names set over the API or by a remote server never went through that rule.
 pub fn clean(s: &str) -> String {
-    let hidden = |c: char| {
-        c.is_control()
-            || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' | '\u{200b}'..='\u{200f}' | '\u{2060}'..='\u{2064}')
-            || matches!(c, '\u{061c}' | '\u{feff}' | '\u{00ad}')
-    };
-    let kept: String = s.chars().filter(|&c| !hidden(c)).collect();
-    if kept.chars().count() <= NOTICE_TEXT {
-        return kept;
+    let one_line = s.replace(['\u{2028}', '\u{2029}'], " ");
+    cut(&strip_hidden(&one_line), NOTICE_TEXT)
+}
+
+/// `s` in at most `most` chars, an ellipsis ending one that was longer.
+fn cut(s: &str, most: usize) -> String {
+    if s.chars().count() <= most {
+        return s.to_string();
     }
-    let mut cut: String = kept.chars().take(NOTICE_TEXT - 1).collect();
+    let mut cut: String = s.chars().take(most.saturating_sub(1)).collect();
     cut.push('…');
     cut
 }

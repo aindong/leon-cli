@@ -171,8 +171,11 @@ pub fn diff(old: Option<&Frame>, new: &Frame) -> Option<Update> {
 }
 
 /// Apply `u` to `frame`. Rows outside the screen are ignored, so a bad update can't grow it; a
-/// line given twice takes its last row, and a row brings at most `cols` backgrounds. Linear in
-/// the update and the frame, whatever a server sends.
+/// line given twice takes its last row, and a row brings at most `cols` spans and backgrounds
+/// inside the line, each span at most a cell's worth of text per column. Linear in the update and
+/// the frame, whatever a server sends. shortcut: each update still scans the frame's backgrounds
+/// (bounded at lines × cols, as the client's copy-on-write of the frame is); index them by line
+/// if a profile ever shows it.
 pub fn apply(frame: &mut Frame, u: Update) {
     if u.full {
         // no larger than a terminal can be, whatever the line said
@@ -187,9 +190,18 @@ pub fn apply(frame: &mut Frame, u: Update) {
     frame.backgrounds.retain(|b| rows[b.line].is_none());
     for r in rows.into_iter().flatten() {
         let line = r.line;
-        let bgs = r.backgrounds.iter().filter(|b| b.col < frame.cols).take(frame.cols);
+        let cols = frame.cols;
+        let bgs = r.backgrounds.iter().filter(|b| b.col < cols).take(cols);
         frame.backgrounds.extend(bgs.map(|b| BgRect { line, col: b.col, len: b.len, color: b.color }));
-        frame.rows[line] = r.spans;
+        let mut spans: Vec<Span> = r.spans.into_iter().filter(|s| s.col < cols).take(cols).collect();
+        for s in &mut spans {
+            // a cell holds a char and its marks (`cell_span`): no more text than that per column
+            let most = s.cells.clamp(1, cols) * (1 + MAX_MARKS);
+            if let Some((cut, _)) = s.text.char_indices().nth(most) {
+                s.text.truncate(cut);
+            }
+        }
+        frame.rows[line] = spans;
     }
     (frame.cursor, frame.app_cursor, frame.bracketed_paste, frame.view) =
         (u.cursor, u.app_cursor, u.bracketed_paste, u.view);

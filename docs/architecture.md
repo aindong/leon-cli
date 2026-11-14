@@ -64,7 +64,9 @@ The decisions, in two parts:
 - [Protocol and clients](architecture/protocol-and-clients.md): the wire protocol, events, layout,
   the socket path, terminal emulation, Lua (config, runtime, bounds), the app, the screen transport,
   scrollback, selection, find, links and mouse reporting, `leon attach`, the app keymap and look,
-  the switcher, Activity and notifications, `leon notify`, and the agent skill.
+  and the agent skill.
+- [Switching and attention](architecture/attention.md): the session switcher, Activity, the
+  badges, notifications and `leon notify`.
 - [State, packaging and hosts](architecture/state-and-hosts.md): persistence, scrollback and resume
   after a restart, terminal reads, packaging (Leon.app, Linux packages), `LEON_BIN_DIR`, remote
   hosts and reconnects, the app's hosts, the API contract, tested

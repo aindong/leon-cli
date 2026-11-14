@@ -210,11 +210,69 @@ impl Shared {
     }
 }
 
+/// A line on the event connection, read into types rather than a `Value` tree: a server (maybe a
+/// box we don't control) gets about a byte of memory per byte it sends, not dozens. Unknown and
+/// unused fields are skipped without being kept.
+#[derive(Deserialize)]
+struct Incoming {
+    screen: Option<Pushed>,
+    event: Option<serde::de::IgnoredAny>,
+    seq: Option<u64>,
+    error: Option<Refusal>,
+}
+
+#[derive(Deserialize)]
+struct Refusal {
+    message: Option<String>,
+}
+
+/// A screen line's body: `Update`'s fields spelled out, since serde's `flatten` would first buffer
+/// the whole line as a tree.
 #[derive(Deserialize)]
 struct Pushed {
     block_id: String,
-    #[serde(flatten)]
-    update: Update,
+    full: bool,
+    lines: usize,
+    cols: usize,
+    rows: Vec<screen::Row>,
+    cursor: Option<screen::Cursor>,
+    #[serde(default)]
+    app_cursor: bool,
+    #[serde(default)]
+    bracketed_paste: bool,
+    #[serde(default)]
+    scrolled: usize,
+    #[serde(default)]
+    history: usize,
+    #[serde(default)]
+    alt_screen: bool,
+    #[serde(default)]
+    alternate_scroll: bool,
+    #[serde(default)]
+    mouse: Option<leon_core::mouse::Report>,
+}
+
+impl Pushed {
+    fn update(self) -> Update {
+        let view = screen::View {
+            scrolled: self.scrolled,
+            history: self.history,
+            alt_screen: self.alt_screen,
+            alternate_scroll: self.alternate_scroll,
+            mouse: self.mouse,
+        };
+        let (full, lines, cols, rows, cursor) = (self.full, self.lines, self.cols, self.rows, self.cursor);
+        Update {
+            full,
+            lines,
+            cols,
+            rows,
+            cursor,
+            app_cursor: self.app_cursor,
+            bracketed_paste: self.bracketed_paste,
+            view,
+        }
+    }
 }
 
 /// Open an event connection and attach it to every event; returns its reader, its write side
@@ -235,11 +293,17 @@ fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
         let mut stale = false;
         loop {
             let mut line = String::new();
-            if matches!(read_line(&mut r, &mut line), Ok(0) | Err(_)) {
+            let read = read_line(&mut r, &mut line);
+            if matches!(read, Ok(0) | Err(_)) {
                 if shared.closing.load(Ordering::SeqCst) {
                     return;
                 }
-                match reattach(&shared) {
+                // a line past the cap would come again after a re-attach: give up on this server
+                let refused = matches!(&read, Err(e) if e.kind() == io::ErrorKind::InvalidData);
+                if refused {
+                    eprintln!("leon: the server sent a line past {} MiB; disconnecting", fetch_model::MAX_LINE >> 20);
+                }
+                match reattach(&shared).filter(|_| !refused) {
                     Some(again) => (r, stale) = (again, true),
                     None => {
                         shared.alive.store(false, Ordering::SeqCst);
@@ -250,23 +314,22 @@ fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
                 break;
             }
             *lock(&shared.heard) = Instant::now();
-            let Ok(mut v) = serde_json::from_str::<Value>(&line) else { continue };
-            if let Some(s) = v.get_mut("screen") {
+            let Ok(v) = serde_json::from_str::<Incoming>(&line) else { continue };
+            if let Some(p) = v.screen {
                 // a line still on its way for a block no longer watched would revive a stale copy
-                let pushed = serde_json::from_value::<Pushed>(s.take()).ok();
-                if let Some(p) = pushed.filter(|p| lock(&shared.watched).contains(&p.block_id)) {
+                if lock(&shared.watched).contains(&p.block_id) {
                     let mut m = lock(&shared.model);
                     *m.screen_updates.entry(p.block_id.clone()).or_default() += 1;
-                    let f = m.screens.entry(p.block_id).or_default();
-                    screen::apply(Arc::make_mut(f), p.update);
+                    let f = m.screens.entry(p.block_id.clone()).or_default();
+                    screen::apply(Arc::make_mut(f), p.update());
                 }
-            } else if v.get("event").is_some() {
-                if let Some(seq) = v["seq"].as_u64() {
+            } else if v.event.is_some() {
+                if let Some(seq) = v.seq {
                     shared.saw(seq);
                 }
                 stale = true;
-            } else if let Some(e) = v.get("error").filter(|e| !e.is_null()) {
-                eprintln!("leon: the server refused a watch: {e}");
+            } else if let Some(e) = v.error {
+                eprintln!("leon: the server refused a watch: {}", e.message.unwrap_or_default());
             }
             if !r.buffer().contains(&b'\n') {
                 break; // nothing more already read: show what came
