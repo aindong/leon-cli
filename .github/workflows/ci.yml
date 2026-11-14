@@ -1,0 +1,38 @@
+# macOS: the whole gate, app included. Linux (x86_64 and aarch64): the server and CLI in the pinned
+# Rust image, the smoke test and the packages (scripts/linux-test.sh, scripts/package-linux.sh).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.100.0"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --no-fail-fast
+
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/linux-test.sh
+      - run: scripts/package-linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leon-linux-${{ matrix.runner }}
+          path: |
+            target/linux/*.tar.gz
+            target/linux/*.deb
