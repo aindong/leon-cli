@@ -14,7 +14,8 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
-        if self.term.find.is_some() && self.find_key(ks, cx) {
+        let finding = self.term.find.as_ref().is_some_and(|f| Some(&f.block) == self.target_block().as_ref());
+        if finding && self.find_key(ks, cx) {
             cx.stop_propagation();
             return;
         }

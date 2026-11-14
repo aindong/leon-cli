@@ -52,8 +52,7 @@ fn literal_text_is_not_a_pattern() {
 #[test]
 fn regex_queries_and_bad_ones() {
     let t = shown(haystack().as_bytes());
-    // a row is as wide as the screen, so `$` would need the padding: a blank ends the number
-    let found = t.find(&q(r"hay 1\d\s", true, true)).unwrap();
+    let found = t.find(&q(r"hay 1\d$", true, true)).unwrap();
     assert_eq!(found.matches.len(), 10, "hay 10 … hay 19");
     assert!(t.find(&q("(", true, true)).is_err(), "a bad regex is an error");
 }
@@ -75,4 +74,14 @@ fn the_limit_holds_and_empty_matches_end() {
     assert!(found.truncated);
     let empty = t.find(&q("x*", true, true)).unwrap();
     assert!(empty.matches.len() <= 1000, "a pattern that matches nothing at every cell still returns");
+}
+
+#[test]
+fn an_end_anchor_matches_before_the_padding_and_not_in_a_class() {
+    let t = shown(b"ends here\r\na$b\r\n");
+    let found = t.find(&q("here$", true, true)).unwrap();
+    assert_eq!(found.matches.len(), 1);
+    assert_eq!(found.matches[0].end, at(0, 8), "the padding isn't part of the match");
+    assert_eq!(t.find(&q(r"a[$]b", true, true)).unwrap().matches.len(), 1, "a $ in a class is a dollar");
+    assert_eq!(t.find(&q(r"a\$b", true, true)).unwrap().matches.len(), 1, "an escaped $ too");
 }

@@ -139,7 +139,9 @@ pub fn encode(e: &Event, m: &Mode) -> Option<Vec<u8>> {
     }
     if m.sgr {
         let end = if e.action == Action::Release { 'm' } else { 'M' };
-        return Some(format!("\x1b[<{code};{};{}{end}", e.col + 1, e.line + 1).into_bytes());
+        return Some(
+            format!("\x1b[<{code};{};{}{end}", e.col.saturating_add(1), e.line.saturating_add(1)).into_bytes(),
+        );
     }
     if e.action == Action::Release {
         code = 3 + (code & !3); // the legacy forms can't say which button went up

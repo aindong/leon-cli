@@ -75,9 +75,20 @@ impl Workspace {
         self.app.model().screens.get(id).cloned().unwrap_or_default()
     }
 
+    /// The session block `id` is in.
+    fn session_of(&self, id: &str) -> String {
+        self.app.model().block(id).map(|(s, _)| s.id.clone()).unwrap_or_default()
+    }
+
+    /// Send an input event (mouse, wheel) to block `id`.
+    pub(super) fn block_event(&self, id: &str, event: Value) {
+        let p = json!({ "session_id": self.session_of(id), "block_id": id, "event": event });
+        let _ = self.app.call("block.event", p);
+    }
+
     /// Call a terminal method on block `id`.
     pub(super) fn term_call(&self, id: &str, method: &str, args: Value) -> Result<Value, leon_core::ApiError> {
-        let sid = self.app.model().block(id).map(|(s, _)| s.id.clone()).unwrap_or_default();
+        let sid = self.session_of(id);
         let p =
             json!({ "session_id": sid, "block_id": id, "method": format!("dev.leon.terminal.{method}"), "args": args });
         self.app.call("block.method", p)
@@ -168,8 +179,7 @@ impl Workspace {
             if at_bottom {
                 let mods = mods(&ev.modifiers);
                 let event = json!({ "type": "wheel", "lines": lines, "line": line, "col": col, "mods": mods });
-                let sid = self.app.model().block(id).map(|(s, _)| s.id.clone()).unwrap_or_default();
-                let _ = self.app.call("block.event", json!({ "session_id": sid, "block_id": id, "event": event }));
+                self.block_event(id, event);
                 return;
             }
         }

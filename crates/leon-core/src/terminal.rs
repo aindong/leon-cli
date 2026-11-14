@@ -398,7 +398,12 @@ impl Terminal {
     /// most `MAX_SIZE`: any client can ask, and a grid's memory grows with rows × columns.
     pub fn resize(&self, rows: u16, cols: u16) -> io::Result<()> {
         let (rows, cols) = (rows.clamp(1, MAX_SIZE.0), cols.clamp(2, MAX_SIZE.1));
-        lock(&self.term).resize(Size { rows, cols });
+        {
+            let mut term = lock(&self.term);
+            term.resize(Size { rows, cols });
+            // shrinking pushes rows into the scrollback: the oldest kept line keeps a number
+            self.scrolled.fetch_max(term.grid().history_size(), Ordering::SeqCst);
+        }
         let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
         lock(&self.master).resize(size).map_err(pty)?;
         self.generation.send_modify(|g| *g += 1);

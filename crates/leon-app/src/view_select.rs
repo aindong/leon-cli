@@ -37,8 +37,7 @@ impl Workspace {
         let Some((line, col)) = self.cell_at(id, at) else { return };
         let event =
             json!({ "type": "mouse", "action": action, "button": button, "line": line, "col": col, "mods": mods(m) });
-        let sid = self.app.model().block(id).map(|(s, _)| s.id.clone()).unwrap_or_default();
-        let _ = self.app.call("block.event", json!({ "session_id": sid, "block_id": id, "event": event }));
+        self.block_event(id, event);
     }
 
     pub(super) fn mouse_down(&mut self, id: &str, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -77,6 +76,12 @@ impl Workspace {
         let pressed = ev.pressed_button.and_then(button);
         let hovering = pressed.is_none() && self.live(id).view.mouse == Some(leon_core::mouse::Report::Motion);
         let pv = self.term.panes.entry(id.to_string()).or_default();
+        if let Some(b) = pv.reporting.filter(|_| pressed.is_none()) {
+            // the button came up outside the pane: the program still hears it
+            pv.reporting = None;
+            self.report(id, "release", Some(b), ev.position, &ev.modifiers);
+            return;
+        }
         if pv.reporting.is_some() || (hovering && self.view_top(id).is_none()) {
             self.report(id, "move", pressed, ev.position, &ev.modifiers);
             return;
@@ -118,14 +123,17 @@ impl Workspace {
         let range = if s.kind == Kind::Simple && s.anchor == s.head {
             None
         } else {
-            let args = json!({ "kind": s.kind, "anchor": s.anchor, "head": s.head });
-            let got =
-                self.term_call(id, "selection", args).ok().and_then(|v| serde_json::from_value::<Selected>(v).ok());
-            got.map(|g| Range { start: g.start, end: g.end })
+            self.selected(id, s, false).map(|g| Range { start: g.start, end: g.end })
         };
         if let Some(s) = self.term.panes.get_mut(id).and_then(|p| p.selection.as_mut()) {
             s.range = range;
         }
+    }
+
+    /// What the server makes of selection `s` on pane `id`, with its text if asked.
+    fn selected(&self, id: &str, s: &Sel, text: bool) -> Option<Selected> {
+        let args = json!({ "kind": s.kind, "anchor": s.anchor, "head": s.head, "text": text });
+        serde_json::from_value(self.term_call(id, "selection", args).ok()?).ok()
     }
 
     /// Copy pane `id`'s selection to the clipboard.
@@ -133,9 +141,7 @@ impl Workspace {
         let Some(s) = self.term.panes.get(id).and_then(|p| p.selection.as_ref()).filter(|s| s.range.is_some()) else {
             return;
         };
-        let args = json!({ "kind": s.kind, "anchor": s.anchor, "head": s.head, "text": true });
-        let got = self.term_call(id, "selection", args).ok().and_then(|v| serde_json::from_value::<Selected>(v).ok());
-        if let Some(text) = got.and_then(|g| g.text) {
+        if let Some(text) = self.selected(id, s, true).and_then(|g| g.text) {
             cx.write_to_clipboard(ClipboardItem::new_string(text));
         }
     }
@@ -206,7 +212,9 @@ impl Workspace {
             return;
         }
         let buttons = [PromptButton::Ok("Open".into()), PromptButton::Cancel("Cancel".into())];
-        let answer = window.prompt(PromptLevel::Info, "Open this link?", Some(&uri), &buttons, cx);
+        let plain = leon_core::search::decoded(&uri);
+        let detail = if plain == uri { uri.clone() } else { format!("{uri}\n\nwhich opens {plain}") };
+        let answer = window.prompt(PromptLevel::Info, "Open this link?", Some(&detail), &buttons, cx);
         cx.spawn(async move |_, cx| {
             if answer.await == Ok(0) {
                 let _ = cx.update(|cx| go(&uri, cx));

@@ -57,7 +57,19 @@ impl Workspace {
                     .rounded(px(6.))
                     .overflow_hidden()
                     .bg(rgb(t.bg))
-                    .when(headers || finding, |d| d.child(self.render_header(&id, focused, cx)))
+                    .when(headers, |d| d.child(self.render_header(&id, focused, cx)))
+                    // with headers off the find bar floats over the pane, so its size stays
+                    .when(!headers && finding, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .right_0()
+                                .bg(rgb(t.bg))
+                                .child(self.render_header(&id, focused, cx)),
+                        )
+                    })
                     .child(self.terminal_area(&id, on_link, cx).child(canvas))
                     .children(self.render_jump(&id, cx))
                     // the focus mark: the tile's left edge, as the mark's rail holds its pane
@@ -165,6 +177,9 @@ impl Render for Workspace {
         DRAWN.with(|d| d.borrow_mut().clear());
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
+        if self.term.find.as_ref().is_some_and(|f| !shown.contains(&f.block)) {
+            self.term.find = None; // its pane left the screen
+        }
         for id in &shown {
             self.sync_pane(id);
         }
