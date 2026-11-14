@@ -61,8 +61,8 @@ impl Workspace {
                     .flex_shrink()
                     .max_w(px(320.))
                     .overflow_hidden()
-                    .whitespace_nowrap()
                     .min_w(px(0.))
+                    .line_clamp(1)
                     .text_ellipsis()
                     .text_color(rgb(if focused { t.title } else { t.text }))
                     .child(title),
@@ -73,8 +73,8 @@ impl Workspace {
                     .debug_selector(|| sel(format!("caption-{id}")))
                     .flex_1()
                     .overflow_hidden()
-                    .whitespace_nowrap()
                     .min_w(px(0.))
+                    .line_clamp(1)
                     .text_ellipsis()
                     .text_color(rgb(t.muted))
                     .children(caption),

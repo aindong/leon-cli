@@ -84,8 +84,15 @@ impl Workspace {
                 bar = bar.child(self.tool("new-tab", Icon::Plus, "client.tab.new", cx));
             } else if let Some(w) = row.windows.get(row.active) {
                 // sidebar style with the sidebar hidden: name the tab on screen, draw no tabs
-                bar =
-                    bar.child(div().min_w(px(0.)).truncate().text_color(rgb(t.muted)).child(format!("› {}", w.title)));
+                bar = bar.child(
+                    div()
+                        .min_w(px(0.))
+                        .overflow_hidden()
+                        .line_clamp(1)
+                        .text_ellipsis()
+                        .text_color(rgb(t.muted))
+                        .child(format!("› {}", w.title)),
+                );
             }
         }
         bar.child(div().flex_1()).when(hidden, |d| {
@@ -126,15 +133,7 @@ impl Workspace {
             .cursor_pointer()
             .when(active, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
             .when(!active, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
-            .child(
-                div()
-                    .flex_1()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .min_w(px(0.))
-                    .text_ellipsis()
-                    .child(w.title.clone()),
-            )
+            .child(div().flex_1().overflow_hidden().min_w(px(0.)).line_clamp(1).text_ellipsis().child(w.title.clone()))
             .children(w.status.map(|s| status_mark(s, frame)))
             .when(i < 9, |d| {
                 d.child(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(format!("⌘{}", i + 1)))

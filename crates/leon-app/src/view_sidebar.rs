@@ -50,8 +50,8 @@ impl Workspace {
                             div()
                                 .flex_1()
                                 .overflow_hidden()
-                                .whitespace_nowrap()
                                 .min_w(px(0.))
+                                .line_clamp(1)
                                 .text_ellipsis()
                                 .child(win.title.clone()),
                         )
@@ -137,13 +137,7 @@ impl Workspace {
             .font_weight(FontWeight::MEDIUM)
             .text_color(rgb(t.muted))
             .child(
-                div()
-                    .flex_1()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .min_w(px(0.))
-                    .text_ellipsis()
-                    .child(row.title.clone()),
+                div().flex_1().overflow_hidden().min_w(px(0.)).line_clamp(1).text_ellipsis().child(row.title.clone()),
             )
             .when(!open, |d| {
                 d.children(
@@ -208,13 +202,7 @@ impl Workspace {
             .when(selected, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
             .when(!selected, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
             .child(
-                div()
-                    .flex_1()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .min_w(px(0.))
-                    .text_ellipsis()
-                    .child(row.title.clone()),
+                div().flex_1().overflow_hidden().min_w(px(0.)).line_clamp(1).text_ellipsis().child(row.title.clone()),
             )
             .when(!selected, |d| {
                 d.children(

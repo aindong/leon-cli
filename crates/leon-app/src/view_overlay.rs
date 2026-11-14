@@ -42,8 +42,8 @@ impl Workspace {
                             .flex_1()
                             .overflow_hidden()
                             .min_w(px(0.))
+                            .line_clamp(1)
                             .text_ellipsis()
-                            .whitespace_nowrap()
                             .child(item.title.clone()),
                     )
                     .children(

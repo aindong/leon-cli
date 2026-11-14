@@ -259,6 +259,9 @@ pub fn drawn() -> HashSet<String> {
     DRAWN.with(|d| d.borrow().clone())
 }
 
+// Truncating text cells use `line_clamp(1)`, not `whitespace_nowrap`: GPUI 0.2.2 caches a no-wrap
+// text's size from its first layout (before its width is known) and never adds the ellipsis.
+
 /// A GPUI rectangle as a settings frame.
 fn frame(b: Bounds<Pixels>) -> chrome::Frame {
     chrome::Frame { x: b.origin.x.into(), y: b.origin.y.into(), w: b.size.width.into(), h: b.size.height.into() }
