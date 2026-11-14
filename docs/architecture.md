@@ -27,6 +27,9 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 - **GPUI build.** `gpui` 0.2.2 with the `runtime_shaders` feature, so building does not need Xcode's
   separate Metal Toolchain download.
 - **Async.** `tokio` in the server; PTY readers on their own threads feeding the emulator.
+- **Config.** `leon-lua` turns `init.lua` into a plain `Config` (bindings with modes and sequences,
+  modes, actions, unbinds, diagnostics) and drops the Lua state; a prefix/sequence clash keeps the newest
+  with a warning. `leon config check` exits 1 if the load fails or any `leon.*` call was skipped.
 - **Naming.** Method, action, event and flag names follow `docs/spec.md`, so scripts and agents written
   for that interface carry over. Env vars are `LEON_*`.
 
