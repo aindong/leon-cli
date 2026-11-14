@@ -48,7 +48,9 @@ fn commands_act_on_the_remote_server() {
     assert!(run(&["-H", H, "ls"]).contains("r1"));
     assert!(run(&["-H", H, "api", "call", "session.list"]).contains("\"r1\""));
 
-    let mut ev = r.events(&["-H", H, "--all"]);
+    let mut events = r.cmd();
+    events.env("LEON_SESSION", "session:local-only").env("LEON_BLOCK", "block:local-only");
+    let mut ev = support::stream(events, &["-H", H, "--all"]);
     run(&["-H", H, "new", "r2"]);
     let e = ev.until("session_created");
     assert_eq!(e.payload["session"]["label"], "r2", "{e:?}");

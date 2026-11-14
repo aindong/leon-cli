@@ -116,9 +116,15 @@ fn resume_replays_unread_lines_once_and_the_token_lasts() {
     let mut c4 = Conn::open(&env);
     let r = c4.call("session.resume", json!({ "resume": token, "seq": last }), &mut none);
     assert!(r.get("error").is_none(), "takeover failed: {r}");
+    // the server closes c3: an end of stream, not a read timing out
     let mut rest = vec![];
-    while let Some(v) = c3.line() {
-        rest.push(v);
+    loop {
+        let mut l = String::new();
+        match c3.r.read_line(&mut l) {
+            Ok(0) => break,
+            Ok(_) => rest.push(serde_json::from_str::<Value>(&l).unwrap()),
+            Err(e) => panic!("c3 was never closed: {e}"),
+        }
     }
     assert!(rest.iter().all(|v| v.get("event").is_some()), "c3 only gets events, then closes: {rest:?}");
     env.ok(&["new", "e"]);

@@ -33,6 +33,14 @@ fn resolve(name: &str) -> Result<(String, Endpoint), Fail> {
     Ok((host.label.clone(), host.endpoint().map_err(Fail::Usage)?))
 }
 
+/// Every label in `labels` is in `list`.
+fn known(list: &[Host], labels: &[String]) -> Result<(), Fail> {
+    match labels.iter().find(|l| !list.iter().any(|h| h.label == **l)) {
+        Some(missing) => Err(unknown(missing)),
+        None => Ok(()),
+    }
+}
+
 fn unknown(label: &str) -> Fail {
     Fail::Api(ApiError::not_found(format!("no host {label:?}; add it with `leon hosts add {label} ssh://…`")))
 }
@@ -60,9 +68,7 @@ pub fn run(cli: &Cli, cmd: &HostsCmd) -> Result<(), Fail> {
             hosts::save(&list).map_err(Fail::Other)?;
         }
         HostsCmd::Remove { labels } => {
-            if let Some(missing) = labels.iter().find(|l| !list.iter().any(|h| h.label == **l)) {
-                return Err(unknown(missing));
-            }
+            known(&list, labels)?;
             list.retain(|h| !labels.contains(&h.label));
             hosts::save(&list).map_err(Fail::Other)?;
         }
@@ -73,9 +79,7 @@ pub fn run(cli: &Cli, cmd: &HostsCmd) -> Result<(), Fail> {
 
 /// Reach each host as a command would (starting a server there if `--autostart` allows).
 fn check(cli: &Cli, list: &[Host], labels: &[String]) -> Result<(), Fail> {
-    if let Some(missing) = labels.iter().find(|l| !list.iter().any(|h| h.label == **l)) {
-        return Err(unknown(missing));
-    }
+    known(list, labels)?;
     let mut results = Vec::new();
     for h in list.iter().filter(|h| labels.is_empty() || labels.contains(&h.label)) {
         let answer = h.endpoint().map_err(Fail::Usage).and_then(|e| {

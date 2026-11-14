@@ -182,13 +182,10 @@ impl Server {
     /// host's proxy decides that, as the link was opened to.
     pub fn connect(&self, autostart: bool) -> Result<Client, Fail> {
         let Some((name, _)) = &self.link else { return connect(&self.socket, autostart) };
-        let lost = || Fail::Unreachable(format!("can't reach leon on {name}"));
-        let mut c = Client::connect(&self.socket).map_err(|_| lost())?;
-        c.call("server.version", json!({})).map_err(|f| match f {
-            Fail::Unreachable(_) => lost(),
+        connect(&self.socket, false).map_err(|f| match f {
+            Fail::Unreachable(_) => Fail::Unreachable(format!("can't reach leon on {name}")),
             f => f,
-        })?;
-        Ok(c)
+        })
     }
 }
 

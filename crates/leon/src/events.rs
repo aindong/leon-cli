@@ -11,8 +11,8 @@ use crate::client::{Client, Fail, Server};
 use crate::commands::pick_session;
 use crate::Cli;
 
-/// How long a dropped link is retried; the server keeps a dropped stream as long.
-const GIVE_UP: Duration = Duration::from_secs(60);
+/// How long a dropped link is retried: as long as the server keeps a dropped stream.
+const GIVE_UP: Duration = leon_server::resume::HOLD;
 
 pub fn run(mut c: Client, cli: &Cli, all: bool, server: &Server) -> Result<(), Fail> {
     let (method, mut params, session) = match (&cli.session, all) {

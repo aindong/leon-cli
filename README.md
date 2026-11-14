@@ -101,7 +101,7 @@ binding on the prefix key itself.
 
 ## Work on your devbox
 
-Any command takes `-H` to act on the leon server on another machine instead, through your own
+Commands that talk to the server take `-H` to act on the leon server on another machine instead, through your own
 `ssh` (no account, relay or VPN; `~/.ssh/config` and `ProxyJump` work). Put `leon` on the other
 machine's PATH or in `~/.local/bin`; the first command there starts its server, and programs keep
 running after you disconnect.
@@ -113,8 +113,9 @@ leon -H devbox attach               # its sessions, in this terminal
 leon hosts check
 ```
 
-A dropped Wi-Fi link is retried: `leon attach` and `leon events` reconnect and carry on without
-losing an event. Use ssh keys or an agent: each connection is its own ssh session.
+A dropped Wi-Fi link is retried for a minute: `leon events` resumes without losing or repeating
+an event, and `leon attach` reconnects and redraws (keys typed while the link is down are lost).
+Use ssh keys or an agent: each connection is its own ssh session.
 
 ## Let an agent drive it
 
