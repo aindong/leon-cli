@@ -1,0 +1,4 @@
+# brand assets that are mostly embedded base64 image data (88-99%), refreshed by brand/build-assets.cjs
+brand/icon/*.svg linguist-generated
+brand/marketing/*.svg linguist-generated
+brand/marketing/index.html linguist-generated
