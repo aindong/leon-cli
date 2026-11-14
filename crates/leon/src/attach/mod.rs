@@ -63,7 +63,12 @@ pub fn run(target: Option<&str>, prefix: Option<&str>, autostart: bool, server: 
     drop(c);
     host::watchdog().map_err(|e| Fail::Other(format!("can't take the terminal: {e}")))?;
     let signals = host::block_signals();
-    let remote = Remote::connect(&server.socket).map_err(|e| {
+    // over a link, a drop is retried for as long as the host keeps a dropped stream
+    let remote = match server.link {
+        Some(_) => Remote::connect_retrying(&server.socket, leon_server::resume::HOLD),
+        None => Remote::connect(&server.socket),
+    }
+    .map_err(|e| {
         host::restore();
         Fail::Unreachable(e)
     })?;

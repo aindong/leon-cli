@@ -3,6 +3,8 @@
 //! and one that receives events and screens. A thread reads the last: a screen line patches that
 //! block's frame, and an event means the model is refetched once the lines that came with it are
 //! read. Calls that may run long (Lua actions) get a connection of their own on a thread.
+//! Over a host's link (`connect_retrying`) a dropped event connection is retried with backoff,
+//! and every connection is opened again when it comes back.
 
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -130,6 +132,10 @@ impl Conn {
 /// What the reader thread and the UI share.
 struct Shared {
     socket: PathBuf,
+    /// How long a re-attach keeps trying (over a link); None gives up at once.
+    retry: Option<Duration>,
+    /// The UI's calls. Here, so a re-attach can replace it too.
+    calls: Mutex<Conn>,
     model: Mutex<Model>,
     /// Refetches go here, one at a time and never through the UI's connection, so a refetch can't
     /// delay a keystroke and an older refetch can't overwrite a newer one.
@@ -286,10 +292,15 @@ fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
 }
 
 /// A new event connection when the server still answers (it dropped a connection that fell too
-/// far behind), with the watched blocks watched again.
+/// far behind, or a link to it came back), with the watched blocks watched again.
 fn reattach(shared: &Shared) -> Option<BufReader<UnixStream>> {
-    lock(&shared.fetch).call("server.version", json!({})).ok()?;
-    let (r, w) = attach(&shared.socket).ok()?;
+    let (r, w) = match shared.retry {
+        None => {
+            lock(&shared.fetch).call("server.version", json!({})).ok()?;
+            attach(&shared.socket).ok()?
+        }
+        Some(limit) => relink(shared, limit)?,
+    };
     // held while sending, as `Remote::watch` holds it, so a newer set can't be overtaken
     let watched = lock(&shared.watched);
     *lock(&shared.events) = w;
@@ -302,11 +313,35 @@ fn reattach(shared: &Shared) -> Option<BufReader<UnixStream>> {
     Some(r)
 }
 
+/// Open the fetch and call connections again until the server answers (backing off from 100 ms
+/// to 5 s, for up to `limit`), then attach a new event connection.
+fn relink(shared: &Shared, limit: Duration) -> Option<(BufReader<UnixStream>, UnixStream)> {
+    let end = std::time::Instant::now() + limit;
+    let mut wait = Duration::from_millis(100);
+    loop {
+        let answered = Conn::open(&shared.socket, Some(CALL_TIMEOUT))
+            .map_err(unreachable)
+            .and_then(|mut c| c.call("server.version", json!({})).map(|_| c));
+        if let Ok(fetch) = answered {
+            let attached = attach(&shared.socket);
+            if let (Ok(attached), Ok(calls)) = (attached, Conn::open(&shared.socket, Some(CALL_TIMEOUT))) {
+                *lock(&shared.fetch) = fetch;
+                *lock(&shared.calls) = calls;
+                return Some(attached);
+            }
+        }
+        if shared.closing.load(Ordering::SeqCst) || std::time::Instant::now() + wait > end {
+            return None;
+        }
+        std::thread::sleep(wait);
+        wait = (wait * 2).min(Duration::from_secs(5));
+    }
+}
+
 /// A resize the app asked for: the size, and the size the screen had then.
 type Asked = ((u16, u16), (usize, usize));
 
 pub struct Remote {
-    calls: Mutex<Conn>,
     shared: Arc<Shared>,
     /// Per block: the size last asked for and the size the screen had then (`fit`).
     asked: Mutex<HashMap<String, Asked>>,
@@ -315,6 +350,16 @@ pub struct Remote {
 impl Remote {
     /// Attach to the server on `socket` and read its model; fails when nothing answers.
     pub fn connect(socket: &Path) -> Result<Remote, String> {
+        Remote::open(socket, None)
+    }
+
+    /// `connect` for a host's link (leon_hosts::Link): when the connections drop, keep trying
+    /// to get them back for up to `limit` before saying the server is gone.
+    pub fn connect_retrying(socket: &Path, limit: Duration) -> Result<Remote, String> {
+        Remote::open(socket, Some(limit))
+    }
+
+    fn open(socket: &Path, retry: Option<Duration>) -> Result<Remote, String> {
         // Keys go to whatever answers, so only to a socket in a dir only we can use (the server
         // binds only in one): a socket in an open dir could be anyone's.
         leon_core::paths::ensure_private_dir(socket.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
@@ -325,6 +370,8 @@ impl Remote {
         let (r, events) = attach(socket).map_err(|e| no_server(&e))?;
         let shared = Arc::new(Shared {
             socket: socket.to_path_buf(),
+            retry,
+            calls: Mutex::new(calls),
             model: Mutex::default(),
             fetch: Mutex::new(fetch),
             wakers: Mutex::default(),
@@ -339,7 +386,7 @@ impl Remote {
             .name("leon-events".into())
             .spawn(move || read_events(reader, r))
             .map_err(|e| e.to_string())?;
-        Ok(Remote { calls: Mutex::new(calls), shared, asked: Mutex::default() })
+        Ok(Remote { shared, asked: Mutex::default() })
     }
 
     /// The model as last received. Hold it briefly: the reader thread waits for it.
@@ -351,7 +398,7 @@ impl Remote {
     /// connection that failed (the server closed it, a reply never came) is replaced for the next
     /// call; this one is not sent again, since it may have been done.
     pub fn call(&self, method: &str, params: Value) -> Result<Value, ApiError> {
-        let mut c = lock(&self.calls);
+        let mut c = lock(&self.shared.calls);
         let r = c.call(method, params);
         if r.as_ref().is_err_and(|e| e.code == "unreachable") {
             if let Ok(fresh) = Conn::open(&self.shared.socket, Some(CALL_TIMEOUT)) {
