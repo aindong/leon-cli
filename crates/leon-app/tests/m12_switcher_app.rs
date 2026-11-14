@@ -74,7 +74,8 @@ fn cmd_enter_moves_a_tab_of_this_session_into_a_split(cx: &mut TestAppContext) {
             let st = s.app.ctx().state();
             let sess = st.session(&sid).unwrap();
             let w = &sess.windows[sess.active];
-            w.id == w0 && w.layout.as_ref().is_some_and(|l| l.leaves().contains(&moved.as_str()) && l.leaves().len() == 2)
+            w.id == w0
+                && w.layout.as_ref().is_some_and(|l| l.leaves().contains(&moved.as_str()) && l.leaves().len() == 2)
         }),
         "the picked tab's pane sits beside the focused one in the active tab"
     );

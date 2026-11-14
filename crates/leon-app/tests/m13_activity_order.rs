@@ -63,16 +63,29 @@ fn a_rows_state_says_the_blocked_kind_and_the_progress() {
 #[test]
 fn the_tracker_lists_every_hosts_blocks_that_need_you_in_order() {
     let here = model(vec![
-        ("web", vec![Tab(None, "build", vec![working(40)]), Tab(None, "zsh", vec![]), Tab(None, "tests", vec![record(State::Done)])]),
+        (
+            "web",
+            vec![
+                Tab(None, "build", vec![working(40)]),
+                Tab(None, "zsh", vec![]),
+                Tab(None, "tests", vec![record(State::Done)]),
+            ],
+        ),
         ("docs", vec![Tab(None, "idle", vec![record(State::Idle)])]),
     ]);
-    let devbox = model(vec![("api", vec![Tab(None, "claude", vec![blocked(Kind::Question)]), Tab(None, "deploy", vec![record(State::Error)])])]);
+    let devbox = model(vec![(
+        "api",
+        vec![Tab(None, "claude", vec![blocked(Kind::Question)]), Tab(None, "deploy", vec![record(State::Error)])],
+    )]);
     let mut t = Tracker::default();
     let start = Instant::now();
     t.update(&[(0, "This Mac", &here), (1, "devbox", &devbox)], start);
     let rows = t.rows();
     let places: Vec<&str> = rows.iter().map(|r| r.place.as_str()).collect();
-    assert_eq!(places, vec!["devbox › api › claude", "devbox › api › deploy", "This Mac › web › tests", "This Mac › web › build"]);
+    assert_eq!(
+        places,
+        vec!["devbox › api › claude", "devbox › api › deploy", "This Mac › web › tests", "This Mac › web › build"]
+    );
     assert_eq!(rows[0].host, 1);
     assert_eq!(state_text(rows[0].status), "blocked: question");
     assert_eq!(state_text(rows[3].status), "working 40%");

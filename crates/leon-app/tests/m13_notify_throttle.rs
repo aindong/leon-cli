@@ -70,7 +70,10 @@ fn one_per_block_and_state_a_minute() {
     let t = change("b1", Indicator::Blocked(None));
     assert!(offer(&mut n, &t, now, AWAY));
     assert!(!offer(&mut n, &t, now + Duration::from_secs(10), AWAY), "flapping within a minute: once");
-    assert!(offer(&mut n, &change("b1", Indicator::Error), now + Duration::from_secs(10), AWAY), "another state is new");
+    assert!(
+        offer(&mut n, &change("b1", Indicator::Error), now + Duration::from_secs(10), AWAY),
+        "another state is new"
+    );
     assert!(offer(&mut n, &t, now + Duration::from_secs(61), AWAY), "a minute later it may come again");
 }
 

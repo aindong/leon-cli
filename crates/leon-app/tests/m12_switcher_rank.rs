@@ -33,8 +33,11 @@ fn names(rows: &[Row]) -> Vec<String> {
 
 #[test]
 fn no_query_lists_every_tab_most_recently_used_first() {
-    let tabs =
-        vec![tab("This Mac", "web", "vim", "w1"), tab("This Mac", "web", "logs", "w2"), tab("devbox", "api", "zsh", "w3")];
+    let tabs = vec![
+        tab("This Mac", "web", "vim", "w1"),
+        tab("This Mac", "web", "logs", "w2"),
+        tab("devbox", "api", "zsh", "w3"),
+    ];
     let recent = vec!["w3".to_string(), "w1".to_string()];
     let rows = rank(&tabs, &[], "", &recent);
     assert_eq!(names(&rows), vec!["devbox › api › zsh", "This Mac › web › vim", "This Mac › web › logs"]);
@@ -80,7 +83,8 @@ fn every_row_names_its_host_and_keeps_its_status() {
 
 #[test]
 fn rows_come_from_every_host_with_each_tabs_status() {
-    let here = model(vec![("web", vec![Tab(None, "vim", vec![]), Tab(Some("logs"), "tail", vec![record(State::Done)])])]);
+    let here =
+        model(vec![("web", vec![Tab(None, "vim", vec![]), Tab(Some("logs"), "tail", vec![record(State::Done)])])]);
     let devbox = model(vec![("api", vec![Tab(None, "claude", vec![blocked(Kind::Question)])])]);
     let (tab_rows, block_rows) = tabs(&[(0, "This Mac", &here), (1, "devbox", &devbox)]);
     let text: Vec<String> = tab_rows.iter().map(Row::text).collect();
@@ -91,5 +95,9 @@ fn rows_come_from_every_host_with_each_tabs_status() {
     assert_eq!(tab_rows[1].status, Some(Indicator::Done));
     assert_eq!(block_rows.len(), 3, "a block row per block, shown only when its title matches");
     let rows = rank(&tab_rows, &block_rows, "tail", &[]);
-    assert!(rows.iter().any(|r| r.block.as_deref() == Some("tail")), "{:?}", rows.iter().map(Row::text).collect::<Vec<_>>());
+    assert!(
+        rows.iter().any(|r| r.block.as_deref() == Some("tail")),
+        "{:?}",
+        rows.iter().map(Row::text).collect::<Vec<_>>()
+    );
 }

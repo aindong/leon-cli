@@ -20,7 +20,9 @@ fn the_docs_cover_m12_and_m13() {
         assert!(lua.contains(s), "lua.md documents {s}");
     }
     let arch = doc("docs/architecture.md");
-    for topic in ["session.switch", "client.sidebar.activity.toggle", "UNUserNotificationCenter", "16 MiB", "report_status"] {
+    for topic in
+        ["session.switch", "client.sidebar.activity.toggle", "UNUserNotificationCenter", "16 MiB", "report_status"]
+    {
         assert!(arch.contains(topic), "architecture.md covers {topic}");
     }
     let api = doc("docs/api.md");

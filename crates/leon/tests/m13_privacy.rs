@@ -32,7 +32,8 @@ fn private_names() -> Vec<String> {
 fn mentions(text: &str, name: &str) -> bool {
     let text = text.to_lowercase().replace('’', "'");
     let word = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
-    text.match_indices(name).any(|(i, _)| !word(text[..i].chars().next_back()) && !word(text[i + name.len()..].chars().next()))
+    text.match_indices(name)
+        .any(|(i, _)| !word(text[..i].chars().next_back()) && !word(text[i + name.len()..].chars().next()))
 }
 
 fn images() -> Vec<PathBuf> {
@@ -71,7 +72,8 @@ fn no_screenshot_shows_the_user_or_machine() {
     assert!(out.status.success(), "ocr failed: {}", String::from_utf8_lossy(&out.stderr));
     let text = String::from_utf8_lossy(&out.stdout);
     for name in private_names() {
-        let hits: Vec<&str> = text.lines().filter(|l| mentions(l.split_once(": ").map_or(*l, |(_, t)| t), &name)).collect();
+        let hits: Vec<&str> =
+            text.lines().filter(|l| mentions(l.split_once(": ").map_or(*l, |(_, t)| t), &name)).collect();
         assert!(hits.is_empty(), "screenshots show {name:?}:\n{}", hits.join("\n"));
     }
 }

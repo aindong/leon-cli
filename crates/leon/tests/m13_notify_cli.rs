@@ -48,7 +48,8 @@ fn notify_sets_the_blocks_state_title_and_body() {
 fn notify_finds_its_own_block_from_the_environment() {
     let env = Env::new();
     let (s, b) = env.session();
-    let out = env.cmd().env("LEON_SESSION", &s).env("LEON_BLOCK", &b).args(["notify", "--state", "error"]).output().unwrap();
+    let out =
+        env.cmd().env("LEON_SESSION", &s).env("LEON_BLOCK", &b).args(["notify", "--state", "error"]).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     assert_eq!(root(&env, &b)["state"], "error");
 }

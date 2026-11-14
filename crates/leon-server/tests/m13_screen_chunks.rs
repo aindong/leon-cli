@@ -12,7 +12,16 @@ fn worst() -> Frame {
         for col in 0..cols {
             let n = (line * cols + col) as u32;
             let text: String = std::iter::once('e').chain(std::iter::repeat_n('\u{0301}', 16)).collect();
-            let span = Span { col, cells: 1, text, fg: n & 0xff_ffff, bold: n % 2 == 0, italic: false, underline: true, strikeout: false };
+            let span = Span {
+                col,
+                cells: 1,
+                text,
+                fg: n & 0xff_ffff,
+                bold: n % 2 == 0,
+                italic: false,
+                underline: true,
+                strikeout: false,
+            };
             f.rows[line].push(span);
             f.backgrounds.push(BgRect { line, col, len: 1, color: (n * 7) & 0xff_ffff });
         }
@@ -44,7 +53,16 @@ fn the_worst_screen_goes_in_bounded_lines_that_rebuild_it() {
 #[test]
 fn a_small_update_is_one_line() {
     let mut f = Frame { lines: 2, cols: 10, rows: vec![Vec::new(); 2], ..Frame::default() };
-    f.rows[0].push(Span { col: 0, cells: 2, text: "hi".into(), fg: 1, bold: false, italic: false, underline: false, strikeout: false });
+    f.rows[0].push(Span {
+        col: 0,
+        cells: 2,
+        text: "hi".into(),
+        fg: 1,
+        bold: false,
+        italic: false,
+        underline: false,
+        strikeout: false,
+    });
     let lines = encode("block:y", screen::diff(None, &f).unwrap());
     assert_eq!(lines.len(), 1);
 }

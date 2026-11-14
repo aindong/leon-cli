@@ -170,18 +170,25 @@ pub fn diff(old: Option<&Frame>, new: &Frame) -> Option<Update> {
     Some(Update { full, lines: f.lines, cols: f.cols, rows, cursor, app_cursor, bracketed_paste, view })
 }
 
-/// Apply `u` to `frame`. Rows outside the screen are ignored, so a bad update can't grow it.
+/// Apply `u` to `frame`. Rows outside the screen are ignored, so a bad update can't grow it; a
+/// line given twice takes its last row, and a row brings at most `cols` backgrounds. Linear in
+/// the update and the frame, whatever a server sends.
 pub fn apply(frame: &mut Frame, u: Update) {
     if u.full {
         // no larger than a terminal can be, whatever the line said
         let (lines, cols) = (u.lines.min(MAX_SIZE.0 as usize), u.cols.min(MAX_SIZE.1 as usize));
         *frame = Frame { lines, cols, rows: vec![Vec::new(); lines], ..Frame::default() };
     }
-    let rows: Vec<Row> = u.rows.into_iter().filter(|r| r.line < frame.lines).collect();
-    frame.backgrounds.retain(|b| !rows.iter().any(|r| r.line == b.line));
-    for r in rows {
+    let mut rows: Vec<Option<Row>> = vec![None; frame.lines];
+    for r in u.rows.into_iter().filter(|r| r.line < frame.lines) {
         let line = r.line;
-        frame.backgrounds.extend(r.backgrounds.iter().map(|b| BgRect { line, col: b.col, len: b.len, color: b.color }));
+        rows[line] = Some(r);
+    }
+    frame.backgrounds.retain(|b| rows[b.line].is_none());
+    for r in rows.into_iter().flatten() {
+        let line = r.line;
+        let bgs = r.backgrounds.iter().filter(|b| b.col < frame.cols).take(frame.cols);
+        frame.backgrounds.extend(bgs.map(|b| BgRect { line, col: b.col, len: b.len, color: b.color }));
         frame.rows[line] = r.spans;
     }
     (frame.cursor, frame.app_cursor, frame.bracketed_paste, frame.view) =
