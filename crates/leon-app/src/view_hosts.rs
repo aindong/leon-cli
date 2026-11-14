@@ -281,6 +281,10 @@ impl Workspace {
             }
         };
         match ask.clone() {
+            // one in the window but no longer in the file (removed from the CLI) is taken too
+            Ask::HostLabel if self.hosts.index_of(&typed).is_some() => {
+                *refused = Some(format!("{} {typed:?} already", leon_hosts::hosts::TAKEN));
+            }
             Ask::HostLabel => match leon_hosts::hosts::check_new_label(&list, &typed) {
                 Ok(()) => {
                     (*ask, *refused) = (Ask::HostEndpoint { label: typed }, None);

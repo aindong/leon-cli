@@ -230,7 +230,9 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   `$LEON_STATE_DIR/hosts.json` (`{"version":1,"hosts":[{label, endpoints, icon}]}`, spec §2),
   written 0600 via a temp file and a rename, read only from a private dir and a regular file of
   ours, and each endpoint is parsed again when used. With `-H`, `LEON_SESSION`/`LEON_BLOCK` are
-  ignored. A link flocks `lock` in its dir while it lives; a killed client leaves its dir, and the
+  ignored. A link flocks `lock` in its dir while it lives; dropping it ends its accept loop (a
+  connection of its own wakes it) and so closes the socket, since the app opens one per connection
+  attempt for as long as it runs; a killed client leaves its dir, and the
   next `Link::open` removes `link-*` dirs whose lock it can take (never by connecting: a live link
   answers a connection by running ssh). One ssh session per connection is the price of the simple design
   (`leon attach` opens three); `ControlMaster auto` shares one login.

@@ -82,7 +82,8 @@ pub(super) fn watchdog(shared: Weak<Shared>) {
                 let _ = io::Write::write_all(&mut *lock(&s.events), line);
                 *ping = Some(Instant::now());
             }
-            Some(at) if at.elapsed() >= PING_AFTER && heard < at => {
+            Some(at) if heard >= at => *ping = None, // answered: watch for the next quiet spell
+            Some(at) if at.elapsed() >= PING_AFTER => {
                 let _ = lock(&s.events).shutdown(std::net::Shutdown::Both);
                 *ping = None;
             }

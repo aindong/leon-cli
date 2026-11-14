@@ -32,11 +32,15 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
     let mut out = Vec::new();
     for s in list["sessions"].as_array().into_iter().flatten() {
         let sid = &s["session_id"];
-        let (Ok(view), Ok(blocks)) = (
+        let (view, blocks) = (
             c.call("session.view", json!({ "session_id": sid })),
             c.call("session.list_blocks", json!({ "session_id": sid })),
-        ) else {
-            continue;
+        );
+        // a connection that broke midway keeps the old model; only a session gone meanwhile is left out
+        let (view, blocks) = match (view, blocks) {
+            (Ok(v), Ok(b)) => (v, b),
+            (Err(e), _) | (_, Err(e)) if e.code == "unreachable" => return Err(e),
+            _ => continue,
         };
         let text = |v: &Value| v.as_str().map(String::from);
         let windows: Vec<Window> = view["windows"]
