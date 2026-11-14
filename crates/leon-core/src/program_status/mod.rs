@@ -15,7 +15,8 @@ pub use store::{Change, Reason, Store, MAX_RECORDS};
 pub const QUERY_REPLY: &[u8] =
     b"\x1b]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth\x1b\\";
 
-/// A scanner and a store for one terminal.
+/// A scanner and a store for one terminal. Change the store through the tracker, or call
+/// [`Store::settle`] after changing it directly.
 #[derive(Debug, Default)]
 pub struct Tracker {
     scanner: Scanner,
@@ -26,7 +27,7 @@ pub struct Tracker {
 #[derive(Debug, Default)]
 pub struct Fed {
     pub changes: Vec<Change>,
-    /// Bytes to write back to the PTY (query replies); usually empty.
+    /// Bytes to write back to the PTY: one query reply at most, however many queries the read held.
     pub reply: Vec<u8>,
 }
 
@@ -38,13 +39,25 @@ impl Tracker {
         self.scanner.feed(input, |piece| match piece {
             Piece::Bytes(b) => pass(b),
             Piece::Report(payload) => match parse(payload) {
-                Ok(Message::Query) => fed.reply.extend_from_slice(QUERY_REPLY),
+                Ok(Message::Query) => {
+                    if fed.reply.is_empty() {
+                        fed.reply.extend_from_slice(QUERY_REPLY)
+                    }
+                }
                 Ok(message) => fed.changes.extend(store.apply(message)),
                 Err(_) => {}
             },
             Piece::Prompt => fed.changes.extend(store.prompt()),
             Piece::Reset => fed.changes.extend(store.reset()),
         });
+        fed.changes.extend(self.store.settle());
         fed
+    }
+
+    /// The terminal's foreground program exited.
+    pub fn process_exited(&mut self) -> Vec<Change> {
+        let mut changes = self.store.process_exited();
+        changes.extend(self.store.settle());
+        changes
     }
 }

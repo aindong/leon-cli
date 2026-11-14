@@ -1,4 +1,4 @@
-//! Removing an ancestor that supplied `app` is a change for the descendants that survive it.
+//! Removing an ancestor that supplied `app` is a change for the descendants that survive it (on settle).
 
 use leon_core::program_status::{parse, Change, Reason, Record, State, Store, MAX_RECORDS};
 
@@ -15,8 +15,10 @@ fn prompt_removing_the_app_ancestor_updates_survivors() {
     let mut s = Store::default();
     apply(&mut s, "state=working:app=claude");
     apply(&mut s, "state=idle:id=a");
+    let mut changes = s.prompt();
+    changes.extend(s.settle());
     assert_eq!(
-        s.prompt(),
+        changes,
         vec![
             Change::Removed { ids: vec![None], reason: Reason::Prompt },
             Change::Changed { id: Some("a".into()), record: idle(), reason: Reason::Inherited },
@@ -32,8 +34,10 @@ fn evicting_the_app_ancestor_updates_survivors() {
     for i in 2..MAX_RECORDS {
         apply(&mut s, &format!("state=idle:id=r{i}"));
     }
+    let mut changes = apply(&mut s, "state=idle:id=new");
+    changes.extend(s.settle());
     assert_eq!(
-        apply(&mut s, "state=idle:id=new"),
+        changes,
         vec![
             Change::Removed { ids: vec![Some("p".into())], reason: Reason::Evicted },
             Change::Changed { id: Some("new".into()), record: idle(), reason: Reason::Report },

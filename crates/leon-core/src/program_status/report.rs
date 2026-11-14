@@ -22,7 +22,8 @@ pub enum Kind {
     Auth,
 }
 
-/// One program's status. `title` and `msg` are decoded and safe to render.
+/// One program's status. `title` and `msg` are decoded, single-line and free of controls and
+/// invisible characters; a renderer must still bidi-isolate them and clip their height.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Record {
     pub state: State,
@@ -83,32 +84,32 @@ pub fn parse(payload: &[u8]) -> Result<Message, Ignored> {
     for pair in payload.split(|&b| b == b':') {
         let Some(eq) = pair.iter().position(|&b| b == b'=') else { continue };
         let (key, value) = (pair[..eq].trim_ascii(), pair[eq + 1..].trim_ascii());
-        if key.len() > 16 {
-            return Err(Ignored::TooLong("key"));
-        }
         if key.is_empty() || !key.iter().all(u8::is_ascii_lowercase) {
             continue;
         }
+        if key.len() > 16 {
+            return Err(Ignored::TooLong("key"));
+        }
+        // Skipping a malformed id would land the report on the root, so every id must be valid.
+        if key == b"id" && !valid_id(value) {
+            return Err(Ignored::BadId);
+        }
         if !value.iter().all(|&b| value_byte(b)) {
-            // Skipping a malformed id would land the report on the root.
-            if key == b"id" {
-                return Err(Ignored::BadId);
-            }
             continue;
         }
-        // Both are ASCII now.
-        let (key, value) = (std::str::from_utf8(key).unwrap(), std::str::from_utf8(value).unwrap());
-        let (slot, max, name) = match key {
-            "state" => (&mut pairs.state, usize::MAX, "state"),
-            "id" => (&mut pairs.id, usize::MAX, "id"),
-            "kind" => (&mut pairs.kind, usize::MAX, "kind"),
-            "progress" => (&mut pairs.progress, usize::MAX, "progress"),
-            "app" => (&mut pairs.app, 32, "app"),
-            "title" => (&mut pairs.title, 256, "title"),
-            "msg" => (&mut pairs.msg, 2732, "msg"),
+        let value = std::str::from_utf8(value).expect("value bytes are ASCII");
+        // Limits hold for every occurrence, even one a later duplicate replaces. (encoded, decoded)
+        let (slot, max, max_decoded, name) = match key {
+            b"state" => (&mut pairs.state, usize::MAX, usize::MAX, "state"),
+            b"id" => (&mut pairs.id, usize::MAX, usize::MAX, "id"),
+            b"kind" => (&mut pairs.kind, usize::MAX, usize::MAX, "kind"),
+            b"progress" => (&mut pairs.progress, usize::MAX, usize::MAX, "progress"),
+            b"app" => (&mut pairs.app, 32, usize::MAX, "app"),
+            b"title" => (&mut pairs.title, 256, 192, "title"),
+            b"msg" => (&mut pairs.msg, 2732, 2048, "msg"),
             _ => continue,
         };
-        if value.len() > max {
+        if value.len() > max || (max_decoded < usize::MAX && B64.decode(value).map_or(0, |b| b.len()) > max_decoded) {
             return Err(Ignored::TooLong(name));
         }
         *slot = Some(value);
@@ -121,10 +122,10 @@ pub fn parse(payload: &[u8]) -> Result<Message, Ignored> {
         Some("done") => State::Done,
         Some("blocked") => State::Blocked,
         Some("error") => State::Error,
-        Some("clear") => return Ok(Message::Clear { id: id(pairs.id)? }),
+        Some("clear") => return Ok(Message::Clear { id: pairs.id.map(String::from) }),
         Some(_) => return Err(Ignored::BadState),
     };
-    let id = id(pairs.id)?;
+    let id = pairs.id.map(String::from);
     let kind = match (state, pairs.kind) {
         (State::Blocked, Some("permission")) => Some(Kind::Permission),
         (State::Blocked, Some("question")) => Some(Kind::Question),
@@ -138,8 +139,7 @@ pub fn parse(payload: &[u8]) -> Result<Message, Ignored> {
         .and_then(|p| p.parse().ok())
         .filter(|&p| p <= 100);
     let app = pairs.app.filter(|a| !a.is_empty() && a.bytes().all(segment_byte)).map(String::from);
-    let title = text(pairs.title, 192, "title")?;
-    let msg = text(pairs.msg, 2048, "msg")?;
+    let (title, msg) = (text(pairs.title), text(pairs.msg));
     Ok(Message::Set { id, record: Record { state, kind, progress, app, title, msg } })
 }
 
@@ -151,45 +151,62 @@ fn segment_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b"_.+-".contains(&b)
 }
 
-/// Absent is the root; present but invalid is an error, never the root.
-fn id(id: Option<&str>) -> Result<Option<String>, Ignored> {
-    let Some(id) = id else { return Ok(None) };
-    let segment_ok = |s: &str| (1..=32).contains(&s.len()) && s.bytes().all(segment_byte);
-    if id.len() > 128 || id.split('/').count() > 8 || !id.split('/').all(segment_ok) {
-        return Err(Ignored::BadId);
-    }
-    Ok(Some(id.to_string()))
+/// `segment ("/" segment)*`, segments of 1–32 bytes, at most 8 deep and 128 bytes in all.
+fn valid_id(id: &[u8]) -> bool {
+    let segment_ok = |s: &[u8]| (1..=32).contains(&s.len()) && s.iter().all(|&b| segment_byte(b));
+    id.len() <= 128 && id.split(|&b| b == b'/').count() <= 8 && id.split(|&b| b == b'/').all(segment_ok)
 }
 
-/// Base64 UTF-8 text. Over `max` decoded bytes discards the report; anything unsafe drops just the field.
-fn text(value: Option<&str>, max: usize, key: &'static str) -> Result<Option<String>, Ignored> {
-    let Some(Ok(bytes)) = value.map(|v| B64.decode(v)) else { return Ok(None) };
-    if bytes.len() > max {
-        return Err(Ignored::TooLong(key));
-    }
-    Ok(String::from_utf8(bytes).ok().filter(|s| !s.is_empty() && s.chars().all(safe_char)))
+/// Base64 UTF-8 text; anything undecodable or unsafe drops just the field.
+fn text(value: Option<&str>) -> Option<String> {
+    let bytes = B64.decode(value?).ok()?;
+    String::from_utf8(bytes).ok().filter(|s| safe_text(s))
 }
 
-/// No controls (C0, DEL, C1), line breaks, bidi controls or invisible format characters. ZWJ and
-/// variation selectors stay: emoji need them.
-fn safe_char(c: char) -> bool {
-    !c.is_control()
-        && !matches!(
-            c,
-            '\u{ad}'
-                | '\u{61c}'
-                | '\u{115f}'
-                | '\u{1160}'
-                | '\u{180e}'
-                | '\u{200b}'
-                | '\u{200c}'
-                | '\u{200e}'..='\u{200f}'
-                | '\u{2028}'..='\u{202e}'
-                | '\u{2060}'..='\u{206f}'
-                | '\u{3164}'
-                | '\u{feff}'
-                | '\u{ffa0}'
-                | '\u{fff9}'..='\u{fffb}'
-                | '\u{e0000}'..='\u{e007f}'
-        )
+/// One line with nothing hidden: no controls (C0, DEL, C1), line breaks, bidi controls or invisible
+/// characters, and something visible. ZWJ and the emoji variation selectors stay, but only right
+/// after something visible (ZWJ also after a selector, as in 🏳️‍🌈), so they can't form hidden runs.
+fn safe_text(s: &str) -> bool {
+    let mut prev = None;
+    for c in s.chars() {
+        let ok = match c {
+            '\u{fe0e}' | '\u{fe0f}' => prev.is_some_and(|p| !joiner(p)),
+            '\u{200d}' => prev.is_some_and(|p| p != '\u{200d}'),
+            _ => !c.is_control() && !invisible(c),
+        };
+        if !ok {
+            return false;
+        }
+        prev = Some(c);
+    }
+    s.chars().any(|c| !c.is_whitespace() && !joiner(c))
+}
+
+fn joiner(c: char) -> bool {
+    matches!(c, '\u{200d}' | '\u{fe0e}' | '\u{fe0f}')
+}
+
+/// Unicode's Default_Ignorable_Code_Point set, plus the line/paragraph separators and interlinear
+/// annotation characters.
+fn invisible(c: char) -> bool {
+    matches!(
+        c,
+        '\u{ad}'
+            | '\u{34f}'
+            | '\u{61c}'
+            | '\u{115f}'..='\u{1160}'
+            | '\u{17b4}'..='\u{17b5}'
+            | '\u{180b}'..='\u{180f}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{2028}'..='\u{202e}'
+            | '\u{2060}'..='\u{206f}'
+            | '\u{3164}'
+            | '\u{fe00}'..='\u{fe0f}'
+            | '\u{feff}'
+            | '\u{ffa0}'
+            | '\u{fff0}'..='\u{fffb}'
+            | '\u{1bca0}'..='\u{1bca3}'
+            | '\u{1d173}'..='\u{1d17a}'
+            | '\u{e0000}'..='\u{e0fff}'
+    )
 }

@@ -70,27 +70,13 @@ impl Scanner {
                 self.pass.extend_from_slice(b"\x1b\\");
                 self.end_osc(f);
             }
-            Mode::Esc { .. } => match b {
-                b']' => {
-                    self.buf.clear();
-                    self.buf.extend_from_slice(b"\x1b]");
-                    self.mode = Mode::Prefix;
+            Mode::Esc { osc } => {
+                if osc {
+                    // vte ends an OSC at any ESC, so a cut-off `133;A` is still a prompt.
+                    self.end_osc(f);
                 }
-                b'c' => {
-                    self.pass.extend_from_slice(b"\x1bc");
-                    self.flush(f);
-                    f(Piece::Reset);
-                    self.mode = Mode::Ground;
-                }
-                ESC => {
-                    self.pass.push(ESC);
-                    self.mode = Mode::Esc { osc: false };
-                }
-                _ => {
-                    self.pass.extend_from_slice(&[ESC, b]);
-                    self.mode = Mode::Ground;
-                }
-            },
+                self.after_esc(b, f);
+            }
             Mode::Prefix => {
                 self.buf.push(b);
                 if self.buf == PREFIX {
@@ -132,8 +118,7 @@ impl Scanner {
                 ESC => self.mode = Mode::Esc { osc: true },
                 CAN | SUB => {
                     self.pass.push(b);
-                    self.buf.clear();
-                    self.mode = Mode::Ground;
+                    self.end_osc(f);
                 }
                 _ => {
                     self.pass.push(b);
@@ -142,6 +127,31 @@ impl Scanner {
                     }
                 }
             },
+        }
+    }
+
+    /// The byte after an ESC (held, not yet passed on).
+    fn after_esc(&mut self, b: u8, f: &mut impl FnMut(Piece<'_>)) {
+        match b {
+            b']' => {
+                self.buf.clear();
+                self.buf.extend_from_slice(b"\x1b]");
+                self.mode = Mode::Prefix;
+            }
+            b'c' => {
+                self.pass.extend_from_slice(b"\x1bc");
+                self.flush(f);
+                f(Piece::Reset);
+                self.mode = Mode::Ground;
+            }
+            ESC => {
+                self.pass.push(ESC);
+                self.mode = Mode::Esc { osc: false };
+            }
+            _ => {
+                self.pass.extend_from_slice(&[ESC, b]);
+                self.mode = Mode::Ground;
+            }
         }
     }
 

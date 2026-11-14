@@ -13,7 +13,7 @@ pub const MAX_RECORDS: usize = 256;
 #[serde(rename_all = "lowercase")]
 pub enum Reason {
     Report,
-    /// The record's effective `app` changed because an ancestor was reported or removed.
+    /// The record's effective `app` changed because an ancestor was reported or removed (see `settle`).
     Inherited,
     Clear,
     Evicted,
@@ -34,11 +34,23 @@ pub enum Change {
     Removed { ids: Vec<Option<String>>, reason: Reason },
 }
 
+#[derive(Debug)]
+struct Entry {
+    /// When it was last reported, for LRU.
+    tick: u64,
+    /// With its own `app`, not the inherited one.
+    record: Record,
+    /// The effective `app` the last event about this record carried.
+    announced: Option<String>,
+}
+
 #[derive(Debug, Default)]
 pub struct Store {
-    /// id → (last report tick, record with its own `app`, not the inherited one).
-    entries: HashMap<Option<String>, (u64, Record)>,
+    /// Keyed by id; the root record is `""`, which no valid id can be.
+    entries: HashMap<String, Entry>,
     tick: u64,
+    /// Something changed since the last `settle`.
+    dirty: bool,
 }
 
 impl Store {
@@ -52,19 +64,24 @@ impl Store {
 
     /// The record with `app` inherited from the nearest ancestor.
     pub fn get(&self, id: Option<&str>) -> Option<Record> {
-        self.entries.get(&id.map(String::from)).map(|(_, r)| self.resolved(id, r))
+        let key = id.unwrap_or("");
+        self.entries.get(key).map(|e| self.resolved(key, &e.record))
     }
 
     /// Every record with `app` resolved, least recently reported first.
     pub fn records(&self) -> Vec<(Option<String>, Record)> {
-        self.by_tick().into_iter().map(|(id, r)| (id.clone(), self.resolved(id.as_deref(), r))).collect()
+        self.by_tick().into_iter().map(|(k, e)| (public(k), self.resolved(k, &e.record))).collect()
     }
 
+    /// Applies one report. Follow a batch of calls with [`Store::settle`].
     pub fn apply(&mut self, message: Message) -> Vec<Change> {
         match message {
             Message::Query => Vec::new(),
-            Message::Clear { id } => self.remove_where(Reason::Clear, |k, _| within(k.as_deref(), id.as_deref())),
-            Message::Set { id, record } => self.set(id, record),
+            Message::Clear { id } => {
+                let root = id.unwrap_or_default();
+                self.remove_where(Reason::Clear, |k, _| within(k, &root))
+            }
+            Message::Set { id, record } => self.set(id.unwrap_or_default(), record),
         }
     }
 
@@ -83,96 +100,102 @@ impl Store {
         self.remove_where(Reason::Reset, |_, _| true)
     }
 
-    fn drop_live(&mut self, reason: Reason) -> Vec<Change> {
-        self.remove_where(reason, |_, r| matches!(r.state, State::Working | State::Blocked))
-    }
-
-    fn set(&mut self, id: Option<String>, record: Record) -> Vec<Change> {
-        let before = self.apps();
-        self.tick += 1;
-        if let Some((_, old)) = self.entries.insert(id.clone(), (self.tick, record.clone())) {
-            if old == record {
-                return Vec::new();
-            }
-        }
-        let mut changes = Vec::new();
-        if self.entries.len() > MAX_RECORDS {
-            let lru = self.entries.iter().min_by_key(|(_, (t, _))| *t).map(|(k, _)| k.clone()).expect("not empty");
-            self.entries.remove(&lru);
-            changes.push(Change::Removed { ids: vec![lru], reason: Reason::Evicted });
-        }
-        changes.push(Change::Changed {
-            record: self.resolved(id.as_deref(), &record),
-            id: id.clone(),
-            reason: Reason::Report,
-        });
-        changes.extend(self.inherited(&before, Some(&id)));
-        changes
-    }
-
-    fn remove_where(&mut self, reason: Reason, doomed: impl Fn(&Option<String>, &Record) -> bool) -> Vec<Change> {
-        let before = self.apps();
-        let mut ids: Vec<_> = self.entries.iter().filter(|(k, (_, r))| doomed(k, r)).map(|(k, _)| k.clone()).collect();
-        if ids.is_empty() {
+    /// `inherited` events for records whose effective `app` no longer matches their last event.
+    /// Run once per batch (the tracker does it per read): at most one event per record, so hostile
+    /// output toggling an ancestor's `app` can't multiply events by the number of descendants.
+    pub fn settle(&mut self) -> Vec<Change> {
+        if !std::mem::take(&mut self.dirty) {
             return Vec::new();
         }
-        ids.sort();
-        for id in &ids {
-            self.entries.remove(id);
-        }
-        let mut changes = vec![Change::Removed { ids, reason }];
-        changes.extend(self.inherited(&before, None));
-        changes
-    }
-
-    /// `changed` events for surviving records (other than `skip`) whose effective app differs from `before`.
-    fn inherited(
-        &self,
-        before: &HashMap<Option<String>, Option<String>>,
-        skip: Option<&Option<String>>,
-    ) -> Vec<Change> {
-        self.by_tick()
+        let stale: Vec<(String, Option<String>)> = self
+            .by_tick()
             .into_iter()
-            .filter(|(id, _)| Some(*id) != skip)
-            .filter(|(id, _)| before.get(*id).is_some_and(|app| *app != self.app(id.as_deref())))
-            .map(|(id, r)| Change::Changed {
-                id: id.clone(),
-                record: self.resolved(id.as_deref(), r),
-                reason: Reason::Inherited,
+            .map(|(k, e)| (k, e, self.app(k)))
+            .filter(|(_, e, app)| e.announced != *app)
+            .map(|(k, _, app)| (k.clone(), app))
+            .collect();
+        stale
+            .into_iter()
+            .map(|(k, app)| {
+                let entry = self.entries.get_mut(&k).expect("listed above");
+                entry.announced = app.clone();
+                let record = Record { app, ..entry.record.clone() };
+                Change::Changed { id: public(&k), record, reason: Reason::Inherited }
             })
             .collect()
     }
 
-    fn by_tick(&self) -> Vec<(&Option<String>, &Record)> {
-        let mut all: Vec<_> = self.entries.iter().collect();
-        all.sort_by_key(|(_, (t, _))| *t);
-        all.into_iter().map(|(id, (_, r))| (id, r)).collect()
+    fn drop_live(&mut self, reason: Reason) -> Vec<Change> {
+        self.remove_where(reason, |_, r| matches!(r.state, State::Working | State::Blocked))
     }
 
-    fn apps(&self) -> HashMap<Option<String>, Option<String>> {
-        self.entries.keys().map(|k| (k.clone(), self.app(k.as_deref()))).collect()
-    }
-
-    fn resolved(&self, id: Option<&str>, record: &Record) -> Record {
-        Record { app: self.app(id), ..record.clone() }
-    }
-
-    /// The `app` of `id` or its nearest ancestor that has one; the root is everyone's ancestor.
-    fn app(&self, mut id: Option<&str>) -> Option<String> {
-        loop {
-            if let Some(app) = self.entries.get(&id.map(String::from)).and_then(|(_, r)| r.app.as_ref()) {
-                return Some(app.clone());
+    fn set(&mut self, key: String, record: Record) -> Vec<Change> {
+        self.tick += 1;
+        let tick = self.tick;
+        if let Some(entry) = self.entries.get_mut(&key) {
+            entry.tick = tick;
+            if entry.record == record {
+                return Vec::new();
             }
-            id = id?.rsplit_once('/').map(|(parent, _)| parent);
         }
+        let mut changes = Vec::new();
+        if !self.entries.contains_key(&key) && self.entries.len() == MAX_RECORDS {
+            let lru = self.entries.iter().min_by_key(|(_, e)| e.tick).map(|(k, _)| k.clone()).expect("full");
+            self.entries.remove(&lru);
+            changes.push(Change::Removed { ids: vec![public(&lru)], reason: Reason::Evicted });
+        }
+        let resolved = Record { app: self.app_with(&key, record.app.as_ref()), ..record.clone() };
+        self.entries.insert(key.clone(), Entry { tick, record, announced: resolved.app.clone() });
+        self.dirty = true;
+        changes.push(Change::Changed { id: public(&key), record: resolved, reason: Reason::Report });
+        changes
+    }
+
+    fn remove_where(&mut self, reason: Reason, doomed: impl Fn(&str, &Record) -> bool) -> Vec<Change> {
+        let mut keys: Vec<String> =
+            self.entries.iter().filter(|(k, e)| doomed(k, &e.record)).map(|(k, _)| k.clone()).collect();
+        if keys.is_empty() {
+            return Vec::new();
+        }
+        keys.sort();
+        for k in &keys {
+            self.entries.remove(k);
+        }
+        self.dirty = true;
+        vec![Change::Removed { ids: keys.iter().map(|k| public(k)).collect(), reason }]
+    }
+
+    fn by_tick(&self) -> Vec<(&String, &Entry)> {
+        let mut all: Vec<_> = self.entries.iter().collect();
+        all.sort_by_key(|(_, e)| e.tick);
+        all
+    }
+
+    fn resolved(&self, key: &str, record: &Record) -> Record {
+        Record { app: self.app(key), ..record.clone() }
+    }
+
+    fn app(&self, key: &str) -> Option<String> {
+        self.app_with(key, self.entries.get(key).and_then(|e| e.record.app.as_ref()))
+    }
+
+    /// `own`, else the `app` of the nearest ancestor that has one; the root is everyone's ancestor.
+    fn app_with(&self, key: &str, own: Option<&String>) -> Option<String> {
+        let mut key = key;
+        let mut found = own;
+        while found.is_none() && !key.is_empty() {
+            key = key.rsplit_once('/').map_or("", |(parent, _)| parent);
+            found = self.entries.get(key).and_then(|e| e.record.app.as_ref());
+        }
+        found.cloned()
     }
 }
 
-/// `key` is `root` or one of its descendants (`None` = root of everything).
-fn within(key: Option<&str>, root: Option<&str>) -> bool {
-    match (key, root) {
-        (_, None) => true,
-        (None, Some(_)) => false,
-        (Some(k), Some(r)) => k.strip_prefix(r).is_some_and(|rest| rest.is_empty() || rest.starts_with('/')),
-    }
+fn public(key: &str) -> Option<String> {
+    (!key.is_empty()).then(|| key.to_string())
+}
+
+/// `key` is `root` or one of its descendants (`""` = the root of everything).
+fn within(key: &str, root: &str) -> bool {
+    root.is_empty() || key.strip_prefix(root).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
 }

@@ -79,15 +79,25 @@ fn app_is_inherited_from_the_nearest_ancestor() {
     assert!(listed.iter().all(|(_, r)| r.app.is_some()), "records() resolves app too: {listed:?}");
 }
 
+/// One batch: what the tracker does per read.
+fn settled(s: &mut Store, changes: Vec<Change>) -> Vec<Change> {
+    let mut all = changes;
+    all.extend(s.settle());
+    all
+}
+
 #[test]
 fn descendants_get_an_inherited_event_when_their_app_changes() {
     let mut s = Store::default();
     s.apply(msg("state=working:id=a"));
     s.apply(msg("state=working:id=a/b:app=own"));
     s.apply(msg("state=working:id=a/c"));
+    assert_eq!(s.settle(), vec![], "each record's own event already carried its app");
     let claude = |state| Record { app: Some("claude".into()), ..rec(state) };
+    let root = s.apply(msg("state=idle:app=claude"));
+    assert_eq!(root.len(), 1, "inherited events wait for settle");
     assert_eq!(
-        s.apply(msg("state=idle:app=claude")),
+        settled(&mut s, root),
         vec![
             Change::Changed { id: None, record: claude(State::Idle), reason: Reason::Report },
             Change::Changed { id: id("a"), record: claude(State::Working), reason: Reason::Inherited },
@@ -95,23 +105,40 @@ fn descendants_get_an_inherited_event_when_their_app_changes() {
         ],
         "a/b keeps its own app, so it gets no event"
     );
-    assert_eq!(s.apply(msg("state=done:app=claude")).len(), 1, "same app, only the root changes");
-    assert_eq!(s.prompt(), removed(&[id("a"), id("a/b"), id("a/c")], Reason::Prompt));
+    assert_eq!(s.settle(), vec![], "settled twice is nothing new");
+    let done = s.apply(msg("state=done:app=claude"));
+    assert_eq!(settled(&mut s, done).len(), 1, "same app, only the root changes");
+    let gone = s.prompt();
+    assert_eq!(settled(&mut s, gone), removed(&[id("a"), id("a/b"), id("a/c")], Reason::Prompt));
     s.apply(msg("state=working:id=a/c"));
+    let cleared = s.apply(msg("state=clear"));
     assert_eq!(
-        s.apply(msg("state=clear")),
+        settled(&mut s, cleared),
         vec![Change::Removed { ids: vec![None, id("a/c")], reason: Reason::Clear }],
         "removed records get no inherited event"
     );
     s.apply(msg("state=idle:app=claude"));
     s.apply(msg("state=working:id=k"));
+    let plain = s.apply(msg("state=idle"));
     assert_eq!(
-        s.apply(msg("state=idle")),
+        settled(&mut s, plain),
         vec![
             Change::Changed { id: None, record: rec(State::Idle), reason: Reason::Report },
             Change::Changed { id: id("k"), record: rec(State::Working), reason: Reason::Inherited },
         ],
         "losing the inherited app is a change too"
+    );
+    // Toggling the app back and forth in one batch is one event per record, with the final app.
+    s.apply(msg("state=idle:app=x"));
+    s.apply(msg("state=idle:app=y"));
+    s.apply(msg("state=idle:app=z"));
+    assert_eq!(
+        s.settle(),
+        vec![Change::Changed {
+            id: id("k"),
+            record: Record { app: Some("z".into()), ..rec(State::Working) },
+            reason: Reason::Inherited
+        }]
     );
 }
 
