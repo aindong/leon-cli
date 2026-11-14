@@ -1,0 +1,4 @@
+# brand assets written by brand/build-assets.cjs, not by hand
+brand/icon/*.svg linguist-generated
+brand/marketing/*.svg linguist-generated
+brand/marketing/index.html linguist-generated
