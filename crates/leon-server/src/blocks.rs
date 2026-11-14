@@ -79,7 +79,7 @@ pub fn open(
         return Err(ApiError::bad_request("command needs at least a program name"));
     }
     let id = new_id("block");
-    let terminal = spawn(ctx, session_id, &id, o.command.unwrap_or_default(), o.cwd.map(PathBuf::from))?;
+    let terminal = spawn(ctx, session_id, &id, o.command.unwrap_or_default(), o.cwd.map(PathBuf::from), &[])?;
     let keep_open = o.exit.is_some_and(|e| !e.on_completion);
     let block = Block {
         id: id.clone(),
@@ -93,14 +93,15 @@ pub fn open(
     Ok(id)
 }
 
-/// Start the terminal of block `block_id`; an empty `command` runs the login shell. Like `open`,
-/// call with the state lock held.
+/// Start the terminal of block `block_id`, showing `shown` first (`Terminal::spawn_showing`); an
+/// empty `command` runs the login shell. Like `open`, call with the state lock held.
 pub(crate) fn spawn(
     ctx: &Arc<Ctx>,
     session_id: &str,
     block_id: &str,
     command: Vec<String>,
     cwd: Option<PathBuf>,
+    shown: &[u8],
 ) -> Result<Terminal, ApiError> {
     let mut env: Vec<(String, String)> = [
         ("LEON_SESSION", session_id),
@@ -128,7 +129,7 @@ pub(crate) fn spawn(
     let spec = Spec { command, cwd, env };
     let weak = Arc::downgrade(ctx);
     let block_id = block_id.to_string();
-    Terminal::spawn(spec, move |notice| {
+    Terminal::spawn_showing(spec, shown, move |notice| {
         let Some(ctx) = weak.upgrade() else { return };
         let exited = matches!(notice, Notice::Exited(_));
         ctx.state().notice(&block_id, notice);
@@ -150,6 +151,8 @@ pub struct BlockView {
     pub keep_open: bool,
     /// Set once the program exited (only seen on blocks kept open).
     pub exit_code: Option<i32>,
+    /// What runs to resume the program after a restart, if it registered one (`set_resume`).
+    pub resume: Option<Vec<String>>,
 }
 
 fn view(b: &Block) -> BlockView {
@@ -161,6 +164,7 @@ fn view(b: &Block) -> BlockView {
         command: b.terminal.command.clone(),
         keep_open: b.keep_open,
         exit_code: b.exit_code,
+        resume: b.terminal.resume(),
     }
 }
 
@@ -319,6 +323,14 @@ pub struct Formatted {
     pub text: String,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetResume {
+    /// argv that resumes this program after a server restart, e.g. `["claude", "--resume", ID]`;
+    /// null clears it. At most 64 arguments and 8 KiB, no control characters.
+    pub command: Option<Vec<String>>,
+}
+
 #[derive(Serialize, JsonSchema)]
 pub struct TermSize {
     pub rows: u16,
@@ -419,6 +431,19 @@ static TERMINAL_METHODS: LazyLock<Vec<TermMethod>> = LazyLock::new(|| {
         term_method("process", "The program's pid, argv, and how much output was parsed.", |t, _: NoArgs| {
             Ok(Process { pid: t.pid(), command: t.command.clone(), output_bytes: t.output_bytes() })
         }),
+        term_method(
+            "set_resume",
+            "Register the command that resumes this block's program after a server restart. Restored \
+             blocks type it at the new prompt (setting `resume`: ask, always or never); nothing else \
+             that ran is run again.",
+            |t, a: SetResume| {
+                if let Some(c) = &a.command {
+                    crate::restore::check_command(c).map_err(ApiError::bad_request)?;
+                }
+                t.set_resume(a.command);
+                Ok(Empty {})
+            },
+        ),
         term_method("program_status", "The OSC 7501 program-status records.", |t, _: NoArgs| {
             let records =
                 t.program_status().into_iter().map(|(id, record)| serde_json::json!({ "id": id, "record": record }));

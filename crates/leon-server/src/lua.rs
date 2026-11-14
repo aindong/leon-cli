@@ -156,6 +156,13 @@ impl Ctx {
     }
 }
 
+impl Ctx {
+    /// The config's resume setting, once the start-up load (`start_config`) has finished.
+    pub async fn resume_policy(&self) -> leon_lua::Resume {
+        self.lua.read().await.cfg.resume.unwrap_or_default()
+    }
+}
+
 /// Ask the config's Lua thread to run a job; reply by `deadline` (plus a second for the reply).
 async fn ask<T: Send + 'static>(
     jobs: Option<mpsc::Sender<Job>>,

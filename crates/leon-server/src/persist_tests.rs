@@ -31,7 +31,7 @@ fn check_json(v: &Value) -> Result<(), String> {
 #[tokio::test]
 async fn a_snapshot_passes_its_own_checks() {
     let v = saved_json().await;
-    assert_eq!(v["version"], 1);
+    assert_eq!(v["version"], 2);
     assert_eq!(v["sessions"][0]["blocks"][1]["command"], json!(["sleep", "300"]), "saved for the record");
     check_json(&v).unwrap();
 }
@@ -79,7 +79,7 @@ fn newer_and_missing_versions_are_refused() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
     assert!(load(&file).unwrap().is_none(), "no file: nothing to restore");
-    fs::write(&file, br#"{"version":2,"sessions":[]}"#).unwrap();
+    fs::write(&file, br#"{"version":3,"sessions":[]}"#).unwrap();
     assert!(load(&file).err().unwrap().contains("newer"));
     fs::write(&file, br#"{"sessions":[]}"#).unwrap();
     assert!(load(&file).is_err());
@@ -130,7 +130,7 @@ fn a_bad_file_that_cant_be_moved_aside_turns_saving_off() {
     let dir = tempfile::Builder::new().permissions(fs::Permissions::from_mode(0o700)).tempdir().unwrap();
     let file = dir.path().join(FILE);
     fs::create_dir(&file).unwrap(); // not a regular file, and a hard link to a dir fails
-    let started = start(&ctx(), &Persist { file: file.clone(), restore: true });
+    let started = start(&ctx(), &Persist { file: file.clone(), restore: true, resume: Resume::Ask });
     assert!(started.is_none(), "saving would replace what couldn't be kept aside");
     assert!(file.is_dir());
 }

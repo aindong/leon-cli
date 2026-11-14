@@ -423,24 +423,17 @@ impl Terminal {
         *lock(&self.resume) = command;
     }
 
-    /// Wait until the program reads a line itself: it is the PTY's foreground process group (no
-    /// job an rc file started is in front) and its line editor has turned canonical mode off. False
-    /// if that hasn't happened by `timeout` or the program exited.
-    pub fn wait_line_editor(&self, timeout: Duration) -> bool {
+    /// Whether the program reads a line itself now: it is the PTY's foreground process group (no
+    /// job an rc file started is in front) and its line editor has turned canonical mode off.
+    pub fn reads_a_line(&self) -> bool {
         let Some(fd) = lock(&self.master).as_raw_fd() else { return false };
-        let end = std::time::Instant::now() + timeout;
-        while std::time::Instant::now() < end && !self.has_exited() {
-            // SAFETY: reads the termios and foreground group of a PTY fd we own into locals.
-            let ready = unsafe {
+        let exited = lock(&self.exited);
+        // SAFETY: reads the termios and foreground group of a PTY fd we own into locals.
+        !*exited
+            && unsafe {
                 let mut t: libc::termios = std::mem::zeroed();
                 libc::tcgetattr(fd, &mut t) == 0 && t.c_lflag & libc::ICANON == 0 && libc::tcgetpgrp(fd) == self.pid
-            };
-            if ready {
-                return true;
             }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        false
     }
 
     /// Hang up a still-running program: its process group (portable-pty makes the child a session
@@ -494,6 +487,21 @@ impl Drop for Terminal {
             kill_group(pid, &exited);
         });
     }
+}
+
+/// The command as a POSIX shell line: plain words as they are, the rest in single quotes.
+// shortcut: fish reads `\\` inside single quotes as one backslash; quote per shell if an agent's
+// resume command ever holds a backslash.
+pub fn shell_line(command: &[String]) -> String {
+    let word = |a: &String| {
+        let plain = !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric() || "_-./:,@+".contains(c));
+        if plain {
+            a.clone()
+        } else {
+            format!("'{}'", a.replace('\'', r"'\''"))
+        }
+    };
+    command.iter().map(word).collect::<Vec<_>>().join(" ")
 }
 
 /// Program-supplied text for events: no control, bidi or invisible characters (they would reach

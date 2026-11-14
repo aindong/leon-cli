@@ -8,6 +8,7 @@ pub mod lua;
 pub mod methods;
 pub mod persist;
 pub mod registry;
+mod restore;
 pub mod screens;
 pub mod serve;
 

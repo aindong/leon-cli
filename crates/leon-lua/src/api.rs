@@ -68,6 +68,7 @@ pub(crate) fn config(lua: &Lua) -> Config {
         unbinds: c.unbinds.clone(),
         diagnostics: c.diagnostics.clone(),
         logs: c.logs.clone(),
+        resume: c.resume,
     }
 }
 
@@ -156,6 +157,7 @@ pub(crate) fn leon_table(lua: &Lua, script: bool) -> mlua::Result<Table> {
         leon.set("modes", func(lua, "modes", loading(modes))?)?;
         leon.set("action", func(lua, "action", loading(action))?)?;
         leon.set("on", func(lua, "on", on_in_config)?)?;
+        leon.set("set", func(lua, "set", loading(set))?)?;
     }
     leon.set("log", func(lua, "log", log)?)?;
     let json = lua.create_table()?;
@@ -300,6 +302,21 @@ fn mode(lua: &Lua, (name, opts): (String, Option<Table>)) -> Result<(), Bad> {
         Some(m) => m.exclusive = exclusive,
         None => st.cfg.modes.push(Mode { name, exclusive, source }),
     }
+    Ok(())
+}
+
+/// `leon.set(name, value)`: a setting. The only one is `resume` (`"ask"`, `"always"`, `"never"`).
+fn set(lua: &Lua, (name, value): (String, Value)) -> Result<(), Bad> {
+    if name != "resume" {
+        return Err(format!("unknown setting {name:?}; the only one is \"resume\"").into());
+    }
+    let text = match &value {
+        Value::String(s) => s.to_str().map(|s| s.to_string()).unwrap_or_default(),
+        _ => String::new(),
+    };
+    let policy = crate::Resume::ALL.into_iter().find(|r| r.as_str() == text);
+    let policy = policy.ok_or_else(|| Bad("resume must be \"ask\", \"always\" or \"never\"".into()))?;
+    state(lua).cfg.resume = Some(policy);
     Ok(())
 }
 

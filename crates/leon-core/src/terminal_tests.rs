@@ -131,13 +131,20 @@ fn dropping_hangs_up_the_program() {
 
 #[test]
 fn the_line_editor_wait_needs_the_shell_in_front() {
+    let soon = |t: &Terminal, wait: Duration| {
+        let end = std::time::Instant::now() + wait;
+        while !t.reads_a_line() && std::time::Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        t.reads_a_line()
+    };
     let (shell, _rx) = spawn(&["sh"]);
-    assert!(shell.wait_line_editor(Duration::from_secs(10)), "an interactive shell reads a line");
+    assert!(soon(&shell, Duration::from_secs(10)), "an interactive shell reads a line");
 
     // A job in front with canonical mode off (a picker an rc file started) isn't the shell.
     let (picker, _rx) = spawn(&["sh", "-c", "set -m; sh -c 'stty -icanon; echo picker-up; sleep 300'"]);
     screen_until(&picker, |s| s.contains("picker-up"));
-    assert!(!picker.wait_line_editor(Duration::from_millis(300)), "the job in front isn't the shell");
+    assert!(!soon(&picker, Duration::from_millis(300)), "the job in front isn't the shell");
 
     let (shown, _rx) = {
         let (tx, rx) = mpsc::channel::<i32>();

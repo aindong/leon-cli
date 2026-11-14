@@ -110,6 +110,9 @@ fn config_check(path: Option<std::path::PathBuf>) -> Result<(), Fail> {
         n(cfg.modes.len(), "mode"),
         n(cfg.actions.len(), "action")
     );
+    if let Some(r) = cfg.resume {
+        println!("resume: {}", r.as_str());
+    }
     for d in &cfg.diagnostics {
         println!("{d}");
     }
@@ -236,15 +239,21 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                 socket: socket.display().to_string(),
             };
             let ctx = std::sync::Arc::new(leon_server::Ctx::new(info, *autostarted));
-            let persist = leon_core::paths::state_dir()
-                .map(|d| leon_server::persist::Persist { file: d.join(leon_server::persist::FILE), restore: *restore });
+            let state_dir = leon_core::paths::state_dir();
             let opts = leon_server::serve::Options { socket, idle_exit: Duration::from_secs(idle) };
             let rt = tokio::runtime::Runtime::new().map_err(|e| Fail::Other(e.to_string()))?;
             let serve = async {
                 ctx.start_config(config.clone());
                 let mut bound = leon_server::serve::listen(&opts.socket).await?;
-                if let Some(p) = &persist {
-                    bound.persist(&ctx, p); // after binding: a server that loses the race keeps nothing
+                if let Some(dir) = state_dir {
+                    // The restore follows the config's resume setting, so it waits for the load.
+                    let resume = ctx.resume_policy().await;
+                    let p = leon_server::persist::Persist {
+                        file: dir.join(leon_server::persist::FILE),
+                        restore: *restore,
+                        resume,
+                    };
+                    bound.persist(&ctx, &p); // after binding: a server that loses the race keeps nothing
                 }
                 leon_server::serve::serve_on(ctx, bound, opts).await
             };
