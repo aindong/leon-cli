@@ -70,17 +70,21 @@ impl Store {
 
     /// The program exited: `working` and `blocked` can't be true any more.
     pub fn process_exited(&mut self) -> Vec<Change> {
-        self.remove_where(Reason::Exited, |_, r| matches!(r.state, State::Working | State::Blocked))
+        self.drop_live(Reason::Exited)
     }
 
     /// A new shell prompt (OSC 133 A): same rule as exit.
     pub fn prompt(&mut self) -> Vec<Change> {
-        self.remove_where(Reason::Prompt, |_, r| matches!(r.state, State::Working | State::Blocked))
+        self.drop_live(Reason::Prompt)
     }
 
     /// RIS wipes every record.
     pub fn reset(&mut self) -> Vec<Change> {
         self.remove_where(Reason::Reset, |_, _| true)
+    }
+
+    fn drop_live(&mut self, reason: Reason) -> Vec<Change> {
+        self.remove_where(reason, |_, r| matches!(r.state, State::Working | State::Blocked))
     }
 
     fn set(&mut self, id: Option<String>, record: Record) -> Vec<Change> {

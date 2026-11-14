@@ -86,7 +86,14 @@ pub fn parse(payload: &[u8]) -> Result<Message, Ignored> {
         if key.len() > 16 {
             return Err(Ignored::TooLong("key"));
         }
-        if key.is_empty() || !key.iter().all(u8::is_ascii_lowercase) || !value.iter().all(|&b| value_byte(b)) {
+        if key.is_empty() || !key.iter().all(u8::is_ascii_lowercase) {
+            continue;
+        }
+        if !value.iter().all(|&b| value_byte(b)) {
+            // Skipping a malformed id would land the report on the root.
+            if key == b"id" {
+                return Err(Ignored::BadId);
+            }
             continue;
         }
         // Both are ASCII now.
