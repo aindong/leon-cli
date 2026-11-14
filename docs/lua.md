@@ -269,3 +269,38 @@ precompiled bytecode. On the server, a config load gets 5 seconds and an action 
 
 See [Projects and git worktrees](recipes.md) for an example action and `leon do` script that
 reuse a session per folder, with optional worktree sessions and an ignored-file setup hook.
+
+## Floating panes and a scratch shell key
+
+`leon.float{block_id=...}` floats the current block when `block_id` is omitted;
+`leon.float{new=true, layout={block={label="notes"}}}` starts a new floating shell.
+Both accept `bounds={x=0.1,y=0.1,width=0.8,height=0.8}`. `leon.dock{side="right",
+size=0.25}` pins the current block; sides are `left`, `right`, `bottom`.
+`leon.toggle{label="scratch",create=true}` creates a bottom drawer on first use,
+then hides/shows it. Hidden programs keep running. These helpers fill `session_id`
+from context and return the API result or `nil, err`. To return a float to the
+split tree use `leon.session.unfloat_block{block_id=...}`.
+
+Put this in init.lua for a scratch shell on Ctrl+G (the recipe is tested):
+
+<!-- m20-scratch -->
+```lua
+leon.action{
+  name = "scratch_shell",
+  title = "Toggle scratch shell",
+  run = function()
+    local result, err = leon.toggle{label="scratch", create=true}
+    if not result then error(err, 0) end
+    return result
+  end,
+}
+leon.bind("ctrl+g", "scratch_shell")
+```
+<!-- /m20-scratch -->
+
+The label must be unique within the session. Creation fails if the bottom side
+already has a drawer. Existing programs and their visibility restore with saved
+sessions, using the usual fresh-shell/resume policy after server restart.
+
+Attach also accepts the client action names `pane.float` and `pane.new_floating` in
+`leon.bind`; their GUI counterparts are part of M20b.

@@ -195,7 +195,8 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   the whole window; borders reduce terminal content by one cell on each edge. Zero-size
   content is clipped. GUI rendering/animation is M20b; no new transport is needed.
 
-  Focus next/previous walks tiles, visible docks, then visible floats, honoring `wrap`.
+  Focus next/previous walks tiles, visible docks, then visible floats in block creation
+  order (independent of z-order), honoring `wrap`.
   Directional focus from an overlay returns to the first tiled pane (with only overlays,
   it cycles). Attach retains session context with no visible focus, so shortcuts can
   show hidden drawers or open tabs. The picker includes hidden and visible overlay blocks.

@@ -141,8 +141,33 @@ pub enum Cmd {
         #[arg(long = "for", value_parser = blocks::parse_duration)]
         timeout: Option<std::time::Duration>,
     },
-    /// Split a block (-b, else the focused one; -b may name a split) and run CMD, default a login
-    /// shell, in the new pane. Prints the new block's ID.
+    /// Float a block, create a floating terminal, or return one to the tiled tree.
+    Float {
+        #[arg(long, conflicts_with_all = ["unfloat", "block"])]
+        new: bool,
+        #[arg(long, conflicts_with_all = ["new", "rect", "label"])]
+        unfloat: bool,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long, value_name = "X,Y,W,H")]
+        rect: Option<String>,
+        #[arg(last = true, requires = "new")]
+        command: Vec<String>,
+    },
+    /// Show or hide a labeled float or drawer; --create opens a scratch shell on first use.
+    Toggle {
+        label: String,
+        #[arg(long)]
+        create: bool,
+    },
+    /// Pin a block to a side (left, right or bottom).
+    Dock {
+        #[arg(value_parser = ["left", "right", "bottom"])]
+        side: String,
+        #[arg(long)]
+        size: Option<f64>,
+    },
+    /// Split a tiled pane.
     Split {
         /// Where the new pane goes.
         #[arg(long = "split", value_enum, default_value = "right")]

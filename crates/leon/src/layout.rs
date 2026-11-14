@@ -28,6 +28,40 @@ fn ratio(side: Side, pct: u8) -> f64 {
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
     let r = match cli.cmd() {
+        Cmd::Float { new, unfloat, label, rect, command } => {
+            let bounds = rect.as_deref().map(parse_rect).transpose()?;
+            let r = if *new {
+                let sid = pick_session(c, cli, None)?;
+                let cmd = (!command.is_empty()).then_some(command);
+                c.call(
+                    "session.new_floating",
+                    json!({ "session_id": sid, "bounds": bounds,
+                    "layout": { "block": { "label": label, "options": { "command": cmd } } } }),
+                )?
+            } else {
+                let (sid, bid) = pick_block(c, cli, None)?;
+                if *unfloat {
+                    c.call("session.unfloat_block", json!({ "session_id": sid, "block_id": bid }))?
+                } else {
+                    c.call(
+                        "session.float_block",
+                        json!({ "session_id": sid, "block_id": bid, "bounds": bounds, "label": label }),
+                    )?
+                }
+            };
+            if *new && !cli.json {
+                println!("{}", r["block_id"].as_str().unwrap_or_default());
+            }
+            r
+        }
+        Cmd::Toggle { label, create } => {
+            let sid = pick_session(c, cli, None)?;
+            c.call("session.toggle", json!({ "session_id": sid, "label": label, "create": create }))?
+        }
+        Cmd::Dock { side, size } => {
+            let (sid, bid) = pick_block(c, cli, None)?;
+            c.call("session.dock_block", json!({ "session_id": sid, "block_id": bid, "side": side, "size": size }))?
+        }
         Cmd::Split { edge, ratio: pct, label, keep_open, cwd, focus, command } => {
             let (sid, anchor) = match cli.block.as_deref().filter(|b| b.starts_with("split:")) {
                 Some(split) => (pick_session(c, cli, None)?, split.to_string()),
@@ -148,4 +182,18 @@ fn parent<'a>(node: &'a Value, id: &str) -> Option<&'a Value> {
         return Some(s);
     }
     parent(&s["before"], id).or_else(|| parent(&s["after"], id))
+}
+
+fn parse_rect(text: &str) -> Result<leon_core::overlays::Bounds, Fail> {
+    let nums = text
+        .split(',')
+        .map(str::parse::<f64>)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| bad("rect must be x,y,w,h fractions"))?;
+    let [x, y, width, height] = nums.as_slice() else {
+        return Err(bad("rect must have four fractions"));
+    };
+    let b = leon_core::overlays::Bounds { x: *x, y: *y, width: *width, height: *height };
+    b.check().map_err(Fail::Api)?;
+    Ok(b)
 }

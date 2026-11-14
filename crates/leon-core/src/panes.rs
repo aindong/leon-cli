@@ -157,7 +157,13 @@ impl State {
         let o = s.overlay(&w.id);
         let mut ids = w.layout.as_ref().map_or(vec![], |t| t.leaves());
         ids.extend(o.docked.iter().filter(|d| !d.hidden).map(|d| d.block_id.as_str()));
-        ids.extend(o.floating.iter().filter(|f| !f.hidden).map(|f| f.block_id.as_str()));
+        // Focus raises floats, so stacking order cannot also be keyboard traversal order.
+        ids.extend(
+            s.blocks
+                .iter()
+                .filter(|b| o.floating.iter().any(|f| f.block_id == b.id && !f.hidden))
+                .map(|b| b.id.as_str()),
+        );
         if ids.is_empty() {
             return Err(ApiError::not_found("the active window has no visible block"));
         }

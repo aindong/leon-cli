@@ -84,7 +84,13 @@ pub fn rows(sessions: &[Session]) -> Vec<Row> {
                 pick: Pick::Window(s.id.clone(), w.id.clone()),
                 block: w.zoomed.clone().or(w.focus.clone()),
             });
-            for leaf in w.layout.as_ref().map(|l| l.leaves()).unwrap_or_default() {
+            let mut ids = w.layout.as_ref().map(|l| l.leaves()).unwrap_or_default();
+            for b in s.blocks.iter().filter(|b| b.window_id == w.id) {
+                if !ids.contains(&b.id.as_str()) {
+                    ids.push(&b.id);
+                }
+            }
+            for leaf in ids {
                 let Some(b) = s.blocks.iter().find(|b| b.id == leaf) else { continue };
                 let text = program(b);
                 out.push(Row {
