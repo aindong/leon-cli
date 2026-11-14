@@ -105,8 +105,9 @@ average of 4 to 12:
 | before the merge | 112.5, 111.1, 105.7, 108.9 MB/s | 2.5 MB/s | 0.024, 0.023, 0.038, 0.024 ms | 0.005–0.007 ms |
 | after the merge | 100.7, 109.9, 109.1, 116.7 MB/s | 2.3–2.5 MB/s | 0.030, 0.036, 0.029, 0.023 ms | 0.005–0.007 ms |
 
-Both builds' medians are about 110 MB/s for `cat`. Whichever build ran second in a round did
-better, so the spread is the machine's load, not the merge; nothing moved.
+Both builds' medians are about 110 MB/s for `cat`. Whichever build ran first in a round did
+better (the pre-merge build ran first in rounds 1 and 2, the merged build in rounds 3 and 4), so
+the spread is the machine's load, not the merge; nothing moved.
 
 ## Not measured yet
 
