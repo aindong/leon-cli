@@ -22,7 +22,11 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
     }
     let mut c = connect(&socket, cli.autostart)?;
     match &cli.cmd {
-        Cmd::Server(_) | Cmd::Config(_) | Cmd::Skill(_) => unreachable!(),
+        Cmd::Server(_) | Cmd::Config(ConfigCmd::Check { .. }) | Cmd::Skill(_) => unreachable!(),
+        Cmd::Config(ConfigCmd::Reload) => crate::script::reload(&mut c, cli)?,
+        Cmd::Do(args) => crate::script::run(&mut c, cli, args, &socket)?,
+        Cmd::Actions => crate::script::actions(&mut c, cli)?,
+        Cmd::Keymap => crate::script::keymap(&mut c, cli)?,
         Cmd::New { label } | Cmd::Session(SessionCmd::New { label }) => {
             let r = c.call("session.create", json!({ "label": label }))?;
             println!("{}", r["session_id"].as_str().unwrap_or_default());
@@ -197,7 +201,7 @@ fn api(c: &mut Client, cli: &Cli, cmd: &ApiCmd) -> Result<(), Fail> {
 fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
     let socket = socket_path();
     match cmd {
-        ServerCmd::Run { autostarted } => {
+        ServerCmd::Run { autostarted, config } => {
             let idle = std::env::var("LEON_IDLE_EXIT_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
             let info = leon_server::Info {
                 pid: std::process::id(),
@@ -207,7 +211,11 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
             let ctx = std::sync::Arc::new(leon_server::Ctx::new(info, *autostarted));
             let opts = leon_server::serve::Options { socket, idle_exit: Duration::from_secs(idle) };
             let rt = tokio::runtime::Runtime::new().map_err(|e| Fail::Other(e.to_string()))?;
-            rt.block_on(leon_server::serve::serve(ctx, opts)).map_err(|e| Fail::Other(e.to_string()))
+            let serve = async {
+                ctx.start_config(config.clone());
+                leon_server::serve::serve(ctx, opts).await
+            };
+            rt.block_on(serve).map_err(|e| Fail::Other(e.to_string()))
         }
         // A running server (perhaps autostarted on demand) is told to stay up; otherwise start one.
         ServerCmd::Start => match Client::connect(&socket) {
