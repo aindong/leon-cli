@@ -111,6 +111,7 @@ fn main() {
 
     let (rt, lat) = (round_trip(&mut c, samples * 5), latency(&mut c, samples));
     let leon = ("leon", rt, lat, throughput(&mut c, "yes | head", &yes), throughput(&mut c, "cat", &cat));
+    // macOS only: the attached app's run (mod attached, above).
     #[cfg(all(feature = "app", target_os = "macos"))]
     let app = attached::run(&socket, dir.path(), samples);
     c.call("server.stop", json!({ "discard": true }));
@@ -128,6 +129,7 @@ fn main() {
     for (name, (rt50, rt99), (l50, l99), yes, cat) in rows {
         println!("| {name} | {rt50:.3} / {rt99:.3} ms | {l50:.3} / {l99:.3} ms | {yes:.1} MB/s | {cat:.1} MB/s |");
     }
+    // macOS only: the attached app's rows and budget (mod attached, above).
     #[cfg(all(feature = "app", target_os = "macos"))]
     attached::report(&app);
 }

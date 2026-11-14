@@ -9,7 +9,7 @@ tmp=$(mktemp -d)
 cleanup() {
     LEON_RUNTIME_DIR=$tmp/run "$leon" server stop >/dev/null 2>&1 || true
     XDG_RUNTIME_DIR=$tmp/xdg "$leon" server stop >/dev/null 2>&1 || true
-    rm -r "$tmp"
+    rm -rf "$tmp" || true
 }
 trap cleanup EXIT
 export LEON_RUNTIME_DIR="$tmp/run" LEON_STATE_DIR="$tmp/state" LEON_CONFIG="$tmp/no-init.lua" SHELL=/bin/sh
