@@ -18,12 +18,13 @@ leon skill status            # current, outdated, missing, foreign or unreadable
 | | Claude Code | Codex |
 |---|---|---|
 | The skill: a `SKILL.md` stub | `~/.claude/skills/leon/` (`$CLAUDE_CONFIG_DIR`) | `~/.agents/skills/leon/` |
-| A session-start hook running `leon skill hook` | `~/.claude/settings.json` | `~/.codex/hooks.json` (`$CODEX_HOME`) |
+| A session-start hook running `leon skill hook --agent …` | `~/.claude/settings.json` | `~/.codex/hooks.json` (`$CODEX_HOME`) |
 
 - **The skill** tells the agent to run `leon skill show`, which prints the full guide compiled into
   your `leon` binary. Upgrading leon upgrades the guide; there is nothing to reinstall.
 - **The hook** runs when an agent session starts. Inside leon it tells the agent its session and
-  terminal block; outside leon it prints nothing and never contacts the server.
+  terminal block, and records how to resume that session (below); outside leon it prints nothing
+  and never contacts the server. A hook from an older leon is `outdated`: run `leon skill setup`.
 
 Setup is safe to run again. It edits settings files in place, keeping your keys and their order,
 backs a file up once to `<file>.leon-backup`, and refuses a file that isn't the JSON shape it
@@ -87,6 +88,28 @@ The rules the guide gives agents:
   for the text you expect, with your own deadline.
 - Use `--json` for output you parse, and `leon api list` / `leon api describe` for anything the
   commands don't cover.
+
+## Agents come back after a restart
+
+When the server stops (`leon server stop`, logging out, a reboot), each block's text is saved, and
+a restored block shows it above a dim `— restored from <time> —` line and a fresh shell. Programs
+don't survive, and a saved command is never run again. What does come back is a command a program
+registered for its own block with `set_resume`. The hook does that for you: `claude --resume <id>`
+for Claude Code, `codex resume <id>` for Codex, from the session id the agent gives its hook. It
+records only for an agent in the foreground of its terminal, so a nested `claude -p` run by
+another agent's tool doesn't replace the interactive session's command.
+
+Any other program can register its own:
+
+```sh
+leon block call set_resume -b "$LEON_BLOCK" '{"command": ["my-agent", "--resume", "42"]}'
+leon block inspect "$LEON_BLOCK"        # shows "resume: my-agent --resume 42"
+leon block call set_resume -b "$LEON_BLOCK" '{"command": null}'
+```
+
+On restore the block follows the `resume` setting in `init.lua` (`leon.set("resume", "ask")`):
+`"ask"` (the default) types the command at the new prompt and waits for Enter (Ctrl-C skips it),
+`"always"` runs it, `"never"` ignores it.
 
 ## Program status: let the user see what the agent is doing
 

@@ -150,9 +150,15 @@ fn readme_and_agents_guide_cover_their_topics() {
         assert!(readme.contains(topic), "README should cover {topic:?}");
     }
     let agents = std::fs::read_to_string(help_walk::repo().join("docs/agents.md")).expect("docs/agents.md exists");
-    for topic in
-        ["leon skill setup", "leon skill status", "leon skill remove", "leon skill show", "LEON_SESSION", "LEON_BLOCK"]
-    {
+    for topic in [
+        "leon skill setup",
+        "leon skill status",
+        "leon skill remove",
+        "leon skill show",
+        "LEON_SESSION",
+        "LEON_BLOCK",
+        "set_resume",
+    ] {
         assert!(agents.contains(topic), "docs/agents.md should cover {topic:?}");
     }
 }

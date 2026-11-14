@@ -238,7 +238,8 @@ List a session's blocks.
 
 ### `leon block inspect [BLOCK]`
 
-Show a block: its window, pid, command and exit status.
+Show a block: its window, pid, command and exit status, and its resume command if its program
+registered one (`set_resume`).
 
 ### `leon block close [BLOCK]`
 
@@ -248,6 +249,13 @@ Close a block and end its program.
 
 Call a block method, such as `size` or `program_status`, or a full name like
 `dev.leon.terminal.size`. `ARGS` is a JSON object, `@file`, or `-` for stdin.
+
+`set_resume` registers the command that resumes this block's program after a restart (`null`
+clears it); a restored block offers it by the config's `resume` setting (see [lua.md](lua.md)):
+
+```sh
+leon block call set_resume '{"command": ["claude", "--resume", "c7583d2c-3133-4d13-b5f0-45883f1cabcb"]}'
+```
 
 ## Automation
 
@@ -344,7 +352,9 @@ Run, start, stop or check the server.
 ### `leon server run`
 
 Run the server in the foreground. Sessions are saved in `$LEON_STATE_DIR` (default
-`~/.local/state/leon`) when it stops, and restored when it starts.
+`~/.local/state/leon`) when it stops, and restored when it starts. A restored block runs a fresh
+shell under the text it showed before, and offers its resume command if a program registered one;
+nothing else that ran is run again.
 
 - `--config PATH`: the Lua config (default as for `leon config check`).
 - `--restore[=BOOL]`: restore the sessions saved when the last server stopped (default true).
@@ -377,7 +387,8 @@ Print the guide for agents driving leon (a SKILL.md).
 
 ### `leon skill setup`
 
-Install the skill and a session-start hook for each agent found.
+Install the skill and a session-start hook for each agent found. The hook tells the agent where
+it is and records how to resume its session after a restart.
 
 - `--agent claude|codex`: only this agent.
 - `--dry-run`: print what would change; write nothing.

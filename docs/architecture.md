@@ -100,7 +100,8 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 - **Agent skill.** `leon skill show` prints a guide compiled into the binary. `skill setup` installs a
   SKILL.md stub (marked `<!-- leon-skill: … -->`) that tells the agent to run `leon skill show`, so
   upgrades reach agents without a reinstall, plus a matcher-less SessionStart hook running
-  `leon skill hook` (prints `LEON_SESSION`/`LEON_BLOCK`, nothing outside leon, no server call). Claude
+  `leon skill hook --agent claude|codex` (prints `LEON_SESSION`/`LEON_BLOCK`, and records the agent's
+  resume command, below; outside leon nothing and no server call). Claude
   Code: `$CLAUDE_CONFIG_DIR` (`~/.claude`) `skills/leon` + `settings.json`; Codex: `~/.agents/skills/leon`
   + `$CODEX_HOME` (`~/.codex`) `hooks.json`. Settings edits keep key order, back up once to
   `<file>.leon-backup`, write atomically through symlinks, and refuse files that aren't the expected
@@ -109,17 +110,37 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   `~/.local/state/leon`) on every exit through the socket loop (`server stop`, SIGTERM, SIGINT,
   SIGHUP, idle exit) and restores them after binding (`--restore`, default true; `server stop --discard`
   skips the save and deletes the file). Saved: sessions, windows, layout trees (split IDs and
-  ratios), labels, focus, zoom, the active tab, revisions, and per block its label, keep-open, cwd
-  and command. IDs come back unchanged. Programs don't survive: a restored block runs a fresh login
-  shell in its cwd (the shell process's cwd, else the last OSC 7 path, else where it started); the
-  saved command is never re-run, since repeating `make deploy` on a restart would be a surprise and
-  would make the file a place that runs code. The dir must be private (0700, ours) and not
+  ratios), labels, focus, zoom, the active tab, revisions, and per block its label, keep-open, cwd,
+  command, scrollback and resume command. IDs come back unchanged. Programs don't survive: a
+  restored block runs a fresh login shell in its cwd (the shell process's cwd, else the last OSC 7
+  path, else where it started); the saved command is never re-run, since repeating `make deploy` on
+  a restart would be a surprise and would make the file a place that runs code. The dir must be private (0700, ours) and not
   flocked by another server, or nothing is saved (`server status` shows `state_file: null`); the file is 0600, written via a temp file and
   a rename. A file that is corrupt, from a newer version, or inconsistent is moved to
   `sessions.json.bad-<secs>-<n>` with a warning in the log, never replaced.
   The app takes no part: the server it starts restores at start, before it accepts the app's
   connection, so the app's "open a session when there is none" sees the restored ones. Tests and
   benches use `embedded::start_at`, an in-process server that keeps nothing.
+- **Scrollback on restore.** Each block's scrollback and screen (`capture`'s text; for an alt-screen
+  app, its screen) is saved as text, capped at 2 MiB per block and 8 MiB over all blocks (each gets
+  `min(2 MiB, 8 MiB / blocks)`), newest whole lines kept. Every control character but `\n` (C0, DEL,
+  C1) is removed when it is saved and again when it is restored, since the file is outside the
+  server's hands in between; so a snapshot can't send an escape, a query or a carriage return. The
+  new terminal's emulator is fed the text, then a dim `— restored from <time> —` line, before the
+  shell's first output: the text is shown, never sent to the shell.
+- **Resume commands.** A program registers the argv that resumes it with
+  `dev.leon.terminal.set_resume {command}` (1 to 64 args, at most 8 KiB, no control characters;
+  null clears it). The skill hook records `claude --resume <session_id>` or `codex resume
+  <session_id>` from the agent's SessionStart JSON (an id of `[A-Za-z0-9._-]`, no leading `-`), and
+  only when the hook, its parent or its grandparent is its terminal's foreground process group: the
+  interactive agent, not a nested `claude -p` that an agent's tool started without a terminal.
+  Restored blocks follow the config's `leon.set("resume", …)`, read once the start-up config has
+  loaded and before restoring: `"ask"` (default) types Ctrl-U and the shell-quoted command at the
+  new prompt and shows a dim hint, so Enter runs it; `"always"` adds the Enter; `"never"` types
+  nothing. Typing waits (up to 10 s, then gives up) until the shell is the PTY's foreground process
+  group with canonical mode off, so neither an rc file's picker nor typeahead gets it. The command
+  stays registered until replaced or cleared; with `"always"` the private state file is a place that
+  runs the commands programs registered, which is why `"ask"` is the default.
 - **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of
   up to 16 KiB); the parser thread feeds what has queued, up to 64 KiB, to the OSC 7501 tracker and
   the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread

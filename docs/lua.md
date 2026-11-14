@@ -115,6 +115,19 @@ leon.action{
 Arguments are declared as `name = "type"` with types `string number integer boolean object array
 any`, and a `?` suffix for optional ones.
 
+## Settings
+
+`leon.set(name, value)` sets one of the server's settings. The only one so far is `resume`: what a
+block restored after a server restart does with the resume command its program registered for
+itself (`set_resume`, which leon's agent hook calls for Claude Code and Codex). `"ask"` (the
+default) types the command at the new prompt and waits for Enter; `"always"` runs it; `"never"`
+leaves the prompt empty. The server reads it at start, before it restores; `leon config check`
+prints it.
+
+```lua
+leon.set("resume", "always")
+```
+
 ## Function bindings
 
 A key can run a Lua function directly. Return `true` if you handled the key; otherwise the key goes
@@ -211,6 +224,7 @@ print("timed out:", slow.timed_out)
 | `leon.unbind(key)` | config | Remove a key's bindings; returns the count. |
 | `leon.mode(name[, {exclusive}])` | config | Declare a mode. |
 | `leon.bindings([filter])`, `leon.modes()` | config | List bindings and modes made so far. |
+| `leon.set(name, value)` | config | A setting: `resume` = `"ask"`, `"always"` or `"never"`. |
 | `leon.action{name, title, run, description?, args?}` | both | Define an action. |
 | `leon.invoke(name[, args])` | both | Run an action (nested at most 16 deep). |
 | `leon.session.<method>(params)` | both | Call a session method; fills `session_id`. |
