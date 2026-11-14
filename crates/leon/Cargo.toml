@@ -12,14 +12,22 @@ path = "src/main.rs"
 leon-core.workspace = true
 leon-server.workspace = true
 leon-lua.workspace = true
-leon-app.workspace = true
 leon-hosts.workspace = true
+# its GPUI-free modules (the client, keymap, layout) serve `leon attach` on every platform
+leon-app.workspace = true
 clap.workspace = true
 libc.workspace = true
 ratatui.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
+
+# The GPUI app (`leon app`, `leon` alone). Cargo has no per-platform default features, so the app is
+# a default feature and gpui a macOS-only dependency of leon-app: Linux builds headless with no
+# flag, and `--no-default-features` gives a headless macOS build (docs/architecture.md, Platforms).
+[features]
+default = ["app"]
+app = ["leon-app/gui"]
 
 # `cargo bench -p leon --bench speed [-- --samples N]`; results in docs/performance.md.
 [[bench]]
@@ -28,4 +36,6 @@ harness = false
 
 [dev-dependencies]
 alacritty_terminal.workspace = true
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

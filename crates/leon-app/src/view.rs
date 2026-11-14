@@ -92,52 +92,6 @@ pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
 }
 
-/// The menu bar. "Quit leon" (⌘Q) detaches and leaves every program running; ending them is the
-/// separate item that asks first.
-pub fn menus() -> Vec<Menu> {
-    vec![
-        Menu {
-            name: "leon".into(),
-            items: vec![
-                MenuItem::action("Quit leon", Quit),
-                MenuItem::action("Quit and End All Sessions…", QuitAndEndAll),
-            ],
-        },
-        Menu {
-            name: "Shell".into(),
-            items: vec![
-                MenuItem::action("New Tab", NewTab),
-                MenuItem::action("New Session", NewSession),
-                MenuItem::separator(),
-                MenuItem::action("Split Right", SplitRight),
-                MenuItem::action("Split Down", SplitDown),
-                MenuItem::action("Zoom Pane", ToggleZoom),
-                MenuItem::separator(),
-                MenuItem::action("Close Pane", ClosePane),
-            ],
-        },
-        Menu {
-            name: "Edit".into(),
-            items: vec![
-                MenuItem::action("Copy", Copy),
-                MenuItem::action("Paste", Paste),
-                MenuItem::action("Select All", SelectAll),
-                MenuItem::separator(),
-                MenuItem::action("Find…", Find),
-            ],
-        },
-        Menu {
-            name: "View".into(),
-            items: vec![
-                MenuItem::action("Toggle Sidebar", ToggleSidebar),
-                MenuItem::separator(),
-                MenuItem::action("Next Tab", NextTab),
-                MenuItem::action("Previous Tab", PreviousTab),
-            ],
-        },
-    ]
-}
-
 /// Keys, menus and quitting. Quitting (⌘Q, the menu, the Dock, logout, closing the window) only
 /// closes the app's connections: the server and every program keep running.
 pub fn install(cx: &mut App) {
@@ -503,6 +457,8 @@ mod header;
 mod hosts_view;
 #[path = "view_keys.rs"]
 mod keys;
+#[path = "view_menus.rs"]
+mod menus;
 #[path = "view_model.rs"]
 mod model;
 #[path = "view_overlay.rs"]
@@ -520,6 +476,7 @@ mod sidebar;
 #[path = "view_stats.rs"]
 mod stats;
 use bars::status_mark;
+pub use menus::menus;
 use paint::*;
 use panes_view::*;
 use stats::Stats;

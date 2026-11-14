@@ -1,6 +1,9 @@
 //! M16b criterion 3: new session, new tab and split act on the focused pane's host; the palette
 //! offers New Session on each machine and Add Host.
 
+// macOS only: drives the GPUI app through support/app.rs (the `app` feature).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 #[path = "support/app.rs"]
 mod app;
 mod support;

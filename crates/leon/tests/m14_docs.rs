@@ -9,7 +9,10 @@ fn doc(rel: &str) -> String {
 
 #[test]
 fn the_docs_cover_scrollback_and_resume() {
-    let arch = doc("docs/architecture.md");
+    let arch =
+        ["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/state-and-hosts.md"]
+            .map(doc)
+            .concat();
     for want in ["2 MiB", "8 MiB", "set_resume", "\"ask\"", "\"always\"", "\"never\""] {
         assert!(arch.contains(want), "docs/architecture.md names {want}");
     }

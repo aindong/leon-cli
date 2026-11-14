@@ -52,7 +52,7 @@ pub struct Cli {
 }
 
 impl Cli {
-    /// The command to run; with none, `leon` opens the app.
+    /// The command to run; with none, `leon` opens the app (a build without it attaches, or prints the help).
     pub fn cmd(&self) -> &Cmd {
         self.cmd.as_ref().unwrap_or(&Cmd::App)
     }

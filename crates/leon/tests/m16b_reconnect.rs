@@ -1,6 +1,9 @@
 //! M16b criterion 4: a dropped link shows reconnecting with its backoff, keeps the host's panes on
 //! screen under a stale overlay, and comes back with the event stream resumed: no event lost.
 
+// macOS only: drives the GPUI app through support/app.rs (the `app` feature).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 #[path = "support/app.rs"]
 mod app;
 mod support;

@@ -1,6 +1,7 @@
 //! M16a criterion 15 (.agent/plans/2026-11-15-m16a-remote-ssh.md): the real thing: system ssh to
 //! an sshd in a Linux container running a Linux `leon`. Skips (and says why) without Docker, a
-//! Linux build (`LEON_LINUX_BIN`, else target/<arch>-unknown-linux-*/release/leon), or an image.
+//! Linux build (`LEON_LINUX_BIN`, else target/<arch>-unknown-linux-*/release/leon, else
+//! scripts/package-linux.sh's target/linux/<arch>/leon), or an image.
 
 mod support;
 
@@ -20,11 +21,17 @@ fn linux_bin(arch: &str) -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("LEON_LINUX_BIN") {
         return Some(PathBuf::from(p)).filter(|p| p.exists());
     }
-    let arch = if arch == "arm64" { "aarch64" } else { arch };
     let target = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target");
+    // scripts/package-linux.sh leaves its binary in target/linux/<arm64|amd64>/
+    let deb_arch = match arch {
+        "aarch64" | "arm64" => "arm64",
+        _ => "amd64",
+    };
+    let arch = if arch == "arm64" { "aarch64" } else { arch };
     ["gnu", "musl"]
         .iter()
         .map(|libc| target.join(format!("{arch}-unknown-linux-{libc}/release/leon")))
+        .chain([target.join(format!("linux/{deb_arch}/leon"))])
         .find(|p| p.exists())
 }
 

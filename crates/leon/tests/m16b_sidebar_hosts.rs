@@ -2,6 +2,9 @@
 //! then each host from the hosts list, each with its sessions and tabs; with no hosts there is no
 //! host level at all.
 
+// macOS only: drives the GPUI app through support/app.rs (the `app` feature).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 #[path = "support/app.rs"]
 mod app;
 mod support;

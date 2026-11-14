@@ -8,6 +8,7 @@ use std::io::{self, Read, Write};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -138,6 +139,17 @@ fn serve(conn: UnixStream, s: &Arc<Shared>) {
     }
     let autostart = !s.reached.load(Ordering::SeqCst);
     let mut cmd = s.endpoint.ssh(autostart, s.batch.load(Ordering::SeqCst));
+    // SAFETY: between fork and exec only sigemptyset and sigprocmask, both async-signal-safe.
+    unsafe {
+        cmd.pre_exec(|| {
+            let mut none: libc::sigset_t = std::mem::zeroed();
+            libc::sigemptyset(&mut none);
+            match libc::sigprocmask(libc::SIG_SETMASK, &none, std::ptr::null_mut()) {
+                0 => Ok(()),
+                _ => Err(io::Error::last_os_error()),
+            }
+        });
+    }
     let mut child = match cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
         Ok(c) => c,
         Err(e) => {
@@ -176,7 +188,7 @@ fn serve(conn: UnixStream, s: &Arc<Shared>) {
     };
     // The client's end closing closes ssh's stdin, so the proxy on the host ends and ssh exits.
     let _ = std::thread::Builder::new().name("leon-link-up".into()).spawn(move || {
-        let _ = io::copy(&mut from, &mut stdin);
+        crate::pump(&mut from, &mut stdin);
     });
     let mut to = &conn;
     let mut buf = vec![0; 64 << 10];
@@ -248,8 +260,8 @@ fn peer_uid(conn: &UnixStream) -> Option<libc::uid_t> {
 /// Block the signals that end a client in this thread (and the threads it starts), so they go
 /// to the main thread: under `leon attach`, to its `sigwait`.
 fn block_signals() {
-    // SAFETY: an empty set filled and applied to this thread. Rust's Command resets the mask in
-    // children, so ssh doesn't inherit it.
+    // SAFETY: an empty set filled and applied to this thread. ssh mustn't inherit it: on Linux
+    // Rust's Command keeps the spawning thread's mask, so `serve` empties it in the child.
     unsafe {
         let mut set: libc::sigset_t = std::mem::zeroed();
         libc::sigemptyset(&mut set);

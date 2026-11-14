@@ -1,9 +1,12 @@
 # leon
 
-A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first; `docs/spec.md` is the
+A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first (its decisions are in
+`docs/architecture/*.md`, kept under 20 KB each; a doc test reads all three files); `docs/spec.md` is the
 interface we match and `docs/roadmap.md` the milestone order.
 
 - Checks: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (or `the verify script`).
+- Linux: `scripts/linux-test.sh` (Docker; the non-app crates, `--workspace --exclude leon-app`), packages
+  `scripts/package-linux.sh`. A test gated to macOS needs a `// macOS only: <reason>` line above the gate.
 - GPUI needs the `runtime_shaders` feature on this machine (no Metal Toolchain installed).
 - Name methods, actions, events and flags as `docs/spec.md` does; env vars are `LEON_*`.
 - The API is a promise (`docs/integrators.md#compatibility`): a new method needs a line in

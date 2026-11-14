@@ -30,6 +30,8 @@ Key bindings from your `init.lua` work in the app, sequences too, with a hint of
 
 ## Install
 
+### macOS
+
 You need macOS 11 or later and a Rust toolchain. From a checkout of this repository:
 
 ```sh
@@ -47,6 +49,34 @@ earlier launch) or starts it. Quitting the app leaves the server and your progra
 `leon server stop`, or **Quit and End All Sessions…** in the leon menu, ends them.
 
 To build only the app: `scripts/bundle.sh` writes `target/release/Leon.app`.
+
+### Linux
+
+On Linux leon is the server, the CLI and `leon attach` (agents and Lua scripts too); the app isn't
+there yet, so `leon` alone in a terminal runs `leon attach`. Build the packages with Docker, from a
+checkout:
+
+```sh
+scripts/package-linux.sh                 # or --arch amd64 / --arch arm64
+```
+
+That writes a tarball and a `.deb` to `target/linux/<arch>/` and checks that both install and run
+in clean containers. Install the `.deb` on Debian or Ubuntu with `dpkg` (as root):
+
+```sh
+dpkg -i target/linux/$(dpkg --print-architecture)/leon_*.deb
+```
+
+or unpack the tarball anywhere and put its `leon` on your `PATH`:
+
+```sh
+tar xzf target/linux/*/leon-*-"$(uname -m)"-linux.tar.gz -C ~/.local
+ln -s ~/.local/leon-*-linux/leon ~/.local/bin/leon
+```
+
+Or build from source with a Rust toolchain and no Docker: `cargo build --release -p leon` gives a
+headless `target/release/leon`. The binary needs glibc 2.34 or newer (Debian 12, Ubuntu 22.04,
+RHEL 9 and later). The socket goes in `$XDG_RUNTIME_DIR/leon` when your session sets it.
 
 ## The first five commands
 

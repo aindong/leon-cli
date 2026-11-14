@@ -3,6 +3,9 @@
 //! `--autostart=false`: with no server it exits 4 (no server, as every command does), names the
 //! socket, and starts nothing.
 
+// macOS only: `leon` alone opens the app; a headless build prints help (m15_no_app.rs).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 mod support;
 
 use support::Env;

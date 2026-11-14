@@ -1,6 +1,9 @@
 //! M16b criterion 6: "Add Host…" asks for a label and an endpoint, validates them as `leon hosts
 //! add` does, saves through the hosts API and starts connecting.
 
+// macOS only: drives the GPUI app through support/app.rs (the `app` feature).
+#![cfg(all(feature = "app", target_os = "macos"))]
+
 #[path = "support/app.rs"]
 mod app;
 mod support;

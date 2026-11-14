@@ -1,6 +1,9 @@
 //! M7b criterion 2 (.agent/plans/2026-11-14-m7b-ship.md): scripts/install.sh installs the app and a
 //! CLI symlink under a temp HOME (or --prefix), is idempotent, and --uninstall removes both.
 
+// macOS only: Leon.app bundles (plutil, codesign, ~/Applications).
+#![cfg(target_os = "macos")]
+
 mod install_kit;
 
 use install_kit::{bundle_id, version, Kit};

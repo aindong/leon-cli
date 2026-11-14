@@ -11,7 +11,8 @@ license = "MIT"
 leon-core = { path = "crates/leon-core" }
 leon-server = { path = "crates/leon-server" }
 leon-lua = { path = "crates/leon-lua" }
-leon-app = { path = "crates/leon-app" }
+# default-features off so `leon` can take its GPUI-free modules on Linux (the `gui` feature)
+leon-app = { path = "crates/leon-app", default-features = false }
 leon-hosts = { path = "crates/leon-hosts" }
 alacritty_terminal = "0.26"
 base64 = "0.22"
