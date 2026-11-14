@@ -96,13 +96,21 @@ fn control(c: char) -> Option<u8> {
     }
 }
 
+/// The US keyboard's unshifted and shifted symbols, position for position.
+const PLAIN: &str = "`1234567890-=[]\\;',./";
+const SHIFT: &str = "~!@#$%^&*()_+{}|:\"<>?";
+
 /// What shift makes of a key on a US keyboard.
 fn shifted(c: char) -> Option<char> {
     if c.is_ascii_lowercase() {
         return Some(c.to_ascii_uppercase());
     }
-    let (plain, shift) = ("`1234567890-=[]\\;',./", "~!@#$%^&*()_+{}|:\"<>?");
-    plain.chars().position(|p| p == c).and_then(|i| shift.chars().nth(i))
+    PLAIN.chars().position(|p| p == c).and_then(|i| SHIFT.chars().nth(i))
+}
+
+/// The key a shifted symbol is on (`%` → `5`) on a US keyboard, or None if `c` isn't one.
+pub fn unshifted(c: char) -> Option<char> {
+    SHIFT.chars().position(|s| s == c).and_then(|i| PLAIN.chars().nth(i))
 }
 
 /// Pasted text as the shell should receive it: line breaks become Enter (`\r`). In bracketed

@@ -137,3 +137,8 @@ pub fn assert_restored(h: &Host, rc: i32) {
     assert!(!h.alt_screen(), "the alt screen must be left");
     assert!(h.cursor_shown(), "the cursor must be shown");
 }
+
+/// `words` appear in a row on screen, whatever the spacing (`od` pads its columns per platform).
+pub fn has_words(screen: &str, words: &[&str]) -> bool {
+    screen.split_whitespace().collect::<Vec<_>>().windows(words.len()).any(|w| w == words)
+}

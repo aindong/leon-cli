@@ -4,7 +4,7 @@
 mod support;
 
 use serde_json::Value;
-use support::host::Host;
+use support::host::{has_words, Host};
 use support::Env;
 
 fn view(env: &Env, session: &str) -> Value {
@@ -54,7 +54,7 @@ fn prefix_keys_drive_tabs_zoom_focus_and_the_picker() {
     // prefix twice types the prefix: ctrl+b shows nothing in sh, so `od` prints the byte
     h.send(b"od -An -tx1\r");
     h.send(b"\x02\x02\r\x04");
-    h.wait_for("od shows the ctrl+b byte", |s| s.contains(" 02 0a"));
+    h.wait_for("od shows the ctrl+b byte", |s| has_words(s, &["02", "0a"]));
 
     h.send(b"\x02s");
     h.wait_for("the picker", |s| s.contains("Pick a session, tab or block"));

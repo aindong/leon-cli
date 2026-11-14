@@ -211,7 +211,7 @@ fn bind(lua: &Lua, (key, target, args): (String, Value, Option<Value>)) -> Resul
     let mut st = state(lua);
     if let Some(m) = &key.mode {
         if !st.cfg.modes.iter().any(|x| &x.name == m) {
-            st.cfg.modes.push(Mode { name: m.clone(), exclusive: false, source: source.clone() });
+            st.cfg.modes.push(Mode { name: m.clone(), exclusive: false, prefix: None, source: source.clone() });
         }
     }
     // A key is either an immediate binding or a prefix of longer ones: newest wins.
@@ -290,15 +290,23 @@ fn mode(lua: &Lua, (name, opts): (String, Option<Table>)) -> Result<(), Bad> {
     if !keys::valid_mode(&name) {
         return Err(format!("bad mode name {name:?}: use [a-z0-9_-]").into());
     }
-    let exclusive = match opts {
-        Some(t) => flag(&t, "exclusive")?,
-        None => false,
+    let (exclusive, prefix) = match &opts {
+        Some(t) => (flag(t, "exclusive")?, field::<String>(t, "prefix")?),
+        None => (false, None),
+    };
+    let prefix = match prefix {
+        Some(p) => match keys::parse(&p) {
+            Ok(k) if k.mode.is_none() && k.seq.len() == 1 => Some(k.sequence()),
+            Ok(_) => return Err(format!("prefix {p:?} must be one chord, like \"ctrl+a\"").into()),
+            Err(e) => return Err(format!("prefix: {e}").into()),
+        },
+        None => None,
     };
     let source = caller(lua);
     let mut st = state(lua);
     match st.cfg.modes.iter_mut().find(|m| m.name == name) {
-        Some(m) => m.exclusive = exclusive,
-        None => st.cfg.modes.push(Mode { name, exclusive, source }),
+        Some(m) => (m.exclusive, m.prefix) = (exclusive, prefix),
+        None => st.cfg.modes.push(Mode { name, exclusive, prefix, source }),
     }
     Ok(())
 }

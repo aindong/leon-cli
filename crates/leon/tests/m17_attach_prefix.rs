@@ -4,7 +4,7 @@
 
 mod support;
 
-use support::host::{assert_restored, attach_then_stty, Host};
+use support::host::{assert_restored, attach_then_stty, has_words, Host};
 use support::Env;
 
 fn one_session(env: &Env) -> String {
@@ -27,7 +27,7 @@ fn prefix_flag_replaces_ctrl_b() {
     // ctrl+b is an ordinary key now: `od` in the pane gets it
     h.send(b"od -An -tx1\r");
     h.send(b"\x02\r\x04");
-    h.wait_for("od shows the ctrl+b byte", |s| s.contains(" 02 0a"));
+    h.wait_for("od shows the ctrl+b byte", |s| has_words(s, &["02", "0a"]));
     h.send(b"\x01d");
     assert_restored(&h, 0);
 }
@@ -81,8 +81,8 @@ leon.bind("ctrl+b>c", "seq_it")
     h.send(b"od -An -tx1\r");
     h.send(b"\x07x\r\x04"); // ctrl+g, then x
     Host::until("the action renamed the session", || env.view(&session)["label"] == "tagged");
-    let s = h.wait_for("od's output", |s| s.contains(" 78 0a"));
-    assert!(!s.contains(" 07 "), "ctrl+g must not reach the pane:\n{s}");
+    let s = h.wait_for("od's output", |s| has_words(s, &["78", "0a"]));
+    assert!(!has_words(&s, &["07"]), "ctrl+g must not reach the pane:\n{s}");
 
     // the config's own `ctrl+b>c` wins over the built-in prefix c (new tab)
     h.send(b"\x02c");
