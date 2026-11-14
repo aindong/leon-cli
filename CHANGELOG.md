@@ -13,7 +13,7 @@ section is a milestone from [docs/roadmap.md](docs/roadmap.md) and
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.1.0`.
+one is `1.2.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -59,6 +59,10 @@ fields it doesn't know. The full policy is in
   Names and status text from a server are stripped of hidden characters before they are shown.
 - The docs' screenshots are retaken with a neutral demo (`scripts/demo-shots.sh`), and a test keeps
   the user's login and machine name out of them.
+
+### M20a — Floating panes and drawers (API `1.2.0`)
+
+Add session.float_block, new_floating, dock_block, unfloat_block and toggle. Window views now carry floating (back to front) and docked placements, including hidden panes; hiding preserves programs. CLI/Lua and attach support floats and drawers.
 
 ### M21: projects and worktrees as a recipe
 

@@ -24,12 +24,20 @@ struct Target {
 }
 
 impl Tui {
+    fn session_id(&self) -> Option<&str> {
+        match &self.mode {
+            Mode::Attached(sid) => Some(sid),
+            _ => None,
+        }
+    }
+
     fn target(&self) -> Option<Target> {
         let Mode::Attached(sid) = &self.mode else { return None };
         let m = self.remote.model();
         let w = m.session(sid)?.windows.get(m.session(sid)?.active)?;
-        let block = w.zoomed.clone().or(w.focus.clone())?;
-        Some(Target { sid: sid.clone(), block, zoomed: w.zoomed.is_some() })
+        let block = super::overlays::focused(w)?.to_string();
+        let zoomed = w.zoomed.as_deref() == Some(block.as_str());
+        Some(Target { sid: sid.clone(), block, zoomed })
     }
 
     pub(super) fn attached_key(&mut self, k: KeyEvent, dirty: &mut bool) -> Flow {
@@ -114,10 +122,11 @@ impl Tui {
         match b.action.as_deref() {
             Some(name) => self.action(name, b.args.as_ref()),
             None => {
-                let Some(t) = self.target() else { return Flow::Go };
+                let Some(sid) = self.session_id() else { return Flow::Go };
+                let block = self.target().map(|t| t.block);
                 let prefix =
                     (!prefix.is_empty()).then(|| prefix.iter().map(Chord::to_string).collect::<Vec<_>>().join(">"));
-                let p = json!({ "session_id": t.sid, "block_id": t.block, "key": last.to_string(), "prefix": prefix });
+                let p = json!({ "session_id": sid, "block_id": block, "key": last.to_string(), "prefix": prefix });
                 self.spawn("client.key", p);
                 Flow::Go
             }
@@ -127,7 +136,7 @@ impl Tui {
     fn config_action(&self, name: &str, args: Option<&Value>) -> Flow {
         let t = self.target();
         let p = json!({ "action": name, "args": args, "origin": "key",
-            "session_id": t.as_ref().map(|t| &t.sid), "block_id": t.as_ref().map(|t| &t.block) });
+            "session_id": self.session_id(), "block_id": t.as_ref().map(|t| &t.block) });
         self.spawn("client.action", p);
         Flow::Go
     }
@@ -148,25 +157,35 @@ impl Tui {
             }
             _ => {}
         }
+        if name.starts_with("client.tab.") || name == "pane.new_floating" {
+            let Some(sid) = self.session_id().map(str::to_string) else { return Flow::Go };
+            let sid = &sid;
+            match name {
+                "client.tab.new" | "pane.new_floating" => {
+                    let layout = self.target().as_ref().map(|t| self.here(t));
+                    let method = if name == "client.tab.new" { "session.new_window" } else { "session.new_floating" };
+                    self.act(method, json!({"session_id": sid, "layout": layout}));
+                }
+                "client.tab.next" | "client.tab.previous" | "client.tab.goto" => {
+                    let (n, active) = self.remote.model().session(sid).map_or((0, 0), |s| (s.windows.len(), s.active));
+                    let to = match (name, args.and_then(|a| a["index"].as_u64())) {
+                        ("client.tab.next", _) => (active + 1) % n.max(1),
+                        ("client.tab.previous", _) => (active + n.max(1) - 1) % n.max(1),
+                        (_, Some(i)) if i >= 1 => i as usize - 1,
+                        _ => return Flow::Go,
+                    };
+                    let wid = self.remote.model().session(sid).and_then(|s| s.windows.get(to).map(|w| w.id.clone()));
+                    if let Some(wid) = wid {
+                        self.act("session.focus_window", json!({ "session_id": sid, "window_id": wid }));
+                    }
+                }
+                _ => self.say(format!("leon attach has no action {name}")),
+            }
+            return Flow::Go;
+        }
         let Some(t) = self.target() else { return Flow::Go };
         let sid = &t.sid;
         match name {
-            "client.tab.new" => {
-                drop(self.act("session.new_window", json!({ "session_id": sid, "layout": self.here(&t) })))
-            }
-            "client.tab.next" | "client.tab.previous" | "client.tab.goto" => {
-                let (n, active) = self.remote.model().session(sid).map_or((0, 0), |s| (s.windows.len(), s.active));
-                let to = match (name, args.and_then(|a| a["index"].as_u64())) {
-                    ("client.tab.next", _) => (active + 1) % n.max(1),
-                    ("client.tab.previous", _) => (active + n.max(1) - 1) % n.max(1),
-                    (_, Some(i)) if i >= 1 => i as usize - 1,
-                    _ => return Flow::Go,
-                };
-                let wid = self.remote.model().session(sid).and_then(|s| s.windows.get(to).map(|w| w.id.clone()));
-                if let Some(wid) = wid {
-                    self.act("session.focus_window", json!({ "session_id": sid, "window_id": wid }));
-                }
-            }
             "pane.split.right" | "pane.split.down" | "pane.split.left" | "pane.split.up" | "pane.split" => {
                 let way =
                     name.strip_prefix("pane.split.").or(args.and_then(|a| a["direction"].as_str())).unwrap_or("right");
@@ -193,6 +212,7 @@ impl Tui {
                 let toward = &name["pane.focus.".len()..];
                 self.act("session.focus_direction", json!({ "session_id": sid, "direction": toward }));
             }
+            "pane.float" => drop(self.act("session.float_block", json!({ "session_id": sid, "block_id": t.block }))),
             "pane.zoom" => drop(self.act("session.zoom_block", json!({ "session_id": sid, "block_id": t.block }))),
             "pane.close" => drop(self.act("block.close", json!({ "session_id": sid, "block_id": t.block }))),
             other => self.say(format!("leon attach has no action {other}")),
@@ -246,11 +266,31 @@ impl Tui {
         };
         let panes_area = Rect { height: area.height.saturating_sub(1), ..area };
         let w = s.windows.get(s.active);
+        if !self.overlay_view.as_ref().is_some_and(|(sid, rev, _)| sid == &s.id && *rev == s.revision) {
+            match self.remote.call("session.view", json!({"session_id": s.id})) {
+                Ok(v) => self.overlay_view = Some((s.id.clone(), s.revision, v)),
+                Err(e) => self.say(e.message),
+            }
+        }
+        let overlays = self
+            .overlay_view
+            .as_ref()
+            .filter(|(sid, _, _)| sid == &s.id)
+            .and_then(|(_, _, v)| v["windows"].as_array())
+            .and_then(|ws| ws.iter().find(|v| w.is_some_and(|w| v["window_id"] == w.id)))
+            .and_then(|v| {
+                serde_json::from_value::<leon_core::overlays::Overlays>(
+                    json!({"floating":v["floating"],"docked":v["docked"]}),
+                )
+                .ok()
+            })
+            .unwrap_or_default();
+        let (tile_area, overlays) = super::overlays::layout(&overlays, panes_area);
         let laid = match w.and_then(|w| w.layout.as_ref()) {
             Some(tree) => panes::layout(
                 tree,
                 w.and_then(|w| w.zoomed.as_deref()),
-                (panes_area.width as f32, panes_area.height as f32),
+                (tile_area.width as f32, tile_area.height as f32),
                 1.,
             ),
             None => panes::Layout::default(),
@@ -258,21 +298,33 @@ impl Tui {
         // run inside a pane on screen, the client neither sizes its own pane (its terminal would
         // shrink, and it would ask again, down to one row) nor draws it into itself
         let own = std::env::var("LEON_BLOCK").ok();
-        let shown: Vec<String> =
-            laid.panes.iter().map(|p| p.block_id.clone()).filter(|id| Some(id) != own.as_ref()).collect();
+        let shown: Vec<String> = laid
+            .panes
+            .iter()
+            .map(|p| p.block_id.clone())
+            .chain(overlays.iter().map(|p| p.id.clone()))
+            .filter(|id| Some(id) != own.as_ref())
+            .collect();
         // the size rule: resize a pane when this client's own size for it changes (or it comes
         // back on screen), never because another client resized it
         self.asked.retain(|id, _| shown.contains(id));
         self.remote.watch(shown.clone());
         for p in laid.panes.iter().filter(|p| shown.contains(&p.block_id)) {
-            let r = draw::cells(&p.rect, panes_area);
+            let r = draw::cells(&p.rect, tile_area);
             let want = (r.height.max(1), r.width.max(2));
             if self.asked.get(&p.block_id) != Some(&want) {
                 self.remote.resize(&s.id, &p.block_id, want.0, want.1);
                 self.asked.insert(p.block_id.clone(), want);
             }
         }
-        let focus = w.and_then(|w| w.zoomed.clone().or(w.focus.clone()));
+        for p in overlays.iter().filter(|p| shown.contains(&p.id)) {
+            let want = (p.inner.height.max(1), p.inner.width.max(2));
+            if self.asked.get(&p.id) != Some(&want) {
+                self.remote.resize(&s.id, &p.id, want.0, want.1);
+                self.asked.insert(p.id.clone(), want);
+            }
+        }
+        let focus = w.and_then(super::overlays::focused).map(str::to_string);
         let tabs = s.windows.iter().enumerate().map(|(i, w)| (picker::tab_name(&s, w), i == s.active)).collect();
         let note = super::lock(&self.note).clone();
         let index = self.remote.model().sessions.iter().position(|x| x.id == s.id).unwrap_or(0);
@@ -292,7 +344,7 @@ impl Tui {
             let buf = f.buffer_mut();
             let mut cursor = None;
             for p in &laid.panes {
-                let r = draw::cells(&p.rect, panes_area);
+                let r = draw::cells(&p.rect, tile_area);
                 if own.as_ref() == Some(&p.block_id) {
                     let style = ratatui::style::Style::default().fg(colors.rgb(draw::brand::UMBER));
                     buf.set_stringn(r.x, r.y, "(this terminal: leon attach)", r.width as usize, style);
@@ -308,7 +360,27 @@ impl Tui {
                         .map(|c| (r.x + c.col as u16, r.y + c.line as u16));
                 }
             }
-            draw::borders(buf, panes_area, &laid.dividers, &laid.panes, focus.as_deref(), colors);
+            draw::borders(buf, tile_area, &laid.dividers, &laid.panes, focus.as_deref(), colors);
+            for p in &overlays {
+                if cursor.is_some_and(|(x, y)| p.outer.contains(Position { x, y })) {
+                    cursor = None;
+                }
+                let focused = focus.as_deref() == Some(&p.id);
+                super::overlays::paint(buf, p, focused, colors);
+                if own.as_ref() == Some(&p.id) {
+                    continue;
+                }
+                if let Some(frame) = screens.get(&p.id) {
+                    draw::screen(buf, p.inner, frame, colors);
+                    if focused {
+                        cursor = frame
+                            .cursor
+                            .as_ref()
+                            .filter(|c| c.col < p.inner.width as usize && c.line < p.inner.height as usize)
+                            .map(|c| (p.inner.x + c.col as u16, p.inner.y + c.line as u16));
+                    }
+                }
+            }
             draw::bar(buf, Rect { y: area.height.saturating_sub(1), height: 1, ..area }, &bar, colors);
             if let Some((x, y)) = cursor {
                 f.set_cursor_position(Position { x, y });

@@ -20,7 +20,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use client::Fail;
 
 #[derive(Parser)]
-#[command(name = "leon", version, about = "A fast, scriptable terminal multiplexer.", after_help = EXIT_CODES)]
+#[command(name = "leon", version, about = "A fast, scriptable terminal multiplexer.", after_help = commands::EXIT_CODES)]
 pub struct Cli {
     /// Start a personal server when none is running.
     #[arg(long, global = true, env = "LEON_AUTOSTART", default_value = "true", num_args = 0..=1,
@@ -132,19 +132,8 @@ pub enum Cmd {
         #[arg(long)]
         trim: bool,
     },
-    /// Report a status for your own block (-b, else $LEON_BLOCK), as an OSC 7501 report from its
-    /// program would: it shows on the tab, in Activity and as a notification.
-    Notify {
-        /// The state to report.
-        #[arg(long, value_enum, default_value = "done")]
-        state: NotifyState,
-        /// One line naming what it is about (at most 192 bytes).
-        #[arg(long, value_name = "T")]
-        title: Option<String>,
-        /// One line saying more (at most 2048 bytes).
-        #[arg(long, value_name = "B")]
-        body: Option<String>,
-    },
+    /// Report a status for your own block (-b, else $LEON_BLOCK), as an OSC 7501 report would.
+    Notify(blocks::NotifyArgs),
     /// Wait for a terminal's program to exit, and exit with its status.
     Wait {
         /// The block to wait for [default: -b, else $LEON_BLOCK].
@@ -154,8 +143,42 @@ pub enum Cmd {
         #[arg(long = "for", value_parser = blocks::parse_duration)]
         timeout: Option<std::time::Duration>,
     },
-    /// Split a block (-b, else the focused one; -b may name a split) and run CMD, default a login
-    /// shell, in the new pane. Prints the new block's ID.
+    /// Float a block, create a floating terminal, or return one to the tiled tree.
+    Float {
+        /// Open a new terminal instead of floating the selected block.
+        #[arg(long, conflicts_with_all = ["unfloat", "block"])]
+        new: bool,
+        /// Return the selected float or drawer to the tiled tree.
+        #[arg(long, conflicts_with_all = ["new", "rect", "label"])]
+        unfloat: bool,
+        /// Assign a label to the floated block.
+        #[arg(long)]
+        label: Option<String>,
+        /// Position and size as window fractions, default 0.1,0.1,0.8,0.8.
+        #[arg(long, value_name = "X,Y,W,H")]
+        rect: Option<String>,
+        /// Program and arguments for --new; omitted starts a login shell.
+        #[arg(last = true, requires = "new")]
+        command: Vec<String>,
+    },
+    /// Show or hide a labeled float or drawer; --create opens a scratch shell on first use.
+    Toggle {
+        /// Exact, case-insensitive label of the float or drawer.
+        label: String,
+        /// Create a bottom scratch-shell drawer if the label is absent.
+        #[arg(long)]
+        create: bool,
+    },
+    /// Pin a block to a side (left, right or bottom).
+    Dock {
+        /// Window edge to pin the panel to.
+        #[arg(value_parser = ["left", "right", "bottom"])]
+        side: String,
+        /// Fraction of the window reserved for the panel, default 0.3.
+        #[arg(long)]
+        size: Option<f64>,
+    },
+    /// Split a tiled pane.
     Split {
         /// Where the new pane goes.
         #[arg(long = "split", value_enum, default_value = "right")]
@@ -464,14 +487,6 @@ pub enum SessionCmd {
     },
 }
 
-#[derive(Clone, Copy, ValueEnum)]
-pub enum NotifyState {
-    Working,
-    Blocked,
-    Done,
-    Error,
-}
-
 #[derive(Subcommand)]
 pub enum WindowCmd {
     /// Add a window and print its ID.
@@ -512,16 +527,6 @@ pub enum ApiCmd {
         args: Option<String>,
     },
 }
-
-const EXIT_CODES: &str = "\
-Exit codes:
-  0    ok
-  1    failed
-  2    bad command line
-  3    target not found or ambiguous
-  4    server unreachable
-  130  interrupted (Ctrl-C)
-  `wait` and `run --wait` exit with the program's own status.";
 
 fn main() -> ExitCode {
     let cli = Cli::parse(); // usage errors exit 2 here

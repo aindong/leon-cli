@@ -6,7 +6,8 @@ interface we match and `docs/roadmap.md` the milestone order.
 
 - Checks: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (or `the verify script`).
 - Linux: `scripts/linux-test.sh` (Docker; the non-app crates, `--workspace --exclude leon-app`), packages
-  `scripts/package-linux.sh`. A test gated to macOS needs a `// macOS only: <reason>` line above the gate.
+  `scripts/package-linux.sh`. `scripts/test-peer-uid.sh` separately proves peer-uid rejection
+  in Docker, including a red run with the check disabled in a disposable source copy. A test gated to macOS needs a `// macOS only: <reason>` line above the gate.
 - GPUI needs the `runtime_shaders` feature on this machine (no Metal Toolchain installed).
 - Name methods, actions, events and flags as `docs/spec.md` does; env vars are `LEON_*`.
 - The API is a promise (`docs/integrators.md#compatibility`): a new method needs a line in

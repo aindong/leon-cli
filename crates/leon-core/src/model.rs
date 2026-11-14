@@ -1,7 +1,7 @@
 //! Server state: an ordered list of sessions, each with ordered windows (tabs), each window a
 //! layout tree of the terminal blocks in it. Every mutation records its events (events.rs).
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use serde_json::json;
@@ -19,7 +19,7 @@ const EXITS_KEPT: usize = 1024;
 pub struct Window {
     pub id: String,
     pub label: Option<String>,
-    /// None only while the window's first block is being opened.
+    /// None while opening the first block, or when every block is an overlay.
     pub layout: Option<Node>,
     pub focus: Option<String>,
     /// The block shown filling the window (display only; the layout stays).
@@ -74,6 +74,8 @@ pub struct Session {
     pub id: String,
     pub label: Option<String>,
     pub windows: Vec<Window>,
+    /// Overlay placement by window ID; independent of terminal ownership.
+    pub overlays: HashMap<String, crate::overlays::Overlays>,
     /// Index into `windows` of the active tab.
     pub active: usize,
     /// In creation order, which is the order block positions count in.
@@ -148,7 +150,15 @@ impl State {
         let window = Window::new(clean_label(window_label)?);
         let ids = (new_id("session"), window.id.clone());
         let session = json!({ "session_id": ids.0, "label": label });
-        let s = Session { id: ids.0.clone(), label, windows: vec![window], active: 0, blocks: vec![], revision: 0 };
+        let s = Session {
+            id: ids.0.clone(),
+            label,
+            windows: vec![window],
+            overlays: HashMap::new(),
+            active: 0,
+            blocks: vec![],
+            revision: 0,
+        };
         self.sessions.push(s);
         self.emit_server(&ids.0, "session_created", json!({ "session": session }));
         Ok(ids)
@@ -181,6 +191,7 @@ impl State {
         let i = s.window_index(window_id)?;
         let was_active = s.windows[s.active].id.clone();
         s.windows.remove(i);
+        s.overlays.remove(window_id);
         let closed: Vec<String> = s.blocks.iter().filter(|b| b.window_id == window_id).map(|b| b.id.clone()).collect();
         s.blocks.retain(|b| b.window_id != window_id);
         if s.windows.is_empty() {
@@ -261,8 +272,8 @@ impl State {
         let i = s.block_index(block_id)?;
         let w = s.window_index(&s.blocks[i].window_id)?;
         s.blocks.remove(i);
-        s.windows[w].detach(block_id);
-        let emptied = s.windows[w].layout.is_none().then(|| s.windows[w].id.clone());
+        s.detach_placed(w, block_id);
+        let emptied = s.empty_window(w).then(|| s.windows[w].id.clone());
         self.emit(session_id, "block_closed", json!({ "block_id": block_id }));
         match emptied {
             Some(window_id) => self.close_window(session_id, &window_id),

@@ -138,6 +138,10 @@ pub struct WindowView {
     /// In layout order.
     pub block_ids: Vec<String>,
     pub layout: Option<Node>,
+    /// Back to front, including hidden floats.
+    pub floating: Vec<leon_core::overlays::Floating>,
+    /// At most one panel per side, including hidden drawers.
+    pub docked: Vec<leon_core::overlays::Docked>,
     pub focused_block_id: Option<String>,
     /// The block shown filling the window; the layout is unchanged.
     pub zoomed_block_id: Option<String>,
@@ -228,8 +232,16 @@ pub(crate) fn view(s: &leon_core::Session) -> SessionView {
                 label: w.label.clone(),
                 position: i + 1,
                 active: i == s.active,
-                block_ids: w.layout.as_ref().map_or(vec![], |t| t.leaves().into_iter().map(String::from).collect()),
+                block_ids: w
+                    .layout
+                    .as_ref()
+                    .map_or(vec![], |t| t.leaves().into_iter().map(String::from).collect::<Vec<_>>())
+                    .into_iter()
+                    .chain(s.overlay(&w.id).ids().map(String::from))
+                    .collect(),
                 layout: w.layout.clone(),
+                floating: s.overlay(&w.id).floating,
+                docked: s.overlay(&w.id).docked,
                 focused_block_id: w.focus.clone(),
                 zoomed_block_id: w.zoomed.clone(),
             })
@@ -389,6 +401,7 @@ pub fn registry() -> Registry {
     );
     blocks::add(&mut r);
     crate::layout::add(&mut r);
+    crate::overlays::add(&mut r);
     crate::events::add(&mut r);
     crate::resume::add(&mut r);
     crate::screens::add(&mut r);
