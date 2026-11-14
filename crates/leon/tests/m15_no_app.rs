@@ -27,3 +27,13 @@ fn leon_app_says_the_app_is_not_built_in() {
     assert!(stderr.contains("without the app"), "says why: {stderr}");
     assert!(std::fs::symlink_metadata(env.socket()).is_err(), "no server was started");
 }
+
+#[test]
+fn leon_alone_with_a_target_but_no_terminal_is_a_usage_error() {
+    let env = Env::new();
+    for args in [&["-s", "x"][..], &["-H", "ssh://box"][..]] {
+        let out = env.run(args);
+        assert_eq!(out.status.code(), Some(2), "leon {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("only in a terminal"), "says why");
+    }
+}

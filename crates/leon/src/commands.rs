@@ -10,7 +10,9 @@ use crate::client::{spawn_server, Client, Fail};
 use crate::{ApiCmd, Cli, Cmd, ConfigCmd, ServerCmd, SessionCmd, WindowCmd};
 
 pub fn run(cli: &Cli) -> Result<(), Fail> {
-    if let (Some(what), Some(_)) = (local_only(cli.cmd()), &cli.host) {
+    // a headless `leon` alone is `leon attach`, which takes -H
+    let attaches = cfg!(not(all(feature = "app", target_os = "macos"))) && cli.cmd.is_none();
+    if let (Some(what), Some(_), false) = (local_only(cli.cmd()), &cli.host, attaches) {
         return Err(Fail::Usage(format!("`leon {what}` is about this machine; it doesn't take -H")));
     }
     let socket = socket_path();
@@ -265,6 +267,9 @@ fn app(cli: &Cli, _socket: &std::path::Path) -> Result<(), Fail> {
     if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
         let server = crate::hosts::server(cli, cli.autostart)?;
         return crate::attach::run(cli.session.as_deref(), None, cli.autostart, &server);
+    }
+    if cli.session.is_some() || cli.host.is_some() {
+        return Err(Fail::Usage("`leon` alone attaches only in a terminal; name a command".into()));
     }
     <Cli as clap::CommandFactory>::command().print_help().map_err(|e| Fail::Other(e.to_string()))
 }

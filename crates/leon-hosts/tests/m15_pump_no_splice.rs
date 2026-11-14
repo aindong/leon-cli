@@ -24,7 +24,15 @@ fn a_waiting_pump_leaves_the_pipe_readable() {
         let mut to = writer;
         leon_hosts::pump(&mut from, &mut to);
     });
-    std::thread::sleep(Duration::from_millis(200)); // the pump is waiting for the socket now
+    // one byte through, so the pump has looped back to waiting on the socket
+    ours.write_all(b"x").unwrap();
+    let mut first = [0u8; 1];
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while std::io::Read::read(&mut reader, &mut first).map_or(true, |n| n == 0) {
+        assert!(std::time::Instant::now() < deadline, "the pump passed nothing on");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    std::thread::sleep(Duration::from_millis(50)); // and is back in its read
 
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {

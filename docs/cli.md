@@ -58,8 +58,9 @@ window) detaches and every program keeps running; the app's "Quit and End All Se
 `leon server stop` ends them. With `--autostart=false` and no server it exits 4.
 
 A build without the app (Linux for now, or macOS with `--no-default-features`) has no window:
-`leon` alone runs `leon attach` when stdin and stdout are a terminal and otherwise prints the help
-and exits 0, and `leon app` exits 1 saying so.
+`leon` alone runs `leon attach` (with `-s` and `-H` as given) when stdin and stdout are a
+terminal, and otherwise prints the help and exits 0 (exit 2 if `-s` or `-H` was given); `leon app`
+exits 1 saying so.
 
 ## In a terminal
 

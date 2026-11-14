@@ -100,13 +100,15 @@ fn serve(conn: UnixStream, s: &Shared) {
     }
     let autostart = !s.reached.load(Ordering::SeqCst);
     let mut cmd = s.endpoint.ssh(autostart, s.batch.load(Ordering::SeqCst));
-    // SAFETY: between fork and exec only sigemptyset and pthread_sigmask, both async-signal-safe.
+    // SAFETY: between fork and exec only sigemptyset and sigprocmask, both async-signal-safe.
     unsafe {
         cmd.pre_exec(|| {
             let mut none: libc::sigset_t = std::mem::zeroed();
             libc::sigemptyset(&mut none);
-            libc::pthread_sigmask(libc::SIG_SETMASK, &none, std::ptr::null_mut());
-            Ok(())
+            match libc::sigprocmask(libc::SIG_SETMASK, &none, std::ptr::null_mut()) {
+                0 => Ok(()),
+                _ => Err(io::Error::last_os_error()),
+            }
         });
     }
     let mut child = match cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn() {

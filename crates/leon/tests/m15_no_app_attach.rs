@@ -24,3 +24,17 @@ fn leon_alone_in_a_terminal_attaches() {
     h.send(b"\x02d");
     assert_restored(&h, 0);
 }
+
+#[test]
+fn leon_alone_with_h_attaches_to_that_host() {
+    let r = support::remote::Remote::new();
+    r.ok(&["-H", "ssh://box", "new", "far"]);
+    let vars = r.vars();
+    let vars: Vec<(&str, &str)> = vars.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let script = attach_then_stty("").replacen("\"$LEON\" attach ", "\"$LEON\" -H ssh://box", 1);
+    let h = Host::spawn(&r.local, &script, &vars);
+    // no target: attach's picker, listing the host's session
+    h.wait_for("the host's sessions in the picker", |s| s.contains("Pick a session") && s.contains("far"));
+    h.send(b"\x1b");
+    assert_restored(&h, 0);
+}
