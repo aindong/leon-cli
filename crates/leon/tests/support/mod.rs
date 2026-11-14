@@ -23,6 +23,7 @@ impl Env {
     pub fn cmd(&self) -> Command {
         let mut c = Command::new(env!("CARGO_BIN_EXE_leon"));
         c.env("LEON_RUNTIME_DIR", self.dir.path())
+            .env("LEON_STATE_DIR", self.state_dir())
             .env("SHELL", "/bin/sh")
             .env_remove("LEON_SESSION")
             .env_remove("LEON_BLOCK")
@@ -54,6 +55,11 @@ impl Env {
 
     pub fn code(&self, args: &[&str]) -> i32 {
         self.run(args).status.code().unwrap()
+    }
+
+    /// Where this env's server saves its sessions (never the real ~/.local/state/leon).
+    pub fn state_dir(&self) -> std::path::PathBuf {
+        self.dir.path().join("state")
     }
 
     pub fn socket(&self) -> std::path::PathBuf {
