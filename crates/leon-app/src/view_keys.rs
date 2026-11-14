@@ -14,6 +14,13 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        // a key binding syntax has no name for continues no sequence either: it ends it
+        if chord.is_none() && !self.pending.is_empty() {
+            self.pending.clear();
+            cx.notify();
+            cx.stop_propagation();
+            return;
+        }
         if let Some(c) = &chord {
             let escape = c.key == leon_lua::keys::Key::Named("escape") && c.mods == Default::default();
             if !self.pending.is_empty() && escape {
@@ -67,7 +74,7 @@ impl Workspace {
     }
 
     /// Run an action by name: the app's own (`client.*`, `pane.*`, `session.*`) here, a config
-    /// action on the server without waiting for it. Unknown app actions do nothing.
+    /// action on the server without waiting for it. An unknown app action is logged.
     pub fn run_action(
         &mut self,
         name: &str,
@@ -130,7 +137,7 @@ impl Workspace {
                 let p = json!({ "action": n, "args": args, "origin": origin, "session_id": sid, "block_id": block });
                 self.app.spawn("client.action", p, |r| report("a config action", r));
             }
-            _ => {}
+            other => eprintln!("leon: the app has no action {other}"),
         }
     }
 

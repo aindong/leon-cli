@@ -224,9 +224,13 @@ impl Workspace {
             for s in &st.sessions {
                 for w in &s.windows {
                     let Some(tree) = &w.layout else { continue };
-                    for p in panes::layout(tree, w.zoomed.as_deref(), area, DIVIDER).panes {
+                    // panes a zoom hides keep their split size; the zoomed one fills the area
+                    let zoomed = w.zoomed.as_deref().map(|z| panes::layout(tree, Some(z), area, DIVIDER).panes);
+                    for p in panes::layout(tree, None, area, DIVIDER).panes {
+                        let rect =
+                            zoomed.iter().flatten().find(|z| z.block_id == p.block_id).map_or(p.rect, |z| z.rect);
                         if let Some(b) = s.blocks.iter().find(|b| b.id == p.block_id) {
-                            out.push((b.terminal.clone(), p.rect));
+                            out.push((b.terminal.clone(), rect));
                         }
                     }
                 }

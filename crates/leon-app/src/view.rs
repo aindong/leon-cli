@@ -355,7 +355,7 @@ impl Workspace {
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let shows = |b: &leon_core::Block| status::indicator(&b.terminal.program_status());
+                let shows = |b: &leon_core::Block| b.terminal.with_program_status(status::indicator_of);
                 let windows: Vec<WindowRow> = s
                     .windows
                     .iter()
@@ -390,7 +390,7 @@ impl Workspace {
     /// The status caption in a pane's corner.
     pub fn pane_caption(&self, block_id: &str) -> Option<String> {
         let t = self.app.ctx().state().block(block_id).ok()?.1.terminal.clone();
-        status::caption(&t.program_status())
+        t.with_program_status(status::caption_of)
     }
 
     /// The spinner frame, when a working indicator is on screen (a sidebar row or a tab).
@@ -431,7 +431,7 @@ impl Workspace {
         self.session_id.hash(&mut h);
         for (id, t) in self.shown().map(|(_, terms)| terms).unwrap_or_default() {
             (id, Arc::as_ptr(&t) as usize, t.generation()).hash(&mut h);
-            status::caption(&t.program_status()).hash(&mut h);
+            t.with_program_status(status::caption_of).hash(&mut h);
         }
         h.finish()
     }

@@ -304,6 +304,12 @@ impl Terminal {
         lock(&self.tracker).store.records()
     }
 
+    /// Look at the program-status records, most recently reported first, without copying them
+    /// (the app reads them on every poll).
+    pub fn with_program_status<R>(&self, f: impl FnOnce(&[&Record]) -> R) -> R {
+        f(&lock(&self.tracker).store.newest_first())
+    }
+
     /// The user returned to this terminal: drop its `done` and `error` records (spec lifetime) and
     /// report the removal like any other. Don't hold the server's state lock: the notice takes it.
     pub fn acknowledge(&self) {

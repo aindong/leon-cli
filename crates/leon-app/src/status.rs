@@ -59,7 +59,16 @@ pub fn aggregate(all: impl IntoIterator<Item = Option<Indicator>>) -> Option<Ind
 
 /// One terminal's indicator from its records (least recently reported first).
 pub fn indicator(records: &[(Option<String>, Record)]) -> Option<Indicator> {
-    aggregate(records.iter().rev().map(|(_, r)| Indicator::of(r)))
+    indicator_of(&newest_first(records))
+}
+
+/// One terminal's indicator from its records, most recently reported first.
+pub fn indicator_of(newest_first: &[&Record]) -> Option<Indicator> {
+    aggregate(newest_first.iter().map(|r| Indicator::of(r)))
+}
+
+fn newest_first(records: &[(Option<String>, Record)]) -> Vec<&Record> {
+    records.iter().rev().map(|(_, r)| r).collect()
 }
 
 /// The glyph for `i`; `frame` turns the spinner.
@@ -79,8 +88,13 @@ pub fn glyph(i: Indicator, frame: u64) -> String {
 /// The title and msg of the record behind the pane's indicator, cut short and bidi-isolated (the
 /// store already removed controls and invisible characters), or None when it has neither.
 pub fn caption(records: &[(Option<String>, Record)]) -> Option<String> {
-    let top = indicator(records)?;
-    let r = records.iter().rev().map(|(_, r)| r).find(|r| Indicator::of(r).is_some_and(|i| i.rank() == top.rank()))?;
+    caption_of(&newest_first(records))
+}
+
+/// `caption` from records most recently reported first.
+pub fn caption_of(newest_first: &[&Record]) -> Option<String> {
+    let top = indicator_of(newest_first)?;
+    let r = newest_first.iter().find(|r| Indicator::of(r).is_some_and(|i| i.rank() == top.rank()))?;
     let text = match (&r.title, &r.msg) {
         (Some(t), Some(m)) => format!("{t}: {m}"),
         (Some(x), None) | (None, Some(x)) => x.clone(),

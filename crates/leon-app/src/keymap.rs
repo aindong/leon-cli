@@ -75,6 +75,21 @@ pub fn chord(ks: &Keystroke) -> Option<Chord> {
     Some(Chord { mods, key: spec.seq.remove(0).key })
 }
 
+/// A config key's chords, with shifted symbols written as typed (`ctrl+b>%`) made unshifted
+/// (`shift+5`) so they match what `chord` makes of the keystroke.
+fn config_seq(key: &str) -> Option<Vec<Chord>> {
+    let mut seq = parse(key).ok()?.seq;
+    for c in &mut seq {
+        if let Key::Char(ch) = c.key {
+            if let Some((_, base)) = SHIFTED.iter().find(|(s, _)| *s == ch) {
+                c.mods.shift = true;
+                c.key = Key::Char(*base);
+            }
+        }
+    }
+    Some(seq)
+}
+
 /// One binding the app resolves: a client action, a config action, or a Lua function (no action).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Bound {
@@ -126,12 +141,12 @@ impl Keymap {
         let list = |k: &str| km[k].as_array().cloned().unwrap_or_default();
         let unmoded = |v: &Value| v["mode"].is_null();
         for u in list("unbinds").iter().filter(|u| unmoded(u)) {
-            let Some(seq) = u["key"].as_str().and_then(|k| parse(k).ok()).map(|s| s.seq) else { continue };
+            let Some(seq) = u["key"].as_str().and_then(config_seq) else { continue };
             let only = u["action"].as_str();
             bindings.retain(|b| b.seq != seq || only.is_some_and(|a| b.action.as_deref() != Some(a)));
         }
         for b in list("bindings").iter().filter(|b| unmoded(b)) {
-            let Some(seq) = b["key"].as_str().and_then(|k| parse(k).ok()).map(|s| s.seq) else { continue };
+            let Some(seq) = b["key"].as_str().and_then(config_seq) else { continue };
             // a key is either a binding or a prefix (the rule leon.bind keeps within the file)
             bindings.retain(|old| {
                 let n = old.seq.len().min(seq.len());

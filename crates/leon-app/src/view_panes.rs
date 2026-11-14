@@ -26,8 +26,8 @@ impl Workspace {
             let Some((_, term)) = terms.iter().find(|(id, _)| *id == p.block_id) else { continue };
             let focused = target.as_deref() == Some(p.block_id.as_str());
             let id = p.block_id.clone();
-            let caption = status::caption(&term.program_status()).map(|c| {
-                let shown = status::indicator(&term.program_status());
+            let (caption, shown) = term.with_program_status(|r| (status::caption_of(r), status::indicator_of(r)));
+            let caption = caption.map(|c| {
                 let color = shown.map_or(t.muted, |i| i.color(t));
                 div()
                     .absolute()
@@ -174,7 +174,6 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_key_down(cx.listener(Self::key_down))
-            .children(self.render_overlay(cx))
             .size_full()
             .flex()
             .bg(rgb(DARK.bg))
@@ -182,6 +181,8 @@ impl Render for Workspace {
             .text_color(rgb(DARK.text))
             .when(self.sidebar, |d| d.child(self.render_sidebar(&rows, cx)))
             .child(div().flex_1().flex().flex_col().min_w(px(0.)).child(self.render_tabs(current, cx)).child(body))
+            // last, so it paints over the panes: GPUI paints children in order
+            .children(self.render_overlay(cx))
     }
 }
 

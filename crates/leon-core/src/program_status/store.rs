@@ -71,6 +71,11 @@ impl Store {
         self.by_tick().into_iter().map(|(k, e)| (public(k), self.resolved(k, &e.record))).collect()
     }
 
+    /// Every record as reported (`app` not resolved), most recently reported first, uncopied.
+    pub fn newest_first(&self) -> Vec<&Record> {
+        self.by_tick().into_iter().rev().map(|(_, e)| &e.record).collect()
+    }
+
     /// Applies one report.
     pub fn apply(&mut self, message: Message) -> Vec<Change> {
         match message {
