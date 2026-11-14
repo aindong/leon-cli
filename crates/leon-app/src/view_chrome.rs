@@ -15,20 +15,14 @@ impl Workspace {
             .h(px(TITLEBAR))
             .pl(px(TRAFFIC_LIGHTS))
             .pr(px(8.))
-            .child(self.tool("toolbar-sidebar", "◧", "client.sidebar.toggle", cx))
+            .child(self.tool("toolbar-sidebar", Icon::Sidebar, "client.sidebar.toggle", cx))
             .child(div().flex_1())
-            .child(self.tool("toolbar-palette", "⌘", "client.palette.toggle", cx))
-            .child(self.tool("toolbar-new", "+", "session.new", cx))
+            .child(self.tool("toolbar-palette", Icon::Command, "client.palette.toggle", cx))
+            .child(self.tool("toolbar-new", Icon::Plus, "session.new", cx))
     }
 
-    /// One toolbar button: a glyph that runs `action`.
-    fn tool(
-        &self,
-        id: &'static str,
-        glyph: &'static str,
-        action: &'static str,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    /// One toolbar button: an icon that runs `action`.
+    fn tool(&self, id: &'static str, icon: Icon, action: &'static str, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &DARK;
         div()
             .id(id)
@@ -37,12 +31,12 @@ impl Workspace {
             .flex_none()
             .items_center()
             .justify_center()
-            .size(px(26.))
+            .size(px(TOOLBAR_TARGET))
             .rounded(px(6.))
             .cursor_pointer()
             .text_color(rgb(t.muted))
             .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
-            .child(glyph)
+            .child(icon.at(TOOLBAR_ICON))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |ws, _, window, cx| {
@@ -69,7 +63,7 @@ impl Workspace {
             .pr(px(8.))
             .pl(px(if hidden { TRAFFIC_LIGHTS } else { 10. }))
             .bg(rgb(t.chrome))
-            .when(hidden, |d| d.child(self.tool("toolbar-sidebar", "◧", "client.sidebar.toggle", cx)));
+            .when(hidden, |d| d.child(self.tool("toolbar-sidebar", Icon::Sidebar, "client.sidebar.toggle", cx)));
         if let Some(row) = row {
             bar = bar.child(
                 div()
@@ -84,16 +78,16 @@ impl Workspace {
                 for (i, w) in row.windows.iter().enumerate() {
                     bar = bar.child(self.top_tab(i, w, i == row.active, row, frame, cx));
                 }
-                bar = bar.child(self.tool("new-tab", "+", "client.tab.new", cx));
+                bar = bar.child(self.tool("new-tab", Icon::Plus, "client.tab.new", cx));
             } else if let Some(w) = row.windows.get(row.active) {
                 // sidebar style with the sidebar hidden: name the tab on screen, draw no tabs
                 bar = bar.child(div().text_color(rgb(t.muted)).child(format!("› {}", w.title)));
             }
         }
         bar.child(div().flex_1()).when(hidden, |d| {
-            d.child(self.tool("toolbar-palette", "⌘", "client.palette.toggle", cx)).child(self.tool(
+            d.child(self.tool("toolbar-palette", Icon::Command, "client.palette.toggle", cx)).child(self.tool(
                 "toolbar-new",
-                "+",
+                Icon::Plus,
                 "session.new",
                 cx,
             ))
@@ -141,7 +135,7 @@ impl Workspace {
                     .invisible()
                     .group_hover(SharedString::from(format!("tab-{i}")), |d| d.visible())
                     .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
-                    .child("×")
+                    .child(Icon::Close.at(ROW_ICON - 2.))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |ws, _, _, cx| {
@@ -154,7 +148,32 @@ impl Workspace {
     }
 }
 
-/// A status glyph in its state's colour (a tab, a sidebar row, a pane header).
+/// A status icon in its state's colour (a tab, a sidebar row, a pane header), with the progress
+/// when the program gave one. Working pulses with `frame`.
 pub(super) fn status_mark(i: Indicator, frame: u64) -> gpui::Div {
-    div().flex_none().text_size(px(SECONDARY_TEXT)).text_color(rgb(i.color(&DARK))).child(status::glyph(i, frame))
+    use leon_core::program_status::Kind;
+    const PULSE: [f32; 8] = [1., 0.85, 0.7, 0.55, 0.45, 0.55, 0.7, 0.85];
+    let icon = match i {
+        Indicator::Working { .. } => Icon::Working,
+        Indicator::Blocked(Some(Kind::Permission)) => Icon::Permission,
+        Indicator::Blocked(Some(Kind::Question)) => Icon::Question,
+        Indicator::Blocked(Some(Kind::Auth)) => Icon::Auth,
+        Indicator::Blocked(None) => Icon::Blocked,
+        Indicator::Done => Icon::Done,
+        Indicator::Error => Icon::Error,
+    };
+    let progress = match i {
+        Indicator::Working { progress: Some(p) } => Some(format!("{p}%")),
+        _ => None,
+    };
+    let pulse = if matches!(i, Indicator::Working { .. }) { PULSE[frame as usize % PULSE.len()] } else { 1. };
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(px(4.))
+        .text_size(px(SECONDARY_TEXT))
+        .text_color(rgb(i.color(&DARK)))
+        .child(icon.at(ROW_ICON).opacity(pulse))
+        .children(progress)
 }

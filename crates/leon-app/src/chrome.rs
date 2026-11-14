@@ -58,11 +58,13 @@ pub struct Settings {
     /// Pane headers shown (`client.pane_header.reveal` toggles them).
     pub pane_headers: bool,
     pub sidebar_width: f32,
+    /// The window's last frame (its restored size, when it was zoomed or full screen).
+    pub window: Option<Frame>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { tab_style: TabStyle::Sidebar, pane_headers: true, sidebar_width: 220. }
+        Settings { tab_style: TabStyle::Sidebar, pane_headers: true, sidebar_width: 220., window: None }
     }
 }
 
@@ -94,4 +96,39 @@ pub fn clamp_width(w: f32) -> f32 {
     } else {
         Settings::default().sidebar_width
     }
+}
+
+/// A window or screen rectangle in points, in the screens' shared space.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Frame {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+/// The smallest the window gets, and the smallest a first window opens at (when the screen fits it).
+pub const MIN_WINDOW: (f32, f32) = (720., 440.);
+const FIRST_WINDOW: (f32, f32) = (1000., 680.);
+
+/// Where the window opens: the saved frame when at least half of it is on one of `screens` (the
+/// primary first), else three quarters of the primary screen, centred.
+pub fn window_frame(saved: Option<Frame>, screens: &[Frame]) -> Frame {
+    let finite = |f: &Frame| [f.x, f.y, f.w, f.h].iter().all(|v| v.is_finite());
+    if let Some(s) = saved.filter(finite) {
+        let s = Frame { w: s.w.max(MIN_WINDOW.0), h: s.h.max(MIN_WINDOW.1), ..s };
+        if screens.iter().any(|screen| 2. * overlap(&s, screen) >= s.w * s.h) {
+            return s;
+        }
+    }
+    let screen = screens.first().copied().unwrap_or(Frame { x: 0., y: 0., w: FIRST_WINDOW.0, h: FIRST_WINDOW.1 });
+    let w = (screen.w * 0.75).max(FIRST_WINDOW.0).min(screen.w);
+    let h = (screen.h * 0.75).max(FIRST_WINDOW.1).min(screen.h);
+    Frame { x: screen.x + (screen.w - w) / 2., y: screen.y + (screen.h - h) / 2., w, h }
+}
+
+fn overlap(a: &Frame, b: &Frame) -> f32 {
+    let w = (a.x + a.w).min(b.x + b.w) - a.x.max(b.x);
+    let h = (a.y + a.h).min(b.y + b.h) - a.y.max(b.y);
+    w.max(0.) * h.max(0.)
 }

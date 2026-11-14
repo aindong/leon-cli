@@ -19,8 +19,8 @@ fn every_icon_is_an_svg_in_the_set() {
 
 #[test]
 fn icons_are_a_comfortable_size() {
-    assert!(TOOLBAR_ICON >= 16. && TOOLBAR_TARGET >= 28., "toolbar {TOOLBAR_ICON} in {TOOLBAR_TARGET}");
-    assert!(ROW_ICON >= 14., "rows and pane headers: {ROW_ICON}");
+    const { assert!(TOOLBAR_ICON >= 16. && TOOLBAR_TARGET >= 28., "toolbar icons: 16 pt in 28 pt targets") };
+    const { assert!(ROW_ICON >= 14., "rows and pane headers: 14 pt") };
 }
 
 #[test]

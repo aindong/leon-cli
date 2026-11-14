@@ -4,6 +4,7 @@ use std::path::Path;
 
 pub mod chrome;
 pub mod embedded;
+pub mod icons;
 pub mod input;
 pub mod keymap;
 pub mod palette;

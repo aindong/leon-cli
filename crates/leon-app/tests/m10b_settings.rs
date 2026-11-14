@@ -15,7 +15,7 @@ fn settings_round_trip_and_bad_files_give_the_defaults() {
     assert_eq!(Settings::load(&path), Settings::default(), "a missing file is the defaults");
     let d = Settings::default();
     assert_eq!((d.tab_style, d.pane_headers, d.sidebar_width), (TabStyle::Sidebar, true, 220.));
-    let mine = Settings { tab_style: TabStyle::Top, pane_headers: false, sidebar_width: 300. };
+    let mine = Settings { tab_style: TabStyle::Top, pane_headers: false, sidebar_width: 300., ..Settings::default() };
     mine.save(&path).unwrap();
     assert_eq!(Settings::load(&path), mine);
     let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;

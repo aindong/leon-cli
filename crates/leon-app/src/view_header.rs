@@ -13,7 +13,7 @@ impl Workspace {
         let frame = shown.and_then(|_| self.spinning(&self.rows())).unwrap_or(0);
         let title = self.pane_title(id).unwrap_or_default();
         let group = SharedString::from(format!("pane-{id}"));
-        let control = |what: &'static str, glyph: &'static str, cx: &mut Context<Self>| {
+        let control = |what: &'static str, icon: Icon, cx: &mut Context<Self>| {
             let (block, name) = (id.to_string(), format!("header-{what}-{id}"));
             div()
                 .id(SharedString::from(name.clone()))
@@ -21,12 +21,12 @@ impl Workspace {
                 .flex()
                 .items_center()
                 .justify_center()
-                .size(px(20.))
+                .size(px(22.))
                 .rounded(px(4.))
                 .cursor_pointer()
                 .text_color(rgb(t.muted))
                 .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
-                .child(glyph)
+                .child(icon.at(ROW_ICON))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |ws, _, window, cx| {
@@ -47,10 +47,10 @@ impl Workspace {
             .flex_none()
             .gap(px(2.))
             .when(!focused, |d| d.invisible().group_hover(group.clone(), |d| d.visible()))
-            .child(control("split-right", "◫", cx))
-            .child(control("split-down", "⊟", cx))
-            .child(control("zoom", "⤢", cx))
-            .child(control("close", "×", cx));
+            .child(control("split-right", Icon::SplitRight, cx))
+            .child(control("split-down", Icon::SplitDown, cx))
+            .child(control("zoom", Icon::Zoom, cx))
+            .child(control("close", Icon::Close, cx));
         div()
             .debug_selector(|| sel(format!("header-{id}")))
             .flex()
@@ -61,7 +61,7 @@ impl Workspace {
             .pl(px(10.))
             .pr(px(4.))
             .text_size(px(SECONDARY_TEXT))
-            .child(div().flex_none().text_color(rgb(t.muted)).child("›_"))
+            .child(div().flex_none().text_color(rgb(t.muted)).child(Icon::Terminal.at(ROW_ICON)))
             .child(
                 div()
                     .flex_none()

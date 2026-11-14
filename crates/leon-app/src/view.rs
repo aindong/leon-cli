@@ -26,6 +26,7 @@ use leon_lua::keys::Chord;
 use serde_json::{json, Value};
 
 use crate::chrome::{self, Places, Settings, SidebarList};
+use crate::icons::{Icon, ROW_ICON, TOOLBAR_ICON, TOOLBAR_TARGET};
 use crate::keymap::{self, Bound, Keymap, Pressed};
 use crate::panes::{self, Divider, GAP};
 use crate::remote::Remote;
@@ -136,9 +137,20 @@ pub fn install(cx: &mut App) {
 /// Open the app window on `server` and run until it quits.
 pub fn run(server: Remote) {
     let server = Rc::new(server);
-    Application::new().run(move |cx: &mut App| {
+    Application::new().with_assets(crate::icons::Icons).run(move |cx: &mut App| {
         install(cx);
-        let bounds = Bounds::centered(None, size(px(1100.), px(700.)), cx);
+        // the last frame when it still fits a screen, else most of the primary one
+        let saved = settings_path().map(|p| Settings::load(&p).window).unwrap_or_default();
+        let frame = |b: Bounds<Pixels>| chrome::Frame {
+            x: b.origin.x.into(),
+            y: b.origin.y.into(),
+            w: b.size.width.into(),
+            h: b.size.height.into(),
+        };
+        let screens: Vec<_> =
+            cx.primary_display().into_iter().chain(cx.displays()).map(|d| frame(d.bounds())).collect();
+        let f = chrome::window_frame(saved, &screens);
+        let bounds = Bounds::new(point(px(f.x), px(f.y)), size(px(f.w), px(f.h)));
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions {
@@ -146,7 +158,7 @@ pub fn run(server: Remote) {
                 appears_transparent: true,
                 traffic_light_position: Some(point(px(14.), px(13.))),
             }),
-            window_min_size: Some(size(px(480.), px(260.))),
+            window_min_size: Some(size(px(chrome::MIN_WINDOW.0), px(chrome::MIN_WINDOW.1))),
             ..WindowOptions::default()
         };
         let app = server.clone();
@@ -284,6 +296,8 @@ pub struct Workspace {
     seen_focus: Option<(String, bool)>,
     _poll: Task<()>,
     _activation: Subscription,
+    _bounds: Subscription,
+    _quit: Subscription,
 }
 
 impl Workspace {
@@ -332,6 +346,16 @@ impl Workspace {
         let stats = Stats { enabled: std::env::var("LEON_FRAME_STATS").is_ok_and(|v| v == "1"), ..Stats::default() };
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |_, _, cx| cx.notify());
+        // the window's frame is kept with the settings, and saved when the app quits
+        let bounds = cx.observe_window_bounds(window, |ws, window, _| {
+            let b = window.window_bounds().get_bounds();
+            let (x, y, w, h) = (b.origin.x.into(), b.origin.y.into(), b.size.width.into(), b.size.height.into());
+            ws.settings.window = Some(chrome::Frame { x, y, w, h });
+        });
+        let quit = cx.on_app_quit(|ws, _| {
+            ws.save_settings();
+            async {}
+        });
         Workspace {
             app,
             drag: None,
@@ -354,6 +378,8 @@ impl Workspace {
             seen_focus: None,
             _poll: poll,
             _activation: activation,
+            _bounds: bounds,
+            _quit: quit,
         }
     }
 

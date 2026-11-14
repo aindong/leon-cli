@@ -41,10 +41,8 @@ fn a_saved_frame_comes_back_only_on_a_screen() {
 
 #[test]
 fn the_window_frame_is_saved_with_the_settings() {
-    let dir = tempfile::Builder::new()
-        .permissions(std::os::unix::fs::PermissionsExt::from_mode(0o700))
-        .tempdir()
-        .unwrap();
+    let dir =
+        tempfile::Builder::new().permissions(std::os::unix::fs::PermissionsExt::from_mode(0o700)).tempdir().unwrap();
     let path = dir.path().join("app.json");
     let s = Settings { window: Some(f(40., 50., 1280., 820.)), ..Settings::default() };
     s.save(&path).unwrap();
