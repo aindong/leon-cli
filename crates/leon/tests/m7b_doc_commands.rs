@@ -1,7 +1,7 @@
 //! M7b criterion 8 (.agent/plans/2026-11-14-m7b-ship.md): every `leon …` in the docs' sh blocks
 //! parses. Each block runs in `/bin/sh` with PATH holding only a `leon` shim: the shim runs the real
-//! binary with no server to reach (so commands stop after parsing, exit 4) and logs any exit 2, the
-//! bad-command-line code. Other programs in a block aren't found, and the cwd is a temp dir, so a
+//! binary with no server to reach (so commands stop after parsing, exit 4) and logs any exit but
+//! 0, 1, 3 and 4: 2 is a bad command line, anything else a crash. Other programs in a block aren't found, and the cwd is a temp dir, so a
 //! block can't build, install or delete anything. The README must also list the app's shortcuts.
 
 mod help_walk;
@@ -39,7 +39,7 @@ printf '%s\n' "$*" >> "$DOC_CALLS"
 case "$1" in ''|app) exit 0 ;; server) case "$2" in run|start) exit 0 ;; esac ;; esac
 "$DOC_LEON" "$@" < /dev/null > /dev/null 2> "$DOC_ERR"
 rc=$?
-[ $rc -eq 2 ] && { printf 'leon %s\n' "$*"; while IFS= read -r l; do printf '  %s\n' "$l"; done < "$DOC_ERR"; } >> "$DOC_BAD"
+case $rc in 0|1|3|4) ;; *) { printf 'leon %s (exit %s)\n' "$*" $rc; while IFS= read -r l; do printf '  %s\n' "$l"; done < "$DOC_ERR"; } >> "$DOC_BAD" ;; esac
 echo block:0000
 exit 0
 "#;
@@ -134,9 +134,16 @@ fn readme_lists_the_app_shortcuts() {
 #[test]
 fn readme_and_agents_guide_cover_their_topics() {
     let readme = std::fs::read_to_string(help_walk::repo().join("README.md")).unwrap();
-    let lower = readme.to_lowercase();
-    for topic in ["## install", "split", "agent", "shortcut", "screenshot", "scripts/install.sh", "leon skill setup"] {
-        assert!(lower.contains(topic), "README should cover {topic:?}");
+    let intro = readme.split("\n## ").next().unwrap();
+    assert!(intro.contains("terminal multiplexer") && intro.lines().count() > 5, "README opens by saying what leon is");
+    assert!(intro.to_lowercase().contains("screenshot"), "README has a screenshot placeholder up top");
+    for heading in
+        ["## Install", "## The first five commands", "## Split it", "## Let an agent drive it", "## App shortcuts"]
+    {
+        assert!(readme.lines().any(|l| l == heading), "README should have the section {heading:?}");
+    }
+    for topic in ["scripts/install.sh", "leon skill setup"] {
+        assert!(readme.contains(topic), "README should cover {topic:?}");
     }
     let agents = std::fs::read_to_string(help_walk::repo().join("docs/agents.md")).expect("docs/agents.md exists");
     for topic in

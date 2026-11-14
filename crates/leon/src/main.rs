@@ -168,7 +168,7 @@ pub enum Cmd {
     },
     /// Show a block filling its window, or stop (toggles by default).
     Zoom {
-        /// The block to zoom [default: -b, else the focused one].
+        /// The block to zoom [default: -b, else $LEON_BLOCK, else the focused one].
         #[arg(value_name = "BLOCK")]
         target: Option<String>,
         /// Zoom in, even if already zoomed.
@@ -180,7 +180,7 @@ pub enum Cmd {
     },
     /// Set a block's share of the split it is in.
     Resize {
-        /// The block to resize [default: -b, else the focused one].
+        /// The block to resize [default: -b, else $LEON_BLOCK, else the focused one].
         #[arg(value_name = "BLOCK")]
         target: Option<String>,
         /// The block's share, in percent.

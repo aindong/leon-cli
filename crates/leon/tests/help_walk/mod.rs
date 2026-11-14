@@ -62,7 +62,8 @@ pub fn help(path: &[String]) -> Help {
                 spec: spec.trim().to_string(),
                 desc: desc.trim().to_string(),
             });
-        } else if line.is_empty() || !line.starts_with(' ') {
+        } else if !line.is_empty() && !line.starts_with(' ') {
+            // a blank line doesn't end a section: clap's long help puts one between entries
             section.clear();
         }
     }

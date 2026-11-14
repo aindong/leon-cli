@@ -14,6 +14,12 @@ fn heading_path(line: &str) -> Option<Vec<String>> {
     Some(words.map(str::to_string).collect())
 }
 
+/// `flag` appears as a whole word: `--for` isn't found inside `--force`.
+fn mentions(text: &str, flag: &str) -> bool {
+    text.match_indices(flag)
+        .any(|(at, _)| !text[at + flag.len()..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '-'))
+}
+
 #[test]
 fn cli_md_covers_every_command_and_flag() {
     let doc = std::fs::read_to_string(help_walk::repo().join("docs/cli.md")).expect("docs/cli.md exists");
@@ -22,7 +28,7 @@ fn cli_md_covers_every_command_and_flag() {
     let globals = all.iter().find(|h| h.path.is_empty()).unwrap().long_flags();
     let mut problems = vec![];
     for g in &globals {
-        if !doc.contains(g.as_str()) {
+        if !mentions(&doc, g) {
             problems.push(format!("global flag {g} is not in the doc"));
         }
     }
@@ -41,7 +47,7 @@ fn cli_md_covers_every_command_and_flag() {
             lines.iter().enumerate().skip(at + 1).find(|(_, l)| l.starts_with('#')).map_or(lines.len(), |(i, _)| i);
         let section = lines[at..end].join("\n");
         for f in h.long_flags().iter().filter(|f| !globals.contains(f)) {
-            if !section.contains(f.as_str()) {
+            if !mentions(&section, f) {
                 problems.push(format!("`leon {}`: {f} is not in its section", h.path.join(" ")));
             }
         }
