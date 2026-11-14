@@ -1,6 +1,6 @@
 # leon identity
 
-**Pocket guardian** is leon's production direction. The user chose character 11: a chunky, nearly square lion with relaxed eyes and a knowing half-smile. Refinement **B / Mane collar** keeps that personality, tucks the ears into a fuller mane, and replaces the grain with smooth gold, amber, coral and Oxide shading on a deep maroon tile. The lion is one continuous form. The earlier pane-mane and glass-chip directions are retired.
+**11 / Original, cleaned** is leon's production identity. The user selected the original Pocket guardian over refinements A, B and C: keep its chunky square silhouette, rounded ear and mane bumps, relaxed lids, broad nose and knowing half-smile. The final render only cleans the grain and contour, smooths the gold-to-coral-to-Oxide shading, and polishes the deep maroon tile. The bottom stays broad and level; the original shallow forehead notch is retained without adding B's swoosh or pointed chin.
 
 **Tagline:** Keep your work in view.
 
@@ -8,11 +8,11 @@
 
 ## Selection and review
 
-[Original 11 beside three refinements, each at 32 px](exploration/pocket-guardian-refine.png) is the comparison to review before merging. B is the implementation recommendation: its fuller cheek mane and tapered chin distinguish the lion from the original's bear-like ears without losing the half-smile. The B shown is the actual final raster, including the last ear refinement. [Exact prompts and preparation notes](exploration/pocket-guardian-prompts.md) record both imagegen calls and the comparison crops.
+[Original 11 beside the final master and true 32 px reductions](exploration/final-compare.png) is the current review sheet. This directly compares the user's selected thumbnail with the production icon. [Exact prompt and preparation notes](exploration/final-prompts.md) document the cleanup and vector work.
 
-![Pocket guardian refinements](exploration/pocket-guardian-refine.png)
+![Original 11 and the cleaned production icon](exploration/final-compare.png)
 
-The [twelve-character sheet](exploration/character-directions.png) records the user's original choice. Earlier exploration images remain as history; they are not current identity assets. No reference-company artwork was supplied to imagegen. Leon's frontal mane, warm continuous gradient and maroon tile differ from the reference app's dinosaur profile, multi-hue character and pale tile.
+The [twelve-character sheet](exploration/character-directions.png) records the user's choice. The A/B/C refinement sheet and all pane-mane/glass studies remain historical and are superseded. No reference-company artwork was supplied to imagegen. Leon keeps a frontal square character, warm continuous colour and a maroon tile.
 
 ## Assets and rules
 
@@ -23,9 +23,9 @@ The [twelve-character sheet](exploration/character-directions.png) records the u
 | Single-colour lion | [logo-mark-mono.svg](logo-mark-mono.svg) | [logo-mark-mono-dark.svg](logo-mark-mono-dark.svg) |
 | Existing wordmark | [wordmark.svg](wordmark.svg) | [wordmark-dark.svg](wordmark-dark.svg) |
 
-The flat lion is independently hand-drawn SVG geometry, not a raster trace: one swept mane silhouette, relaxed lids, a broad nose and a one-sided smile. Light marks use Oxide with Parchment details; dark marks use Amber with Maroon details. Monochrome marks cut the features out of one solid colour. The flat logo is an intentional simplification of the shaded character, not a miniature raster embedded in a logo.
+The flat lion is a manual SVG contour transcription of the cleaned original: one square mane silhouette with rounded top bumps, relaxed lids, a broad nose and a one-sided smile. Light marks use Oxide with Parchment details; dark marks use Amber with Maroon details. Monochrome marks cut the features out of one solid colour. The flat logo is an intentional simplification of the shaded character, not a miniature raster embedded in a logo.
 
-Keep at least 10 design units of space around the lion. Use flat marks at 24 px or above and lockups at 108 px or above; use the optical app icon for 16 px. Preserve the sideways smile, low lids, broad cheek tufts and single colour field. Do not add round protruding ears, fangs, angry brows, shields, panels or separated colour chips. Do not stretch, rotate or give individual mane parts their own gloss. Keep depth on the app icon; keep logos flat.
+Keep at least 10 design units of space around the lion. Use flat marks at 24 px or above and lockups at 108 px or above; use the optical app icon for 16 px. Preserve the sideways smile, low lids, original rounded ear bumps, cheek tufts, broad base and single colour field. Do not add a swept top curl, pointed chin, fangs, angry brows, shields, panels or separated colour chips. Do not stretch, rotate or give individual mane parts their own gloss. Keep depth on the app icon; keep logos flat.
 
 The custom lowercase wordmark, 360 × 90 lockup frame, tagline and product copy are retained. Use **leon** in copy, **Leon.app** for the bundle and `leon` for commands.
 
