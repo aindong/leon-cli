@@ -135,7 +135,8 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   only when the hook, its parent or its grandparent is its terminal's foreground process group: the
   interactive agent, not a nested `claude -p` that an agent's tool started without a terminal.
   Restored blocks follow the config's `leon.set("resume", …)`, read once the start-up config has
-  loaded and before restoring: `"ask"` (default) types Ctrl-U and the shell-quoted command at the
+  loaded and before restoring (the restore waits at most 1 s for it, since nothing is served until
+  the restore is done; a config slower than that restores with `"ask"`): `"ask"` (default) types Ctrl-U and the shell-quoted command at the
   new prompt and shows a dim hint, so Enter runs it; `"always"` adds the Enter; `"never"` types
   nothing. Typing waits (up to 10 s, then gives up) until the shell is the PTY's foreground process
   group with canonical mode off, so neither an rc file's picker nor typeahead gets it. The command
