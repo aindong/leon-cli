@@ -121,8 +121,8 @@ any`, and a `?` suffix for optional ones.
 block restored after a server restart does with the resume command its program registered for
 itself (`set_resume`, which leon's agent hook calls for Claude Code and Codex). `"ask"` (the
 default) types the command at the new prompt and waits for Enter; `"always"` runs it; `"never"`
-leaves the prompt empty. The server reads it at start, before it restores; `leon config check`
-prints it.
+leaves the prompt empty. The server reads it at start, before it restores (it waits at most a
+second for the config, and past that offers nothing, as with `"never"`); `leon config check` prints it.
 
 ```lua
 leon.set("resume", "always")

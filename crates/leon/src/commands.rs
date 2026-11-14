@@ -246,13 +246,8 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                 ctx.start_config(config.clone());
                 let mut bound = leon_server::serve::listen(&opts.socket).await?;
                 if let Some(dir) = state_dir {
-                    // The restore follows the config's resume setting, so it waits for the load, but
-                    // not long: nothing is served until the restore. Past the wait, "ask" is safe.
-                    let wait = tokio::time::timeout(Duration::from_secs(1), ctx.resume_policy()).await;
-                    let resume = wait.unwrap_or_else(|_| {
-                        eprintln!("leon: warning: the config is slow to load; restored blocks ask before resuming");
-                        leon_lua::Resume::Ask
-                    });
+                    // The config's setting, waited for briefly, and only if there is a restore to follow it.
+                    let resume = if *restore { ctx.resume_policy().await } else { leon_lua::Resume::Never };
                     let p = leon_server::persist::Persist {
                         file: dir.join(leon_server::persist::FILE),
                         restore: *restore,

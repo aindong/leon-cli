@@ -21,7 +21,7 @@ const OLD_COMMANDS: &[&str] = &["leon skill hook", "command -v leon >/dev/null 2
 fn is_ours(hook: &Value) -> bool {
     hook["command"].as_str().is_some_and(|c| {
         let c = c.trim();
-        OLD_COMMANDS.contains(&c) || [Agent::Claude, Agent::Codex].iter().any(|a| command(*a) == c)
+        OLD_COMMANDS.contains(&c) || Agent::ALL.iter().any(|a| command(*a) == c)
     })
 }
 

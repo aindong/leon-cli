@@ -341,10 +341,14 @@ impl Terminal {
         gone.into_iter().for_each(|c| (self.notify)(Notice::ProgramStatus(c)));
     }
 
+    /// Whether the program asked for bracketed paste (a line editor does while it reads a line).
+    pub fn bracketed_paste(&self) -> bool {
+        lock(&self.term).mode().contains(TermMode::BRACKETED_PASTE)
+    }
+
     /// Paste `text` the way the program asked for it now (`keys::paste_bytes`).
     pub fn paste(&self, text: &str) -> io::Result<()> {
-        let bracketed = lock(&self.term).mode().contains(TermMode::BRACKETED_PASTE);
-        self.write(&crate::keys::paste_bytes(text, bracketed))
+        self.write(&crate::keys::paste_bytes(text, self.bracketed_paste()))
     }
 
     /// Press one key given in binding syntax (`enter`, `ctrl+c`, `up`).
@@ -487,21 +491,6 @@ impl Drop for Terminal {
             kill_group(pid, &exited);
         });
     }
-}
-
-/// The command as a POSIX shell line: plain words as they are, the rest in single quotes.
-// shortcut: fish reads `\\` inside single quotes as one backslash; quote per shell if an agent's
-// resume command ever holds a backslash.
-pub fn shell_line(command: &[String]) -> String {
-    let word = |a: &String| {
-        let plain = !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric() || "_-./:,@+".contains(c));
-        if plain {
-            a.clone()
-        } else {
-            format!("'{}'", a.replace('\'', r"'\''"))
-        }
-    };
-    command.iter().map(word).collect::<Vec<_>>().join(" ")
 }
 
 /// Program-supplied text for events: no control, bidi or invisible characters (they would reach

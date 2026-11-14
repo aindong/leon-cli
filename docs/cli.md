@@ -367,7 +367,8 @@ Start a server in the background. Does nothing if one runs (except make it persi
 
 ### `leon server stop`
 
-Stop the server. Every program in every session ends; the sessions are saved for the next start.
+Stop the server. Every program in every session ends; the sessions are saved for the next start,
+with the text each terminal shows (in the private state dir, 0600).
 
 - `--discard`: don't save, and forget the sessions saved before, so the next start is empty.
 
@@ -387,8 +388,9 @@ Print the guide for agents driving leon (a SKILL.md).
 
 ### `leon skill setup`
 
-Install the skill and a session-start hook for each agent found. The hook tells the agent where
-it is and records how to resume its session after a restart.
+Install the skill and a session-start hook for each agent found. The hook runs
+`leon skill hook --agent claude|codex`, which tells the agent where it is and records how to
+resume its session after a restart (see [agents.md](agents.md)).
 
 - `--agent claude|codex`: only this agent.
 - `--dry-run`: print what would change; write nothing.

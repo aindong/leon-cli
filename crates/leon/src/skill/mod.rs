@@ -35,6 +35,8 @@ pub enum Agent {
 }
 
 impl Agent {
+    const ALL: [Agent; 2] = [Agent::Claude, Agent::Codex];
+
     fn name(self) -> &'static str {
         match self {
             Agent::Claude => "claude",
@@ -100,7 +102,7 @@ fn targets(agent: Option<Agent>, for_setup: bool) -> Result<Vec<Target>, Fail> {
     if let Some(a) = agent {
         return Ok(vec![target(a, for_setup)?.1]);
     }
-    let all = [Agent::Claude, Agent::Codex].map(|a| target(a, false)).into_iter().collect::<Result<Vec<_>, _>>()?;
+    let all = Agent::ALL.map(|a| target(a, false)).into_iter().collect::<Result<Vec<_>, _>>()?;
     if !for_setup {
         return Ok(all.into_iter().map(|(_, t)| t).collect());
     }

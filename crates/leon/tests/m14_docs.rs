@@ -19,5 +19,7 @@ fn the_docs_cover_scrollback_and_resume() {
         assert!(text.contains("set_resume"), "{file} tells agents about set_resume");
     }
     let cli = doc("docs/cli.md");
-    assert!(cli.contains("resume"), "docs/cli.md mentions the resume command");
+    for want in ["skill hook --agent", "set_resume", "resume command"] {
+        assert!(cli.contains(want), "docs/cli.md mentions {want}");
+    }
 }

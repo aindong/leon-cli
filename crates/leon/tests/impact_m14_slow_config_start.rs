@@ -1,6 +1,6 @@
 //! Impact (M14): the restore waits for the start-up config to read its `resume` setting, and the
 //! server serves nothing until it has restored. A slow init.lua must not hold every client (the
-//! app's first screen) for its whole load: the wait is bounded, then the restore uses "ask".
+//! app's first screen) for its whole load: the wait is bounded, then the restore offers nothing.
 
 mod support;
 

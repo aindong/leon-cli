@@ -127,21 +127,29 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   C1) is removed when it is saved and again when it is restored, since the file is outside the
   server's hands in between; so a snapshot can't send an escape, a query or a carriage return. The
   new terminal's emulator is fed the text, then a dim `— restored from <time> —` line, before the
-  shell's first output: the text is shown, never sent to the shell.
+  shell's first output: the text is shown, never sent to the shell. Whatever a terminal showed (a
+  printed token too) is on disk in the private 0600 file until the next save replaces it;
+  `server stop --discard` forgets it.
 - **Resume commands.** A program registers the argv that resumes it with
-  `dev.leon.terminal.set_resume {command}` (1 to 64 args, at most 8 KiB, no control characters;
-  null clears it). The skill hook records `claude --resume <session_id>` or `codex resume
-  <session_id>` from the agent's SessionStart JSON (an id of `[A-Za-z0-9._-]`, no leading `-`), and
-  only when the hook, its parent or its grandparent is its terminal's foreground process group: the
-  interactive agent, not a nested `claude -p` that an agent's tool started without a terminal.
-  Restored blocks follow the config's `leon.set("resume", …)`, read once the start-up config has
-  loaded and before restoring (the restore waits at most 1 s for it, since nothing is served until
-  the restore is done; a config slower than that restores with `"ask"`): `"ask"` (default) types Ctrl-U and the shell-quoted command at the
-  new prompt and shows a dim hint, so Enter runs it; `"always"` adds the Enter; `"never"` types
-  nothing. Typing waits (up to 10 s, then gives up) until the shell is the PTY's foreground process
-  group with canonical mode off, so neither an rc file's picker nor typeahead gets it. The command
-  stays registered until replaced or cleared; with `"always"` the private state file is a place that
-  runs the commands programs registered, which is why `"ask"` is the default.
+  `dev.leon.terminal.set_resume {command}` (1 to 64 args, at most 8 KiB of printable ASCII, no
+  backslash; null clears it). Under "ask" the user agrees to what they see typed, so it must be what
+  runs: no control key, no bidi or invisible character, no byte readline could read as Meta, no
+  backslash (fish reads `\'` inside single quotes). The skill hook records `claude --resume
+  <session_id>` or `codex resume <session_id>` from the agent's SessionStart JSON (an id of
+  `[A-Za-z0-9._-]`, no leading `-`), and only when the hook, its parent or its grandparent is its
+  terminal's foreground process group: the interactive agent, not a nested `claude -p` that an
+  agent's tool started without a terminal. Restored blocks follow the config's
+  `leon.set("resume", …)`, read once the start-up config has loaded and before restoring (the
+  restore waits at most 1 s for it, since nothing is served until the restore is done; past that
+  nothing is offered, as with `"never"`): `"ask"` (default) types Ctrl-U and the shell-quoted command
+  at the new prompt and shows a dim hint, so Enter runs it; `"always"` adds the Enter; `"never"`
+  types nothing. Typing waits (up to 60 s, then gives up) until the shell is the PTY's foreground
+  process group with canonical mode off, so neither an rc file's picker nor typeahead gets it; zsh
+  and fish must also have turned bracketed paste on, which their line editors do and a key an rc
+  file reads (oh-my-zsh's update question, compinit's `read -q`) doesn't. bash and sh are taken at
+  canonical mode alone. The command stays registered until replaced or cleared; with `"always"` the
+  private state file is a place that runs the commands programs registered, which is why `"ask"` is
+  the default.
 - **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of
   up to 16 KiB); the parser thread feeds what has queued, up to 64 KiB, to the OSC 7501 tracker and
   the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread

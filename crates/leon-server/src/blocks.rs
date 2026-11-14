@@ -327,7 +327,8 @@ pub struct Formatted {
 #[serde(deny_unknown_fields)]
 pub struct SetResume {
     /// argv that resumes this program after a server restart, e.g. `["claude", "--resume", ID]`;
-    /// null clears it. At most 64 arguments and 8 KiB, no control characters.
+    /// null (or leaving it out) clears it. At most 64 arguments and 8 KiB of printable ASCII, no
+    /// backslash.
     pub command: Option<Vec<String>>,
 }
 

@@ -214,12 +214,10 @@ fn restore(ctx: &Arc<Ctx>, file: &Path, policy: Resume) -> bool {
     let mut st = ctx.state();
     let mut skipped = false;
     let cap = restore::cap(saved.sessions.iter().map(|s| s.blocks.len()).sum());
-    let shown = |b: &SavedBlock| {
-        restore::shown(b.scrollback.as_deref(), cap, saved.saved_at, b.resume.as_ref().map(|_| policy))
-    };
+    let how = restore::Restoring { cap, saved_at: saved.saved_at, policy };
     for s in saved.sessions {
         let id = s.session_id.clone();
-        match restore_session(ctx, s, &shown, policy) {
+        match restore_session(ctx, s, &how) {
             Ok(session) => st.sessions.push(session),
             Err(e) => {
                 eprintln!("leon: warning: can't restore {id}: {e}");
@@ -230,22 +228,17 @@ fn restore(ctx: &Arc<Ctx>, file: &Path, policy: Resume) -> bool {
     !skipped || aside(file, "a session in it couldn't be restored")
 }
 
-fn restore_session(
-    ctx: &Arc<Ctx>,
-    s: SavedSession,
-    shown: &dyn Fn(&SavedBlock) -> Vec<u8>,
-    policy: Resume,
-) -> Result<Session, ApiError> {
+fn restore_session(ctx: &Arc<Ctx>, s: SavedSession, how: &restore::Restoring) -> Result<Session, ApiError> {
     let SavedSession { session_id, label, revision, active, windows, blocks } = s;
     let blocks = blocks
         .into_iter()
         .map(|b| {
             // A dir that has gone starts the shell in $HOME instead.
             let cwd = b.cwd.clone().filter(|d| d.is_dir());
-            let terminal = crate::blocks::spawn(ctx, &session_id, &b.block_id, vec![], cwd, &shown(&b))?;
-            let terminal = Arc::new(terminal);
+            let shown = restore::shown(b.scrollback.as_deref(), b.resume.is_some(), how);
+            let terminal = Arc::new(crate::blocks::spawn(ctx, &session_id, &b.block_id, vec![], cwd, &shown)?);
             if let Some(command) = &b.resume {
-                restore::offer(&terminal, command, policy);
+                restore::offer(&terminal, command, how.policy);
             }
             terminal.set_resume(b.resume);
             let (id, label, window_id, keep_open) = (b.block_id, b.label, b.window_id, b.keep_open);

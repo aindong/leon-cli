@@ -157,9 +157,17 @@ impl Ctx {
 }
 
 impl Ctx {
-    /// The config's resume setting, once the start-up load (`start_config`) has finished.
+    /// The config's resume setting, once the start-up load (`start_config`) has finished. Waits at
+    /// most a second: nothing is served until the restore that asks is done. Past it, "never": the
+    /// setting is unknown, so nothing is typed.
     pub async fn resume_policy(&self) -> leon_lua::Resume {
-        self.lua.read().await.cfg.resume.unwrap_or_default()
+        match tokio::time::timeout(Duration::from_secs(1), self.lua.read()).await {
+            Ok(loaded) => loaded.cfg.resume.unwrap_or_default(),
+            Err(_) => {
+                eprintln!("leon: warning: the config is slow to load; restored blocks don't offer to resume");
+                leon_lua::Resume::Never
+            }
+        }
     }
 }
 

@@ -145,17 +145,11 @@ fn the_line_editor_wait_needs_the_shell_in_front() {
     let (picker, _rx) = spawn(&["sh", "-c", "set -m; sh -c 'stty -icanon; echo picker-up; sleep 300'"]);
     screen_until(&picker, |s| s.contains("picker-up"));
     assert!(!soon(&picker, Duration::from_millis(300)), "the job in front isn't the shell");
+}
 
-    let (shown, _rx) = {
-        let (tx, rx) = mpsc::channel::<i32>();
-        let spec = Spec { command: vec!["sleep".into(), "300".into()], cwd: None, env: vec![] };
-        let tx = Mutex::new(tx);
-        let t = Terminal::spawn_showing(spec, b"before\r\nthe program", move |n| {
-            if let Notice::Exited(c) = n {
-                let _ = lock(&tx).send(c);
-            }
-        });
-        (t.unwrap(), rx)
-    };
-    assert_eq!(shown.text(true), "before\nthe program", "shown text is on the screen, not sent");
+#[test]
+fn shown_text_is_on_the_screen_before_the_program() {
+    let spec = Spec { command: vec!["sleep".into(), "300".into()], cwd: None, env: vec![] };
+    let t = Terminal::spawn_showing(spec, b"before\r\nthe program", |_| {}).unwrap();
+    assert_eq!(t.text(true), "before\nthe program");
 }

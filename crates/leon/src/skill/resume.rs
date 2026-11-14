@@ -11,8 +11,9 @@ use serde_json::{json, Value};
 use super::Agent;
 use crate::client::Client;
 
-/// How long the hook waits for its stdin, and for the server.
-const WAIT: Duration = Duration::from_secs(2);
+/// How long the hook waits for its stdin, then for the server's reply: about 2 s in all.
+const STDIN_WAIT: Duration = Duration::from_secs(1);
+const SERVER_WAIT: Duration = Duration::from_secs(1);
 /// A SessionStart input is a few hundred bytes.
 const MAX_INPUT: u64 = 64 << 10;
 
@@ -43,7 +44,7 @@ pub fn record(agent: Agent) {
     }
     let socket = var("LEON_SERVER").map_or_else(leon_core::paths::socket_path, PathBuf::from);
     let Ok(mut c) = Client::connect(&socket) else { return };
-    if c.set_timeout(WAIT).is_err() {
+    if c.set_timeout(SERVER_WAIT).is_err() {
         return;
     }
     let args = json!({ "command": command });
@@ -63,7 +64,7 @@ fn stdin_json() -> Option<Value> {
         let read = std::io::stdin().take(MAX_INPUT).read_to_end(&mut bytes);
         let _ = tx.send(read.ok().map(|_| bytes));
     });
-    serde_json::from_slice(&rx.recv_timeout(WAIT).ok()??).ok()
+    serde_json::from_slice(&rx.recv_timeout(STDIN_WAIT).ok()??).ok()
 }
 
 /// Whether the hook belongs to an agent a person is using: the hook, its parent or its grandparent

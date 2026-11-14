@@ -120,6 +120,21 @@ pub fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
     out
 }
 
+/// The command as a POSIX shell line: plain words as they are, the rest in single quotes.
+// shortcut: fish reads `\\` inside single quotes as one backslash; quote per shell if an agent's
+// resume command ever holds a backslash.
+pub fn shell_line(command: &[String]) -> String {
+    let word = |a: &String| {
+        let plain = !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric() || "_-./:,@+".contains(c));
+        if plain {
+            a.clone()
+        } else {
+            format!("'{}'", a.replace('\'', r"'\''"))
+        }
+    };
+    command.iter().map(word).collect::<Vec<_>>().join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::encode;

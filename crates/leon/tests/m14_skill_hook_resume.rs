@@ -71,7 +71,7 @@ fn the_hook_records_each_agents_resume_command() {
     let _listener = std::os::unix::net::UnixListener::bind(&sock).unwrap(); // connects queue; no reply
     let prefix = format!("LEON_SERVER='{}'", sock.display());
     let took = hook_in_block(&env, &b, n, &prefix, "--agent claude", &start("c7583d2c"));
-    assert!(took < Duration::from_secs(6), "took {took:?}");
+    assert!(took < Duration::from_secs(3), "took {took:?}");
 }
 
 #[test]
