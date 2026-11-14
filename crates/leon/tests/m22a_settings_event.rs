@@ -27,16 +27,30 @@ fn settings_method_and_change_event() {
     let mut events = env.events(&["--all"]);
     let o = env.cmd().env("LEON_CONFIG", &path).args(["config", "set", "theme", "leon-light"]).output().unwrap();
     assert!(o.status.success(), "config set: {}", String::from_utf8_lossy(&o.stderr));
-    let e = events.until("settings_changed");
-    assert_eq!(e.payload["settings"]["theme"]["light"], "leon-light", "{:?}", e);
+    // the set's reload sends settings_changed and keymap_changed (generation 2), in either order
+    let (mut settings, mut keymap) = (None, false);
+    while settings.is_none() || !keymap {
+        let e = events.next();
+        match e.name.as_str() {
+            "settings_changed" => settings = Some(e.payload),
+            "keymap_changed" => keymap = e.payload["generation"] == 2,
+            _ => {}
+        }
+    }
+    assert_eq!(settings.unwrap()["settings"]["theme"]["light"], "leon-light");
     assert_eq!(env.json(&["api", "call", "server.settings"])["settings"]["theme"]["dark"], "leon-light");
 
     // a reload that changes no setting says nothing about settings
     std::fs::write(&path, std::fs::read_to_string(&path).unwrap() + "leon.bind(\"ctrl+q\", \"client.tab.new\")\n")
         .unwrap();
     assert!(env.run(&["config", "reload"]).status.success());
-    let e = events.until("keymap_changed");
-    assert_eq!(e.payload["generation"], 3, "{:?}", e);
+    loop {
+        let e = events.next();
+        assert_ne!(e.name, "settings_changed", "an unchanged reload emitted {:?}", e);
+        if e.name == "keymap_changed" && e.payload["generation"] == 3 {
+            break;
+        }
+    }
     while let Some(line) = events.line(Duration::from_millis(500)) {
         assert!(!line.contains("settings_changed"), "an unchanged reload emitted {line}");
     }

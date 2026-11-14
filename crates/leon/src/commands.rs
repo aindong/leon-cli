@@ -25,6 +25,12 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
     if let Cmd::Config(ConfigCmd::Check { path }) = cli.cmd() {
         return config_check(path.clone());
     }
+    if let Cmd::Config(cmd @ (ConfigCmd::Get { .. } | ConfigCmd::Set { .. })) = cli.cmd() {
+        return crate::settings::config(cli, cmd);
+    }
+    if let Cmd::Theme(cmd) = cli.cmd() {
+        return crate::settings::theme(cli, cmd);
+    }
     if let Cmd::Skill(cmd) = cli.cmd() {
         return crate::skill::run(cli, cmd);
     }
@@ -48,7 +54,8 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         Cmd::App
         | Cmd::Attach { .. }
         | Cmd::Server(_)
-        | Cmd::Config(ConfigCmd::Check { .. })
+        | Cmd::Config(ConfigCmd::Check { .. } | ConfigCmd::Get { .. } | ConfigCmd::Set { .. })
+        | Cmd::Theme(_)
         | Cmd::Skill(_)
         | Cmd::Hosts(_) => unreachable!(),
         Cmd::Config(ConfigCmd::Reload) => crate::script::reload(&mut c, cli)?,
@@ -134,6 +141,9 @@ fn local_only(cmd: &Cmd) -> Option<&'static str> {
         Cmd::Server(ServerCmd::Start { .. }) => "server start",
         Cmd::Server(ServerCmd::Proxy) => "server proxy",
         Cmd::Config(ConfigCmd::Check { .. }) => "config check",
+        Cmd::Config(ConfigCmd::Get { .. }) => "config get",
+        Cmd::Config(ConfigCmd::Set { .. }) => "config set",
+        Cmd::Theme(_) => "theme",
         Cmd::Skill(_) => "skill",
         Cmd::Hosts(_) => "hosts",
         _ => return None,
@@ -154,8 +164,8 @@ fn config_check(path: Option<std::path::PathBuf>) -> Result<(), Fail> {
         n(cfg.modes.len(), "mode"),
         n(cfg.actions.len(), "action")
     );
-    if let Some(r) = cfg.resume {
-        println!("resume: {}", r.as_str());
+    if cfg.setting_sources.contains_key("resume") {
+        println!("resume: {}", cfg.settings.resume.as_str());
     }
     for d in &cfg.diagnostics {
         println!("{d}");

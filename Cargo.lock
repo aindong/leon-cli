@@ -3354,6 +3354,7 @@ dependencies = [
 name = "leon-lua"
 version = "0.1.0"
 dependencies = [
+ "leon-core",
  "libc",
  "mlua",
  "serde_json",

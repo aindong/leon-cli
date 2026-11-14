@@ -382,7 +382,7 @@ leon api call server.status
 
 ### `leon config`
 
-Check or reload the Lua config (`init.lua`).
+Check or reload the Lua config (`init.lua`), and get or set its settings.
 
 ### `leon config check [PATH]`
 
@@ -398,6 +398,71 @@ Re-read the config on the server. A failed load keeps the last good one and exit
 leon config check
 leon config check ./init.lua
 leon config reload
+```
+
+### `leon config get [KEY]`
+
+Print a setting as init.lua leaves it (its `leon.set` call, else the default), or every setting
+and where each is set without KEY. Needs no server. The keys are `theme`, `font.family`,
+`font.size`, `notifications.done`, `notifications.blocked`, `notifications.error`,
+`copy_on_select` and `resume` ([docs/lua.md](lua.md#settings) has what each does). With `--json`
+the value is JSON.
+
+### `leon config set KEY VALUE`
+
+Set a setting in init.lua and keep the rest of the file: the value in the `leon.set("KEY", …)`
+call that set it last is replaced, comments and all else left as they were, and a key not set yet
+gets a `leon.set` line at the end (a missing init.lua is created). A running server reloads the
+file. `theme` takes a NAME, or `dark=NAME,light=NAME` to follow the OS appearance; the booleans take
+`true` or `false`.
+
+It refuses (exit 1, the file untouched) a value the setting doesn't take, and a key set by code it
+can't rewrite: a call whose key or value isn't a literal (a variable, `"font." .. k`), or one in a
+file `require` loaded. The message names the `file:line` to change by hand. The edited text is
+loaded before it replaces the file; a symlinked init.lua stays a symlink.
+
+```sh
+leon config get
+leon config get font.size
+leon config set font.size 15
+leon config set theme dark=leon-dark,light=leon-light
+leon config set notifications.done false
+```
+
+## Themes
+
+A theme is the terminal's 16 colours, background, foreground, cursor and selection, plus the app's
+colours around the panes and the status colours. leon has two built in, `leon-dark` and
+`leon-light`; imported ones live as files in `themes/` beside init.lua (by default
+`~/.config/leon/themes/NAME.theme`), in Ghostty's `key = value` syntax with leon's own colours
+added. `leon config set theme NAME` picks one.
+
+### `leon theme`
+
+List, import and show themes. Needs no server.
+
+### `leon theme list`
+
+Print each theme's name and whether it is dark or light, the built-in ones first.
+
+### `leon theme import FILE [--name NAME]`
+
+Read a Ghostty theme file or an iTerm2 `.itermcolors` file (an XML plist; convert a binary one with
+`plutil -convert xml1`) and store it as a leon theme. `--name` names it; the default is the file's
+name without its extension. The app's colours around the panes are mixed from the theme's
+background and foreground, and the status colours come from `leon-dark` or `leon-light`, whichever
+matches. A file that isn't a theme exits 1 with what is wrong and on which line, as does a name
+that is taken (remove the old file first), built in, or not a plain file name.
+
+### `leon theme show NAME`
+
+Print a theme's colours as a leon theme file (`--json`: an object of `#rrggbb` strings).
+
+```sh
+leon theme list
+leon theme import ~/Downloads/Harbor.itermcolors --name harbor
+leon theme show leon-light
+leon config set theme harbor
 ```
 
 ## Server

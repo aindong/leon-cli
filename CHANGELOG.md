@@ -15,7 +15,7 @@ M9) and M15 (Linux) are still to come.
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.2.0`.
+one is `1.3.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -29,6 +29,25 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+### M22a — Themes and settings, the model half (API `1.3.0`)
+
+#### Added
+
+- A theme model outside the app (`leon_core::theme`): the terminal palette, the app's chrome
+  and the status colours. `leon-dark` is the app's colours unchanged; `leon-light` is new, Iron on
+  Parchment, with every text and status colour at 4.5:1 or more.
+- `leon theme list`, `leon theme import FILE [--name NAME]` (Ghostty theme files and iTerm2
+  `.itermcolors`, stored in `themes/` beside init.lua) and `leon theme show NAME`.
+- Settings in init.lua: `leon.set` takes `theme` (a name, or `{dark, light}` to follow the OS),
+  `font.family`, `font.size`, `notifications.done|blocked|error`, as well as `copy_on_select` and
+  `resume`. `leon config get [KEY]` reads them; `leon config set KEY VALUE` edits init.lua in
+  place, keeping comments, and refuses a key set by code it can't rewrite.
+- `server.settings` (stable): the effective settings and where each was set, and the
+  `settings_changed` event when a reload changes them. This additive change raises `api_version`
+  from `1.2.0` to `1.3.0`.
+
+The app doesn't use the themes or the new settings yet; that is M22b.
 
 ### M20a — Floating panes and drawers (API `1.2.0`)
 

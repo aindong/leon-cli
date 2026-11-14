@@ -133,10 +133,33 @@ any`, and a `?` suffix for optional ones.
 
 ## Settings
 
-`leon.set(name, value)` sets one of the server's settings. `resume` is what a
-block restored after a server restart does with the resume command its program registered for
-itself (`set_resume`, which leon's agent hook calls for Claude Code and Codex). `"ask"` (the
-default) types the command at the new prompt and waits for Enter; `"always"` runs it; `"never"`
+`leon.set(name, value)` sets one of leon's settings. init.lua is the only place they live:
+`leon config get KEY` reads them, `leon config set KEY VALUE` edits the `leon.set` call in place
+(docs/cli.md), and the app's settings follow the same file. A bad value is a skipped call with a
+`file:line` message, and the setting keeps its default.
+
+| Setting | Takes | Default |
+|---|---|---|
+| `theme` | a theme name, or `{ dark = NAME, light = NAME }` to follow the OS appearance | `"leon-dark"` |
+| `font.family` | a font's name | `"Menlo"` |
+| `font.size` | points, 8 to 32 | `13` |
+| `notifications.done`, `notifications.blocked`, `notifications.error` | `true` or `false`: may a program reaching that state post a system notification | `true` |
+| `copy_on_select` | `true` or `false` | `false` |
+| `resume` | `"ask"`, `"always"` or `"never"` | `"ask"` |
+
+`theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored in `themes/` beside
+init.lua; an unknown name is an error.
+
+```lua
+leon.set("theme", { dark = "leon-dark", light = "leon-light" })
+leon.set("font.family", "Menlo")
+leon.set("font.size", 14)
+leon.set("notifications.done", false)
+```
+
+`resume` is what a block restored after a server restart does with the resume command its program
+registered for itself (`set_resume`, which leon's agent hook calls for Claude Code and Codex).
+`"ask"` types the command at the new prompt and waits for Enter; `"always"` runs it; `"never"`
 leaves the prompt empty. The server reads it at start, before it restores (it waits at most a
 second for the config, and past that offers nothing, as with `"never"`); `leon config check` prints it.
 
@@ -144,11 +167,20 @@ second for the config, and past that offers nothing, as with `"never"`); `leon c
 leon.set("resume", "always")
 ```
 
-`copy_on_select` (default `false`) makes the app copy a selection to the clipboard as soon as you
-make it, without ⌘C. The app reads it with the keymap, so a reload takes effect within a second.
+`copy_on_select` makes the app copy a selection to the clipboard as soon as you make it, without
+⌘C. The app reads it with the keymap, so a reload takes effect within a second.
 
 ```lua
 leon.set("copy_on_select", true)
+```
+
+The server reports the effective settings, defaults filled in and `theme` always as
+`{ dark, light }`, with `server.settings`; a reload that changes any of them sends `--all`
+subscribers a `settings_changed` event carrying the same object. A script can read them:
+
+```lua script
+local r = assert(leon.call("server.settings"))
+assert(r.settings.font.size >= 8 and r.settings.theme.dark ~= nil)
 ```
 
 ## Function bindings
@@ -247,7 +279,7 @@ print("timed out:", slow.timed_out)
 | `leon.unbind(key)` | config | Remove a key's bindings; returns the count. |
 | `leon.mode(name[, {exclusive, prefix}])` | config | Declare a mode; `prefix` (one key) is `leon attach`'s for the `attach` mode. |
 | `leon.bindings([filter])`, `leon.modes()` | config | List bindings and modes made so far. |
-| `leon.set(name, value)` | config | A setting: `resume` = `"ask"`, `"always"` or `"never"`; `copy_on_select` = `true` or `false`. |
+| `leon.set(name, value)` | config | A setting (Settings, above): `theme`, `font.family`, `font.size`, `notifications.*`, `copy_on_select`, `resume`. |
 | `leon.action{name, title, run, description?, args?}` | both | Define an action. |
 | `leon.invoke(name[, args])` | both | Run an action (nested at most 16 deep). |
 | `leon.session.<method>(params)` | both | Call a session method; fills `session_id`. |

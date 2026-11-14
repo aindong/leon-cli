@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.2.0**. Every method is marked:
+API version **1.3.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -18,7 +18,7 @@ same facts for the server you run.
 ## Contents
 
 - [help](#help): 1
-- [server](#server): 5
+- [server](#server): 6
 - [session](#session): 28
 - [target](#target): 1
 - [block](#block): 5
@@ -351,7 +351,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.2.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.3.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -427,6 +427,173 @@ same facts for the server you run.
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "Empty",
     "type": "object"
+  }
+}
+```
+
+</details>
+
+### `server.settings`
+
+*stable*. The effective settings from init.lua (theme, font, notifications, copy_on_select, resume), defaults filled in, and where each was set. A reload that changes them emits `settings_changed` with the same object to `--all` subscribers.
+
+**Input:** none
+
+**Output:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `settings` | `Effective` | yes | The effective settings: init.lua's `leon.set` calls over the defaults. |
+| `sources` | object | yes | Where each setting was last set, as `file:line`, by key (`font.size`); a setting at its default isn't listed. |
+
+**`Effective`:** The shape of `leon_lua::Settings::to_json`, which builds it.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `theme` | `ThemeChoice` | yes |  |
+| `font` | `Font` | yes |  |
+| `notifications` | `Notifications` | yes |  |
+| `copy_on_select` | boolean | yes | The app copies a selection to the clipboard as it is made. |
+| `resume` | string | yes | What a restored block does with its program's resume command: `ask`, `always` or `never`. |
+
+**`ThemeChoice`:** A theme name for each OS appearance (the same one for both unless init.lua gives two).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `dark` | string | yes |  |
+| `light` | string | yes |  |
+
+**`Font`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `family` | string | yes |  |
+| `size` | number | yes | Points, from 8 to 32. |
+
+**`Notifications`:** Which program states may post a system notification.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `done` | boolean | yes |  |
+| `blocked` | boolean | yes |  |
+| `error` | boolean | yes |  |
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "NoParams",
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "SettingsView",
+    "type": "object",
+    "properties": {
+      "settings": {
+        "description": "The effective settings: init.lua's `leon.set` calls over the defaults.",
+        "$ref": "#/$defs/Effective"
+      },
+      "sources": {
+        "description": "Where each setting was last set, as `file:line`, by key (`font.size`); a setting at its\ndefault isn't listed.",
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "settings",
+      "sources"
+    ],
+    "$defs": {
+      "Effective": {
+        "description": "The shape of `leon_lua::Settings::to_json`, which builds it.",
+        "type": "object",
+        "properties": {
+          "theme": {
+            "$ref": "#/$defs/ThemeChoice"
+          },
+          "font": {
+            "$ref": "#/$defs/Font"
+          },
+          "notifications": {
+            "$ref": "#/$defs/Notifications"
+          },
+          "copy_on_select": {
+            "description": "The app copies a selection to the clipboard as it is made.",
+            "type": "boolean"
+          },
+          "resume": {
+            "description": "What a restored block does with its program's resume command: `ask`, `always` or `never`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "theme",
+          "font",
+          "notifications",
+          "copy_on_select",
+          "resume"
+        ]
+      },
+      "ThemeChoice": {
+        "description": "A theme name for each OS appearance (the same one for both unless init.lua gives two).",
+        "type": "object",
+        "properties": {
+          "dark": {
+            "type": "string"
+          },
+          "light": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dark",
+          "light"
+        ]
+      },
+      "Font": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string"
+          },
+          "size": {
+            "description": "Points, from 8 to 32.",
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "required": [
+          "family",
+          "size"
+        ]
+      },
+      "Notifications": {
+        "description": "Which program states may post a system notification.",
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "blocked": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "done",
+          "blocked",
+          "error"
+        ]
+      }
+    }
   }
 }
 ```
