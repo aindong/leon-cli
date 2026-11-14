@@ -24,5 +24,9 @@ fn title_and_pwd_events_carry_no_bidi_or_invisible_chars() {
     }
     let bad = |s: &str| s.contains(['\u{202e}', '\u{200b}']);
     assert!(!bad(&title) && !bad(&pwd), "bidi/invisible chars reached title_changed/pwd_changed: {title:?} {pwd:?}");
-    assert_eq!((title.as_str(), pwd.as_str()), ("abc", "file://h/xy"));
+    assert_eq!(
+        (title.as_str(), pwd.as_str()),
+        ("abc", ""),
+        "a title is stripped; a pwd with hidden characters is dropped"
+    );
 }
