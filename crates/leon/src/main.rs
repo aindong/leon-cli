@@ -44,6 +44,7 @@ impl Cli {
     }
 }
 
+// A positional named `block` would shadow the global `-b`, so block positionals are `target`.
 #[derive(Subcommand)]
 pub enum Cmd {
     /// Open the leon app; it runs the server in-process (also what `leon` alone does).
@@ -108,7 +109,8 @@ pub enum Cmd {
     /// Wait for a terminal's program to exit, and exit with its status.
     Wait {
         /// The block to wait for [default: -b, else $LEON_BLOCK].
-        block: Option<String>,
+        #[arg(value_name = "BLOCK")]
+        target: Option<String>,
         /// Give up after this long (e.g. 500ms, 10s, 2m) and exit 1.
         #[arg(long = "for", value_parser = blocks::parse_duration)]
         timeout: Option<std::time::Duration>,
@@ -159,14 +161,16 @@ pub enum Cmd {
     /// Two blocks trade places.
     Swap {
         /// One block.
-        block: String,
+        #[arg(value_name = "BLOCK")]
+        target: String,
         /// The block it trades places with.
         other: String,
     },
     /// Show a block filling its window, or stop (toggles by default).
     Zoom {
-        /// The block to zoom [default: the focused one].
-        block: Option<String>,
+        /// The block to zoom [default: -b, else the focused one].
+        #[arg(value_name = "BLOCK")]
+        target: Option<String>,
         /// Zoom in, even if already zoomed.
         #[arg(long, conflicts_with = "off")]
         on: bool,
@@ -176,8 +180,9 @@ pub enum Cmd {
     },
     /// Set a block's share of the split it is in.
     Resize {
-        /// The block to resize [default: the focused one].
-        block: Option<String>,
+        /// The block to resize [default: -b, else the focused one].
+        #[arg(value_name = "BLOCK")]
+        target: Option<String>,
         /// The block's share, in percent.
         #[arg(long, required = true, value_parser = clap::value_parser!(u8).range(1..=99))]
         ratio: u8,
