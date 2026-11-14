@@ -2,6 +2,7 @@
 
 pub mod embedded;
 pub mod input;
+pub mod panes;
 pub mod render;
 pub mod theme;
 pub mod view;

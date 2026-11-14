@@ -1,6 +1,6 @@
 //! The window: a sidebar of sessions, a tab bar of the selected session's windows, and the active
-//! window's terminal painted from the in-process grid. A poll on the GPUI executor redraws only
-//! when a terminal or the session model changed.
+//! window's split layout, each pane a terminal painted from the in-process grid. A poll on the
+//! GPUI executor redraws only when a visible terminal or the session model changed.
 
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
@@ -14,40 +14,71 @@ use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::CursorShape;
 use gpui::{
     actions, canvas, div, fill, font, outline, point, prelude::*, px, rgb, size, App, Application, Bounds, Context,
-    FocusHandle, Font, FontStyle, FontWeight, KeyBinding, KeyDownEvent, Menu, MenuItem, MouseButton, Pixels,
-    SharedString, StrikethroughStyle, Task, TextRun, TitlebarOptions, UnderlineStyle, Window, WindowBounds,
-    WindowOptions,
+    CursorStyle, FocusHandle, Font, FontStyle, FontWeight, KeyBinding, KeyDownEvent, Menu, MenuItem, MouseButton,
+    MouseMoveEvent, MouseUpEvent, Pixels, SharedString, StrikethroughStyle, Task, TextRun, TitlebarOptions,
+    UnderlineStyle, Window, WindowBounds, WindowOptions,
 };
-use leon_core::model::{Block, Session};
+use leon_core::layout::Direction;
 use leon_core::terminal::Terminal;
 use serde_json::json;
 
 use crate::embedded::Embedded;
+use crate::panes::{self, Divider};
 use crate::render::{self, Frame};
 use crate::theme::{Theme, DARK};
 
-actions!(leon, [NewTab, CloseTab, NewSession, NextTab, PreviousTab, Paste, ToggleSidebar, Quit]);
+actions!(
+    leon,
+    [
+        NewTab,
+        ClosePane,
+        NewSession,
+        NextTab,
+        PreviousTab,
+        Paste,
+        ToggleSidebar,
+        Quit,
+        SplitRight,
+        SplitDown,
+        FocusLeft,
+        FocusRight,
+        FocusUp,
+        FocusDown,
+        ToggleZoom
+    ]
+);
 
 const FONT_FAMILY: &str = "Menlo";
 const FONT_SIZE: f32 = 13.;
 const LINE_HEIGHT: f32 = 1.3;
 const SIDEBAR_WIDTH: f32 = 220.;
 const TAB_BAR_HEIGHT: f32 = 38.;
-const PADDING: f32 = 10.;
+/// Space between a pane's edge and its text.
+const PADDING: f32 = 8.;
+/// The divider line between panes, and how far either side of it a drag can start.
+const DIVIDER: f32 = 1.;
+const DIVIDER_GRAB: f32 = 3.;
 /// How often the poll looks for changes (about 120 Hz).
 const POLL: Duration = Duration::from_millis(8);
 
-/// The block a window shows: its first (one per window until M3's splits; then the focused one,
-/// and the redraw signature must hash every visible block).
-pub fn window_block<'a>(s: &'a Session, window_id: &str) -> Option<&'a Block> {
-    s.blocks.iter().find(|b| b.window_id == window_id)
+/// The block input goes to: the one on screen when a block is zoomed, else the focused one. The
+/// model keeps zoom and focus apart (a CLI can zoom any block), so this is what the user sees.
+fn target(w: &leon_core::Window) -> Option<&str> {
+    w.zoomed.as_deref().or(w.focus.as_deref())
 }
 
 /// Key bindings. Cmd+1..9 are handled in `key_down`, so one rule covers them all.
 pub fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("cmd-t", NewTab, None),
-        KeyBinding::new("cmd-w", CloseTab, None),
+        KeyBinding::new("cmd-w", ClosePane, None),
+        KeyBinding::new("cmd-d", SplitRight, None),
+        KeyBinding::new("cmd-shift-d", SplitDown, None),
+        KeyBinding::new("cmd-alt-left", FocusLeft, None),
+        KeyBinding::new("cmd-alt-right", FocusRight, None),
+        KeyBinding::new("cmd-alt-up", FocusUp, None),
+        KeyBinding::new("cmd-alt-down", FocusDown, None),
+        KeyBinding::new("cmd-shift-enter", ToggleZoom, None),
         KeyBinding::new("cmd-n", NewSession, None),
         KeyBinding::new("cmd-shift-]", NextTab, None),
         KeyBinding::new("cmd-}", NextTab, None),
@@ -72,7 +103,11 @@ pub fn run(server: Embedded) {
                     MenuItem::action("New Tab", NewTab),
                     MenuItem::action("New Session", NewSession),
                     MenuItem::separator(),
-                    MenuItem::action("Close Tab", CloseTab),
+                    MenuItem::action("Split Right", SplitRight),
+                    MenuItem::action("Split Down", SplitDown),
+                    MenuItem::action("Zoom Pane", ToggleZoom),
+                    MenuItem::separator(),
+                    MenuItem::action("Close Pane", ClosePane),
                 ],
             },
             Menu { name: "Edit".into(), items: vec![MenuItem::action("Paste", Paste)] },
@@ -163,8 +198,18 @@ struct WindowRow {
     title: String,
 }
 
+/// The terminals on screen, by block id, in leaf order.
+type Panes = Vec<(String, Arc<Terminal>)>;
+
+/// A divider being dragged: the split it sets, and where the drag started.
+struct Drag {
+    divider: Divider,
+    from: Pixels,
+}
+
 pub struct Workspace {
     app: Rc<Embedded>,
+    drag: Option<Drag>,
     session_id: Option<String>,
     /// Where the selected session sat in the list when last seen.
     selected_at: usize,
@@ -206,6 +251,7 @@ impl Workspace {
         let session_id = app.ctx().state().sessions.first().map(|s| s.id.clone());
         Workspace {
             app,
+            drag: None,
             session_id,
             selected_at: 0,
             sidebar: true,
@@ -226,11 +272,36 @@ impl Workspace {
         self.sidebar
     }
 
-    /// The terminal of the selected session's active window.
+    /// The terminal input goes to (`target`) in the selected session's active window.
     pub fn terminal(&self) -> Option<Arc<Terminal>> {
+        let (_, id, _) = self.target()?;
+        Some(self.app.ctx().state().block(&id).ok()?.1.terminal.clone())
+    }
+
+    /// (session id, target block id, whether it is zoomed) of the selected session's active window.
+    fn target(&self) -> Option<(String, String, bool)> {
+        let sid = self.session_id.clone()?;
+        let st = self.app.ctx().state();
+        let s = st.session(&sid).ok()?;
+        let w = s.windows.get(s.active)?;
+        Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
+    }
+
+    /// The active window's layout and the terminals it shows, in leaf order.
+    fn shown(&self) -> Option<(leon_core::Window, Panes)> {
         let st = self.app.ctx().state();
         let s = st.session(self.session_id.as_deref()?).ok()?;
-        Some(window_block(s, &s.windows.get(s.active)?.id)?.terminal.clone())
+        let w = s.windows.get(s.active)?;
+        let ids: Vec<&str> = match &w.zoomed {
+            Some(z) => vec![z.as_str()],
+            None => w.layout.as_ref()?.leaves(),
+        };
+        let terms = ids
+            .into_iter()
+            .filter_map(|id| s.blocks.iter().find(|b| b.id == id))
+            .map(|b| (b.id.clone(), b.terminal.clone()))
+            .collect();
+        Some((w.clone(), terms))
     }
 
     /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
@@ -258,7 +329,8 @@ impl Workspace {
                     .map(|w| WindowRow {
                         id: w.id.clone(),
                         title: w.label.clone().unwrap_or_else(|| {
-                            window_block(s, &w.id).map_or("empty".into(), |b| program_name(&b.terminal.command))
+                            let shown = target(w).and_then(|id| s.blocks.iter().find(|b| b.id == id));
+                            shown.map_or("empty".into(), |b| program_name(&b.terminal.command))
                         }),
                     })
                     .collect(),
@@ -267,21 +339,125 @@ impl Workspace {
             .collect()
     }
 
-    /// Changes worth a redraw: the model's shape and the shown terminal's content.
-    fn signature(&self) -> u64 {
+    /// Changes worth a redraw: every session's view (its revision moves with layout, focus, zoom
+    /// and labels) and the content of every pane on screen. Hidden tabs and panes hidden by a zoom
+    /// don't count.
+    pub fn signature(&self) -> u64 {
         let mut h = DefaultHasher::new();
         {
             let st = self.app.ctx().state();
             for s in &st.sessions {
-                (&s.id, &s.label, s.active).hash(&mut h);
+                (&s.id, &s.label, s.active, s.revision).hash(&mut h);
                 for w in &s.windows {
                     (&w.id, &w.label).hash(&mut h);
                 }
             }
         }
         self.session_id.hash(&mut h);
-        self.terminal().map(|t| (Arc::as_ptr(&t) as usize, t.generation())).hash(&mut h);
+        for (id, t) in self.shown().map(|(_, terms)| terms).unwrap_or_default() {
+            (id, Arc::as_ptr(&t) as usize, t.generation()).hash(&mut h);
+        }
         h.finish()
+    }
+
+    /// Run a layout method on the selected session; redraw.
+    fn call(&mut self, method: &str, mut params: serde_json::Value, cx: &mut Context<Self>) {
+        let Some(sid) = self.session_id.clone() else { return };
+        params["session_id"] = json!(sid);
+        let _ = self.app.call(method, params);
+        let rows = self.rows();
+        self.settle(&rows);
+        cx.notify();
+    }
+
+    /// Split the target pane; a zoom ends first so the new pane shows.
+    fn split(&mut self, direction: Direction, cx: &mut Context<Self>) {
+        let Some((_, id, zoomed)) = self.target() else { return };
+        if zoomed {
+            self.call("session.zoom_block", json!({ "block_id": id, "zoom": false }), cx);
+        }
+        let p = json!({ "anchor_id": id, "direction": direction, "side": "after", "layout": { "block": {} }, "focus": true });
+        self.call("session.new_split", p, cx);
+    }
+
+    /// Move focus by direction; a zoom ends first so the focused pane shows.
+    fn focus_toward(&mut self, toward: &str, cx: &mut Context<Self>) {
+        let Some((_, id, zoomed)) = self.target() else { return };
+        if zoomed {
+            self.call("session.zoom_block", json!({ "block_id": id, "zoom": false }), cx);
+        }
+        self.call("session.focus_direction", json!({ "direction": toward }), cx);
+    }
+
+    fn split_right(&mut self, _: &SplitRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.split(Direction::Horizontal, cx);
+    }
+
+    fn split_down(&mut self, _: &SplitDown, _: &mut Window, cx: &mut Context<Self>) {
+        self.split(Direction::Vertical, cx);
+    }
+
+    fn focus_left(&mut self, _: &FocusLeft, _: &mut Window, cx: &mut Context<Self>) {
+        self.focus_toward("left", cx);
+    }
+
+    fn focus_right(&mut self, _: &FocusRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.focus_toward("right", cx);
+    }
+
+    fn focus_up(&mut self, _: &FocusUp, _: &mut Window, cx: &mut Context<Self>) {
+        self.focus_toward("up", cx);
+    }
+
+    fn focus_down(&mut self, _: &FocusDown, _: &mut Window, cx: &mut Context<Self>) {
+        self.focus_toward("down", cx);
+    }
+
+    fn toggle_zoom(&mut self, _: &ToggleZoom, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some((_, id, _)) = self.target() {
+            self.call("session.zoom_block", json!({ "block_id": id }), cx);
+        }
+    }
+
+    /// Close the target pane; its window closes with its last pane, and its session with its last window.
+    fn close_pane(&mut self, _: &ClosePane, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some((_, id, _)) = self.target() {
+            self.call("block.close", json!({ "block_id": id }), cx);
+        }
+    }
+
+    fn focus_block(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.call("session.focus_block", json!({ "block_id": id }), cx);
+    }
+
+    fn start_drag(&mut self, divider: Divider, at: gpui::Point<Pixels>, cx: &mut Context<Self>) {
+        let from = if divider.direction == Direction::Horizontal { at.x } else { at.y };
+        self.drag = Some(Drag { divider, from });
+        cx.stop_propagation();
+    }
+
+    /// While dragging, the split's ratio follows the mouse: the start ratio plus the distance moved
+    /// over the room the split shares out.
+    fn drag_to(&mut self, ev: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(drag) = &self.drag else { return };
+        if ev.pressed_button != Some(MouseButton::Left) {
+            self.drag = None;
+            return;
+        }
+        let d = &drag.divider;
+        let (at, room) = match d.direction {
+            Direction::Horizontal => (ev.position.x, d.split.w - DIVIDER),
+            Direction::Vertical => (ev.position.y, d.split.h - DIVIDER),
+        };
+        let moved = f32::from(at - drag.from) as f64;
+        let ratio = (d.ratio + moved / room.max(1.) as f64).clamp(0.05, 0.95);
+        let p =
+            json!({ "direction": d.direction, "before_block_id": d.before, "after_block_id": d.after, "ratio": ratio });
+        self.call("session.resize_pane", p, cx);
+    }
+
+    fn end_drag(&mut self, _: &MouseUpEvent, _: &mut Window, _: &mut Context<Self>) {
+        self.drag = None;
     }
 
     /// (session id, window id) of the selected session's window `index`, or of its active one.
@@ -324,12 +500,6 @@ impl Workspace {
             None => self.new_session(&NewSession, window, cx),
         }
         cx.notify();
-    }
-
-    fn close_tab(&mut self, _: &CloseTab, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(w) = self.window_ref(None) {
-            self.close_window(w, cx);
-        }
     }
 
     fn new_session(&mut self, _: &NewSession, _: &mut Window, cx: &mut Context<Self>) {
@@ -581,6 +751,88 @@ impl Workspace {
     }
 }
 
+impl Workspace {
+    /// The active window's panes, placed by `panes::layout` in the pane area: the window less the
+    /// sidebar and the tab bar (so the size is known now, not a frame late).
+    fn render_panes(
+        &self,
+        w: &leon_core::Window,
+        terms: Panes,
+        window: &Window,
+        stats: Rc<RefCell<Stats>>,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let t = &DARK;
+        let view = window.viewport_size();
+        let sidebar = if self.sidebar { SIDEBAR_WIDTH } else { 0. };
+        let size = ((f32::from(view.width) - sidebar).max(0.), (f32::from(view.height) - TAB_BAR_HEIGHT).max(0.));
+        let active = window.is_window_active();
+        let l =
+            w.layout.as_ref().map(|tree| panes::layout(tree, w.zoomed.as_deref(), size, DIVIDER)).unwrap_or_default();
+        let target = target(w).map(str::to_string);
+        let several = l.panes.len() > 1;
+        let mut out = div().flex_1().relative().bg(rgb(t.bg));
+        for p in &l.panes {
+            let Some((_, term)) = terms.iter().find(|(id, _)| *id == p.block_id) else { continue };
+            let focused = target.as_deref() == Some(p.block_id.as_str());
+            let id = p.block_id.clone();
+            out = out.child(
+                div()
+                    .id(SharedString::from(format!("pane-{}", p.block_id)))
+                    .debug_selector(|| format!("pane-{}", p.block_id))
+                    .absolute()
+                    .left(px(p.rect.x))
+                    .top(px(p.rect.y))
+                    .w(px(p.rect.w))
+                    .h(px(p.rect.h))
+                    .p(px(PADDING - 1.))
+                    .border_1()
+                    .border_color(if several && focused {
+                        gpui::Hsla::from(rgb(t.accent)).opacity(0.55)
+                    } else {
+                        gpui::transparent_black()
+                    })
+                    .child(terminal_canvas(term.clone(), active && focused, stats.clone()))
+                    .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.focus_block(&id, cx))),
+            );
+        }
+        for (i, d) in l.dividers.iter().enumerate() {
+            let r = d.rect;
+            let across = d.direction == Direction::Horizontal;
+            let (x, y, w, h) = if across {
+                (r.x - DIVIDER_GRAB, r.y, r.w + 2. * DIVIDER_GRAB, r.h)
+            } else {
+                (r.x, r.y - DIVIDER_GRAB, r.w, r.h + 2. * DIVIDER_GRAB)
+            };
+            let divider = d.clone();
+            let line = if across { div().w(px(DIVIDER)).h_full() } else { div().h(px(DIVIDER)).w_full() };
+            out = out.child(
+                div()
+                    .id(SharedString::from(format!("divider-{i}")))
+                    .debug_selector(|| format!("divider-{i}"))
+                    .absolute()
+                    .left(px(x))
+                    .top(px(y))
+                    .w(px(w))
+                    .h(px(h))
+                    .flex()
+                    .justify_center()
+                    .items_center()
+                    .occlude()
+                    .cursor(if across { CursorStyle::ResizeLeftRight } else { CursorStyle::ResizeUpDown })
+                    .child(line.bg(rgb(t.border)))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |ws, ev: &gpui::MouseDownEvent, _, cx| {
+                            ws.start_drag(divider.clone(), ev.position, cx)
+                        }),
+                    ),
+            );
+        }
+        out
+    }
+}
+
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let stats = self.stats.clone();
@@ -590,10 +842,8 @@ impl Render for Workspace {
         let rows = self.rows();
         self.settle(&rows);
         let current = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
-        let terminal = self.terminal();
-        let active = window.is_window_active();
-        let body = match terminal {
-            Some(term) => div().flex_1().bg(rgb(DARK.bg)).p(px(PADDING)).child(terminal_canvas(term, active, stats)),
+        let body = match self.shown() {
+            Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
             None => div()
                 .flex_1()
                 .flex()
@@ -603,13 +853,23 @@ impl Render for Workspace {
                 .gap(px(6.))
                 .bg(rgb(DARK.bg))
                 .child(div().text_color(rgb(DARK.text)).child("No sessions"))
-                .child(div().text_sm().text_color(rgb(DARK.muted)).child("Press ⌘N to start one")),
+                .child(div().text_sm().text_color(rgb(DARK.muted)).child("Press ⌘N to start one"))
+                .into_any_element(),
         };
         div()
             .key_context("Workspace")
             .track_focus(&self.focus)
             .on_action(cx.listener(Self::new_tab))
-            .on_action(cx.listener(Self::close_tab))
+            .on_action(cx.listener(Self::close_pane))
+            .on_action(cx.listener(Self::split_right))
+            .on_action(cx.listener(Self::split_down))
+            .on_action(cx.listener(Self::focus_left))
+            .on_action(cx.listener(Self::focus_right))
+            .on_action(cx.listener(Self::focus_up))
+            .on_action(cx.listener(Self::focus_down))
+            .on_action(cx.listener(Self::toggle_zoom))
+            .on_mouse_move(cx.listener(Self::drag_to))
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::end_drag))
             .on_action(cx.listener(Self::new_session))
             .on_action(cx.listener(Self::next_tab))
             .on_action(cx.listener(Self::previous_tab))

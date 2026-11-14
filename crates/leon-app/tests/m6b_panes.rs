@@ -202,8 +202,8 @@ fn zoom_never_hides_where_input_goes(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("cmd-d"); // unzooms, then splits
     cx.run_until_parked();
     let w = window(&s.app, &ws, cx).0;
-    assert_eq!((w.zoomed, leaves(&w).len()), (None, 3));
-    let new = term(&s.app, &w.focus.unwrap());
+    assert_eq!((w.zoomed.clone(), leaves(&w).len()), (None, 3));
+    let new = term(&s.app, &w.focus.clone().unwrap());
     settle(&new);
     let (rows, cols) = new.size();
     let beside = term(&s.app, &leaves(&w)[0]).size();
@@ -343,6 +343,8 @@ fn signature_follows_every_visible_pane_and_nothing_hidden(cx: &mut TestAppConte
     let before = sig(cx);
     cx.simulate_keystrokes("cmd-shift-enter"); // zooms b, hiding a
     assert_ne!(sig(cx), before, "zoom redraws");
+    cx.run_until_parked();
+    settle(&tb); // the zoom resized b, and its shell redraws for that
     let before = sig(cx);
     ta.write(b"echo behind\r").unwrap();
     wait_text(&ta, |x| has_line(x, "behind"));
