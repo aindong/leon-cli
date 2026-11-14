@@ -135,7 +135,12 @@ fn readme_and_agents_guide_cover_their_topics() {
     let readme = std::fs::read_to_string(help_walk::repo().join("README.md")).unwrap();
     let intro = readme.split("\n## ").next().unwrap();
     assert!(intro.contains("terminal multiplexer") && intro.lines().count() > 5, "README opens by saying what leon is");
-    assert!(intro.to_lowercase().contains("screenshot"), "README has a screenshot placeholder up top");
+    let shots: Vec<&str> = intro.split("](docs/images/").skip(1).filter_map(|s| s.split(')').next()).collect();
+    assert!((2..=3).contains(&shots.len()), "README shows 2–3 screenshots from docs/images up top: {shots:?}");
+    for s in shots {
+        let png = std::fs::read(help_walk::repo().join("docs/images").join(s)).unwrap_or_default();
+        assert!(png.starts_with(b"\x89PNG"), "docs/images/{s} is a PNG in the repo");
+    }
     for heading in
         ["## Install", "## The first five commands", "## Split it", "## Let an agent drive it", "## App shortcuts"]
     {
