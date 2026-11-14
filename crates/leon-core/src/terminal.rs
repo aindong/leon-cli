@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::fd::FromRawFd;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -31,7 +31,8 @@ const SCROLLBACK: usize = 10_000;
 const REPLY_BUDGET: usize = 64 << 10;
 /// Titles and pwds in events are cut to this many bytes.
 const MAX_TEXT: usize = 4096;
-/// How long the exit report waits for the last output (background jobs may hold the PTY open).
+/// How long the exit report waits for the PTY's EOF (background jobs may hold the PTY open). What
+/// was read by then is always parsed before the report.
 const DRAIN_WAIT: Duration = Duration::from_secs(1);
 /// Reads queued between the PTY and the emulator. The tty itself buffers only ~1 KiB, so a reader
 /// that stops to parse stalls the program; this queue lets reading go on meanwhile. At most
@@ -149,6 +150,8 @@ pub struct Terminal {
     start_cwd: Option<PathBuf>,
     /// The last OSC 7 pwd reported, as a URL.
     pwd: Arc<Mutex<Option<String>>>,
+    /// Bytes of output parsed so far.
+    output: Arc<AtomicU64>,
 }
 
 impl std::fmt::Debug for Terminal {
@@ -214,14 +217,23 @@ impl Terminal {
         let term = Arc::new(Mutex::new(Term::new(config, &Size, listener)));
         let tracker = Arc::new(Mutex::new(Tracker::default()));
 
-        let (drained, eof) = mpsc::channel::<()>();
-        let pwd = Arc::new(Mutex::new(None));
-        let reading =
-            Reading { term: term.clone(), tracker: tracker.clone(), seen, writer: writer.clone(), pwd: pwd.clone() };
+        // Each disconnects when its end is done: the reads at the PTY's EOF, the parsing after the
+        // last output's notices.
+        let (at_eof, eof) = mpsc::channel::<()>();
+        let (parsed, drained) = mpsc::channel::<()>();
+        let (pwd, output) = (Arc::new(Mutex::new(None)), Arc::new(AtomicU64::new(0)));
+        let reading = Reading {
+            term: term.clone(),
+            tracker: tracker.clone(),
+            seen,
+            writer: writer.clone(),
+            pwd: pwd.clone(),
+            output: output.clone(),
+        };
         let to_reader = notify.clone();
         std::thread::spawn(move || {
-            reading.run(reader, &*to_reader);
-            drop(drained); // after the last output's notices
+            reading.run(reader, at_eof, &*to_reader);
+            drop(parsed);
         });
         let exited = Arc::new(Mutex::new(false));
         let done = exited.clone();
@@ -236,14 +248,32 @@ impl Terminal {
                 reap(pid)
             };
             drop(child); // reaped above; dropping std's Child neither waits nor kills
-            let _ = eof.recv_timeout(DRAIN_WAIT); // disconnects at the reader's EOF
+            if eof.recv_timeout(DRAIN_WAIT) == Err(mpsc::RecvTimeoutError::Disconnected) {
+                let _ = drained.recv(); // a bounded backlog: it finishes
+            }
             notify(Notice::Exited(status));
         });
-        Ok(Terminal { term, tracker, writer, master: Mutex::new(pair.master), pid, exited, command, start_cwd, pwd })
+        Ok(Terminal {
+            term,
+            tracker,
+            writer,
+            master: Mutex::new(pair.master),
+            pid,
+            exited,
+            command,
+            start_cwd,
+            pwd,
+            output,
+        })
     }
 
     pub fn pid(&self) -> i32 {
         self.pid
+    }
+
+    /// How many bytes of output the emulator has parsed.
+    pub fn output_bytes(&self) -> u64 {
+        self.output.load(Ordering::SeqCst)
     }
 
     /// Queue input for the program; never blocks.
@@ -293,11 +323,25 @@ impl Terminal {
     }
 }
 
-/// The path of an OSC 7 `file://host/path` URL, percent-decoded.
+/// The path of an OSC 7 `file://host/path` URL, percent-decoded, if the host is this one (an
+/// ssh session reports the remote host's paths).
 fn pwd_path(url: &str) -> Option<PathBuf> {
     let rest = url.strip_prefix("file://")?;
-    let path = String::from_utf8(percent_decode(&rest.as_bytes()[rest.find('/')?..])).ok()?;
-    Some(PathBuf::from(path))
+    let (host, path) = rest.split_at(rest.find('/')?);
+    if !(host.is_empty() || host == "localhost" || Some(host) == hostname().as_deref()) {
+        return None;
+    }
+    String::from_utf8(percent_decode(path.as_bytes())).ok().map(PathBuf::from)
+}
+
+fn hostname() -> Option<String> {
+    let mut buf = [0u8; 256];
+    // SAFETY: gethostname writes at most buf.len() bytes into our buffer.
+    if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) } != 0 {
+        return None;
+    }
+    let end = buf.iter().position(|&b| b == 0)?;
+    String::from_utf8(buf[..end].to_vec()).ok()
 }
 
 #[cfg(target_os = "macos")]
@@ -390,15 +434,17 @@ struct Reading {
     seen: Arc<Mutex<Seen>>,
     writer: Writer,
     pwd: Arc<Mutex<Option<String>>>,
+    output: Arc<AtomicU64>,
 }
 
 impl Reading {
     /// Feed output to the tracker and emulator until the PTY closes, reporting per batch. A thread
     /// of its own does the reads. Takes the term and tracker locks only while feeding, never while
     /// notifying.
-    fn run(self, mut reader: Box<dyn Read + Send>, notify: &dyn Fn(Notice)) {
+    fn run(self, mut reader: Box<dyn Read + Send>, at_eof: mpsc::Sender<()>, notify: &dyn Fn(Notice)) {
         let (tx, reads) = mpsc::sync_channel::<Vec<u8>>(QUEUED_READS);
         std::thread::spawn(move || {
+            let _at_eof = at_eof; // dropped when reading ends
             let mut buf = vec![0u8; READ_SIZE];
             loop {
                 match reader.read(&mut buf) {
@@ -423,6 +469,7 @@ impl Reading {
                 let mut term = lock(&self.term);
                 lock(&self.tracker).feed(&batch, |bytes| parser.advance(&mut *term, bytes))
             };
+            self.output.fetch_add(batch.len() as u64, Ordering::SeqCst);
             if !fed.reply.is_empty() {
                 self.writer.reply(fed.reply);
             }
@@ -598,7 +645,7 @@ mod tests {
         t.write(b"cd sub; echo cd-$((40+2))\r").unwrap();
         screen_until(&t, |s| s.lines().any(|l| l == "cd-42"));
         assert_eq!(t.cwd(), Some(start.join("sub")), "the shell's own cwd");
-        t.write(b"printf '\\033]7;file://h/o%%20sc7\\007'; exit\r").unwrap();
+        t.write(b"printf '\\033]7;file://localhost/o%%20sc7\\007'; exit\r").unwrap();
         rx.recv_timeout(Duration::from_secs(10)).unwrap();
         assert_eq!(t.cwd(), Some(PathBuf::from("/o sc7")), "after exit: the last OSC 7 path");
         let spec = Spec { command: vec!["true".into()], cwd: Some(start.clone()), env: vec![] };
@@ -633,11 +680,22 @@ mod tests {
             assert!(std::time::Instant::now() < end, "the program didn't exit");
             std::thread::sleep(Duration::from_millis(5));
         }
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(DRAIN_WAIT + Duration::from_millis(300)); // past the EOF wait, too
         assert!(exits.try_recv().is_err(), "the exit was reported while its output was still unparsed");
+        assert_eq!(t.output_bytes(), 0, "nothing parsed while the emulator was locked");
         drop(parsing);
         exits.recv_timeout(Duration::from_secs(10)).unwrap();
         assert!(t.text(true).ends_with("END"), "the last output is on the screen by the exit report");
+        assert_eq!(t.output_bytes(), 20_003, "every byte counted");
+    }
+
+    #[test]
+    fn osc7_paths_count_only_from_this_host() {
+        assert_eq!(pwd_path("file:///a%20b"), Some(PathBuf::from("/a b")));
+        assert_eq!(pwd_path("file://localhost/x"), Some(PathBuf::from("/x")));
+        let here = hostname().unwrap();
+        assert_eq!(pwd_path(&format!("file://{here}/y")), Some(PathBuf::from("/y")));
+        assert_eq!(pwd_path("file://some-remote-box.example/etc"), None, "an ssh session's path");
     }
 
     #[test]

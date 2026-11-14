@@ -81,7 +81,7 @@ pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
     let mut term = signal(SignalKind::terminate())?;
     let mut int = signal(SignalKind::interrupt())?;
     let mut hup = signal(SignalKind::hangup())?; // `server run`'s terminal closed
-    let (state_file, _state_lock) = opts.persist.as_ref().and_then(|p| persist::start(&ctx, p)).unzip();
+    let (state_file, state_lock) = opts.persist.as_ref().and_then(|p| persist::start(&ctx, p)).unzip();
     *crate::events::lock(&ctx.state_file) = state_file.clone();
     let shared = Arc::new(Shared {
         ctx,
@@ -136,7 +136,8 @@ pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
         }
     }
     shared.ctx.end_programs(Duration::from_secs(2)).await;
-    // Only remove the socket if the path is still ours; a newer server may have bound it.
+    drop(state_lock); // before the socket goes, so a server started next finds the dir free
+                      // Only remove the socket if the path is still ours; a newer server may have bound it.
     if std::fs::symlink_metadata(&opts.socket).is_ok_and(|m| (m.dev(), m.ino()) == ours) {
         let _ = std::fs::remove_file(&opts.socket);
     }
@@ -251,7 +252,7 @@ async fn serve_lines(
                     return Ok(());
                 }
                 if let Some(discard) = stop {
-                    shared.discard.store(discard, Ordering::SeqCst);
+                    shared.discard.fetch_or(discard, Ordering::SeqCst); // any stop that asked wins
                     shared.shutdown.notify_one(); // only after this connection's own stop reply is out
                 }
             }

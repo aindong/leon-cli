@@ -305,6 +305,8 @@ pub struct TermSize {
 pub struct Process {
     pub pid: i32,
     pub command: Vec<String>,
+    /// Bytes of output the terminal has parsed (as the PTY delivered them: `\n` arrives as `\r\n`).
+    pub output_bytes: u64,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -357,8 +359,8 @@ static TERMINAL_METHODS: LazyLock<Vec<TermMethod>> = LazyLock::new(|| {
             let (rows, cols) = t.size();
             Ok(TermSize { rows, cols })
         }),
-        term_method("process", "The program's pid and argv.", |t, _: NoArgs| {
-            Ok(Process { pid: t.pid(), command: t.command.clone() })
+        term_method("process", "The program's pid, argv, and how much output was parsed.", |t, _: NoArgs| {
+            Ok(Process { pid: t.pid(), command: t.command.clone(), output_bytes: t.output_bytes() })
         }),
         term_method("program_status", "The OSC 7501 program-status records.", |t, _: NoArgs| {
             let records =

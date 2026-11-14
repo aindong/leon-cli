@@ -51,6 +51,7 @@ async fn checks_refuse_what_the_model_would_trip_on() {
         ("ID with an escape", |v| v["sessions"][0]["session_id"] = json!("session:\u{1b}[2J")),
         ("label with a newline", |v| v["sessions"][0]["label"] = json!("a\nb")),
         ("block in no window", |v| v["sessions"][0]["blocks"][1]["window_id"] = json!("window:gone")),
+        ("revision near the end", |v| v["sessions"][0]["revision"] = json!(u64::MAX)),
     ];
     for (what, f) in broken {
         let mut v = good.clone();
@@ -113,4 +114,23 @@ fn ratios_come_back_bit_for_bit() {
         let back: f64 = serde_json::from_str(&serde_json::to_string(&r).unwrap()).unwrap();
         assert_eq!(back.to_bits(), r.to_bits(), "{r:e} came back as {back:e}");
     }
+}
+
+#[test]
+fn a_cwd_json_cant_hold_is_dropped_not_a_panic() {
+    use std::os::unix::ffi::OsStrExt;
+    let odd = PathBuf::from(std::ffi::OsStr::from_bytes(b"/tmp/d\xff"));
+    assert!(serde_json::to_vec(&Some(&odd)).is_err(), "serde refuses non-UTF-8 paths");
+    assert_eq!(saveable(Some(odd)), None);
+    assert_eq!(saveable(Some(PathBuf::from("/tmp/ok"))), Some(PathBuf::from("/tmp/ok")));
+}
+
+#[test]
+fn a_bad_file_that_cant_be_moved_aside_turns_saving_off() {
+    let dir = tempfile::Builder::new().permissions(fs::Permissions::from_mode(0o700)).tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    fs::create_dir(&file).unwrap(); // not a regular file, and a hard link to a dir fails
+    let started = start(&ctx(), &Persist { file: file.clone(), restore: true });
+    assert!(started.is_none(), "saving would replace what couldn't be kept aside");
+    assert!(file.is_dir());
 }

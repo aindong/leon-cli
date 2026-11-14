@@ -13,6 +13,8 @@ use serde_json::{json, Value};
 const THROUGHPUT_BYTES: u64 = 100_000_000;
 const THROUGHPUT_RUNS: usize = 3;
 const END: &str = "BENCH-END";
+/// What the server's terminal must parse per run: 100 MB of `y\n`, each `\n` sent as `\r\n`, and the marker.
+const PTY_BYTES: u64 = THROUGHPUT_BYTES / 2 * 3 + END.len() as u64;
 
 /// One NDJSON connection to the server.
 struct Conn {
@@ -73,7 +75,7 @@ fn until(what: &str, mut f: impl FnMut() -> bool) {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let samples: usize =
-        args.iter().position(|a| a == "--samples").and_then(|i| args.get(i + 1)?.parse().ok()).unwrap_or(300);
+        args.iter().position(|a| a == "--samples").and_then(|i| args.get(i + 1)?.parse().ok()).unwrap_or(300).max(1);
     let dir = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
     let server = Command::new(env!("CARGO_BIN_EXE_leon"))
         .args(["server", "run", "--restore=false"])
@@ -156,10 +158,11 @@ fn latency(c: &mut Conn, n: usize) -> (f64, f64) {
 }
 
 /// `writer` (100 MB) then an end marker; timed from creating the block until the server reports
-/// the program exited, which it does only after reading all its output. The marker on the screen
-/// afterwards shows every byte before it went through the emulator.
+/// the program exited, which it does only after parsing all its output. Then the marker must be on
+/// the screen and the server's count of parsed bytes exactly `PTY_BYTES`.
 fn throughput(c: &mut Conn, what: &str, writer: &str) -> f64 {
     let script = format!("{writer}; printf '{END}'");
+    let mut parsed = Vec::new();
     let mut rates: Vec<f64> = (0..THROUGHPUT_RUNS)
         .map(|_| {
             let t = Instant::now();
@@ -167,13 +170,20 @@ fn throughput(c: &mut Conn, what: &str, writer: &str) -> f64 {
             c.call("block.wait", json!({ "block_id": bid }));
             let secs = t.elapsed().as_secs_f64();
             assert!(c.text(&sid, &bid).ends_with(END), "the end marker reached the grid");
+            let args = json!({ "session_id": sid, "block_id": bid, "method": "dev.leon.terminal.process" });
+            let seen = c.call("block.method", args)["output_bytes"].as_u64().unwrap();
+            assert_eq!(seen, PTY_BYTES, "the server parsed every byte (the tty sends each \\n as \\r\\n)");
+            parsed.push(seen);
             c.call("session.destroy", json!({ "session_id": sid }));
             THROUGHPUT_BYTES as f64 / 1e6 / secs
         })
         .collect();
     rates.sort_by(f64::total_cmp);
     let median = rates[rates.len() / 2];
-    println!("leon throughput ({what}): bytes={THROUGHPUT_BYTES} runs={THROUGHPUT_RUNS} median={median:.1} MB/s all={rates:.1?}");
+    println!(
+        "leon throughput ({what}): writer_bytes={THROUGHPUT_BYTES} server_parsed={parsed:?} \
+         runs={THROUGHPUT_RUNS} median={median:.1} MB/s all={rates:.1?}"
+    );
     median
 }
 
@@ -220,6 +230,6 @@ fn tmux_row(samples: usize, yes: &str, cat: &str) -> Row {
     let _ = tmux(&["kill-server"]);
     println!("tmux list-sessions round trip: samples={} p50={:.3} ms p99={:.3} ms", samples * 5, rt.0, rt.1);
     println!("tmux input latency: samples={samples} p50={:.3} ms p99={:.3} ms", lat.0, lat.1);
-    println!("tmux throughput: bytes={THROUGHPUT_BYTES} yes|head {yes:.1} MB/s, cat {cat:.1} MB/s");
+    println!("tmux throughput: writer_bytes={THROUGHPUT_BYTES} yes|head {yes:.1} MB/s, cat {cat:.1} MB/s");
     ("tmux (CLI)", rt, lat, yes, cat)
 }

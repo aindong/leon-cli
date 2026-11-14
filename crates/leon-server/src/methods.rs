@@ -54,6 +54,7 @@ pub struct Status {
     pub state_file: Option<String>,
 }
 
+/// Checked here; serve.rs reads `discard` from the raw params when the stop goes through.
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Stop {

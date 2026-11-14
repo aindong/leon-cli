@@ -26,6 +26,10 @@ pub const FILE: &str = "sessions.json";
 const VERSION: u64 = 1;
 /// A bigger file is taken as corrupt.
 const MAX_FILE: u64 = 16 << 20;
+/// More blocks than this (the spec's server limit) is taken as corrupt: each would start a shell.
+const MAX_BLOCKS: usize = 1024;
+/// A revision past this is corrupt; the model only ever adds one.
+const MAX_REVISION: u64 = 1 << 53;
 
 /// Where to save, and whether to restore what is there first.
 #[derive(Debug, Clone)]
@@ -89,8 +93,9 @@ pub fn start(ctx: &Arc<Ctx>, p: &Persist) -> Option<(PathBuf, fs::File)> {
             return None;
         }
     };
-    if p.restore {
-        restore(ctx, &p.file);
+    if p.restore && !restore(ctx, &p.file) {
+        eprintln!("leon: warning: sessions won't be saved, so {} stays as it is", p.file.display());
+        return None;
     }
     Some((p.file.clone(), lock))
 }
@@ -112,7 +117,7 @@ fn lock(dir: &Path) -> io::Result<fs::File> {
 
 /// Write the sessions to `file`: a 0600 temp file beside it, synced, then renamed over it.
 pub fn save(st: &State, file: &Path) -> io::Result<()> {
-    let bytes = serde_json::to_vec_pretty(&snapshot(st)).expect("saved sessions serialize");
+    let bytes = serde_json::to_vec_pretty(&snapshot(st)).map_err(io::Error::other)?;
     let tmp = file.with_extension("json.tmp");
     let _ = fs::remove_file(&tmp); // a crash's leftover; the dir is ours
     let written = OpenOptions::new()
@@ -165,7 +170,7 @@ fn snapshot(st: &State) -> Saved {
                 label: b.label.clone(),
                 window_id: b.window_id.clone(),
                 keep_open: b.keep_open,
-                cwd: b.terminal.cwd(),
+                cwd: saveable(b.terminal.cwd()),
                 command: b.terminal.command.clone(),
             })
             .collect(),
@@ -173,11 +178,17 @@ fn snapshot(st: &State) -> Saved {
     Saved { version: VERSION, sessions: sessions.collect() }
 }
 
+/// JSON holds only UTF-8 paths; a shell in any other dir restores in `$HOME`.
+fn saveable(cwd: Option<PathBuf>) -> Option<PathBuf> {
+    cwd.filter(|d| d.to_str().is_some())
+}
+
 /// Bring back the saved sessions. A file that can't be used is moved aside; so is one with a
-/// session that couldn't be restored, so the next save can't lose that session.
-fn restore(ctx: &Arc<Ctx>, file: &Path) {
+/// session that couldn't be restored, so the next save can't lose that session. False if such a
+/// file couldn't be moved, so saving over it would lose it.
+fn restore(ctx: &Arc<Ctx>, file: &Path) -> bool {
     let saved = match load(file) {
-        Ok(None) => return,
+        Ok(None) => return true,
         Ok(Some(saved)) => saved,
         Err(why) => return aside(file, &format!("{why}; starting without its sessions")),
     };
@@ -194,9 +205,7 @@ fn restore(ctx: &Arc<Ctx>, file: &Path) {
             }
         }
     }
-    if skipped {
-        aside(file, "a session in it couldn't be restored");
-    }
+    !skipped || aside(file, "a session in it couldn't be restored")
 }
 
 fn restore_session(ctx: &Arc<Ctx>, s: SavedSession) -> Result<Session, ApiError> {
@@ -258,8 +267,14 @@ fn check(saved: &Saved) -> Result<(), String> {
             _ => Ok(()),
         }
     };
+    if saved.sessions.iter().map(|s| s.blocks.len()).sum::<usize>() > MAX_BLOCKS {
+        return Err(format!("it has over {MAX_BLOCKS} blocks"));
+    }
     for s in &saved.sessions {
         fresh(&s.session_id, "session")?;
+        if s.revision > MAX_REVISION {
+            return Err(format!("{} has revision {}", s.session_id, s.revision));
+        }
         label(&s.label)?;
         if s.active >= s.windows.len() {
             return Err(format!("{} has no window {}", s.session_id, s.active + 1));
@@ -282,7 +297,7 @@ fn check(saved: &Saved) -> Result<(), String> {
             }
             for id in [&w.focus, &w.zoomed].into_iter().flatten() {
                 if !leaves.contains(&id.as_str()) {
-                    return Err(format!("{id} isn't in {}", w.window_id));
+                    return Err(format!("{id:?} isn't in {}", w.window_id));
                 }
             }
         }
@@ -314,21 +329,28 @@ fn splits(n: &Node, fresh: &mut impl FnMut(&str, &str) -> Result<(), String>) ->
 }
 
 /// Move `file` to `<file>.bad-<secs>-<n>`, a name nothing has yet (a hard link never replaces),
-/// and warn.
-fn aside(file: &Path, why: &str) {
+/// and warn. False if it couldn't be moved.
+fn aside(file: &Path, why: &str) -> bool {
+    // `why` may quote the file (serde names unknown keys); keep its control characters off the log.
+    let why: String = why.chars().map(|c| if c.is_control() { '?' } else { c }).collect();
     let secs = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
     for n in 0..1000 {
         let to = PathBuf::from(format!("{}.bad-{secs}-{n}", file.display()));
         match fs::hard_link(file, &to) {
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return eprintln!("leon: warning: {}: {why}; can't move it aside: {e}", file.display()),
+            Err(e) => {
+                eprintln!("leon: warning: {}: {why}; can't move it aside: {e}", file.display());
+                return false;
+            }
             Ok(()) => {
                 let _ = fs::remove_file(file);
-                return eprintln!("leon: warning: {}: {why}; moved it to {}", file.display(), to.display());
+                eprintln!("leon: warning: {}: {why}; moved it to {}", file.display(), to.display());
+                return true;
             }
         }
     }
     eprintln!("leon: warning: {}: {why}; no free name to move it aside", file.display());
+    false
 }
 
 #[cfg(test)]

@@ -213,12 +213,19 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
         }
         // A running server (perhaps autostarted on demand) is told to stay up; otherwise start one.
         ServerCmd::Start { restore } => match Client::connect(&socket) {
-            Ok(mut c) => c.call("server.persist", json!({})).map(|_| ()),
+            Ok(mut c) => {
+                if !restore {
+                    eprintln!("leon: a server is already running; --restore=false applies only when one starts");
+                }
+                c.call("server.persist", json!({})).map(|_| ())
+            }
             Err(_) => spawn_server(&socket, false, *restore),
         },
         ServerCmd::Stop { discard } => {
             let mut c = connect(&socket, false)?;
-            c.call("server.stop", json!({ "discard": discard }))?;
+            // Plain stops send no params, which servers from before `discard` also take.
+            let params = if *discard { json!({ "discard": true }) } else { json!({}) };
+            c.call("server.stop", params)?;
             let end = Instant::now() + Duration::from_secs(5);
             while Instant::now() < end && Client::connect(&socket).is_ok() {
                 std::thread::sleep(Duration::from_millis(20));

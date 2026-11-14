@@ -117,6 +117,12 @@ pub fn spawn_server(socket: &Path, autostarted: bool, restore: bool) -> Result<(
     if !restore {
         cmd.arg("--restore=false");
     }
+    // The server runs in `/`, so a relative state dir means one under this directory.
+    if let Some(dir) = std::env::var_os("LEON_STATE_DIR").map(std::path::PathBuf::from).filter(|d| d.is_relative()) {
+        if let (false, Ok(here)) = (dir.as_os_str().is_empty(), std::env::current_dir()) {
+            cmd.env("LEON_STATE_DIR", here.join(dir));
+        }
+    }
     cmd.current_dir("/")
         .stdin(Stdio::null())
         .stdout(log.try_clone().map_err(|e| Fail::Unreachable(e.to_string()))?)
