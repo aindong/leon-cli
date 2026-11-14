@@ -11,7 +11,7 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
 | `leon-core` | The object model (server state, sessions, windows, layout tree, blocks), stable IDs and target resolution, terminal blocks (PTY via `portable-pty`, emulation via `alacritty_terminal`), the OSC 7501 program-status parser, and the event log with gapless `seq`. No I/O policy, no sockets. |
 | `leon-server` | The API: a method registry where every method carries a description and JSON Schemas (`help.all`), served over a Unix socket. Also runnable in-process. |
 | `leon-lua` | Lua 5.1 (`mlua`): `init.lua` config (bindings, sequences, modes, actions), the live config `Runtime`, and `leon do` scripts (`leon.on`, `wait`, timers, `exec`). |
-| `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart. With no arguments it opens the app. |
+| `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart, and `leon attach` (the terminal client). With no arguments it opens the app. |
 | `leon-app` | The GPUI client. It attaches to the server over the socket like any client and paints the screens the server pushes, so programs outlive the app. |
 
 ## Decisions
@@ -89,6 +89,35 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   bracketed-paste mode at that moment (the app's copy of the screen may be older). `block.watch`
   and `dev.leon.terminal.screen` are leon's own: the spec's screen stream is `data.connect` over a
   WebSocket, which leon doesn't serve. The app attaches only to a socket in a private dir.
+- **The terminal client.** `leon attach` (`crates/leon/src/attach/`) is the app's client code drawn
+  with ratatui 0.30 (crossterm 0.29 through `ratatui::crossterm`) instead of GPUI: it uses
+  `leon_app::remote::Remote` (the same connections, model refetches and `block.watch` screen
+  stream), the app's keymap, pane layout (in cells, one-cell dividers) and palette filter, without
+  code of its own on the server. It watches only the panes on screen (the picker: the previewed
+  block). Drawing is coalesced: one thread reads host input, the model's change hook wakes the loop
+  (one wake queued at most), the loop handles everything queued and then draws once, and redraws
+  for screen changes alone are at least 16 ms apart. Ratatui diffs each frame against the last, so
+  a keystroke's echo costs the host a few cells; over a slow link a write blocks, the model keeps
+  only the newest screens meanwhile, and the next frame shows those. Keys are decoded by crossterm
+  and re-encoded with `leon_core::keys::encode` using the focused pane's own cursor-key mode, so the
+  host's mode doesn't matter; pastes go through `block.event` paste. The **prefix** is
+  `--prefix`, else the `attach` mode's `prefix` (`leon.mode`, carried in `client.keymap`'s modes),
+  else ctrl+b; after it an `attach/KEY` binding, then a config sequence `prefix>KEY`, then the
+  built-in table decides. Other config bindings resolve through the app's keymap; anything unbound
+  goes to the pane. **Sizes:** the server has no `own_block` yet, so the rule is the client's own
+  size: the TUI resizes a pane only when its own layout of that pane changes (attach, host resize,
+  split, zoom, the pane coming back on screen), never because another client resized it, and clips or pads a screen of another
+  size. The app re-fits whenever a screen's size differs from its pane, so while both show the
+  same tab the app's size wins. **The host terminal** is put back (raw mode off, alt screen left,
+  cursor shown, bracketed paste off) on detach, errors, a panic (hook), and SIGHUP, SIGTERM,
+  SIGINT, SIGQUIT: those are blocked in every thread (after any server autostart, so the server
+  doesn't inherit the mask) and taken by a `sigwait` thread; the exit status is 128 + the signal.
+  For SIGKILL a watchdog, forked before any thread starts, sits in its own process group with the
+  saved termios and a close-on-exec pipe: `e` means the client entered the alt screen, `x` that it
+  restored; EOF without `x` means it died, and the watchdog restores (the escapes only after `e`).
+  While attached, stderr points at /dev/null, since the app's client code reports some failures
+  with `eprintln!` (which would scribble over the screen); restoring puts it back. No tty (`ssh host leon attach` without `-t`) exits 1 and
+  writes nothing to stdout.
 - **App keys go through the keymap.** The server loads `init.lua` (`leon server run`).
   The app has no GPUI key table (only ⌘Q): every keystroke becomes an unshifted chord
   (`keymap::chord`) and is resolved against its built-in defaults (`keymap::DEFAULTS`) with the

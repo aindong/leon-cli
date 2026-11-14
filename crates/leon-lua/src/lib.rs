@@ -80,6 +80,9 @@ pub enum Target {
 pub struct Mode {
     pub name: String,
     pub exclusive: bool,
+    /// The one chord that enters the mode for the next key (`leon attach`'s `attach` mode), as
+    /// `KeySpec::sequence` writes it.
+    pub prefix: Option<String>,
     pub source: String,
 }
 

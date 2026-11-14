@@ -3,6 +3,8 @@
 
 #![allow(dead_code)]
 
+pub mod host;
+
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Child, Command, Output, Stdio};

@@ -25,9 +25,15 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
     if let Cmd::Skill(cmd) = cli.cmd() {
         return crate::skill::run(cli, cmd);
     }
+    if let Cmd::Attach { target, prefix } = cli.cmd() {
+        let target = target.as_deref().or(cli.session.as_deref());
+        return crate::attach::run(target, prefix.as_deref(), cli.autostart);
+    }
     let mut c = connect(&socket, cli.autostart)?;
     match cli.cmd() {
-        Cmd::App | Cmd::Server(_) | Cmd::Config(ConfigCmd::Check { .. }) | Cmd::Skill(_) => unreachable!(),
+        Cmd::App | Cmd::Attach { .. } | Cmd::Server(_) | Cmd::Config(ConfigCmd::Check { .. }) | Cmd::Skill(_) => {
+            unreachable!()
+        }
         Cmd::Config(ConfigCmd::Reload) => crate::script::reload(&mut c, cli)?,
         Cmd::Do(args) => crate::script::run(&mut c, cli, args, &socket)?,
         Cmd::Actions => crate::script::actions(&mut c, cli)?,

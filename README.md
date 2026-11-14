@@ -74,6 +74,31 @@ leon -s demo zoom                                            # fill the window; 
 In the app: ⌘D splits right, ⌘⇧D splits down, ⌘⌥ and an arrow moves between panes, and dragging a
 divider resizes.
 
+## In any terminal: `leon attach`
+
+```text
+leon attach                  # pick a session, tab or block (type to filter), Enter attaches
+leon attach demo             # straight to the session "demo"
+ssh -t box leon attach       # the same, on another machine's leon
+```
+
+`leon attach` shows the tab's split panes and a status bar, and sends your keys to the focused
+pane. After the prefix, ctrl+b (`--prefix` or the config's `leon.mode("attach", { prefix })` to
+change it):
+
+| Keys | Action |
+|---|---|
+| ctrl+b d | Detach; every program keeps running |
+| ctrl+b ←↑↓→, ctrl+b h/j/k/l | Focus the pane that way |
+| ctrl+b %, ctrl+b " | Split right, split down |
+| ctrl+b z | Zoom the pane (again to undo) |
+| ctrl+b c | New tab |
+| ctrl+b n, ctrl+b p | Next, previous tab |
+| ctrl+b s | Back to the picker |
+
+Your `init.lua` bindings work there too, except `cmd` keys (a terminal never sends them) and a
+binding on the prefix key itself.
+
 ## Let an agent drive it
 
 ```sh

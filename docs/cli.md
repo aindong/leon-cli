@@ -54,6 +54,40 @@ sessions you see. `leon` with no command does the same. Quitting the app (⌘Q, 
 window) detaches and every program keeps running; the app's "Quit and End All Sessions…" or
 `leon server stop` ends them. With `--autostart=false` and no server it exits 4.
 
+## In a terminal
+
+### `leon attach [TARGET]`
+
+Use leon inside any terminal, locally or over ssh (`ssh -t HOST leon attach`; without `-t` there is
+no terminal and it exits 1). With no TARGET (and no `-s`) it opens a picker of every session, its
+tabs and their blocks, with the selected block's screen previewed live: type to filter (letters in
+order, as the command palette matches), ↑ and ↓ (or ctrl+p, ctrl+n) move, Enter attaches, Esc goes
+back or quits. TARGET is a session, or a block, whose tab then opens with it focused. With no
+session at all, Enter starts one.
+
+Attached, it shows the session's active tab: every pane of the split layout with borders between
+them, and a status bar with the session and its tabs. Keys go to the focused pane, except the
+prefix key and your config's bindings (`init.lua`; a `cmd` key never arrives from a terminal).
+After the prefix (`--prefix KEY`, else the config's `leon.mode("attach", { prefix = … })`, else
+ctrl+b):
+
+| Key | Does |
+|---|---|
+| `d` | Detach: `leon attach` exits 0 and every program keeps running |
+| ←↑↓→ or `h` `j` `k` `l` | Focus the pane that way |
+| `%`, `"` | Split the pane right, down |
+| `z` | Zoom the pane (again to undo) |
+| `c` | New tab |
+| `n`, `p` | Next, previous tab |
+| `s` | Back to the picker |
+| the prefix again | Type the prefix key into the pane |
+
+Panes are sized to fit this terminal whenever its own layout of them changes (attaching, a resize,
+a split or zoom, a pane coming back on screen); a pane another client resized since is clipped or
+padded. On exit
+(detach, the server stopping, SIGHUP, SIGTERM, SIGINT, SIGQUIT) the terminal is given back as it was; a
+watchdog process does it even after SIGKILL. Killed by a signal, it exits 128 + the signal.
+
 ## Sessions
 
 ### `leon new [LABEL]`
