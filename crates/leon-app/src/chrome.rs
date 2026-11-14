@@ -29,6 +29,8 @@ impl TabStyle {
 pub enum SidebarList {
     SessionsAndTabs,
     SessionsOnly,
+    /// The Activity list (`client.sidebar.activity.toggle`) in place of the sessions.
+    Activity,
 }
 
 /// Where the chrome goes for a tab style and whether the sidebar is shown.

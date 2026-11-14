@@ -9,7 +9,7 @@ mod report;
 mod scan;
 mod store;
 
-pub(crate) use report::strip_hidden;
+pub use report::strip_hidden;
 pub use report::{parse, Ignored, Kind, Message, Record, State};
 pub use scan::{Piece, Scanner};
 pub use store::{Change, Reason, Store, MAX_RECORDS};

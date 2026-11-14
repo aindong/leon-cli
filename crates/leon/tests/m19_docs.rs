@@ -52,7 +52,7 @@ fn readme_architecture_and_changelog() {
         assert!(readme.contains(key), "README lists {key}");
     }
     let arch =
-        ["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/state-and-hosts.md"]
+        ["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/keys-copy-hints.md"]
             .map(doc)
             .concat();
     for topic in ["Copy mode", "Hints", "repeat_time"] {

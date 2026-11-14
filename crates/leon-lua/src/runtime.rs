@@ -203,6 +203,28 @@ fn shared(lua: &Lua, leon: &Table) -> mlua::Result<()> {
         "call",
         api::func(lua, "call", |lua, (method, args): (String, Value)| Ok(api_call(lua, &method, to_json(&args)?)?))?,
     )?;
+    for (name, method) in
+        [("float", "session.float_block"), ("toggle", "session.toggle"), ("dock", "session.dock_block")]
+    {
+        leon.set(
+            name,
+            api::func(lua, name, move |lua, args: Value| {
+                let c = rt(lua).ctx.clone();
+                let mut params = fill(to_json(&args)?, "session_id", c.session_id)?;
+                let mut method = method;
+                if name == "float" {
+                    if params.as_object_mut().unwrap().remove("new").is_some_and(|v| v == true) {
+                        method = "session.new_floating";
+                    } else {
+                        params = fill(params, "block_id", c.block_id)?;
+                    }
+                } else if name == "dock" {
+                    params = fill(params, "block_id", c.block_id)?;
+                }
+                Ok(api_call(lua, method, params)?)
+            })?,
+        )?;
+    }
     let session = lua.create_table()?;
     let meta = lua.create_table()?;
     meta.set(

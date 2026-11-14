@@ -22,10 +22,13 @@ use leon_core::{ApiError, Window};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+#[path = "remote_events.rs"]
+mod events;
 #[path = "remote_fetch.rs"]
 mod fetch_model;
 #[path = "remote_link.rs"]
 mod link;
+use events::{attach, read_events};
 use fetch_model::{fetch, read_line};
 use link::Job;
 pub use link::LinkState;
@@ -208,100 +211,6 @@ impl Shared {
         line.push(b'\n');
         lock(&self.events).write_all(&line)
     }
-}
-
-#[derive(Deserialize)]
-struct Pushed {
-    block_id: String,
-    #[serde(flatten)]
-    update: Update,
-}
-
-/// Open an event connection and attach it to every event; returns its reader, its write side
-/// and the snapshot (with a `resume` token when `resumable`).
-fn attach(socket: &Path, resumable: bool, wait: Duration) -> io::Result<(BufReader<UnixStream>, UnixStream, Value)> {
-    let mut c = Conn::open(socket, Some(wait))?;
-    let p = json!({ "event_scope": "all", "resumable": resumable });
-    let snapshot = c.call("session.attach_all", p).map_err(|e| io::Error::other(e.message))?;
-    c.r.get_ref().set_read_timeout(None)?;
-    let write = c.r.get_ref().try_clone()?;
-    Ok((c.r, write, snapshot))
-}
-
-/// The reader thread: apply screens, refetch after events, re-attach after a drop while the
-/// server still answers, and say the server is gone when it doesn't.
-fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
-    loop {
-        let mut stale = false;
-        loop {
-            let mut line = String::new();
-            if matches!(read_line(&mut r, &mut line), Ok(0) | Err(_)) {
-                if shared.closing.load(Ordering::SeqCst) {
-                    return;
-                }
-                match reattach(&shared) {
-                    Some(again) => (r, stale) = (again, true),
-                    None => {
-                        shared.alive.store(false, Ordering::SeqCst);
-                        shared.bump();
-                        return;
-                    }
-                }
-                break;
-            }
-            *lock(&shared.heard) = Instant::now();
-            let Ok(mut v) = serde_json::from_str::<Value>(&line) else { continue };
-            if let Some(s) = v.get_mut("screen") {
-                // a line still on its way for a block no longer watched would revive a stale copy
-                let pushed = serde_json::from_value::<Pushed>(s.take()).ok();
-                if let Some(p) = pushed.filter(|p| lock(&shared.watched).contains(&p.block_id)) {
-                    let mut m = lock(&shared.model);
-                    *m.screen_updates.entry(p.block_id.clone()).or_default() += 1;
-                    let f = m.screens.entry(p.block_id).or_default();
-                    screen::apply(Arc::make_mut(f), p.update);
-                }
-            } else if v.get("event").is_some() {
-                if let Some(seq) = v["seq"].as_u64() {
-                    shared.saw(seq);
-                }
-                stale = true;
-            } else if let Some(e) = v.get("error").filter(|e| !e.is_null()) {
-                eprintln!("leon: the server refused a watch: {e}");
-            }
-            if !r.buffer().contains(&b'\n') {
-                break; // nothing more already read: show what came
-            }
-        }
-        if stale {
-            let _ = shared.refresh();
-        } else {
-            shared.bump();
-        }
-    }
-}
-
-/// A new event connection when the server still answers (it dropped a connection that fell too
-/// far behind, or a link to it came back), with the watched blocks watched again.
-fn reattach(shared: &Shared) -> Option<BufReader<UnixStream>> {
-    let (r, w) = match shared.retry {
-        None => {
-            lock(&shared.fetch).call("server.version", json!({})).ok()?;
-            let (r, w, snapshot) = attach(&shared.socket, false, CALL_TIMEOUT).ok()?;
-            shared.restart_stream(&snapshot);
-            (r, w)
-        }
-        Some(limit) => link::relink(shared, limit)?,
-    };
-    // held while sending, as `Remote::watch` holds it, so a newer set can't be overtaken
-    let watched = lock(&shared.watched);
-    *lock(&shared.events) = w;
-    if shared.closing.load(Ordering::SeqCst) {
-        let _ = lock(&shared.events).shutdown(std::net::Shutdown::Both); // dropped meanwhile
-        return None;
-    }
-    lock(&shared.model).screens.clear(); // the new connection starts with whole screens
-    shared.send_watch(&watched).ok()?;
-    Some(r)
 }
 
 /// A resize the app asked for: the size, and the size the screen had then.

@@ -8,6 +8,7 @@ pub mod keys;
 mod runtime;
 mod sandbox;
 mod script;
+mod settings;
 
 pub use runtime::{CallCtx, Host, Runtime, LOAD_LIMIT, MAX_DEPTH, TIMED_OUT};
 pub use script::{run_script, ScriptOptions, MAX_TIMERS};
@@ -41,6 +42,11 @@ pub struct Config {
     pub repeat_time: Option<u64>,
     /// `leon.set("hint_patterns", {...})`: regular expressions hints match besides the built-in ones.
     pub hint_patterns: Vec<String>,
+    /// `leon.set("notify_blocked" | "notify_error" | "notify_done", false)`: the app's notifications
+    /// for a block becoming blocked, erroring, or finishing a long run. None is on.
+    pub notify_blocked: Option<bool>,
+    pub notify_error: Option<bool>,
+    pub notify_done: Option<bool>,
 }
 
 /// What a restored block does with the resume command a program registered for itself.

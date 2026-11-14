@@ -31,6 +31,8 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+-", "client.font.decrease"),
     ("cmd+0", "client.font.reset"),
     ("cmd+shift+p", "client.palette.toggle"),
+    ("cmd+k", "session.switch"),
+    ("cmd+shift+a", "client.sidebar.activity.toggle"),
     ("cmd+c", "pane.copy"),
     ("cmd+a", "pane.select_all"),
     ("cmd+f", "client.find.open"),
@@ -150,6 +152,8 @@ pub struct Keymap {
     pub repeat_time: Duration,
     /// The config's own hint patterns (`leon.set("hint_patterns")`).
     pub hint_patterns: Vec<String>,
+    /// The `notify_*` settings.
+    pub notify: crate::attention::Settings,
 }
 
 impl Keymap {
@@ -210,11 +214,18 @@ impl Keymap {
             })
             .collect();
         let settings = &km["settings"];
+        let on = |name: &str| settings[name] != false; // on unless the config turned it off
+        let notify = crate::attention::Settings {
+            blocked: on("notify_blocked"),
+            error: on("notify_error"),
+            done: on("notify_done"),
+        };
         Keymap {
             generation: km["generation"].as_u64().unwrap_or(0),
             bindings,
             actions,
             copy_on_select: settings["copy_on_select"] == true,
+            notify,
             repeat_time: Duration::from_millis(settings["repeat_time"].as_u64().unwrap_or(REPEAT_TIME)),
             hint_patterns: settings["hint_patterns"]
                 .as_array()

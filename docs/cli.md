@@ -232,6 +232,24 @@ leon send-key -b "$id" ctrl+d
 leon wait -b "$id" --for 10s
 ```
 
+### `leon notify`
+
+Report a status for your own block (`-b`, else `$LEON_BLOCK`; with neither, exit 2), as an OSC
+7501 report from its program would: it shows on the tab and pane header, in the app's Activity list,
+and for blocked, error and a long run's done as a notification. For tools that can't write OSC 7501
+(a hook, a job with no tty). It replaces the block's root record, with that record's lifetime.
+
+- `--state working|blocked|done|error`: the state (default `done`).
+- `--title T`, `--body B`: one line each (at most 192 and 2048 bytes). Text OSC 7501 would drop
+  (controls, line breaks, invisible characters) is refused (exit 1), and nothing is recorded.
+
+```sh
+id=$(leon run --keep-open -- sleep 30)
+leon notify -b "$id" --state blocked --title "Deploy" --body "approve the rollout?"
+leon block call -b "$id" program_status
+leon block close "$id"
+```
+
 ## Layout
 
 ### `leon focus TARGET`
@@ -343,9 +361,7 @@ leon do --for 1m ./watch.lua
 
 ### `leon actions`
 
-List the actions: the config's (`leon.action`, with the `file:line` that defines each), then
-the app's own actions (`client.*`, `pane.*`, `session.*`, source `app`), which its keys and
-command palette run. `--json` prints the same list.
+Config actions, then the app's own actions.
 
 ### `leon keymap`
 
@@ -524,3 +540,28 @@ leon skill setup --dry-run
 leon skill setup
 leon skill status
 ```
+
+### `leon float [--new [-- CMD]]`
+
+Float the block selected by `-b/--block` (default the focused block). `--new` opens a
+new terminal in the active window of `-s/--session`, running CMD or a login shell.
+`--label L` assigns a label; `--rect x,y,w,h` sets fractions of the whole window
+(default `0.1,0.1,0.8,0.8`). Rectangles must have positive width/height and fit inside
+the window. A float is shown, focused and raised above earlier floats. `--unfloat`
+returns a float or drawer to the tiled tree beside its root; its terminal keeps running.
+`--new` prints the new block ID; `--json` prints the API result.
+
+### `leon toggle LABEL`
+
+Show/hide a float or drawer by its exact, case-insensitive label within `-s/--session`.
+Labels must be unique there. Hidden terminals continue running and producing output.
+`--create` opens a scratch login shell docked to the bottom on first use; subsequent
+calls toggle it. A bottom panel already occupying that side makes creation fail.
+
+### `leon dock left|right|bottom`
+
+Pin `-b/--block` (default the focused block) to a side of its window. `--size F` is
+a fraction strictly between 0 and 1 (default 0.3). Each side holds at most one panel,
+including hidden panels; an occupied side fails without changes. `leon attach`
+reserves room for visible panels and draws visible floats above the tiled panes,
+with a border. The GPUI app's overlay drawing and animation arrive in M20b.

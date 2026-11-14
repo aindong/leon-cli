@@ -63,7 +63,17 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   bold/italic/underline/strikeout), backgrounds are runs of cells. The first line for a block, and
   any after a size change, is `full` (every row); later ones carry only the dirty rows, found by
   diffing the frame against the last one sent on that connection (`leon_core::screen::diff`).
-  Screen lines have no `seq`: they are state, not events. Per watched block a task waits on the
+  Screen lines have no `seq`: they are state, not events. A client reads at most 16 MiB per line
+  (a server may be a box we don't control; the CLI's cap is 64 MiB), so an update whose line would
+  pass 4 MiB (only a huge screen of distinctly styled cells gets there) goes as several: the first
+  carries `full`, the rest are partial updates of the same size (`screens::encode`), and
+  `dev.leon.terminal.lines` replies keep the first rows that fit in 4 MiB (the app asks again from
+  the first row it lacks). A line past the cap ends the connection for good rather than re-attaching
+  to the same line. Event and screen lines are parsed into their types, not a JSON tree, so memory
+  stays near a byte per byte read (replies still become a `Value`: a shortcut). Applying an update
+  (`screen::apply`) is linear in the update and the frame: one row per line (the last wins), and a
+  row keeps at most `cols` spans and backgrounds inside the line, each span at most a cell's text
+  per column. Per watched block a task waits on the
   terminal's change counter (a `tokio::sync::watch`) and only marks it dirty; the connection loop
   builds the frame under the terminal's lock, between replies and events, so nothing queues per
   connection beyond "dirty": a slow reader gets fewer, newer screens, never a backlog, and is
@@ -155,27 +165,6 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   server (`client.action` / `client.key`) without waiting. A pending sequence shows a hint and has
   no timeout; unbound keys go to the pane (`dev.leon.terminal.write`). Program status (OSC 7501)
   comes with the model copy; arriving at a pane clears its `done`/`error` (reason `seen`).
-- **Repeat keys, copy mode and hints (M19).** A binding with `repeats` (tmux `bind -r`) opens a
-  window of `repeat_time` (default 500 ms) when it runs: a key that completes a repeatable binding
-  after the same prefix runs it with no prefix and restarts the window; any other key closes it and
-  is handled from no prefix (`keymap::Repeat`, shared by the app and `leon attach`). A repeated Lua
-  function or config action goes to the server as `client.key {prefix, key}`, which resolves the
-  whole sequence. Defaults never repeat. Key names ignore case (a capital is `shift+f`); shifted
-  symbols match as typed or as `shift+<key>` (US layout). **Copy mode** (`client.copy_mode`, ⌘⇧C)
-  is a cursor in absolute lines over the view and its cached scrollback (`leon_app::copy_mode`,
-  GPUI-free): vi motions, `v`/`V` set the pane's selection (the server's, which takes both end
-  cells, so `v` alone selects the one under the cursor), `/` and `?` run
-  `dev.leon.terminal.find` and step from the cursor, `y` copies. Its badge or prompt is written
-  over the pane's top-right cells (`stamp`) and the program's cursor is hidden; keys never reach
-  the program, ⌘ chords still go to the keymap. `leon attach` has no copy mode: it draws only the
-  live screen, with no scrollback view, cursor overlay or selection of its own. **Hints**
-  (`client.hints`, ⌘⇧H) match `leon_core::hints` over the cells the pane shows: URLs, paths, git
-  hashes, UUIDs, `0x` hex, IPv4, 4+ digit numbers, then the config's `hint_patterns` (at most 32,
-  256 bytes each, compiled with a 1 MiB limit; Rust's regex is linear and matches don't overlap,
-  so a screen yields at most a hint per cell). Labels are prefix-free (tmux-fingers' alphabet),
-  shortest near the bottom, one per distinct text, at most 676; a label copies, and in upper case
-  is pasted into the pane. A new size or screen labels the view again; copy mode ends when its
-  lines are gone (an alt-screen switch, a full scrollback) and stays through a resize.
 - **App layout and look.** Tabs are drawn in one place (`leon_app::chrome::places`): as rows under
   their session in the sidebar (the default), or with `client.tab_style.toggle` in the titlebar row
   beside the session's name, the sidebar then listing sessions only. Panes are inset tiles
@@ -198,3 +187,29 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   + `$CODEX_HOME` (`~/.codex`) `hooks.json`. Settings edits keep key order, back up once to
   `<file>.leon-backup`, write atomically through symlinks, and refuse files that aren't the expected
   JSON shape. Not yet: OpenCode/Pi, `--project`, `--session-naming`.
+
+- **Floating panes and drawers (M20a).** Terminal ownership stays in `Session.blocks`;
+  `Session.overlays` maps window IDs to floating and docked placements separately from
+  the tiled tree. This keeps the shared `Window` type compatible with the M20b app work.
+  Every window in `session.view` has `floating` (back to front; last is topmost) and
+  `docked` arrays. Floats have `block_id`, `bounds` in window fractions, and `hidden`;
+  docks have `block_id`, `side` (left/right/bottom), `size` and `hidden`. Each block is
+  placed exactly once; a window can have no tiled tree when all its blocks float.
+  Hiding never removes a block or stops its PTY. Showing/focusing raises a float;
+  hidden panes cannot retain focus or zoom. Dock collisions fail atomically.
+  Mutations emit the existing `session_view_changed` revision event; clients refetch
+  the full view. `block_ids` includes tiled leaves then overlays, including hidden ones.
+  Attach caches the raw window fields on revision changes while sharing the existing
+  screen/event transport. It reserves dock space (in list order, clamped to remaining
+  space), then paints bordered floats above tiles in z-order. Bounds are relative to
+  the whole window; borders reduce terminal content by one cell on each edge. Zero-size
+  content is clipped. GUI rendering/animation is M20b; no new transport is needed.
+
+  Focus next/previous walks tiles, visible docks, then visible floats in block creation
+  order (independent of z-order), honoring `wrap`.
+  Directional focus from an overlay returns to the first tiled pane (with only overlays,
+  it cycles). Attach retains session context with no visible focus, so shortcuts can
+  show hidden drawers or open tabs. The picker includes hidden and visible overlay blocks.
+
+  A focused overlay takes input above a zoomed tile; tile-only zoom keeps its existing
+  display/input behavior.

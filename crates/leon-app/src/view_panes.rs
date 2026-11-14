@@ -198,6 +198,7 @@ impl Render for Workspace {
         }
         let rows = self.rows();
         self.settle(&rows);
+        self.note_recent();
         let current = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
         let body = match self.shown() {
             Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
@@ -249,8 +250,4 @@ impl Render for Workspace {
     }
 }
 
-/// The argv0 a tab shows: `/bin/zsh` → `zsh`, a login shell's `-zsh` → `zsh`.
-pub(super) fn program_name(command: &[String]) -> String {
-    let argv0 = command.first().map_or("", String::as_str);
-    argv0.rsplit('/').next().unwrap_or(argv0).trim_start_matches('-').to_string()
-}
+pub(super) use crate::switcher::program_name;

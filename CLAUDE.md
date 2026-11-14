@@ -1,12 +1,13 @@
 # leon
 
 A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first (its decisions are in
-`docs/architecture/*.md`, kept under 20 KB each; a doc test reads all three files); `docs/spec.md` is the
+`docs/architecture/*.md`, kept under 20 KB each; the doc tests read them); `docs/spec.md` is the
 interface we match and `docs/roadmap.md` the milestone order.
 
 - Checks: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (or `the verify script`).
 - Linux: `scripts/linux-test.sh` (Docker; the non-app crates, `--workspace --exclude leon-app`), packages
-  `scripts/package-linux.sh`. A test gated to macOS needs a `// macOS only: <reason>` line above the gate.
+  `scripts/package-linux.sh`. `scripts/test-peer-uid.sh` separately proves peer-uid rejection
+  in Docker, including a red run with the check disabled in a disposable source copy. A test gated to macOS needs a `// macOS only: <reason>` line above the gate.
 - GPUI needs the `runtime_shaders` feature on this machine (no Metal Toolchain installed).
 - Name methods, actions, events and flags as `docs/spec.md` does; env vars are `LEON_*`.
 - The API is a promise (`docs/integrators.md#compatibility`): a new method needs a line in
@@ -22,3 +23,7 @@ interface we match and `docs/roadmap.md` the milestone order.
   (`Leon` for the bundled Leon.app).
   A locked screen draws nothing (macOS occludes the window); `scripts/idle-frames.sh` refuses then.
   Frame stats: `LEON_FRAME_STATS=1 leon app`; headless model cost: `cargo run --release -p leon-app --example frame_bench`.
+- Docs screenshots show a neutral demo, never this machine: retake them with `scripts/demo-shots.sh`
+  (temp HOME, neutral prompt and titles, private LEON_* dirs, a fake devbox). No image name, README
+  text or picture may show the user's login or hostname; `cargo test -p leon --test m13_privacy`
+  checks names, bytes and OCR'd text, and a look at each picture covers the rest.
