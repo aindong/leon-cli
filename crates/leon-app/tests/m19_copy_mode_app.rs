@@ -31,10 +31,13 @@ fn motions_selections_and_yank(cx: &mut TestAppContext) {
     assert_eq!(at.col, 0, "it starts at the terminal's cursor");
     let drawn = ws.read_with(cx, |ws, _| ws.drawn_text(&id)).unwrap();
     assert!(drawn.lines().next().unwrap().trim_end().ends_with("COPY"), "the badge: {drawn}");
+    let alpha = row_of(&ws, cx, &id, "alpha beta gamma");
+    assert_eq!(ws.read_with(cx, |ws, _| ws.copy_mark(&id)), Some((alpha + 1, 0)), "the cursor is outlined");
 
     keys(cx, "k w");
     assert_eq!(cursor(&ws, cx, &id).as_deref(), Some("alpha beta gamma"));
     assert_eq!(ws.read_with(cx, |ws, _| ws.copy_cursor(&id)).unwrap().0.col, 6, "on the b");
+    assert_eq!(ws.read_with(cx, |ws, _| ws.copy_mark(&id)), Some((alpha, 6)), "the outline follows");
     keys(cx, "v y");
     assert_eq!(clipboard(cx).as_deref(), Some("b"), "v y copies the cell under the cursor");
     assert_eq!(ws.read_with(cx, |ws, _| ws.copy_cursor(&id)), None, "y exits");

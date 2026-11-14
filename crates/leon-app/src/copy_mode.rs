@@ -100,13 +100,26 @@ pub struct Area {
     pub rows: usize,
 }
 
-/// Where `m` takes the cursor from `at`; `row(line)` gives a line's cells, one char per cell.
+/// Where `m` takes the cursor from `at`; `row(line)` gives a line's cells, one char per cell (a
+/// wide char's second cell `\0`). The cursor never rests on a second cell.
 pub fn motion(at: Pos, m: Motion, area: &Area, row: &mut dyn FnMut(usize) -> Vec<char>) -> Pos {
     let line = |l: usize| l.clamp(area.oldest, area.last);
     let half = (area.rows / 2).max(1);
+    let last = area.cols.saturating_sub(1);
     match m {
-        Motion::Left => Pos { col: at.col.saturating_sub(1), ..at },
-        Motion::Right => Pos { col: (at.col + 1).min(area.cols.saturating_sub(1)), ..at },
+        Motion::Left => {
+            let cells = row(at.line);
+            let mut col = at.col.saturating_sub(1);
+            while col > 0 && cell(&cells, col) == '\0' {
+                col -= 1;
+            }
+            Pos { col, ..at }
+        }
+        Motion::Right => {
+            let cells = row(at.line);
+            let next = (at.col + 1..=last).find(|&c| cell(&cells, c) != '\0');
+            Pos { col: next.unwrap_or(at.col), ..at }
+        }
         Motion::Up => Pos { line: line(at.line.saturating_sub(1)), ..at },
         Motion::Down => Pos { line: line(at.line + 1), ..at },
         Motion::HalfUp => Pos { line: line(at.line.saturating_sub(half)), ..at },
@@ -114,24 +127,35 @@ pub fn motion(at: Pos, m: Motion, area: &Area, row: &mut dyn FnMut(usize) -> Vec
         Motion::LineStart => Pos { col: 0, ..at },
         Motion::LineEnd => {
             let cells = row(at.line);
-            Pos { col: (0..area.cols).rev().find(|&c| class(cell(&cells, c)) != 0).unwrap_or(0), ..at }
+            let end = (0..area.cols).rev().find(|&c| !matches!(cell(&cells, c), '\0') && class(cell(&cells, c)) != 0);
+            Pos { col: end.unwrap_or(0), ..at }
         }
         Motion::Top => Pos { line: area.oldest, col: 0 },
         Motion::Bottom => Pos { line: area.last, col: 0 },
-        Motion::WordNext => word_next(at, area, row),
-        Motion::WordBack => word_back(at, area, row),
+        Motion::WordNext => word_next(at, area, &mut |l| whole(row(l))),
+        Motion::WordBack => word_back(at, area, &mut |l| whole(row(l))),
     }
+}
+
+/// A row whose second cells read as the char they belong to, so word runs go over them.
+fn whole(mut cells: Vec<char>) -> Vec<char> {
+    for i in 1..cells.len() {
+        if cells[i] == '\0' {
+            cells[i] = cells[i - 1];
+        }
+    }
+    cells
 }
 
 fn cell(cells: &[char], col: usize) -> char {
     cells.get(col).copied().unwrap_or(' ')
 }
 
-/// 0 blank, 1 word (a wide char's second cell too), 2 punctuation.
+/// 0 blank, 1 word, 2 punctuation.
 fn class(c: char) -> u8 {
     match c {
         c if c.is_whitespace() => 0,
-        c if c.is_alphanumeric() || c == '_' || c == '\0' => 1,
+        c if c.is_alphanumeric() || c == '_' => 1,
         _ => 2,
     }
 }
@@ -192,10 +216,10 @@ pub struct CopyMode {
     pub cursor: Pos,
     /// The selection's kind and anchor; the cursor is its other end.
     pub selection: Option<(Kind, Pos)>,
-    /// A search being typed: its direction and text.
+    /// A search being typed: its direction (true: down) and text.
     pub prompt: Option<(bool, String)>,
-    /// The last search: its text and direction.
-    pub search: Option<(String, bool)>,
+    /// The last search, the same way.
+    pub search: Option<(bool, String)>,
 }
 
 impl CopyMode {

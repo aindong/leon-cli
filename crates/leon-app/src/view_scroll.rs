@@ -98,12 +98,14 @@ impl Workspace {
     }
 
     /// Before a pane is drawn: a new size or screen starts its numbering over (the cache,
-    /// selection and scroll go), a history clear drops what's gone, and missing rows are fetched.
+    /// selection and scroll go, copy mode too if its lines went, and hints label the view again), a history clear drops
+    /// what's gone, and missing rows are fetched.
     pub(super) fn sync_pane(&mut self, id: &str) {
         let live = self.live(id);
         let key = (live.lines, live.cols, live.view.alt_screen);
         let pv = self.term.panes.entry(id.to_string()).or_default();
-        if pv.key != key || live.view.history < pv.history {
+        let renumbered = pv.key != key || live.view.history < pv.history;
+        if renumbered {
             *pv = PaneView { key, ..PaneView::default() };
         }
         pv.history = live.view.history;
@@ -113,6 +115,13 @@ impl Workspace {
         }
         pv.top = scrollback::clamp(&live, pv.top);
         let missing = scrollback::compose(&live, pv.top, &pv.cache).missing;
+        self.check_copy(id);
+        if renumbered {
+            // hints label the new view again
+            if self.term.hints.take_if(|h| h.block == id).is_some() {
+                self.open_hints(id.to_string());
+            }
+        }
         if let Some(&first) = missing.first() {
             self.fetch(id, first.saturating_sub(FETCH / 2).max(oldest), live.lines + FETCH);
         }

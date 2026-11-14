@@ -36,6 +36,8 @@ impl Tui {
         if super::lock(&self.note).take().is_some() {
             *dirty = true;
         }
+        // every key closes the repeat window; only a repeatable one opens it again
+        let mut window = std::mem::take(&mut self.repeat);
         let Some(c) = keys::chord(&k) else {
             // a key binding syntax can't name ends any prefix or sequence, and goes to the pane
             *dirty |= self.after_prefix || !self.pending.is_empty();
@@ -51,7 +53,7 @@ impl Tui {
                 true => keys.repeatable(c),
                 false => keys.config.repeatable(p, c).map(|b| After::Config(Pressed::Run(b))),
             };
-            if let Some((after, prefix)) = self.repeat.press(&c, now, find) {
+            if let Some((after, prefix)) = window.press(&c, now, find) {
                 self.repeat.ran(&prefix, true, repeat, now);
                 return match after {
                     After::Run(a, args) => self.action(&a, args.as_ref()),

@@ -13,20 +13,30 @@ use crate::copy_mode::{self, Area, CopyMode, Op};
 use crate::scrollback::{self, Composed};
 use crate::stamp::stamp;
 
-/// Hints on one pane: the labelled tokens of its view, the letters typed so far, and whether one
-/// was typed in upper case (then the text is typed into the pane instead of copied).
+/// Hints on one pane: the labelled tokens of its view and the letters typed so far, as typed (one
+/// in upper case types the text into the pane instead of copying it).
 pub(super) struct Hints {
-    block: String,
+    pub(super) block: String,
     hints: Vec<Hint>,
     typed: String,
-    upper: bool,
+}
+
+impl Hints {
+    /// The labels still showing: those that start with what was typed.
+    fn showing(&self) -> impl Iterator<Item = &Hint> {
+        let typed = self.typed.to_ascii_lowercase();
+        self.hints.iter().filter(move |x| x.label.starts_with(&typed))
+    }
 }
 
 impl Workspace {
     /// `client.copy_mode` and `client.hints`, on the target pane; either ends the other.
     pub(super) fn mode_action(&mut self, name: &str, cx: &mut Context<Self>) {
         let Some((_, id, _)) = self.target() else { return };
-        (self.term.copy, self.term.hints) = (None, None);
+        if let Some(old) = self.term.copy.as_ref().map(|c| c.block.clone()) {
+            self.exit_copy(&old);
+        }
+        self.term.hints = None;
         match name {
             "client.copy_mode" => self.enter_copy(id),
             _ => self.open_hints(id),
@@ -38,11 +48,14 @@ impl Workspace {
     /// whose pane is no longer the target has ended.
     pub(super) fn mode_key(&mut self, ks: &gpui::Keystroke, chord: Option<&Chord>, cx: &mut Context<Self>) -> bool {
         let target = self.target_block();
-        if self.term.copy.as_ref().is_some_and(|c| Some(&c.block) != target.as_ref()) {
-            self.term.copy = None;
+        if let Some(old) = self.term.copy.as_ref().map(|c| c.block.clone()).filter(|b| Some(b) != target.as_ref()) {
+            self.exit_copy(&old);
         }
         if self.term.hints.as_ref().is_some_and(|h| Some(&h.block) != target.as_ref()) {
             self.term.hints = None;
+        }
+        if let Some(id) = self.term.copy.as_ref().map(|c| c.block.clone()) {
+            self.check_copy(&id);
         }
         if ks.modifiers.platform || (self.term.copy.is_none() && self.term.hints.is_none()) {
             return false;
@@ -53,6 +66,29 @@ impl Workspace {
         }
         cx.notify();
         true
+    }
+
+    /// Whether copy mode's lines on pane `id` are gone: an alt-screen switch moves `scrolled` past
+    /// every line kept, and a full scrollback drops its oldest.
+    fn copy_lost(&self, c: &CopyMode) -> bool {
+        let live = self.live(&c.block);
+        let (oldest, _) = scrollback::bounds(&live);
+        let last = live.view.scrolled + live.lines.saturating_sub(1);
+        let gone = |p: Pos| p.line < oldest || p.line > last;
+        gone(c.cursor) || c.selection.is_some_and(|(_, a)| gone(a))
+    }
+
+    /// Copy mode on pane `id` ends when its lines are gone; a new size keeps them, so it stays,
+    /// in the new width.
+    pub(super) fn check_copy(&mut self, id: &str) {
+        let Some(c) = self.term.copy.as_ref().filter(|c| c.block == id) else { return };
+        if self.copy_lost(c) {
+            return self.exit_copy(id);
+        }
+        let cols = self.live(id).cols;
+        if let Some(c) = self.term.copy.as_mut() {
+            c.cursor.col = c.cursor.col.min(cols.saturating_sub(1));
+        }
     }
 
     /// Copy mode starts at the terminal's cursor, or at the view's bottom row when scrolled back.
@@ -77,7 +113,12 @@ impl Workspace {
             match ks.key.as_str() {
                 "escape" => cm.prompt = None,
                 "enter" => {
-                    cm.search = Some((std::mem::take(text), *forward));
+                    // an empty search repeats the last one, the new way (vi's `/` Enter)
+                    let (forward, text) = (*forward, std::mem::take(text));
+                    cm.search = match (text.is_empty(), cm.search.take()) {
+                        (true, Some((_, last))) => Some((forward, last)),
+                        _ => Some((forward, text)),
+                    };
                     cm.prompt = None;
                     self.copy_search(&id, false);
                 }
@@ -164,7 +205,7 @@ impl Workspace {
     /// The last search again from the cursor (`reverse`: the other way), over find's matches.
     fn copy_search(&mut self, id: &str, reverse: bool) {
         let Some(cm) = self.term.copy.as_ref() else { return };
-        let (Some((query, forward)), at) = (cm.search.clone(), cm.cursor) else { return };
+        let (Some((forward, query)), at) = (cm.search.clone(), cm.cursor) else { return };
         if query.is_empty() {
             return;
         }
@@ -176,15 +217,16 @@ impl Workspace {
         }
     }
 
-    fn open_hints(&mut self, id: String) {
+    pub(super) fn open_hints(&mut self, id: String) {
         let c = self.composed(&id);
         let rows: Vec<String> =
             c.frame.rows.iter().map(|r| scrollback::cells(r, c.frame.cols).into_iter().collect()).collect();
         // the config's patterns were checked when it loaded
-        let extra: Vec<_> = self.keymap.hint_patterns.iter().filter_map(|p| hints::compile(p).ok()).collect();
+        let patterns = self.keymap.hint_patterns.iter().take(hints::MAX_PATTERNS);
+        let extra: Vec<_> = patterns.filter_map(|p| hints::compile(p).ok()).collect();
         let found = hints::find(&rows, &extra);
         if !found.is_empty() {
-            self.term.hints = Some(Hints { block: id, hints: found, typed: String::new(), upper: false });
+            self.term.hints = Some(Hints { block: id, hints: found, typed: String::new() });
         }
     }
 
@@ -203,14 +245,15 @@ impl Workspace {
             return;
         }
         let Some(letter) = letter.filter(|_| !m.control && !m.alt) else { return };
-        let typed = format!("{}{}", h.typed, letter.to_ascii_lowercase());
-        if !h.hints.iter().any(|x| x.label.starts_with(&typed)) {
+        let letter = if m.shift { letter.to_ascii_uppercase() } else { letter };
+        h.typed.push(letter);
+        if h.showing().next().is_none() {
+            h.typed.pop();
             return;
         }
-        h.upper |= m.shift || letter.is_ascii_uppercase();
-        h.typed = typed;
-        let Some(text) = h.hints.iter().find(|x| x.label == h.typed).map(|x| x.text.clone()) else { return };
-        let (id, upper) = (h.block.clone(), h.upper);
+        let typed = h.typed.to_ascii_lowercase();
+        let Some(text) = h.hints.iter().find(|x| x.label == typed).map(|x| x.text.clone()) else { return };
+        let (id, upper) = (h.block.clone(), h.typed.chars().any(|c| c.is_ascii_uppercase()));
         self.term.hints = None;
         match upper {
             true => self.block_event(&id, json!({ "type": "paste", "data": text })),
@@ -236,7 +279,7 @@ impl Workspace {
             stamp(&mut c.frame, 0, col, &badge, t.bg, t.accent);
         }
         if let Some(h) = self.term.hints.as_ref().filter(|h| h.block == id) {
-            for x in h.hints.iter().filter(|x| x.label.starts_with(&h.typed)) {
+            for x in h.showing() {
                 stamp(&mut c.frame, x.row, x.col, &x.label, t.bg, t.accent);
             }
         }
@@ -253,7 +296,7 @@ impl Workspace {
             }
         }
         if let Some(h) = self.term.hints.as_ref().filter(|h| h.block == id) {
-            for x in h.hints.iter().filter(|x| x.label.starts_with(&h.typed) && x.cells > x.label.len()) {
+            for x in h.showing().filter(|x| x.cells > x.label.len()) {
                 let (from, to) = (x.col + x.label.len(), x.col + x.cells - 1);
                 out.push(CellMark { row: x.row, from, to, mark: Mark::Found });
             }
@@ -263,13 +306,19 @@ impl Workspace {
 
     /// Copy mode's cursor on pane `id` and its line's text, while copy mode is on there.
     pub fn copy_cursor(&self, id: &str) -> Option<(Pos, String)> {
-        let cm = self.term.copy.as_ref().filter(|m| m.block == id)?;
+        let cm = self.term.copy.as_ref().filter(|m| m.block == id && !self.copy_lost(m))?;
         let live = self.live(id);
         let spans = match cm.cursor.line.checked_sub(live.view.scrolled) {
             Some(l) => live.rows.get(l).cloned().unwrap_or_default(),
             None => self.cached_row(id, cm.cursor.line).map(|r| r.spans.clone()).unwrap_or_default(),
         };
         Some((cm.cursor, scrollback::text_of(&spans, live.cols, 0, live.cols.saturating_sub(1))))
+    }
+
+    /// Where pane `id` draws copy mode's cursor (outlined): its view row and column.
+    pub fn copy_mark(&self, id: &str) -> Option<(usize, usize)> {
+        let marks = self.mode_marks(id, &self.composed(id));
+        marks.iter().find(|m| m.mark == Mark::Current).map(|m| (m.row, m.from))
     }
 
     /// The hints showing on pane `id`: (label, text).

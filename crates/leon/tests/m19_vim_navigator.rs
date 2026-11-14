@@ -11,9 +11,8 @@ use support::Env;
 /// The recipe: the `lua` block of docs/lua.md that mentions nvim.
 fn recipe() -> String {
     let doc = std::fs::read_to_string(help_walk::repo().join("docs/lua.md")).unwrap();
-    let blocks: Vec<&str> = doc.split("```").collect();
-    let lua = blocks.iter().skip(1).step_by(2).find(|b| b.starts_with("lua\n") && b.contains("nvim"));
-    lua.expect("docs/lua.md has the vim-navigator recipe")["lua\n".len()..].to_string()
+    let recipe = help_walk::blocks(&doc, "lua").into_iter().find(|b| b.contains("nvim"));
+    recipe.expect("docs/lua.md has the vim-navigator recipe")
 }
 
 fn focus(env: &Env, sid: &str) -> String {

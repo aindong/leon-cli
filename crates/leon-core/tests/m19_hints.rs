@@ -41,7 +41,7 @@ fn the_built_in_rules_find_each_token_once() {
         ]
     );
     for h in &found {
-        assert_eq!(h.cells, h.text.chars().count(), "{h:?} spans its own cells");
+        assert_eq!(h.cells, h.text.chars().count(), "{h:?} spans its own cells (no wide chars here)");
     }
 }
 
@@ -87,4 +87,19 @@ fn the_bottom_gets_the_short_labels_and_a_text_keeps_one_label() {
     assert_eq!(label(0).len(), 2, "the top ones need two");
     let distinct: std::collections::HashSet<_> = found.iter().map(|h| h.label.clone()).collect();
     assert_eq!(distinct.len(), 30, "one label per distinct text");
+}
+
+#[test]
+fn past_676_texts_the_top_ones_go_unlabelled() {
+    let lines: Vec<String> = (0..700).map(|i| format!("/t/f{i}")).collect();
+    let found = hints::find(&lines, &[]);
+    assert_eq!(found.len(), 676, "one hint per labelled text");
+    assert!(found.iter().all(|h| h.row >= 24), "the 24 topmost rows lost their hints");
+}
+
+#[test]
+fn a_hint_covers_a_wide_end_and_is_never_one_character() {
+    let found = hints::find(&rows(&["https://x.io/中\0 and /.. ok"]), &[]);
+    assert_eq!(texts(&found), vec![(0, 0, "https://x.io/中")]);
+    assert_eq!(found[0].cells, 15, "the wide char's second cell too");
 }

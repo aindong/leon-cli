@@ -174,7 +174,8 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   256 bytes each, compiled with a 1 MiB limit; Rust's regex is linear and matches don't overlap,
   so a screen yields at most a hint per cell). Labels are prefix-free (tmux-fingers' alphabet),
   shortest near the bottom, one per distinct text, at most 676; a label copies, and in upper case
-  is pasted into the pane. Labels stay where the matches were when hints opened.
+  is pasted into the pane. A new size or screen labels the view again; copy mode ends when its
+  lines are gone (an alt-screen switch, a full scrollback) and stays through a resize.
 - **App layout and look.** Tabs are drawn in one place (`leon_app::chrome::places`): as rows under
   their session in the sidebar (the default), or with `client.tab_style.toggle` in the titlebar row
   beside the session's name, the sidebar then listing sessions only. Panes are inset tiles

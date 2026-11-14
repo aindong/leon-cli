@@ -9,6 +9,8 @@ impl Workspace {
     pub(super) fn key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let ks = &ev.keystroke;
         let chord = keymap::chord(ks);
+        // every key closes the repeat window; only a repeatable one opens it again
+        let mut repeat = std::mem::take(&mut self.repeat);
         if self.palette.is_some() {
             self.palette_key(ks, chord.as_ref(), window, cx);
             cx.stop_propagation();
@@ -32,7 +34,7 @@ impl Workspace {
         }
         if let Some(c) = chord.as_ref().filter(|_| self.pending.is_empty()) {
             let now = Instant::now();
-            if let Some((b, prefix)) = self.repeat.press(c, now, |p, k| self.keymap.repeatable(p, k)) {
+            if let Some((b, prefix)) = repeat.press(c, now, |p, k| self.keymap.repeatable(p, k)) {
                 self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, now);
                 self.run_binding(b, prefix, c, window, cx);
                 cx.stop_propagation();

@@ -12,9 +12,7 @@ fn doc(path: &str) -> String {
 
 /// The fenced `lua` blocks of docs/lua.md.
 fn lua_blocks() -> Vec<String> {
-    let lua = doc("docs/lua.md");
-    let blocks: Vec<&str> = lua.split("```").collect();
-    blocks.iter().skip(1).step_by(2).filter_map(|b| b.strip_prefix("lua\n")).map(String::from).collect()
+    help_walk::blocks(&doc("docs/lua.md"), "lua")
 }
 
 #[test]

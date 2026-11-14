@@ -80,8 +80,12 @@ pub fn find(rows: &[String], extra: &[Regex]) -> Vec<Hint> {
             for caps in re.captures_iter(row) {
                 let Some(m) = caps.get(1).or_else(|| caps.get(0)) else { continue };
                 let text = if i < BUILT_IN.len() { trim(m.as_str()) } else { m.as_str() };
-                if !text.is_empty() {
-                    spans.push((m.start(), m.start() + text.len()));
+                // a one-character hint (`/` once `..` is trimmed) is shorter than its label
+                if text.chars().count() > 1 {
+                    let end = m.start() + text.len();
+                    // a wide char's second cell belongs to the match it ends
+                    let end = end + row[end..].chars().take_while(|&c| c == '\0').count();
+                    spans.push((m.start(), end));
                 }
             }
         }
@@ -100,11 +104,13 @@ pub fn find(rows: &[String], extra: &[Regex]) -> Vec<Hint> {
     // distinct texts, nearest the bottom first
     let mut texts: Vec<&str> = Vec::new();
     for h in found.iter().rev() {
+        if texts.len() == MAX_HINTS {
+            break;
+        }
         if !texts.contains(&h.text.as_str()) {
             texts.push(&h.text);
         }
     }
-    texts.truncate(MAX_HINTS);
     let labelled: Vec<(String, String)> = texts.iter().map(|t| t.to_string()).zip(labels(texts.len())).collect();
     found
         .into_iter()
