@@ -58,17 +58,17 @@ On Linux leon is the server and the CLI (agents and Lua scripts too); the app is
 scripts/package-linux.sh                 # or --arch amd64 / --arch arm64
 ```
 
-That writes a tarball and a `.deb` to `target/linux/` and checks that both install and run in clean
-containers. Install the `.deb` on Debian or Ubuntu with `dpkg` (as root):
+That writes a tarball and a `.deb` to `target/linux/<arch>/` and checks that both install and run
+in clean containers. Install the `.deb` on Debian or Ubuntu with `dpkg` (as root):
 
 ```sh
-dpkg -i target/linux/leon_*.deb
+dpkg -i target/linux/$(dpkg --print-architecture)/leon_*.deb
 ```
 
 or unpack the tarball anywhere and put its `leon` on your `PATH`:
 
 ```sh
-tar xzf target/linux/leon-*-linux.tar.gz -C ~/.local
+tar xzf target/linux/*/leon-*-"$(uname -m)"-linux.tar.gz -C ~/.local
 ln -s ~/.local/leon-*-linux/leon ~/.local/bin/leon
 ```
 

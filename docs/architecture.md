@@ -33,18 +33,23 @@ gives a headless macOS build. `leon-app` stays a workspace member, so Linux comm
 
 Platform code: the socket goes under `$XDG_RUNTIME_DIR/leon` when that is set (Linux desktops set
 it; the dir must still be private); the peer check is tokio's `peer_cred` (`SO_PEERCRED` on Linux,
-`getpeereid` on macOS); a program's cwd is `/proc/<pid>/cwd` on Linux and `proc_pidinfo` on macOS;
+`getpeereid` on macOS); a program's cwd is `/proc/<pid>/cwd` on Linux (a removed dir, which reads `<path> (deleted)`, is
+dropped for the next fallback) and `proc_pidinfo` on macOS;
 the skill hook reads `/proc/<pid>/stat` for the process tree there. Signals, process groups,
 `flock`, PTYs (`portable-pty`) and the state dir are the same POSIX code on both.
 
 `scripts/linux-test.sh [--arch arm64|amd64]` runs clippy, `cargo test --no-fail-fast` and
 `scripts/linux-smoke.sh` (start, a session, `run -- echo hi`, `capture`, a block's cwd, stop, then
 the socket through `XDG_RUNTIME_DIR`) for the non-app crates in the pinned official image
-`rust:1.100.0-bookworm` (tag and digest in `scripts/linux-image.sh`), as uid 1000 rather than root
-so the private-dir and peer checks are real, with the cargo registry in the named volume
+`rust:1.100.0-bookworm` (tag and digest in `scripts/linux-image.sh`), as your own uid (1000 when
+you're root) rather than root, so the private-dir and peer checks are real and what it writes to
+the repo stays yours, with the cargo registry in the named volume
 `leon-cargo-registry` and each arch's target dir in `leon-linux-target-<arch>`. The source is
 mounted read-only. CI (`.github/workflows/ci.yml`) runs the full macOS gate and the Linux script
-and packages on x86_64 and aarch64 runners.
+and packages on x86_64 and aarch64 runners. On an Apple Silicon Mac `--arch amd64` runs under
+Rosetta, which leaks its own fds into children (tests that spawn from several threads deadlock on
+each other's pipes: pass `--test-threads=1`) and writes `$HOME/.cache/rosetta` (the two
+`m7a_skill` tests that check nothing was written then fail); native x86_64 has neither.
 
 ## Decisions
 
@@ -193,13 +198,14 @@ and packages on x86_64 and aarch64 runners.
   copies the app to `~/Applications` and links `~/.local/bin/leon` to the binary inside it. Both
   replace only what they made: an app with our bundle id, or a link whose text is our binary's path.
 - **Linux packages.** `scripts/package-linux.sh [--arch arm64|amd64]` builds a release binary
-  (symbols stripped) in the same pinned image and writes `target/linux/leon-<version>-<arch>-linux.tar.gz`
-  (`leon`, `README.md`, `LICENSE`, `docs/`) and `target/linux/leon_<version>_<debarch>.deb` (hand-built
-  with `dpkg-deb`: `/usr/bin/leon`, docs in `/usr/share/doc/leon`, `Depends: libc6 (>= …)` from the
-  newest glibc symbol the binary uses). It then installs the `.deb` in a clean
-  `debian:bookworm-slim` and unpacks the tarball in `ubuntu:24.04`, and fails unless each `leon
+  (symbols stripped) in the same pinned image and writes, to `target/linux/<arch>/` (emptied
+  first), `leon-<version>-<uname -m>-linux.tar.gz` (`leon`, `README.md`, `LICENSE`, `docs/`) and
+  `leon_<version>_<arch>.deb` (hand-built with `dpkg-deb`: `/usr/bin/leon`, docs in
+  `/usr/share/doc/leon`, `Depends: libc6 (>= …)` from the newest glibc symbol the binary uses, a
+  fixed placeholder maintainer). It then installs the `.deb` in a clean `debian:bookworm-slim` and
+  unpacks the tarball in `ubuntu:24.04` (both pinned by digest), and fails unless each `leon
   --version` prints the version. Rust links glibc dynamically: the binary needs glibc 2.34 or newer
-  (measured on arm64; no musl build yet).
+  (measured on arm64 and amd64; no musl build yet).
 - **`LEON_BIN_DIR`.** Every terminal gets the server binary's directory as `LEON_BIN_DIR` and at
   the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
   `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an
