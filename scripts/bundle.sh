@@ -22,14 +22,22 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# "x.app/" would follow a symlink in the checks below and rm -rf its target
+while [ "$out" != / ] && [ "${out%/}" != "$out" ]; do out=${out%/}; done
+# an absolute --bin, so the version we read and the binary we copy are the same file
+if [ -n "$bin" ]; then bin="$(cd "$(dirname "$bin")" && pwd)/$(basename "$bin")"; fi
+
 bundle_id() { plutil -extract CFBundleIdentifier raw -o - "$1/Contents/Info.plist" 2>/dev/null || true; }
 
-if [ -e "$out" ] || [ -L "$out" ]; then
-  if [ -L "$out" ] || [ ! -d "$out" ] || [ "$(bundle_id "$out")" != dev.leon.app ]; then
-    echo "bundle.sh: $out exists and is not a Leon.app (bundle id dev.leon.app); leaving it alone" >&2
-    exit 1
+check_out() {
+  if [ -e "$out" ] || [ -L "$out" ]; then
+    if [ -L "$out" ] || [ ! -d "$out" ] || [ "$(bundle_id "$out")" != dev.leon.app ]; then
+      echo "bundle.sh: $out exists and is not a Leon.app (bundle id dev.leon.app); leaving it alone" >&2
+      exit 1
+    fi
   fi
-fi
+}
+check_out
 
 if [ -z "$bin" ]; then
   echo "bundle.sh: cargo build --release -p leon"
@@ -38,6 +46,10 @@ if [ -z "$bin" ]; then
 fi
 version=$(LEON_AUTOSTART=0 "$bin" --version)
 version=${version#leon }
+if ! printf '%s' "$version" | grep -Eq '^[0-9A-Za-z.+-]+$'; then
+  echo "bundle.sh: $bin --version printed an odd version: $version" >&2
+  exit 1
+fi
 
 mkdir -p "$(dirname "$out")"
 # build next to the target, then swap it in, so a failed build never leaves half an app
@@ -73,6 +85,7 @@ plutil -lint -s "$app/Contents/Info.plist"
 # ad-hoc signature: Apple Silicon won't launch an unsigned bundle
 codesign --force --sign - "$app" 2>/dev/null || { echo "bundle.sh: codesign failed on $app" >&2; exit 1; }
 
+check_out # again: the build can take minutes
 rm -rf "$out"
 mv "$app" "$out"
 echo "bundle.sh: built $out (leon $version)"

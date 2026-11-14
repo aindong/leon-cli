@@ -111,3 +111,17 @@ fn bundle_refuses_a_foreign_out() {
     assert!(!bundle(&file).status.success(), "bundle.sh overwrote a file");
     assert_eq!(std::fs::read(&file).unwrap(), b"a file");
 }
+
+/// Found in review: `--out link/` (a symlink to one of our bundles, with a slash) must not reach
+/// through the link and replace the bundle it points at.
+#[test]
+fn bundle_refuses_a_symlink_out_even_with_a_slash() {
+    let tmp = tempfile::tempdir().unwrap();
+    let real = tmp.path().join("real.app");
+    assert!(bundle(&real).status.success());
+    std::fs::write(real.join("sentinel"), "x").unwrap();
+    std::os::unix::fs::symlink("real.app", tmp.path().join("link")).unwrap();
+    let o = bundle(&tmp.path().join("link/"));
+    assert!(!o.status.success(), "bundle.sh went through the link");
+    assert!(real.join("sentinel").exists(), "the linked bundle was replaced");
+}

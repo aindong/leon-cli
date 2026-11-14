@@ -58,6 +58,20 @@ fn a_dangling_link_to_our_app_is_still_ours() {
     assert!(k.cli().symlink_metadata().is_err(), "the dangling link is removed");
 }
 
+/// Found in review: HOME with and without a trailing slash is the same home, so the link stays ours.
+#[test]
+fn a_trailing_slash_in_home_is_the_same_home() {
+    let k = Kit::new();
+    let slashed = format!("{}/", k.home.display());
+    let r = k.install_cmd(&[]).env("HOME", &slashed).output().unwrap();
+    assert!(r.status.success(), "{}", String::from_utf8_lossy(&r.stderr));
+    let r = k.install(&[]);
+    assert!(r.ok, "reinstall without the slash: {}", r.out);
+    let r = k.install_cmd(&["--uninstall"]).env("HOME", &slashed).output().unwrap();
+    assert!(r.status.success(), "{}", String::from_utf8_lossy(&r.stderr));
+    assert!(k.cli().symlink_metadata().is_err() && !k.installed_app().exists());
+}
+
 #[test]
 fn install_script_never_uses_sudo() {
     let s = std::fs::read_to_string(install_kit::repo().join("scripts/install.sh")).unwrap();

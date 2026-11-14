@@ -4,7 +4,7 @@
 #   scripts/install.sh [--prefix DIR] [--app PATH] [--uninstall]
 #
 # --prefix DIR  the CLI goes to DIR/bin/leon [default: ~/.local]
-# --app PATH    the Leon.app to install [default: target/release/Leon.app, bundled first if missing]
+# --app PATH    the Leon.app to install [default: build target/release/Leon.app with bundle.sh]
 # --uninstall   remove what an install made (use the same --prefix)
 #
 # Safe to run again. Needs no root, and never replaces or removes anything that isn't a leon
@@ -12,8 +12,11 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
-# an empty HOME would aim everything at /Applications and /.local
+# an empty HOME (or /) would aim everything at /Applications and /.local
 : "${HOME:?install.sh needs HOME set}"
+while [ "${HOME%/}" != "$HOME" ]; do HOME=${HOME%/}; done # one spelling, so our link's text matches
+[ -n "$HOME" ] || { echo "install.sh: HOME is /; set HOME to your home directory" >&2; exit 1; }
+[ "$(id -u)" != 0 ] || { echo "install.sh: don't run this as root; it installs for your own user" >&2; exit 1; }
 prefix="$HOME/.local"
 src=""
 uninstall=0
@@ -62,7 +65,7 @@ fi
 
 if [ -z "$src" ]; then
   src="$repo/target/release/Leon.app"
-  [ -d "$src" ] || "$repo/scripts/bundle.sh"
+  "$repo/scripts/bundle.sh"
 fi
 if ! is_leon_app "$src"; then
   echo "install.sh: $src is not a Leon.app (bundle id dev.leon.app)" >&2
@@ -78,7 +81,12 @@ else
   trap 'rm -rf "$stage"' EXIT
   ditto "$src" "$stage/Leon.app"
   verb=installed
-  if exists "$dest"; then rm -rf "$dest"; verb=updated; fi
+  if exists "$dest"; then
+    # check again: something may have appeared there while we copied
+    is_leon_app "$dest" || { refuse "$dest"; exit 1; }
+    rm -rf "$dest"
+    verb=updated
+  fi
   mv "$stage/Leon.app" "$dest"
   echo "$verb $dest ($("$target" --version))"
 fi
@@ -90,7 +98,8 @@ else
   ln -s "$target" "$cli"
   echo "linked $cli -> $target"
 fi
+# shellcheck disable=SC2016 # $PATH stays literal in the hint: the user pastes that line
 case ":$PATH:" in
   *":$prefix/bin:"*) ;;
-  *) echo "note: $prefix/bin is not on your PATH; add it: export PATH=\"$prefix/bin:\$PATH\"" ;;
+  *) printf 'note: %s is not on your PATH; add this to your shell profile:\n  export PATH=%q:"$PATH"\n' "$prefix/bin" "$prefix/bin" ;;
 esac

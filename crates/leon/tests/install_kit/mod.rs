@@ -33,16 +33,20 @@ impl Kit {
         Kit { tmp, home, app }
     }
 
-    pub fn install(&self, args: &[&str]) -> Run {
-        let o = Command::new("bash")
-            .arg(repo().join("scripts/install.sh"))
+    /// `install.sh --app <bundle> ARGS` with HOME set to the temp home.
+    pub fn install_cmd(&self, args: &[&str]) -> Command {
+        let mut c = Command::new("bash");
+        c.arg(repo().join("scripts/install.sh"))
             .arg("--app")
             .arg(&self.app)
             .args(args)
             .env("HOME", &self.home)
-            .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
-            .output()
-            .unwrap();
+            .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
+        c
+    }
+
+    pub fn install(&self, args: &[&str]) -> Run {
+        let o = self.install_cmd(args).output().unwrap();
         let out = String::from_utf8_lossy(&o.stdout).into_owned() + &String::from_utf8_lossy(&o.stderr);
         Run { ok: o.status.success(), out }
     }
