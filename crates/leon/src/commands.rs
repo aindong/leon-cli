@@ -258,15 +258,21 @@ pub(crate) fn resolve(c: &mut Client, kind: &str, query: &str, session_id: Optio
 /// The session a command acts on: an explicit target, then `-s`, then `$LEON_SESSION`, then the
 /// only session if there is exactly one.
 pub(crate) fn pick_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<String, Fail> {
+    find_session(c, cli, explicit)?
+        .ok_or_else(|| Fail::Api(ApiError::not_found("which session? pass -s or set LEON_SESSION")))
+}
+
+/// `pick_session`, but None when nothing names a session and there isn't exactly one.
+pub(crate) fn find_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<Option<String>, Fail> {
     let env = std::env::var("LEON_SESSION").ok().filter(|s| !s.is_empty());
     if let Some(q) = explicit.or(cli.session.as_deref()).or(env.as_deref()) {
-        return resolve(c, "session", q, None);
+        return resolve(c, "session", q, None).map(Some);
     }
     let r = c.call("session.list", json!({}))?;
-    match r["sessions"].as_array().map(Vec::as_slice) {
-        Some([only]) => Ok(only["session_id"].as_str().unwrap_or_default().to_string()),
-        _ => Err(Fail::Api(ApiError::not_found("which session? pass -s or set LEON_SESSION"))),
-    }
+    Ok(match r["sessions"].as_array().map(Vec::as_slice) {
+        Some([only]) => Some(only["session_id"].as_str().unwrap_or_default().to_string()),
+        _ => None,
+    })
 }
 
 pub(crate) fn read_args(args: Option<&str>) -> Result<Value, Fail> {

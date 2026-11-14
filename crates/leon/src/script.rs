@@ -15,12 +15,9 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Map, Value};
 
 use crate::blocks::{block_query, pick_block};
-use crate::client::{Client, Fail};
-use crate::commands::{print_json, read_args, resolve};
+use crate::client::{Client, Fail, MAX_REPLY};
+use crate::commands::{find_session, print_json, read_args};
 use crate::{Cli, DoArgs};
-
-/// Event and reply lines longer than this end the script, like the CLI client's limit.
-const MAX_LINE: u64 = 64 << 20;
 
 /// A failed call is a failed command (exit 1), even when the error is a missing target.
 fn failed(f: Fail) -> Fail {
@@ -40,7 +37,8 @@ pub fn run(c: &mut Client, cli: &Cli, d: &DoArgs, socket: &Path) -> Result<(), F
     };
     let args = args(d.args.as_deref(), words)?;
     let (session_id, block_id) = here(c, cli)?;
-    let script = target.filter(|t| t.ends_with(".lua") || t.contains('/') || Path::new(t).is_file());
+    // Only a path-like word is a script: a file that happens to share an action's name is not.
+    let script = target.filter(|t| t.ends_with(".lua") || t.contains('/'));
     if d.code.is_none() && script.is_none() {
         let action = d.action.as_deref().or(target).unwrap_or_default();
         let origin = d.origin.as_deref().unwrap_or("cli");
@@ -104,15 +102,7 @@ fn here(c: &mut Client, cli: &Cli) -> Result<(Option<String>, Option<String>), F
         let (sid, bid) = pick_block(c, cli, None)?;
         return Ok((Some(sid), Some(bid)));
     }
-    let env = std::env::var("LEON_SESSION").ok().filter(|s| !s.is_empty());
-    if let Some(q) = cli.session.as_deref().or(env.as_deref()) {
-        return Ok((Some(resolve(c, "session", q, None)?), None));
-    }
-    let r = c.call("session.list", json!({}))?;
-    Ok(match r["sessions"].as_array().map(Vec::as_slice) {
-        Some([only]) => (only["session_id"].as_str().map(str::to_string), None),
-        _ => (None, None),
-    })
+    Ok((find_session(c, cli, None)?, None))
 }
 
 /// The script's connection to the server.
@@ -132,9 +122,9 @@ impl Socket {
             let mut r = BufReader::new(read);
             loop {
                 let mut line = Vec::new();
-                let line = match (&mut r).take(MAX_LINE + 1).read_until(b'\n', &mut line) {
+                let line = match (&mut r).take(MAX_REPLY + 1).read_until(b'\n', &mut line) {
                     Ok(0) | Err(_) => return,
-                    Ok(_) if line.len() as u64 > MAX_LINE => Err("a server line is too long".to_string()),
+                    Ok(_) if line.len() as u64 > MAX_REPLY => Err("a server line is too long".to_string()),
                     Ok(_) => serde_json::from_slice(&line).map_err(|e| format!("bad server line: {e}")),
                 };
                 let stop = line.is_err();
