@@ -1,9 +1,9 @@
 //! M16b criterion 5: a host that can't be reached says why; one that needs a password says to log
 //! in from a terminal; the app's ssh never prompts; everything else keeps working.
 
-mod support;
 #[path = "support/app.rs"]
 mod app;
+mod support;
 
 use app::*;
 use gpui::TestAppContext;

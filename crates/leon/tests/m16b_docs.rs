@@ -7,7 +7,8 @@ fn doc(path: &str) -> String {
 #[test]
 fn the_docs_cover_hosts_in_the_app() {
     let readme = doc("README.md");
-    let devbox = readme.split("## Work on your devbox").nth(1).expect("the README section").split("\n## ").next().unwrap();
+    let devbox =
+        readme.split("## Work on your devbox").nth(1).expect("the README section").split("\n## ").next().unwrap();
     for want in ["This Mac", "Add Host", "needs login", "leon hosts check"] {
         assert!(devbox.contains(want), "README's devbox section covers {want:?}");
     }
@@ -30,7 +31,8 @@ fn the_screenshots_are_windows() {
         let path = format!("{}/../../docs/images/{name}.png", env!("CARGO_MANIFEST_DIR"));
         let png = std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
         assert_eq!(&png[1..4], b"PNG", "{name} is a PNG");
-        let (w, h) = (u32::from_be_bytes(png[16..20].try_into().unwrap()), u32::from_be_bytes(png[20..24].try_into().unwrap()));
+        let (w, h) =
+            (u32::from_be_bytes(png[16..20].try_into().unwrap()), u32::from_be_bytes(png[20..24].try_into().unwrap()));
         assert!(w >= 1000 && h >= 600, "{name} shows a whole window: {w}x{h}");
         let readme = doc("README.md");
         assert!(readme.contains(&format!("docs/images/{name}.png")), "the README shows {name}");

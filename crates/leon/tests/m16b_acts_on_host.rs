@@ -1,9 +1,9 @@
 //! M16b criterion 3: new session, new tab and split act on the focused pane's host; the palette
 //! offers New Session on each machine and Add Host.
 
-mod support;
 #[path = "support/app.rs"]
 mod app;
+mod support;
 
 use app::*;
 use gpui::TestAppContext;

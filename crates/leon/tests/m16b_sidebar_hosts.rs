@@ -2,9 +2,9 @@
 //! then each host from the hosts list, each with its sessions and tabs; with no hosts there is no
 //! host level at all.
 
-mod support;
 #[path = "support/app.rs"]
 mod app;
+mod support;
 
 use app::*;
 use gpui::TestAppContext;
@@ -31,9 +31,7 @@ fn the_sidebar_lists_this_mac_then_each_host(cx: &mut TestAppContext) {
     assert!(drawn(cx, "host-1") && drawn(cx, "host-dot-1"), "the host shows while connecting");
     std::fs::remove_file(h.r.fake.path().join("hold")).unwrap();
     wait_connected(&ws, cx, "devbox");
-    let ok = shows(cx, |cx| {
-        ws.read_with(cx, |ws, _| ws.host_rows()[1].sessions.iter().any(|s| s.title == "api"))
-    });
+    let ok = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.host_rows()[1].sessions.iter().any(|s| s.title == "api")));
     let rows = ws.read_with(cx, |ws, _| ws.host_rows());
     assert!(ok, "devbox lists its session: {rows:?}");
     let labels: Vec<&str> = rows.iter().map(|r| r.label.as_str()).collect();

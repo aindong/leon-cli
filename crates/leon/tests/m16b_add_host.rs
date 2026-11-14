@@ -1,9 +1,9 @@
 //! M16b criterion 6: "Add Host…" asks for a label and an endpoint, validates them as `leon hosts
 //! add` does, saves through the hosts API and starts connecting.
 
-mod support;
 #[path = "support/app.rs"]
 mod app;
+mod support;
 
 use app::*;
 use gpui::TestAppContext;

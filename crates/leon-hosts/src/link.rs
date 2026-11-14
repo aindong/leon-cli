@@ -11,7 +11,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::Endpoint;
 
@@ -32,6 +32,8 @@ struct Shared {
     reached: AtomicBool,
     /// `never_prompt` was called.
     batch: AtomicBool,
+    /// What ssh last said on stderr, or why its run failed: the reason a host is unreachable.
+    last_error: Mutex<Option<String>>,
 }
 
 impl Link {
@@ -63,6 +65,7 @@ impl Link {
             endpoint: endpoint.clone(),
             reached: AtomicBool::new(!autostart),
             batch: AtomicBool::new(false),
+            last_error: Mutex::new(None),
         });
         let serving = shared.clone();
         std::thread::Builder::new().name("leon-link".into()).spawn(move || {
@@ -88,10 +91,22 @@ impl Link {
     pub fn never_prompt(&self) {
         self.shared.batch.store(true, Ordering::SeqCst);
     }
+
+    /// The last line ssh wrote to stderr (`ssh: connect to host … Connection refused`), or why a
+    /// run failed (leon missing on the host, ssh missing here); None while nothing went wrong.
+    pub fn last_error(&self) -> Option<String> {
+        self.shared.last_error.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+}
+
+impl Shared {
+    fn failed(&self, why: String) {
+        *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(why);
+    }
 }
 
 /// One connection: ssh's stdin is what the client writes, ssh's stdout goes back to the client.
-fn serve(conn: UnixStream, s: &Shared) {
+fn serve(conn: UnixStream, s: &Arc<Shared>) {
     // as the server does: the dir is private, and a connection that isn't ours gets no ssh
     // SAFETY: geteuid has no preconditions.
     if peer_uid(&conn) != Some(unsafe { libc::geteuid() }) {
@@ -99,13 +114,29 @@ fn serve(conn: UnixStream, s: &Shared) {
     }
     let autostart = !s.reached.load(Ordering::SeqCst);
     let mut cmd = s.endpoint.ssh(autostart, s.batch.load(Ordering::SeqCst));
-    let mut child = match cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn() {
+    let mut child = match cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("leon: can't run {:?}: {e}", cmd.get_program());
+            let why = format!("can't run {:?}: {e}", cmd.get_program());
+            eprintln!("leon: {why}");
+            s.failed(why);
             return;
         }
     };
+    // ssh's messages still reach our stderr; the last one is kept as the reason
+    let (read_all, errors) = std::sync::mpsc::channel::<()>();
+    if let Some(err) = child.stderr.take() {
+        let s = s.clone();
+        let _ = std::thread::Builder::new().name("leon-link-err".into()).spawn(move || {
+            let _read_all = read_all; // dropped at the end of ssh's stderr
+            for line in io::BufRead::lines(io::BufReader::new(err)).map_while(Result::ok) {
+                eprintln!("{line}");
+                if !line.trim().is_empty() {
+                    s.failed(line.trim().to_string());
+                }
+            }
+        });
+    }
     let (Some(mut stdin), Some(mut stdout), Ok(mut from)) = (child.stdin.take(), child.stdout.take(), conn.try_clone())
     else {
         let _ = child.kill();
@@ -118,16 +149,26 @@ fn serve(conn: UnixStream, s: &Shared) {
     });
     let mut to = &conn;
     let mut buf = vec![0; 64 << 10];
+    let mut answered = false;
     while let Ok(n @ 1..) = stdout.read(&mut buf) {
         s.reached.store(true, Ordering::SeqCst);
+        if !answered {
+            answered = true;
+            *s.last_error.lock().unwrap_or_else(|e| e.into_inner()) = None; // warnings before it worked
+        }
         if to.write_all(&buf[..n]).is_err() {
             break;
         }
     }
     drop(stdout);
+    // ssh's last words are in before anyone asks why it ended (bounded: a program ssh started
+    // may still hold its stderr)
+    let _ = errors.recv_timeout(std::time::Duration::from_secs(1));
     if child.wait().is_ok_and(|st| st.code() == Some(127)) {
         let name = &s.name;
-        eprintln!("leon: leon isn't on {name}'s PATH or in ~/.local/bin: install leon on {name}");
+        let why = format!("leon isn't on {name}'s PATH or in ~/.local/bin: install leon on {name}");
+        eprintln!("leon: {why}");
+        s.failed(why);
     }
     let _ = conn.shutdown(std::net::Shutdown::Both);
 }

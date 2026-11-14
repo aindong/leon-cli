@@ -2,9 +2,9 @@
 //! remote pane queue off the UI thread and happen once the link moves again; a link that stays
 //! stalled is found dead and resumed.
 
-mod support;
 #[path = "support/app.rs"]
 mod app;
+mod support;
 
 use std::time::{Duration, Instant};
 

@@ -1,9 +1,9 @@
 //! M16b criterion 4: a dropped link shows reconnecting with its backoff, keeps the host's panes on
 //! screen under a stale overlay, and comes back with the event stream resumed: no event lost.
 
-mod support;
 #[path = "support/app.rs"]
 mod app;
+mod support;
 
 use app::*;
 use gpui::TestAppContext;
@@ -27,9 +27,7 @@ fn a_dropped_link_reconnects_and_resumes(cx: &mut TestAppContext) {
 
     std::fs::write(h.r.fake.path().join("down"), "").unwrap();
     assert!(h.r.kill_transports() >= 3);
-    let reconnecting = |cx: &mut gpui::VisualTestContext| {
-        matches!(state(&ws, cx, "devbox"), Some(HostState::Reconnecting { attempt, .. }) if attempt >= 2)
-    };
+    let reconnecting = |cx: &mut gpui::VisualTestContext| matches!(state(&ws, cx, "devbox"), Some(HostState::Reconnecting { attempt, .. }) if attempt >= 2);
     assert!(shows(cx, reconnecting), "reconnecting, and retrying: {:?}", state(&ws, cx, "devbox"));
     let Some(HostState::Reconnecting { retry_in, .. }) = state(&ws, cx, "devbox") else { unreachable!() };
     assert!(retry_in > std::time::Duration::ZERO, "it says when it tries next");
@@ -41,9 +39,8 @@ fn a_dropped_link_reconnects_and_resumes(cx: &mut TestAppContext) {
     h.r.remote.ok(&["new", "while-down"]);
     std::fs::remove_file(h.r.fake.path().join("down")).unwrap();
     wait_connected(&ws, cx, "devbox");
-    let ok = shows(cx, |cx| {
-        ws.read_with(cx, |ws, _| ws.host_rows()[1].sessions.iter().any(|s| s.title == "while-down"))
-    });
+    let ok =
+        shows(cx, |cx| ws.read_with(cx, |ws, _| ws.host_rows()[1].sessions.iter().any(|s| s.title == "while-down")));
     assert!(ok, "the session made while the link was down shows up");
     assert!(!drawn(cx, "stale-overlay"));
     assert!(remote.seq() > seq, "the stream went on");
