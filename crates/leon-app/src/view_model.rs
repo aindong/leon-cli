@@ -4,8 +4,16 @@
 use super::*;
 
 impl Workspace {
+    /// Every machine's sessions, This Mac's first, then each host's in the hosts list's order.
     pub(super) fn rows(&self) -> Vec<SessionRow> {
-        let m = self.app.model();
+        let mut out = Vec::new();
+        for (host, remote) in self.hosts.remotes() {
+            out.extend(Self::host_rows_of(host, &remote.model()));
+        }
+        out
+    }
+
+    fn host_rows_of(host: usize, m: &crate::remote::Model) -> Vec<SessionRow> {
         m.sessions
             .iter()
             .enumerate()
@@ -25,6 +33,7 @@ impl Workspace {
                     })
                     .collect();
                 SessionRow {
+                    host,
                     id: s.id.clone(),
                     title: s.label.clone().unwrap_or_else(|| format!("Session {}", i + 1)),
                     status: status::aggregate(windows.iter().map(|w| w.status)),
@@ -78,14 +87,14 @@ impl Workspace {
     }
 
     pub fn settings(&self) -> Settings {
-        self.settings
+        self.settings.clone()
     }
 
     /// Where tabs and sessions are drawn now.
     pub fn places(&self) -> Places {
-        // with no session the sidebar has nothing to list: the empty state takes the window
-        let sessions = !self.app.model().sessions.is_empty();
-        chrome::places(self.settings.tab_style, self.sidebar && sessions)
+        // with no session and no host the sidebar has nothing to list: the empty state takes the window
+        let listed = self.grouped() || self.hosts.remotes().any(|(_, r)| !r.model().sessions.is_empty());
+        chrome::places(self.settings.tab_style, self.sidebar && listed)
     }
 
     /// Save the settings, when this workspace has a place for them.
@@ -113,6 +122,7 @@ impl Workspace {
                 Some("client.palette.toggle"),
             ),
             ("leon skill setup".into(), "Let Claude Code and Codex open panes here".into(), None),
+            ("leon hosts add".into(), "Add a host".into(), Some("client.host.add")),
         ]
     }
 
@@ -148,18 +158,26 @@ impl Workspace {
     pub fn signature(&self) -> u64 {
         let mut h = DefaultHasher::new();
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
-        {
-            let m = self.app.model();
+        for (host, remote) in self.hosts.remotes() {
+            let m = remote.model();
+            host.hash(&mut h);
             for s in &m.sessions {
                 (&s.id, &s.label, s.active, s.revision).hash(&mut h);
                 for w in &s.windows {
                     (&w.id, &w.label).hash(&mut h);
                 }
             }
+        }
+        {
+            let m = self.app.model();
             for id in &shown {
                 (id, m.screen_updates.get(id)).hash(&mut h);
             }
         }
+        for m in self.hosts.machines() {
+            (&m.label, m.state()).hash(&mut h);
+        }
+        (self.host, &self.settings.collapsed_hosts).hash(&mut h);
         // status and titles show for every tab and session, shown or not
         let rows = self.rows();
         for r in &rows {

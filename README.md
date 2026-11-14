@@ -114,9 +114,24 @@ leon -H devbox attach               # its sessions, in this terminal
 leon hosts check
 ```
 
-A dropped Wi-Fi link is retried for a minute: `leon events` resumes without losing or repeating
-an event, and `leon attach` reconnects and redraws (keys typed while the link is down are lost).
-Use ssh keys or an agent: each connection is its own ssh session.
+A dropped Wi-Fi link is retried for a minute: `leon events` and the app resume without losing or
+repeating an event, and `leon attach` reconnects and redraws (keys typed while the link is down are
+lost). Use ssh keys or an agent: each connection is its own ssh session.
+
+The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
+and tabs and a dot for its connection. A remote pane works like a local one, with the host's name in
+its header; New Session, New Tab and splits act on the machine of the focused pane, and the palette
+has New Session on each machine and Add Host… (a label, then an `ssh://` endpoint). Click a host's
+label to fold it away. The app's ssh never asks for a password: a host that needs one says
+`needs login: run leon hosts check devbox in a terminal`; do that once (accept the host key, unlock
+your key), and the app's next try gets in. While a link is down the host's panes keep their last
+screens under a "reconnecting" note.
+
+![The sidebar with This Mac and a devbox, each with its sessions and tabs](docs/images/m16b-hosts.png)
+
+![A pane on the devbox, focused, with the host's name in its header](docs/images/m16b-remote-pane.png)
+
+![A host that can't be reached, with ssh's reason under its label](docs/images/m16b-unreachable.png)
 
 ## Let an agent drive it
 

@@ -51,7 +51,7 @@ pub fn places(style: TabStyle, sidebar_shown: bool) -> Places {
 /// The sidebar's width range in points; dragging its edge stays inside it.
 pub const SIDEBAR_WIDTHS: (f32, f32) = (160., 400.);
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     pub tab_style: TabStyle,
@@ -62,11 +62,20 @@ pub struct Settings {
     /// its display, and that display's id.
     pub window: Option<Frame>,
     pub display: Option<u32>,
+    /// The machines whose sessions the sidebar hides, by label (`This Mac` for this one).
+    pub collapsed_hosts: Vec<String>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { tab_style: TabStyle::Sidebar, pane_headers: true, sidebar_width: 220., window: None, display: None }
+        Settings {
+            tab_style: TabStyle::Sidebar,
+            pane_headers: true,
+            sidebar_width: 220.,
+            window: None,
+            display: None,
+            collapsed_hosts: Vec::new(),
+        }
     }
 }
 

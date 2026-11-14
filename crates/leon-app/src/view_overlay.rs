@@ -22,7 +22,7 @@ impl Workspace {
         let first = selected.saturating_sub(PALETTE_ROWS - 1);
         let mut list = div().flex().flex_col().py(px(4.));
         for (i, item) in matches.iter().enumerate().skip(first).take(PALETTE_ROWS) {
-            let name = item.name.clone();
+            let (name, args) = (item.name.clone(), item.args.clone());
             list = list.child(
                 div()
                     .id(SharedString::from(format!("palette-{i}")))
@@ -55,17 +55,21 @@ impl Workspace {
                         MouseButton::Left,
                         cx.listener(move |ws, _, window, cx| {
                             ws.palette = None;
-                            ws.run_action(&name, None, "palette", window, cx);
+                            ws.run_action(&name, args.as_ref(), "palette", window, cx);
                             cx.stop_propagation();
                         }),
                     ),
             );
         }
-        if matches.is_empty() {
+        let ask = self.ask_rows();
+        if let Some((_, row)) = &ask {
+            list = list.child(div().px(px(16.)).py(px(6.)).text_color(rgb(t.muted)).child(row.clone()));
+        } else if matches.is_empty() {
             list = list.child(div().px(px(16.)).py(px(6.)).text_color(rgb(t.muted)).child("No matching actions"));
         }
         let prompt = if query.is_empty() {
-            div().text_color(rgb(t.muted)).child("Type an action…")
+            let placeholder = ask.map_or("Type an action…".to_string(), |(p, _)| p);
+            div().text_color(rgb(t.muted)).child(placeholder)
         } else {
             div().text_color(rgb(t.text)).child(query)
         };

@@ -118,7 +118,13 @@ impl Picker {
     pub fn shown(&self, rows: &[Row]) -> Vec<usize> {
         let items: Vec<Item> = rows
             .iter()
-            .map(|r| Item { name: String::new(), title: r.path.clone(), keywords: Vec::new(), shortcut: None })
+            .map(|r| Item {
+                name: String::new(),
+                title: r.path.clone(),
+                keywords: Vec::new(),
+                shortcut: None,
+                args: None,
+            })
             .collect();
         filter(&items, &self.query)
     }

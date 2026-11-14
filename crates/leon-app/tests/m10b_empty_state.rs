@@ -15,6 +15,7 @@ fn the_empty_state_lists_the_keys_that_matter(cx: &mut TestAppContext) {
     assert!(drawn(cx, "empty-state"), "an empty state, not a blank pane area");
     let hints = ws.read_with(cx, |ws, _| ws.empty_hints());
     let keys: Vec<&str> = hints.iter().map(|(k, _)| k.as_str()).collect();
-    assert_eq!(keys, ["⌘N", "⌘K", "leon skill setup"], "from the live keymap: {hints:?}");
+    // M16b added "Add a host" after these
+    assert_eq!(keys[..3], ["⌘N", "⌘K", "leon skill setup"], "from the live keymap: {hints:?}");
     s.app.stop();
 }

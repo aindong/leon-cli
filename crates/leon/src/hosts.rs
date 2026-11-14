@@ -57,17 +57,10 @@ pub fn run(cli: &Cli, cmd: &HostsCmd) -> Result<(), Fail> {
             }
         }
         HostsCmd::Add { label, endpoints, icon } => {
-            hosts::check_label(label).map_err(Fail::Usage)?;
-            if let Some(i) = icon {
-                hosts::check_icon(i).map_err(Fail::Usage)?;
-            }
-            for e in endpoints {
-                e.parse::<Endpoint>().map_err(Fail::Usage)?;
-            }
-            if list.iter().any(|h| h.label == *label) {
-                return Err(Fail::Other(format!("there is a host {label:?} already; remove it first")));
-            }
-            list.push(Host { label: label.clone(), endpoints: endpoints.clone(), icon: icon.clone() });
+            let host = Host { label: label.clone(), endpoints: endpoints.clone(), icon: icon.clone() };
+            // a label in use is not a bad command line
+            let fail = |e: String| if e.starts_with(hosts::TAKEN) { Fail::Other(e) } else { Fail::Usage(e) };
+            hosts::add(&mut list, host).map_err(fail)?;
             hosts::save(&list).map_err(Fail::Other)?;
         }
         HostsCmd::Remove { labels } => {

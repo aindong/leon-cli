@@ -172,7 +172,7 @@ impl Workspace {
         self.seen_focus = now;
         if let Some((sid, id, _)) = self.target().filter(|_| arrived) {
             let event = json!({ "session_id": sid, "block_id": id, "event": { "type": "focus" } });
-            let _ = self.app.call("block.event", event);
+            self.app.send_then("block.event", event, drop); // a pane already gone is fine
         }
     }
 }
@@ -243,6 +243,7 @@ impl Render for Workspace {
             .text_color(rgb(DARK.text))
             .children(places.sidebar.map(|list| self.render_sidebar(&rows, list, cx)))
             .child(column)
+            .children(self.render_stale(window))
             // last, so it paints over the panes: GPUI paints children in order
             .children(self.render_overlay(cx))
     }

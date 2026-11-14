@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::Endpoint;
 
 pub const FILE: &str = "hosts.json";
+/// How the error for a label in use starts.
+pub const TAKEN: &str = "there is a host";
 const VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -50,6 +52,33 @@ pub fn check_icon(icon: &str) -> Result<(), String> {
     match crate::word(icon, 64) {
         true => Ok(()),
         false => Err(format!("bad icon name {icon:?}: use letters, digits, . _ -")),
+    }
+}
+
+/// Add `host` to `list` as `leon hosts add` does: a good label and icon, every endpoint parseable,
+/// no other host with that label. `list` is unchanged when it fails.
+pub fn add(list: &mut Vec<Host>, host: Host) -> Result<(), String> {
+    check_label(&host.label)?;
+    if let Some(i) = &host.icon {
+        check_icon(i)?;
+    }
+    if host.endpoints.is_empty() {
+        return Err(format!("host {} has no endpoint", host.label));
+    }
+    for e in &host.endpoints {
+        e.parse::<Endpoint>()?;
+    }
+    check_new_label(list, &host.label)?;
+    list.push(host);
+    Ok(())
+}
+
+/// A label that is good and not taken in `list`.
+pub fn check_new_label(list: &[Host], label: &str) -> Result<(), String> {
+    check_label(label)?;
+    match list.iter().any(|h| h.label == label) {
+        true => Err(format!("{TAKEN} {label:?} already; remove it first")),
+        false => Ok(()),
     }
 }
 

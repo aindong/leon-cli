@@ -26,6 +26,7 @@ use leon_lua::keys::Chord;
 use serde_json::{json, Value};
 
 use crate::chrome::{self, Places, Settings, SidebarList};
+use crate::hosts::{HostState, Hosts};
 use crate::icons::{Icon, ROW_ICON, TOOLBAR_ICON, TOOLBAR_TARGET};
 use crate::keymap::{self, Bound, Keymap, Pressed};
 use crate::panes::{self, Divider, GAP};
@@ -177,45 +178,10 @@ pub fn run(server: Remote) {
     });
 }
 
-/// Frame build times (render start to paint end), printed each second that drew when
-/// `LEON_FRAME_STATS=1`.
-#[derive(Default)]
-struct Stats {
-    enabled: bool,
-    render_start: Option<Instant>,
-    frames: u32,
-    total: Duration,
-    max: Duration,
-    since: Option<Instant>,
-}
-
-impl Stats {
-    fn painted(&mut self) {
-        if let Some(start) = self.render_start.take() {
-            let took = start.elapsed();
-            self.frames += 1;
-            self.total += took;
-            self.max = self.max.max(took);
-            self.since.get_or_insert_with(Instant::now);
-        }
-    }
-
-    fn report(&mut self) {
-        let Some(since) = self.since.filter(|s| s.elapsed() >= Duration::from_secs(1)) else { return };
-        let ms = |d: Duration| d.as_secs_f64() * 1000.;
-        eprintln!(
-            "leon frames: {} in {:.2}s, avg {:.2} ms, max {:.2} ms",
-            self.frames,
-            since.elapsed().as_secs_f64(),
-            ms(self.total) / self.frames as f64,
-            ms(self.max)
-        );
-        (self.frames, self.total, self.max, self.since) = (0, Duration::ZERO, Duration::ZERO, None);
-    }
-}
-
 /// What one render needs from the model, copied out under the state lock.
 struct SessionRow {
+    /// Which machine it is on (`Hosts` index; 0 is This Mac).
+    host: usize,
     id: String,
     title: String,
     windows: Vec<WindowRow>,
@@ -233,6 +199,8 @@ struct WindowRow {
 struct Palette {
     query: String,
     selected: usize,
+    /// Asking for text instead of listing actions (Add Host…), with the last refusal.
+    ask: Option<(hosts_view::Ask, Option<String>)>,
 }
 
 /// The last `client.keymap` reply, handed over from the runtime thread that fetched it.
@@ -285,7 +253,13 @@ pub fn settings_path() -> Option<PathBuf> {
 }
 
 pub struct Workspace {
+    /// The selected session's machine's remote: what every action acts on.
     app: Rc<Remote>,
+    /// This Mac and the hosts; `host` is the one `app` belongs to.
+    hosts: Hosts,
+    host: usize,
+    /// A session to select once it shows in its host's model (New Session over a link).
+    select_later: Arc<Mutex<Option<(usize, String)>>>,
     drag: Option<Drag>,
     session_id: Option<String>,
     /// Where the selected session sat in the list when last seen.
@@ -326,13 +300,29 @@ impl Workspace {
         Self::with_settings(app, None, window, cx)
     }
 
-    /// The app's own workspace: settings from `settings_path()`, saved there on each change.
+    /// The app's own workspace: settings from `settings_path()`, saved there on each change, and
+    /// the hosts list's machines.
     pub fn for_app(app: Rc<Remote>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::with_settings(app, settings_path(), window, cx)
+        let hosts = leon_hosts::hosts::load().unwrap_or_else(|e| {
+            eprintln!("leon: can't read the hosts list: {e}");
+            Vec::new()
+        });
+        Self::with_hosts(app, settings_path(), hosts, window, cx)
     }
 
     /// A workspace with the settings in `path` (the defaults when it is None or unreadable).
     pub fn with_settings(app: Rc<Remote>, path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::with_hosts(app, path, Vec::new(), window, cx)
+    }
+
+    /// A workspace on This Mac's `app` that also shows `hosts`, connecting to each.
+    pub fn with_hosts(
+        app: Rc<Remote>,
+        path: Option<PathBuf>,
+        hosts: Vec<leon_hosts::Host>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         if app.model().sessions.is_empty() {
             let _ = app.act("session.create", json!({}));
         }
@@ -342,15 +332,20 @@ impl Workspace {
         // channel's bound holds: each clone would bring a slot of its own)
         let (wake, mut woken) = futures::channel::mpsc::channel::<()>(0);
         let wake = Mutex::new(wake);
-        app.on_change(move || drop(wake.lock().unwrap_or_else(|e| e.into_inner()).try_send(())));
+        let wake: Arc<dyn Fn() + Send + Sync> =
+            Arc::new(move || drop(wake.lock().unwrap_or_else(|e| e.into_inner()).try_send(())));
+        let woke = wake.clone();
+        app.on_change(move || woke());
+        let hosts = Hosts::new(app.clone(), hosts, wake);
         let poll = cx.spawn(async move |this, cx| loop {
             let timer = cx.background_executor().timer(POLL);
             futures::future::select(timer, woken.next()).await;
             let alive = this.update(cx, |ws, cx| {
-                if !ws.app.alive() {
+                if !ws.hosts.local().alive() {
                     cx.quit(); // the server stopped (`leon server stop`, or the menu's end-all)
                     return;
                 }
+                ws.poll_hosts();
                 ws.stats.borrow_mut().report();
                 ws.refresh_keymap(cx);
                 let now = ws.signature();
@@ -363,7 +358,7 @@ impl Workspace {
                 return;
             }
         });
-        let stats = Stats { enabled: std::env::var("LEON_FRAME_STATS").is_ok_and(|v| v == "1"), ..Stats::default() };
+        let stats = Stats::new();
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |_, _, cx| cx.notify());
         // the window's frame and display are kept with the settings, and saved when the app quits
@@ -379,6 +374,9 @@ impl Workspace {
         let release = cx.on_release(|ws, _| ws.save_settings());
         Workspace {
             app,
+            hosts,
+            host: 0,
+            select_later: Arc::default(),
             drag: None,
             session_id,
             selected_at: 0,
@@ -470,21 +468,23 @@ impl Workspace {
     }
 
     /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
-    /// killed from the CLI) hands over to the session now in its place.
+    /// killed from the CLI, or its host went away) hands over to the session now in its place.
     fn settle(&mut self, rows: &[SessionRow]) {
         if let Some(i) = rows.iter().position(|r| Some(&r.id) == self.session_id.as_ref()) {
             self.selected_at = i;
+            self.use_host(rows[i].host);
             return;
         }
         self.selected_at = self.selected_at.min(rows.len().saturating_sub(1));
         self.session_id = rows.get(self.selected_at).map(|r| r.id.clone());
+        self.use_host(rows.get(self.selected_at).map_or(0, |r| r.host));
     }
 
     /// Run a layout method on the selected session; redraw.
     fn call(&mut self, method: &str, mut params: serde_json::Value, cx: &mut Context<Self>) {
         let Some(sid) = self.session_id.clone() else { return };
         params["session_id"] = json!(sid);
-        let _ = self.app.act(method, params);
+        self.app.act_later(method, params, drop);
         let rows = self.rows();
         self.settle(&rows);
         cx.notify();
@@ -499,6 +499,8 @@ mod find;
 mod handlers;
 #[path = "view_header.rs"]
 mod header;
+#[path = "view_hosts.rs"]
+mod hosts_view;
 #[path = "view_keys.rs"]
 mod keys;
 #[path = "view_model.rs"]
@@ -515,6 +517,9 @@ mod scroll;
 mod select;
 #[path = "view_sidebar.rs"]
 mod sidebar;
+#[path = "view_stats.rs"]
+mod stats;
 use bars::status_mark;
 use paint::*;
 use panes_view::*;
+use stats::Stats;
