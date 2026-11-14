@@ -1,7 +1,7 @@
 //! The OSC 7501 program-status protocol (docs/spec.md §5): scanner, parser, per-terminal store.
 //!
-//! Pure: M2 feeds PTY output into a [`Tracker`] per terminal, hands the pass-through bytes to the
-//! emulator, writes `reply` back to the PTY, and M3 forwards the [`Change`]s as events.
+//! Pure: the terminal's reader feeds PTY output into a [`Tracker`], hands the pass-through bytes to
+//! the emulator, writes `reply` back to the PTY, and forwards the [`Change`]s as events.
 
 mod report;
 mod scan;
@@ -28,6 +28,8 @@ pub struct Fed {
     pub changes: Vec<Change>,
     /// Bytes to write back to the PTY: one query reply at most, however many queries the read held.
     pub reply: Vec<u8>,
+    /// The last OSC 7 payload (a `file://host/path` URL, unchecked) the read completed.
+    pub pwd: Option<Vec<u8>>,
 }
 
 impl Tracker {
@@ -49,6 +51,7 @@ impl Tracker {
             Piece::Prompt => fed.changes.extend(store.prompt()),
             Piece::Reset => fed.changes.extend(store.reset()),
         });
+        fed.pwd = self.scanner.take_pwd();
         fed
     }
 }

@@ -6,20 +6,20 @@ use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use leon_core::model::clean_label;
-use leon_core::terminal::{Spec, Terminal, NAMESPACE as TERMINAL};
-use leon_core::{new_id, ApiError, Block, State};
+use leon_core::terminal::{Notice, Spec, Terminal, NAMESPACE as TERMINAL};
+use leon_core::{new_id, ApiError, Block, Place, State};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::methods::{Empty, MethodDoc, SessionRef};
+use crate::methods::{revision, Empty, MethodDoc, SessionRef};
 use crate::registry::{parse, schema, to_value};
 use crate::{Ctx, Later, Registry};
 
 pub const SHELL_FLAVOR: &str = "dev.leon.terminal.shell";
 
-/// What a new window holds. Today one block; splits come with M3.
+/// What a new window or split holds: one block (nested layouts aren't supported yet).
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase", deny_unknown_fields)]
 pub enum Layout {
@@ -59,14 +59,16 @@ impl Layout {
     }
 }
 
-/// Start `spec` in window `window_id`. Call with the state lock held, so an instant exit can't
-/// be reported before the block is in the model.
+/// Start `spec` in window `window_id`, beside `place`'s anchor (None: as the empty window's only
+/// block). Call with the state lock held, so an instant exit can't be reported before the block is
+/// in the model.
 pub fn open(
     ctx: &Arc<Ctx>,
     st: &mut State,
     session_id: &str,
     window_id: &str,
     spec: BlockSpec,
+    place: Option<&Place>,
 ) -> Result<String, ApiError> {
     if spec.flavor.as_deref().is_some_and(|f| f != SHELL_FLAVOR) {
         return Err(ApiError::bad_request(format!("unknown flavor; the only one is {SHELL_FLAVOR}")));
@@ -90,9 +92,11 @@ pub fn open(
     };
     let weak = Arc::downgrade(ctx);
     let block_id = id.clone();
-    let terminal = Terminal::spawn(spec, move |code| {
-        if let Some(ctx) = weak.upgrade() {
-            ctx.state().block_exited(&block_id, code);
+    let terminal = Terminal::spawn(spec, move |notice| {
+        let Some(ctx) = weak.upgrade() else { return };
+        let exited = matches!(notice, Notice::Exited(_));
+        ctx.state().notice(&block_id, notice);
+        if exited {
             ctx.exited.send_modify(|n| *n += 1);
         }
     })
@@ -106,7 +110,7 @@ pub fn open(
         exit_code: None,
         terminal: Arc::new(terminal),
     };
-    st.add_block(session_id, block)?;
+    st.add_block(session_id, block, place)?;
     Ok(id)
 }
 
@@ -207,10 +211,15 @@ pub fn add(r: &mut Registry) {
         }
         Ok(view(b))
     });
-    r.add("block.close", "Close a block and end its program; an emptied window closes too.", |ctx, p: BlockRef| {
-        ctx.state().close_block(&p.session_id, &p.block_id)?;
-        Ok(Empty {})
-    });
+    r.add(
+        "block.close",
+        "Close a block and end its program; its split collapses, and an emptied window closes too.",
+        |ctx, p: BlockRef| {
+            let mut st = ctx.state();
+            st.close_block(&p.session_id, &p.block_id)?;
+            Ok(revision(&st, &p.session_id))
+        },
+    );
     r.add("block.method", "Call a block method (see block_types in help.all) with `args`.", |ctx, p: CallMethod| {
         let t = terminal(ctx, &BlockRef { session_id: p.session_id, block_id: p.block_id })?;
         terminal_method(&t, &p.method, p.args.unwrap_or(Value::Null))
@@ -294,6 +303,13 @@ pub struct Process {
 #[serde(deny_unknown_fields)]
 pub struct NoArgs {}
 
+#[derive(Serialize, JsonSchema)]
+pub struct ProgramStatus {
+    /// `{id, record}` per record, least recently reported first; `id` null is the root record.
+    /// A record has `state` and optional `kind`, `progress`, `app` (inherited), `title`, `msg`.
+    pub records: Vec<Value>,
+}
+
 type TermFn = Box<dyn Fn(&Terminal, Value) -> Result<Value, ApiError> + Send + Sync>;
 
 /// A terminal block method: its docs for `help.all` and its handler, kept in one table.
@@ -335,6 +351,11 @@ static TERMINAL_METHODS: LazyLock<Vec<TermMethod>> = LazyLock::new(|| {
         }),
         term_method("process", "The program's pid and argv.", |t, _: NoArgs| {
             Ok(Process { pid: t.pid(), command: t.command.clone() })
+        }),
+        term_method("program_status", "The OSC 7501 program-status records.", |t, _: NoArgs| {
+            let records =
+                t.program_status().into_iter().map(|(id, record)| serde_json::json!({ "id": id, "record": record }));
+            Ok(ProgramStatus { records: records.collect() })
         }),
     ]
 });

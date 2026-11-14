@@ -7,7 +7,7 @@ use leon_core::ApiError;
 use serde_json::{json, Value};
 
 use crate::client::{Client, Fail};
-use crate::commands::{label, pick_session, print_json, resolve};
+use crate::commands::{label, pick_session, print_json, read_args, resolve};
 use crate::{BlockCmd, Cli, Cmd};
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
@@ -96,6 +96,14 @@ fn block(c: &mut Client, cli: &Cli, cmd: &BlockCmd) -> Result<(), Fail> {
             let (sid, bid) = pick_block(c, cli, target.as_deref())?;
             c.call("block.close", json!({ "session_id": sid, "block_id": bid }))?;
         }
+        BlockCmd::Call { method: m, args } => {
+            let (sid, bid) = pick_block(c, cli, None)?;
+            let name = if m.contains('.') { m.clone() } else { format!("{TERMINAL}.{m}") };
+            let args = read_args(args.as_deref())?;
+            print_json(
+                &c.call("block.method", json!({ "session_id": sid, "block_id": bid, "method": name, "args": args }))?,
+            );
+        }
     }
     Ok(())
 }
@@ -145,8 +153,8 @@ fn block_query(cli: &Cli, explicit: Option<&str>) -> Option<String> {
 
 /// The block a command acts on, as (session id, block id). A query is looked up in `-s`, else
 /// `$LEON_SESSION`, else every session (full IDs always search every session unless `-s` is given);
-/// with no query it is the active window's block in the picked session.
-fn pick_block(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<(String, String), Fail> {
+/// with no query it is the active window's focused block in the picked session.
+pub(crate) fn pick_block(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<(String, String), Fail> {
     if let Some(q) = block_query(cli, explicit) {
         let session = cli.session.clone().or_else(|| if q.starts_with("block:") { None } else { env("LEON_SESSION") });
         let scope = match session {
@@ -161,7 +169,7 @@ fn pick_block(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<(Stri
     let v = c.call("session.view", json!({ "session_id": sid }))?;
     let windows = v["windows"].as_array().cloned().unwrap_or_default();
     let active = windows.iter().find(|w| w["active"] == true);
-    match active.and_then(|w| w["block_ids"][0].as_str()) {
+    match active.and_then(|w| w["focused_block_id"].as_str()) {
         Some(bid) => Ok((sid, bid.to_string())),
         None => Err(Fail::Api(ApiError::not_found("the active window has no block; pass -b"))),
     }

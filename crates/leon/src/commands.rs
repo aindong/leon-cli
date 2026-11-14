@@ -71,6 +71,13 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         | Cmd::Capture { .. }
         | Cmd::Wait { .. }
         | Cmd::Block(_) => crate::blocks::run(&mut c, cli)?,
+        Cmd::Split { .. }
+        | Cmd::Focus { .. }
+        | Cmd::Move { .. }
+        | Cmd::Swap { .. }
+        | Cmd::Zoom { .. }
+        | Cmd::Resize { .. } => crate::layout::run(&mut c, cli)?,
+        Cmd::Events { all } => crate::events::run(&mut c, cli, *all)?,
         Cmd::Api(cmd) => api(&mut c, cli, cmd)?,
     }
     Ok(())
@@ -244,7 +251,7 @@ pub(crate) fn pick_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) ->
     }
 }
 
-fn read_args(args: Option<&str>) -> Result<Value, Fail> {
+pub(crate) fn read_args(args: Option<&str>) -> Result<Value, Fail> {
     let text = match args {
         None => return Ok(json!({})),
         Some("-") => std::io::read_to_string(std::io::stdin()).map_err(|e| Fail::Other(e.to_string()))?,

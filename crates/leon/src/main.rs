@@ -3,12 +3,14 @@
 mod blocks;
 mod client;
 mod commands;
+mod events;
+mod layout;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::builder::BoolishValueParser;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 use client::Fail;
 
@@ -89,6 +91,69 @@ pub enum Cmd {
         #[arg(long = "for", value_parser = blocks::parse_duration)]
         timeout: Option<std::time::Duration>,
     },
+    /// Split a block (-b, else the focused one; -b may name a split) and run CMD, default a login
+    /// shell, in the new pane. Prints the new block's ID.
+    Split {
+        /// Where the new pane goes.
+        #[arg(long = "split", value_enum, default_value = "right")]
+        edge: Edge,
+        /// The new pane's share of the space, in percent.
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u8).range(1..=99))]
+        ratio: u8,
+        /// Label for the new block.
+        #[arg(long)]
+        label: Option<String>,
+        /// Keep the block open after the program exits.
+        #[arg(long)]
+        keep_open: bool,
+        /// Working directory [default: the current directory].
+        #[arg(short = 'c', long = "cwd")]
+        cwd: Option<PathBuf>,
+        /// Focus the new pane.
+        #[arg(long, default_value = "true", num_args = 0..=1, require_equals = true,
+              default_missing_value = "true", value_parser = BoolishValueParser::new())]
+        focus: bool,
+        #[arg(last = true, value_name = "CMD")]
+        command: Vec<String>,
+    },
+    /// Focus a block, or move focus left|right|up|down|next|prev in the active window.
+    Focus {
+        target: String,
+        /// With nothing that way, go round to the far side.
+        #[arg(long)]
+        wrap: bool,
+    },
+    /// Put a block beside ANCHOR: `move [BLOCK] right|left|above|below ANCHOR` (same session).
+    Move {
+        #[arg(num_args = 2..=3, required = true, value_name = "[BLOCK] DIRECTION ANCHOR")]
+        args: Vec<String>,
+        /// The moved block's share of the space, in percent.
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u8).range(1..=99))]
+        ratio: u8,
+    },
+    /// Two blocks trade places.
+    Swap { block: String, other: String },
+    /// Show a block filling its window, or stop (toggles by default).
+    Zoom {
+        block: Option<String>,
+        #[arg(long, conflicts_with = "off")]
+        on: bool,
+        #[arg(long)]
+        off: bool,
+    },
+    /// Set a block's share of the split it is in.
+    Resize {
+        block: Option<String>,
+        /// The block's share, in percent.
+        #[arg(long, required = true, value_parser = clap::value_parser!(u8).range(1..=99))]
+        ratio: u8,
+    },
+    /// Stream events: session lifecycle by default, one session's (block events too) with -s,
+    /// everything with --all. --json prints the snapshot, then one NDJSON line per event.
+    Events {
+        #[arg(long)]
+        all: bool,
+    },
     /// Manage blocks (terminals).
     #[command(subcommand)]
     Block(BlockCmd),
@@ -117,6 +182,17 @@ pub enum BlockCmd {
     Inspect { target: Option<String> },
     /// Close a block and end its program.
     Close { target: Option<String> },
+    /// Call a block method (`program_status`, or a full name) with JSON args (inline, @file, or -).
+    Call { method: String, args: Option<String> },
+}
+
+/// Where a new or moved pane goes, beside its anchor.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum Edge {
+    Right,
+    Left,
+    Above,
+    Below,
 }
 
 #[derive(Subcommand)]

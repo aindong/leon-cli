@@ -1,5 +1,6 @@
 //! A blocking NDJSON client, with on-demand server start.
 
+use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::net::UnixStream;
@@ -36,11 +37,37 @@ impl From<ApiError> for Fail {
 pub struct Client {
     reader: BufReader<UnixStream>,
     next_id: u64,
+    /// Pushed event lines that arrived while waiting for a reply.
+    events: VecDeque<Value>,
 }
 
 impl Client {
     pub fn connect(socket: &Path) -> std::io::Result<Self> {
-        Ok(Client { reader: BufReader::new(UnixStream::connect(socket)?), next_id: 1 })
+        Ok(Client { reader: BufReader::new(UnixStream::connect(socket)?), next_id: 1, events: VecDeque::new() })
+    }
+
+    /// The next line the server sends, parsed; None when it closed the connection.
+    fn read(&mut self) -> Result<Option<Value>, Fail> {
+        let io = |e: std::io::Error| Fail::Unreachable(format!("lost the server connection: {e}"));
+        let mut line = Vec::new();
+        let n = (&mut self.reader).take(MAX_REPLY + 1).read_until(b'\n', &mut line).map_err(io)?;
+        if n == 0 {
+            return Ok(None);
+        }
+        if line.len() as u64 > MAX_REPLY {
+            return Err(Fail::Other("the server's reply is too large".into()));
+        }
+        serde_json::from_slice(&line).map(Some).map_err(|e| Fail::Other(format!("bad reply: {e}")))
+    }
+
+    /// The next pushed event line (`{"event":…,"seq":N}`) after an attach.
+    pub fn next_event(&mut self) -> Result<Value, Fail> {
+        if let Some(e) = self.events.pop_front() {
+            return Ok(e);
+        }
+        self.read()?.ok_or_else(|| {
+            Fail::Other("the server closed the event stream (it drops a reader that falls 8 MiB behind)".into())
+        })
     }
 
     pub fn call(&mut self, method: &str, params: Value) -> Result<Value, Fail> {
@@ -50,15 +77,13 @@ impl Client {
         line.push(b'\n');
         let io = |e: std::io::Error| Fail::Unreachable(format!("lost the server connection: {e}"));
         self.reader.get_mut().write_all(&line).map_err(io)?;
-        let mut reply = Vec::new();
-        let n = (&mut self.reader).take(MAX_REPLY + 1).read_until(b'\n', &mut reply).map_err(io)?;
-        if n == 0 {
-            return Err(Fail::Unreachable("the server closed the connection".into()));
-        }
-        if reply.len() as u64 > MAX_REPLY {
-            return Err(Fail::Other("the server's reply is too large".into()));
-        }
-        let mut v: Value = serde_json::from_slice(&reply).map_err(|e| Fail::Other(format!("bad reply: {e}")))?;
+        let mut v = loop {
+            match self.read()? {
+                None => return Err(Fail::Unreachable("the server closed the connection".into())),
+                Some(v) if v.get("event").is_some() => self.events.push_back(v),
+                Some(v) => break v,
+            }
+        };
         if let Some(err) = v.get("error").filter(|e| !e.is_null()) {
             return Err(Fail::Api(serde_json::from_value(err.clone()).map_err(|e| Fail::Other(e.to_string()))?));
         }
