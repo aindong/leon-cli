@@ -214,9 +214,10 @@ impl Workspace {
         };
         self.shown()?;
         let t = &DARK;
+        // the pane area is the window's bottom right corner (`pane_area`)
         let (w, h) = self.pane_area(window);
-        let left = if self.places().sidebar.is_some() { self.settings.sidebar_width } else { 0. };
-        let top = if self.titlebar_shown() { TITLEBAR } else { 0. };
+        let view = window.viewport_size();
+        let (left, top) = (f32::from(view.width) - w, f32::from(view.height) - h);
         Some(
             div()
                 .debug_selector(|| sel("stale-overlay".into()))

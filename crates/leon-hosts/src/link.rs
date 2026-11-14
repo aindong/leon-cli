@@ -107,9 +107,9 @@ impl Shared {
     /// Keep a line of ssh's as the reason: printable only (the app shows it), 200 characters at
     /// most, blank lines skipped.
     fn failed_with(&self, line: &str) {
-        let shown: String = line.chars().filter(|c| !c.is_control()).take(200).collect();
-        if !shown.trim().is_empty() {
-            self.failed(shown.trim().to_string());
+        let shown = crate::shown_text(line, 200);
+        if !shown.is_empty() {
+            self.failed(shown);
         }
     }
 }
@@ -266,5 +266,6 @@ mod tests {
         s.failed_with(&format!("\x1b]0;title\x07{}\u{202e}", "x".repeat(1000)));
         let kept = s.last_error.lock().unwrap().clone().unwrap();
         assert!(kept.chars().count() <= 200 && !kept.chars().any(char::is_control), "{kept:?}");
+        assert!(!kept.contains('\u{202e}'), "no bidi override: {kept:?}");
     }
 }

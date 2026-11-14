@@ -3,7 +3,7 @@
 //! per connection attempt does the slow part; the UI thread picks the result up in `poll`.
 
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use leon_hosts::{Host, Link};
@@ -47,6 +47,7 @@ impl HostState {
 /// Sort a failure: in BatchMode ssh fails where it would have asked something, and those need a
 /// terminal; anything else is a host that can't be reached.
 pub fn classify(why: String) -> HostState {
+    let why = leon_hosts::shown_text(&why, 200); // the host's words go on screen
     let l = why.to_lowercase();
     let asks = ["permission denied", "host key verification failed", "passphrase", "password", "authentication"];
     match asks.iter().any(|w| l.contains(w)) {
@@ -78,6 +79,19 @@ pub struct Machine {
 }
 
 impl Machine {
+    fn new(label: String, host: Option<Host>, remote: Option<Rc<Remote>>) -> Machine {
+        Machine {
+            label,
+            host,
+            remote,
+            _link: None,
+            attempt: Arc::default(),
+            failed: None,
+            retry_at: None,
+            backoff: BACKOFF.0,
+        }
+    }
+
     pub fn remote(&self) -> Option<&Rc<Remote>> {
         self.remote.as_ref()
     }
@@ -106,16 +120,7 @@ impl Hosts {
     /// This Mac on `local`, then `hosts`, each starting to connect now. `wake` runs (on any
     /// thread) whenever a host's state or model changes.
     pub fn new(local: Rc<Remote>, hosts: Vec<Host>, wake: Arc<dyn Fn() + Send + Sync>) -> Hosts {
-        let this_mac = Machine {
-            label: THIS_MAC.into(),
-            host: None,
-            remote: Some(local),
-            _link: None,
-            attempt: Arc::default(),
-            failed: None,
-            retry_at: None,
-            backoff: BACKOFF.0,
-        };
+        let this_mac = Machine::new(THIS_MAC.into(), None, Some(local));
         let mut out = Hosts { machines: vec![this_mac], wake };
         hosts.into_iter().for_each(|h| out.add(h));
         out
@@ -123,17 +128,8 @@ impl Hosts {
 
     /// Show `host` and start connecting to it.
     pub fn add(&mut self, host: Host) {
-        let mut m = Machine {
-            label: host.label.clone(),
-            host: Some(host),
-            remote: None,
-            _link: None,
-            attempt: Arc::default(),
-            failed: None,
-            retry_at: None,
-            backoff: BACKOFF.0,
-        };
-        self.start(&mut m);
+        let mut m = Machine::new(host.label.clone(), Some(host), None);
+        Self::spawn(&mut m, self.wake.clone());
         self.machines.push(m);
     }
 
@@ -167,7 +163,7 @@ impl Hosts {
                 m.retry_at = Some(Instant::now() + m.backoff);
                 changed = true;
             }
-            let mut a = m.attempt.lock().unwrap_or_else(|e| e.into_inner());
+            let mut a = m.attempt.lock().unwrap_or_else(PoisonError::into_inner);
             if let Some((remote, link)) = a.done.take() {
                 let w = wake.clone();
                 remote.on_change(move || w());
@@ -188,18 +184,14 @@ impl Hosts {
         changed
     }
 
-    fn start(&self, m: &mut Machine) {
-        Self::spawn(m, self.wake.clone());
-    }
-
     /// One attempt on a thread of its own: open a link (ssh in BatchMode) and attach through it.
     fn spawn(m: &mut Machine, wake: Arc<dyn Fn() + Send + Sync>) {
         let Some(host) = m.host.clone() else { return };
         let attempt = m.attempt.clone();
-        attempt.lock().unwrap_or_else(|e| e.into_inner()).running = true;
+        attempt.lock().unwrap_or_else(PoisonError::into_inner).running = true;
         let run = move || {
             let result = connect(&host);
-            let mut a = attempt.lock().unwrap_or_else(|e| e.into_inner());
+            let mut a = attempt.lock().unwrap_or_else(PoisonError::into_inner);
             match result {
                 Ok(done) => a.done = Some(done),
                 Err(st) => a.state = Some(st),
@@ -209,7 +201,7 @@ impl Hosts {
             wake();
         };
         if std::thread::Builder::new().name("leon-host-connect".into()).spawn(run).is_err() {
-            m.attempt.lock().unwrap_or_else(|e| e.into_inner()).running = false;
+            m.attempt.lock().unwrap_or_else(PoisonError::into_inner).running = false;
         }
     }
 }
@@ -244,5 +236,11 @@ mod tests {
             "needs login: run `leon hosts check box` in a terminal"
         );
         assert_eq!(HostState::Connected.note("box"), None);
+        let hostile = format!("\u{1b}]0;x\u{7}\u{202e}{}", "A".repeat(100_000));
+        let HostState::Unreachable(shown) = classify(hostile) else { panic!() };
+        assert!(
+            shown.chars().count() <= 200 && !shown.contains(['\u{1b}', '\u{202e}']),
+            "a host's error is shown tamed"
+        );
     }
 }

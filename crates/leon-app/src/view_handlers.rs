@@ -18,19 +18,17 @@ impl Workspace {
     /// Over a link the model's cwd is used: no round trip on the UI thread, and the path is the
     /// host's, so it can't be checked here.
     fn here(&self) -> Value {
-        if self.app.is_link() {
-            let cwd = self.target().and_then(|(_, id, _)| self.app.model().block(&id)?.1.cwd.clone());
-            return match cwd {
-                Some(d) => json!({ "block": { "options": { "cwd": d } } }),
-                None => json!({ "block": {} }),
-            };
-        }
-        let pwd = |(sid, id, _): (String, String, bool)| {
-            let p = json!({ "session_id": sid, "block_id": id, "method": "dev.leon.terminal.pwd" });
-            self.app.call("block.method", p).ok()?["path"].as_str().map(std::path::PathBuf::from)
+        let cwd = match self.app.is_link() {
+            true => self.target().and_then(|(_, id, _)| self.app.model().block(&id)?.1.cwd.clone()),
+            false => {
+                let pwd = |(sid, id, _): (String, String, bool)| {
+                    let p = json!({ "session_id": sid, "block_id": id, "method": "dev.leon.terminal.pwd" });
+                    self.app.call("block.method", p).ok()?["path"].as_str().map(String::from)
+                };
+                self.target().and_then(pwd).filter(|d| std::path::Path::new(d).is_dir())
+            }
         };
-        let cwd = self.target().and_then(pwd).filter(|d| d.is_dir());
-        match cwd.as_deref().and_then(|d| d.to_str()) {
+        match cwd {
             Some(d) => json!({ "block": { "options": { "cwd": d } } }),
             None => json!({ "block": {} }),
         }

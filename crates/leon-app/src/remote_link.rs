@@ -97,7 +97,9 @@ pub(super) fn watchdog(shared: Weak<Shared>) {
 pub(super) fn relink(shared: &Shared, limit: Duration) -> Option<(BufReader<UnixStream>, UnixStream)> {
     let end = Instant::now() + limit;
     let mut wait = Duration::from_millis(100);
-    for attempt in 1.. {
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
         *lock(&shared.link) = LinkState::Reconnecting { attempt, retry_in: wait };
         shared.bump();
         let answered = Conn::open(&shared.socket, Some(CALL_TIMEOUT))
@@ -121,7 +123,6 @@ pub(super) fn relink(shared: &Shared, limit: Duration) -> Option<(BufReader<Unix
         std::thread::sleep(wait);
         wait = (wait * 2).min(Duration::from_secs(5));
     }
-    None
 }
 
 /// A new event connection carrying the old stream from the seq after the last one seen.
