@@ -48,6 +48,22 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   + `$CODEX_HOME` (`~/.codex`) `hooks.json`. Settings edits keep key order, back up once to
   `<file>.leon-backup`, write atomically through symlinks, and refuse files that aren't the expected
   JSON shape. Not yet: OpenCode/Pi, `--project`, `--session-naming`.
+- **Persistence.** The server saves its sessions to `$LEON_STATE_DIR/sessions.json` (default
+  `~/.local/state/leon`) on every exit through the socket loop (`server stop`, SIGTERM, SIGINT,
+  idle exit) and restores them after binding (`--restore`, default true; `server stop --discard`
+  skips the save and deletes the file). Saved: sessions, windows, layout trees (split IDs and
+  ratios), labels, focus, zoom, the active tab, revisions, and per block its label, keep-open, cwd
+  and command. IDs come back unchanged. Programs don't survive: a restored block runs a fresh login
+  shell in its cwd (the shell process's cwd, else the last OSC 7 path, else where it started); the
+  saved command is never re-run, since repeating `make deploy` on a restart would be a surprise and
+  would make the file a place that runs code. The dir must be private (0700, ours) or nothing is
+  saved (`server status` shows `state_file: null`); the file is 0600, written via a temp file and
+  a rename. A file that is corrupt, from a newer version, or inconsistent is moved to
+  `sessions.json.bad-<secs>-<n>` with a warning in the log, never replaced.
+- **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of
+  up to 16 KiB); the parser thread feeds what has queued, up to 64 KiB, to the OSC 7501 tracker and
+  the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread
+  stalled the program while it parsed (docs/performance.md).
 - **Naming.** Method, action, event and flag names follow `docs/spec.md`, so scripts and agents written
   for that interface carry over. Env vars are `LEON_*`.
 

@@ -33,10 +33,18 @@ const REPLY_BUDGET: usize = 64 << 10;
 const MAX_TEXT: usize = 4096;
 /// How long the exit report waits for the last output (background jobs may hold the PTY open).
 const DRAIN_WAIT: Duration = Duration::from_secs(1);
+/// Reads queued between the PTY and the emulator. The tty itself buffers only ~1 KiB, so a reader
+/// that stops to parse stalls the program; this queue lets reading go on meanwhile. At most
+/// `QUEUED_READS` x `READ_SIZE` bytes wait, then reading waits for the parser.
+const QUEUED_READS: usize = 64;
+const READ_SIZE: usize = 16 << 10;
+/// Queued reads are parsed together up to this many bytes, one lock and one report per batch.
+const BATCH: usize = 64 << 10;
 
-/// What a terminal reports, from its reader and waiter threads. Per PTY read there is at most one
-/// title, one pwd and one bell (the last title and pwd win, and only if they changed), reported in
-/// that order rather than stream order.
+/// What a terminal reports, from its reader and waiter threads. Per batch of PTY reads (what
+/// arrived while the last batch was parsed, up to `BATCH` bytes) there is at most one title, one
+/// pwd and one bell (the last title and pwd win, and only if they changed), reported in that order
+/// rather than stream order.
 #[derive(Debug)]
 pub enum Notice {
     /// The program exited with this status (128 + signal), after its last output was read.
@@ -87,7 +95,7 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// What the emulator saw during one read, reported once the read is done.
+/// What the emulator saw during one batch, reported once the batch is parsed.
 #[derive(Default)]
 struct Seen {
     title: Option<String>,
@@ -385,22 +393,35 @@ struct Reading {
 }
 
 impl Reading {
-    /// Feed output to the tracker and emulator until the PTY closes, reporting per read. Takes the
-    /// term and tracker locks only while feeding, never while notifying.
+    /// Feed output to the tracker and emulator until the PTY closes, reporting per batch. A thread
+    /// of its own does the reads. Takes the term and tracker locks only while feeding, never while
+    /// notifying.
     fn run(self, mut reader: Box<dyn Read + Send>, notify: &dyn Fn(Notice)) {
+        let (tx, reads) = mpsc::sync_channel::<Vec<u8>>(QUEUED_READS);
+        std::thread::spawn(move || {
+            let mut buf = vec![0u8; READ_SIZE];
+            loop {
+                match reader.read(&mut buf) {
+                    // macOS reports a closed PTY as EIO rather than EOF.
+                    Ok(0) | Err(_) => return,
+                    Ok(n) if tx.send(buf[..n].to_vec()).is_err() => return,
+                    Ok(_) => {}
+                }
+            }
+        });
         let mut parser: Processor = Processor::new();
-        let mut buf = [0u8; 8192];
         // The last title and pwd reported: shells resend them at every prompt.
         let (mut title, mut pwd) = (None, None);
-        loop {
-            let n = match reader.read(&mut buf) {
-                // macOS reports a closed PTY as EIO rather than EOF.
-                Ok(0) | Err(_) => break,
-                Ok(n) => n,
-            };
+        while let Ok(mut batch) = reads.recv() {
+            while batch.len() < BATCH {
+                match reads.try_recv() {
+                    Ok(more) => batch.extend_from_slice(&more),
+                    Err(_) => break,
+                }
+            }
             let fed = {
                 let mut term = lock(&self.term);
-                lock(&self.tracker).feed(&buf[..n], |bytes| parser.advance(&mut *term, bytes))
+                lock(&self.tracker).feed(&batch, |bytes| parser.advance(&mut *term, bytes))
             };
             if !fed.reply.is_empty() {
                 self.writer.reply(fed.reply);
