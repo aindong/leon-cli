@@ -110,7 +110,7 @@ fn watch_sends_a_full_screen_then_only_changed_rows() {
     let red = full["rows"].as_array().unwrap().iter().flat_map(|r| r["spans"].as_array().unwrap().clone());
     let red: Vec<Value> = red.filter(|s| s["text"].as_str().unwrap().starts_with("RED")).collect();
     assert!(!red.is_empty() && red[0]["fg"].as_u64().is_some(), "colours are RGB numbers: {full}");
-    assert_ne!(red[0]["fg"], json!(0xd5dae5), "red text isn't the default colour: {}", red[0]);
+    assert_ne!(red[0]["fg"], json!(leon_app::theme::DARK.fg), "red text isn't the default colour: {}", red[0]);
     assert!(full["cursor"].is_object(), "the cursor: {full}");
     assert!(full["app_cursor"].is_boolean() && full["bracketed_paste"].is_boolean(), "the modes: {full}");
 

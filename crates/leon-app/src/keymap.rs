@@ -22,6 +22,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+shift+[", "client.tab.previous"),
     ("cmd+v", "pane.paste"),
     ("cmd+b", "client.sidebar.toggle"),
+    ("cmd+shift+s", "client.tab_style.toggle"),
     ("cmd+=", "client.font.increase"),
     ("cmd+shift+=", "client.font.increase"),
     ("cmd+-", "client.font.decrease"),

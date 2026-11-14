@@ -15,6 +15,8 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("client.tab.next", "Next Tab"),
     ("client.tab.previous", "Previous Tab"),
     ("client.sidebar.toggle", "Toggle Sidebar"),
+    ("client.tab_style.toggle", "Toggle Tab Style"),
+    ("client.pane_header.reveal", "Show or Hide Pane Headers"),
     ("client.font.increase", "Increase Font Size"),
     ("client.font.decrease", "Decrease Font Size"),
     ("client.font.reset", "Reset Font Size"),

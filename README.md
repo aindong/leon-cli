@@ -108,6 +108,7 @@ what it created. See [docs/agents.md](docs/agents.md).
 | ⌘1 … ⌘9 | Go to tab 1–9 |
 | ⌘V | Paste |
 | ⌘B | Show or hide the sidebar |
+| ⌘⇧S | Tabs in the sidebar or in the titlebar (saved for the next launch) |
 | ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
 | ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |

@@ -29,9 +29,13 @@ pub fn open_with<'a>(
     (ws, vcx)
 }
 
-/// The bounds of the element drawn with debug selector `sel` in the last frame, if any.
+/// The bounds of the element drawn with debug selector `sel` in the last frame, if any. GPUI
+/// keeps a selector's bounds after its element is gone, so the view's own record says what's drawn.
 pub fn at(cx: &mut VisualTestContext, sel: &str) -> Option<Bounds<Pixels>> {
     cx.run_until_parked();
+    if !view::drawn().contains(sel) {
+        return None;
+    }
     cx.debug_bounds(Box::leak(sel.to_string().into_boxed_str()))
 }
 

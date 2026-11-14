@@ -1,207 +1,160 @@
-//! The workspace's chrome: the sessions sidebar and the tab bar.
+//! The toolbar (sidebar toggle, palette, new session) and the titlebar row: the session's name
+//! and, in top tab style, its tabs.
 
 use super::*;
 
 impl Workspace {
-    pub(super) fn render_sidebar(&self, rows: &[SessionRow], cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &DARK;
-        let frame = self.spinning(rows).unwrap_or(0);
-        let mut list = div().flex().flex_col().gap(px(2.)).px(px(8.));
-        for (i, row) in rows.iter().enumerate() {
-            let selected = self.session_id.as_deref() == Some(row.id.as_str());
-            let open = !self.collapsed.contains(&row.id);
-            let (id, toggle_id) = (row.id.clone(), row.id.clone());
-            let header = div()
-                .id(SharedString::from(format!("session-{i}")))
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .h(px(28.))
-                .px(px(6.))
-                .rounded(px(6.))
-                .cursor_pointer()
-                .when(selected, |d| d.bg(rgb(t.hover)).text_color(rgb(0xffffff)))
-                .when(!selected, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
-                .child(
-                    div()
-                        .id(SharedString::from(format!("chevron-{i}")))
-                        .w(px(12.))
-                        .text_color(rgb(t.muted))
-                        .child(if open { "▾" } else { "▸" })
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(move |ws, _, _, cx| {
-                                if !ws.collapsed.remove(&toggle_id) {
-                                    ws.collapsed.insert(toggle_id.clone());
-                                }
-                                cx.stop_propagation();
-                                cx.notify();
-                            }),
-                        ),
-                )
-                .child(div().flex_1().overflow_hidden().text_ellipsis().child(row.title.clone()))
-                .children(row.status.map(|i| status_mark(i, frame)))
-                .child(
-                    div()
-                        .text_xs()
-                        .px(px(6.))
-                        .rounded(px(8.))
-                        .bg(rgb(t.border))
-                        .text_color(rgb(t.muted))
-                        .child(row.windows.len().to_string()),
-                )
-                .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.select(&id, None, cx)));
-            list = list.child(header);
-            if open {
-                for (w, win) in row.windows.iter().enumerate() {
-                    let active = w == row.active;
-                    let sid = row.id.clone();
-                    list = list.child(
-                        div()
-                            .id(SharedString::from(format!("window-{i}-{w}")))
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .h(px(24.))
-                            .pl(px(26.))
-                            .pr(px(6.))
-                            .rounded(px(6.))
-                            .text_sm()
-                            .cursor_pointer()
-                            .text_color(rgb(if active && selected { t.text } else { t.muted }))
-                            .hover(|d| d.bg(rgb(t.hover)))
-                            .child(div().size(px(6.)).rounded_full().bg(rgb(if active { t.accent } else { t.border })))
-                            .child(div().flex_1().overflow_hidden().text_ellipsis().child(win.title.clone()))
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |ws, _, _, cx| ws.select(&sid, Some(w), cx)),
-                            ),
-                    );
-                }
-            }
-        }
+    /// The toolbar row at the top of the sidebar, beside the traffic lights.
+    pub(super) fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .debug_selector(|| sel("toolbar".into()))
             .flex()
-            .flex_col()
-            .w(px(SIDEBAR_WIDTH))
-            .h_full()
             .flex_none()
-            .bg(rgb(t.chrome))
-            .border_r_1()
-            .border_color(rgb(t.border))
-            .child(
-                div()
-                    .mt(px(TAB_BAR_HEIGHT)) // the traffic lights' row
-                    .h(px(28.))
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .px(px(14.))
-                    .text_xs()
-                    .text_color(rgb(t.muted))
-                    .child("SESSIONS")
-                    .child(
-                        div()
-                            .id("new-session")
-                            .px(px(6.))
-                            .rounded(px(4.))
-                            .cursor_pointer()
-                            .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.text)))
-                            .child("+")
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(|ws, _, window, cx| ws.new_session(&NewSession, window, cx)),
-                            ),
-                    ),
-            )
-            .child(div().flex_1().child(list))
-            .child(
-                div().p(px(14.)).text_xs().whitespace_nowrap().text_color(rgb(t.muted)).child("⌘N session  ·  ⌘T tab"),
+            .items_center()
+            .gap(px(2.))
+            .h(px(TITLEBAR))
+            .pl(px(TRAFFIC_LIGHTS))
+            .pr(px(8.))
+            .child(self.tool("toolbar-sidebar", "◧", "client.sidebar.toggle", cx))
+            .child(div().flex_1())
+            .child(self.tool("toolbar-palette", "⌘", "client.palette.toggle", cx))
+            .child(self.tool("toolbar-new", "+", "session.new", cx))
+    }
+
+    /// One toolbar button: a glyph that runs `action`.
+    fn tool(
+        &self,
+        id: &'static str,
+        glyph: &'static str,
+        action: &'static str,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let t = &DARK;
+        div()
+            .id(id)
+            .debug_selector(|| sel(id.into()))
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_center()
+            .size(px(26.))
+            .rounded(px(6.))
+            .cursor_pointer()
+            .text_color(rgb(t.muted))
+            .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
+            .child(glyph)
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |ws, _, window, cx| {
+                    cx.stop_propagation();
+                    ws.run_action(action, None, "toolbar", window, cx);
+                }),
             )
     }
 
-    pub(super) fn render_tabs(&self, row: Option<&SessionRow>, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The titlebar row over the panes: with the sidebar hidden it holds the toolbar's buttons;
+    /// then the session's name, and in top style its tabs and a + for a new one.
+    pub(super) fn render_titlebar(&self, row: Option<&SessionRow>, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &DARK;
-        let frame = row.and_then(|r| self.spinning(std::slice::from_ref(r))).unwrap_or(0);
+        let places = self.places();
+        let frame = self.spinning(row.map(std::slice::from_ref).unwrap_or_default()).unwrap_or(0);
+        let hidden = places.sidebar.is_none();
         let mut bar = div()
+            .debug_selector(|| sel("titlebar".into()))
             .flex()
             .flex_none()
-            .items_end()
-            .h(px(TAB_BAR_HEIGHT))
+            .items_center()
+            .gap(px(4.))
+            .h(px(TITLEBAR))
+            .pr(px(8.))
+            .pl(px(if hidden { TRAFFIC_LIGHTS } else { 10. }))
             .bg(rgb(t.chrome))
-            .border_b_1()
-            .border_color(rgb(t.border))
-            .px(px(6.))
-            .when(!self.sidebar, |d| d.pl(px(78.))) // clear the traffic lights (after px, which sets left too)
-            .gap(px(2.));
+            .when(hidden, |d| d.child(self.tool("toolbar-sidebar", "◧", "client.sidebar.toggle", cx)));
         if let Some(row) = row {
-            for (i, w) in row.windows.iter().enumerate() {
-                let active = i == row.active;
-                let (sid, wid) = (row.id.clone(), w.id.clone());
-                bar = bar.child(
-                    div()
-                        .id(SharedString::from(format!("tab-{i}")))
-                        .group("tab")
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .h(px(30.))
-                        .px(px(12.))
-                        .min_w(px(120.))
-                        .max_w(px(220.))
-                        .rounded_t(px(7.))
-                        .text_sm()
-                        .cursor_pointer()
-                        .when(active, |d| {
-                            d.bg(rgb(t.bg)).text_color(rgb(0xffffff)).border_t_2().border_color(rgb(t.accent))
-                        })
-                        .when(!active, |d| {
-                            d.text_color(rgb(t.muted)).hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.text)))
-                        })
-                        .children(w.status.map(|s| status_mark(s, frame)))
-                        .child(div().flex_1().overflow_hidden().text_ellipsis().child(w.title.clone()))
-                        .when(i < 9, |d| d.child(div().text_xs().text_color(rgb(t.muted)).child(format!("⌘{}", i + 1))))
-                        .child(
-                            div()
-                                .id(SharedString::from(format!("close-{i}")))
-                                .px(px(4.))
-                                .rounded(px(4.))
-                                .text_color(rgb(t.muted))
-                                .invisible()
-                                .group_hover("tab", |d| d.visible())
-                                .hover(|d| d.bg(rgb(t.border)).text_color(rgb(t.text)))
-                                .child("×")
-                                .on_mouse_down(
-                                    MouseButton::Left,
-                                    cx.listener(move |ws, _, _, cx| {
-                                        ws.close_window((sid.clone(), wid.clone()), cx);
-                                        cx.stop_propagation();
-                                    }),
-                                ),
-                        )
-                        .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.focus_window(i, cx))),
-                );
+            bar = bar.child(
+                div()
+                    .debug_selector(|| sel("titlebar-session".into()))
+                    .flex_none()
+                    .px(px(6.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(rgb(t.title))
+                    .child(row.title.clone()),
+            );
+            if places.top_tabs {
+                for (i, w) in row.windows.iter().enumerate() {
+                    bar = bar.child(self.top_tab(i, w, i == row.active, row, frame, cx));
+                }
+                bar = bar.child(self.tool("new-tab", "+", "client.tab.new", cx));
+            } else if let Some(w) = row.windows.get(row.active) {
+                // sidebar style with the sidebar hidden: name the tab on screen, draw no tabs
+                bar = bar.child(div().text_color(rgb(t.muted)).child(format!("› {}", w.title)));
             }
         }
-        bar.child(
-            div()
-                .id("new-tab")
-                .flex()
-                .items_center()
-                .justify_center()
-                .size(px(28.))
-                .mb(px(1.))
-                .rounded(px(6.))
-                .cursor_pointer()
-                .text_color(rgb(t.muted))
-                .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.text)))
-                .child("+")
-                .on_mouse_down(MouseButton::Left, cx.listener(|ws, _, window, cx| ws.new_tab(&NewTab, window, cx))),
-        )
+        bar.child(div().flex_1()).when(hidden, |d| {
+            d.child(self.tool("toolbar-palette", "⌘", "client.palette.toggle", cx)).child(self.tool(
+                "toolbar-new",
+                "+",
+                "session.new",
+                cx,
+            ))
+        })
+    }
+
+    fn top_tab(
+        &self,
+        i: usize,
+        w: &WindowRow,
+        active: bool,
+        row: &SessionRow,
+        frame: u64,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let t = &DARK;
+        let (sid, wid) = (row.id.clone(), w.id.clone());
+        div()
+            .id(SharedString::from(format!("tab-{i}")))
+            .debug_selector(|| sel(format!("tab-{i}")))
+            .group(SharedString::from(format!("tab-{i}")))
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(8.))
+            .h(px(26.))
+            .pl(px(10.))
+            .pr(px(4.))
+            .max_w(px(220.))
+            .rounded(px(6.))
+            .cursor_pointer()
+            .when(active, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
+            .when(!active, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
+            .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(w.title.clone()))
+            .children(w.status.map(|s| status_mark(s, frame)))
+            .when(i < 9, |d| {
+                d.child(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(format!("⌘{}", i + 1)))
+            })
+            .child(
+                div()
+                    .id(SharedString::from(format!("close-{i}")))
+                    .px(px(4.))
+                    .rounded(px(4.))
+                    .text_color(rgb(t.muted))
+                    .invisible()
+                    .group_hover(SharedString::from(format!("tab-{i}")), |d| d.visible())
+                    .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
+                    .child("×")
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |ws, _, _, cx| {
+                            ws.close_window((sid.clone(), wid.clone()), cx);
+                            cx.stop_propagation();
+                        }),
+                    ),
+            )
+            .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.focus_window(i, cx)))
     }
 }
 
-/// A status glyph in its state's color (a tab, a sidebar row).
-fn status_mark(i: Indicator, frame: u64) -> impl IntoElement {
-    div().flex_none().text_xs().text_color(rgb(i.color(&DARK))).child(status::glyph(i, frame))
+/// A status glyph in its state's colour (a tab, a sidebar row, a pane header).
+pub(super) fn status_mark(i: Indicator, frame: u64) -> gpui::Div {
+    div().flex_none().text_size(px(SECONDARY_TEXT)).text_color(rgb(i.color(&DARK))).child(status::glyph(i, frame))
 }

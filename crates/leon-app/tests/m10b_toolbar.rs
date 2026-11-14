@@ -16,12 +16,15 @@ fn the_toolbar_buttons_work(cx: &mut TestAppContext) {
         assert!(bar.contains(&center(at)), "{b} is in the toolbar row");
     }
     assert!(!drawn(cx, "sidebar-footer") && !drawn(cx, "sidebar-header"), "no header or footer rows");
-    cx.simulate_click(center(at(cx, "toolbar-palette").unwrap()), Modifiers::none());
+    let p = center(at(cx, "toolbar-palette").unwrap());
+    cx.simulate_click(p, Modifiers::none());
     assert!(ws.read_with(cx, |ws, _| ws.palette_open()), "the palette button opens the palette");
     cx.simulate_keystrokes("escape");
-    cx.simulate_click(center(at(cx, "toolbar-new").unwrap()), Modifiers::none());
+    let p = center(at(cx, "toolbar-new").unwrap());
+    cx.simulate_click(p, Modifiers::none());
     assert_eq!(s.app.ctx().state().sessions.len(), 2, "+ makes a session");
-    cx.simulate_click(center(at(cx, "toolbar-sidebar").unwrap()), Modifiers::none());
+    let p = center(at(cx, "toolbar-sidebar").unwrap());
+    cx.simulate_click(p, Modifiers::none());
     assert!(!ws.read_with(cx, |ws, _| ws.sidebar_visible()), "the toggle hides the sidebar");
     assert!(drawn(cx, "toolbar-sidebar"), "and stays reachable in the titlebar");
     s.app.stop();

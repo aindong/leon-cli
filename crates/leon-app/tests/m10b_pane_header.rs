@@ -35,11 +35,15 @@ fn the_header_controls_split_zoom_and_close(cx: &mut TestAppContext) {
     cx.simulate_click(center(split), Modifiers::none());
     assert!(shows(cx, |cx| leaves(&window(&s.app, &ws, cx).0).len() == 2), "the control split the pane");
     let new = ws.read_with(cx, |ws, _| ws.target_block()).unwrap();
-    cx.simulate_mouse_move(center(at(cx, &format!("header-{new}")).unwrap()), None, Modifiers::none());
-    cx.simulate_click(center(at(cx, &format!("header-zoom-{new}")).unwrap()), Modifiers::none());
+    let p = center(at(cx, &format!("header-{new}")).unwrap());
+    cx.simulate_mouse_move(p, None, Modifiers::none());
+    let p = center(at(cx, &format!("header-zoom-{new}")).unwrap());
+    cx.simulate_click(p, Modifiers::none());
     assert_eq!(window(&s.app, &ws, cx).0.zoomed.as_deref(), Some(new.as_str()), "zoom zooms it");
-    cx.simulate_mouse_move(center(at(cx, &format!("header-{new}")).unwrap()), None, Modifiers::none());
-    cx.simulate_click(center(at(cx, &format!("header-close-{new}")).unwrap()), Modifiers::none());
+    let p = center(at(cx, &format!("header-{new}")).unwrap());
+    cx.simulate_mouse_move(p, None, Modifiers::none());
+    let p = center(at(cx, &format!("header-close-{new}")).unwrap());
+    cx.simulate_click(p, Modifiers::none());
     assert!(shows(cx, |cx| leaves(&window(&s.app, &ws, cx).0) == vec![id.clone()]), "close closes it");
     s.app.stop();
 }

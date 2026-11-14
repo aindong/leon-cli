@@ -27,7 +27,7 @@ mod cwd;
 use cwd::{process_cwd, pwd_path, pwd_url};
 #[path = "terminal_reading.rs"]
 mod reading;
-use reading::Reading;
+use reading::{Reading, Reported};
 
 pub const NAMESPACE: &str = "dev.leon.terminal";
 pub const ROWS: u16 = 24;
@@ -164,8 +164,8 @@ pub struct Terminal {
     pub command: Vec<String>,
     /// The directory it was started in (None: `$HOME`).
     start_cwd: Option<PathBuf>,
-    /// The last OSC 7 pwd reported, as a URL.
-    pwd: Arc<Mutex<Option<String>>>,
+    /// The last OSC 7 pwd (a URL) and title reported.
+    reported: Arc<Mutex<Reported>>,
     /// Bytes of output parsed so far.
     output: Arc<AtomicU64>,
     notify: Notify,
@@ -238,14 +238,14 @@ impl Terminal {
         // last output's notices.
         let (at_eof, eof) = mpsc::channel::<()>();
         let (parsed, drained) = mpsc::channel::<()>();
-        let (pwd, output) = (Arc::new(Mutex::new(None)), Arc::new(AtomicU64::new(0)));
+        let (reported, output) = (Arc::<Mutex<Reported>>::default(), Arc::new(AtomicU64::new(0)));
         let generation = Arc::new(watch::channel(0).0);
         let reading = Reading {
             term: term.clone(),
             tracker: tracker.clone(),
             seen,
             writer: writer.clone(),
-            pwd: pwd.clone(),
+            reported: reported.clone(),
             output: output.clone(),
             changes: generation.clone(),
         };
@@ -283,7 +283,7 @@ impl Terminal {
             generation,
             command,
             start_cwd,
-            pwd,
+            reported,
             output,
             notify: to_self,
         })
@@ -393,7 +393,7 @@ impl Terminal {
             // Under the lock the program is unreaped, so its pid is still its own.
             (!*exited && self.pid > 0).then(|| process_cwd(self.pid)).flatten()
         };
-        live.or_else(|| lock(&self.pwd).as_deref().and_then(pwd_path)).or_else(|| self.start_cwd.clone())
+        live.or_else(|| lock(&self.reported).pwd.as_deref().and_then(pwd_path)).or_else(|| self.start_cwd.clone())
     }
 }
 

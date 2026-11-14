@@ -7,7 +7,7 @@ use m10b_support::*;
 
 #[gpui::test]
 fn the_empty_state_lists_the_keys_that_matter(cx: &mut TestAppContext) {
-    let s = setup_with_config(r#"leon.bind{ key = "cmd+k", action = "client.palette.toggle" }"#);
+    let s = setup_with_config(r#"leon.bind("cmd+k", "client.palette.toggle")"#);
     let (ws, cx) = open(cx, &s.app);
     ws.update(cx, |ws, _| ws.sync_keymap());
     cx.simulate_keystrokes("cmd-w");

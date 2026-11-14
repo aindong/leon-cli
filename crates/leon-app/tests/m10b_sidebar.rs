@@ -19,7 +19,8 @@ fn rows_are_30pt_and_labels_are_smaller(cx: &mut TestAppContext) {
     assert!(label.size.height < row.size.height, "a session label is quieter than a row: {label:?}");
     assert!(!drawn(cx, "session-count-0"), "no count pill");
     run_until(&focused(&s.app, &ws, cx), WORKING, "w-sent");
-    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.indicators()).1 == vec![Some(Indicator::Working { progress: None })]));
+    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.indicators()).1
+        == vec![Some(Indicator::Working { progress: None })]));
     assert!(drawn(cx, "row-status-0-0"), "the row shows the status glyph");
     s.app.stop();
 }

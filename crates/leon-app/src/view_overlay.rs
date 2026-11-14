@@ -35,13 +35,16 @@ impl Workspace {
                     .mx(px(4.))
                     .rounded(px(5.))
                     .cursor_pointer()
-                    .text_sm()
-                    .when(i == selected, |d| d.bg(rgb(t.hover)).text_color(rgb(0xffffff)))
+                    .when(i == selected, |d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
                     .when(i != selected, |d| d.text_color(rgb(t.text)))
                     .child(
                         div().flex_1().overflow_hidden().text_ellipsis().whitespace_nowrap().child(item.title.clone()),
                     )
-                    .children(item.shortcut.clone().map(|k| div().text_xs().text_color(rgb(t.muted)).child(k)))
+                    .children(
+                        item.shortcut
+                            .clone()
+                            .map(|k| div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(k)),
+                    )
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |ws, _, window, cx| {
@@ -53,15 +56,14 @@ impl Workspace {
             );
         }
         if matches.is_empty() {
-            list = list
-                .child(div().px(px(16.)).py(px(6.)).text_sm().text_color(rgb(t.muted)).child("No matching actions"));
+            list = list.child(div().px(px(16.)).py(px(6.)).text_color(rgb(t.muted)).child("No matching actions"));
         }
         let prompt = if query.is_empty() {
             div().text_color(rgb(t.muted)).child("Type an action…")
         } else {
             div().text_color(rgb(t.text)).child(query)
         };
-        div().absolute().top(px(TAB_BAR_HEIGHT + 24.)).left_0().right_0().flex().justify_center().child(
+        div().absolute().top(px(TITLEBAR + 24.)).left_0().right_0().flex().justify_center().child(
             div()
                 .id("palette")
                 .w(px(520.))
@@ -99,7 +101,7 @@ fn render_hint((prefix, next): (String, Vec<(String, String)>)) -> impl IntoElem
             div()
                 .flex()
                 .gap(px(10.))
-                .text_xs()
+                .text_size(px(SECONDARY_TEXT))
                 .child(div().min_w(px(48.)).text_color(rgb(t.accent)).child(key))
                 .child(div().text_color(rgb(t.text)).child(what)),
         );
@@ -117,6 +119,8 @@ fn render_hint((prefix, next): (String, Vec<(String, String)>)) -> impl IntoElem
         .border_color(rgb(t.border))
         .rounded(px(8.))
         .shadow_lg()
-        .child(div().text_xs().text_color(rgb(t.muted)).child(format!("{prefix} ›   esc to cancel")))
+        .child(
+            div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(format!("{prefix} ›   esc to cancel")),
+        )
         .child(rows)
 }

@@ -8,8 +8,7 @@ use leon_app::status::Indicator;
 use m10b_support::*;
 
 // base64 of "Claude" and "thinking"
-const WORKING: &str =
-    r"printf '\033]7501;state=working:title=Q2xhdWRl:msg=dGhpbmtpbmc=\007'; echo w-sent; sleep 60";
+const WORKING: &str = r"printf '\033]7501;state=working:title=Q2xhdWRl:msg=dGhpbmtpbmc=\007'; echo w-sent; sleep 60";
 
 #[gpui::test]
 fn the_tab_row_and_pane_header_show_status_and_the_label_does_not(cx: &mut TestAppContext) {

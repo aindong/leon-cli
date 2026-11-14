@@ -41,10 +41,10 @@ impl Indicator {
 
     pub fn color(self, t: &Theme) -> u32 {
         match self {
-            Indicator::Working { .. } => t.accent,
-            Indicator::Blocked(_) => t.ansi[3],
-            Indicator::Done => t.ansi[2],
-            Indicator::Error => t.ansi[1],
+            Indicator::Working { .. } => t.working,
+            Indicator::Blocked(_) => t.blocked,
+            Indicator::Done => t.done,
+            Indicator::Error => t.error,
         }
     }
 }

@@ -55,8 +55,8 @@ fn the_toggle_moves_tabs_from_the_sidebar_to_the_titlebar(cx: &mut TestAppContex
 #[gpui::test]
 fn no_state_draws_tabs_twice(cx: &mut TestAppContext) {
     let s = setup();
-    let (ws, cx) = open(cx, &s.app);
-    let mut check = |cx: &mut gpui::VisualTestContext, want_rows: bool, want_top: bool, why: &str| {
+    let (_ws, cx) = open(cx, &s.app);
+    let check = |cx: &mut gpui::VisualTestContext, want_rows: bool, want_top: bool, why: &str| {
         let (rows, top) = (drawn(cx, "row-0-0"), drawn(cx, "tab-0"));
         assert!(!(rows && top), "{why}: tabs in two places");
         assert_eq!((rows, top), (want_rows, want_top), "{why}");
@@ -78,7 +78,7 @@ fn no_state_draws_tabs_twice(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn the_toggle_is_in_the_palette_and_bindable_from_lua(cx: &mut TestAppContext) {
-    let s = setup_with_config(r#"leon.bind{ key = "ctrl+alt+t", action = "client.tab_style.toggle" }"#);
+    let s = setup_with_config(r#"leon.bind("ctrl+alt+t", "client.tab_style.toggle")"#);
     let (ws, cx) = open(cx, &s.app);
     ws.update(cx, |ws, _| ws.sync_keymap());
     cx.simulate_keystrokes("cmd-shift-p");

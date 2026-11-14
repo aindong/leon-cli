@@ -150,6 +150,10 @@ pub struct BlockView {
     pub keep_open: bool,
     /// Set once the program exited (only seen on blocks kept open).
     pub exit_code: Option<i32>,
+    /// The last title the program set (OSC 0/2).
+    pub title: Option<String>,
+    /// Where the program is: its cwd, else its last OSC 7 path, else where it started.
+    pub cwd: Option<String>,
 }
 
 fn view(b: &Block) -> BlockView {
@@ -161,6 +165,8 @@ fn view(b: &Block) -> BlockView {
         command: b.terminal.command.clone(),
         keep_open: b.keep_open,
         exit_code: b.exit_code,
+        title: b.terminal.title(),
+        cwd: b.terminal.cwd().map(|d| d.display().to_string()),
     }
 }
 

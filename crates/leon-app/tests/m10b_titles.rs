@@ -19,14 +19,22 @@ fn a_tab_is_named_by_its_label_then_its_programs_title_then_the_program(cx: &mut
     let first = titles(cx);
     assert!(first[0].ends_with("sh"), "the program name before any title: {first:?}");
     let id = ws.read_with(cx, |ws, _| ws.target_block()).unwrap();
-    run_until(&term(&s.app, &id), r"printf '\033]2;fix-the-flaky-test\007'; echo t-sent", "t-sent");
+    run_until(&term(&s.app, &id), r"printf '\033]2;fix-the-flaky-test\007'; echo t-sent; sleep 60", "t-sent");
     assert!(shows(cx, |cx| titles(cx) == vec!["fix-the-flaky-test".to_string()]), "{:?}", titles(cx));
-    let b = s.app.call("session.describe_block", serde_json::json!({
-        "session_id": ws.read_with(cx, |ws, _| ws.session_id()).unwrap(), "block_id": id })).unwrap();
+    let b = s
+        .app
+        .call(
+            "session.describe_block",
+            serde_json::json!({
+        "session_id": ws.read_with(cx, |ws, _| ws.session_id()).unwrap(), "block_id": id }),
+        )
+        .unwrap();
     assert_eq!(b["title"], "fix-the-flaky-test", "the server keeps the title: {b}");
     let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
     let wid = window(&s.app, &ws, cx).0.id;
-    s.app.call("session.set_window_label", serde_json::json!({ "session_id": sid, "window_id": wid, "label": "api" })).unwrap();
+    s.app
+        .call("session.set_window_label", serde_json::json!({ "session_id": sid, "window_id": wid, "label": "api" }))
+        .unwrap();
     assert!(shows(cx, |cx| titles(cx) == vec!["api".to_string()]), "a label wins: {:?}", titles(cx));
     s.app.stop();
 }

@@ -51,6 +51,9 @@ pub struct Block {
     pub id: String,
     pub window_id: String,
     pub command: Vec<String>,
+    /// The title the program set, and where it is (`session.list_blocks`).
+    pub title: Option<String>,
+    pub cwd: Option<String>,
     /// Program-status records, least recently reported first.
     pub status: Vec<Record>,
 }
@@ -213,6 +216,8 @@ fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
                 id: text(&b["block_id"]).unwrap_or_default(),
                 window_id: text(&b["window_id"]).unwrap_or_default(),
                 command: serde_json::from_value(b["command"].clone()).unwrap_or_default(),
+                title: text(&b["title"]),
+                cwd: text(&b["cwd"]),
                 status: status.filter_map(|r| serde_json::from_value(r["record"].clone()).ok()).collect(),
             });
         }

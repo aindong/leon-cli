@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+pub mod chrome;
 pub mod embedded;
 pub mod input;
 pub mod keymap;
