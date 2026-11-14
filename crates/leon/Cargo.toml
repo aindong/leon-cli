@@ -25,4 +25,5 @@ name = "speed"
 harness = false
 
 [dev-dependencies]
+alacritty_terminal.workspace = true
 gpui = { workspace = true, features = ["test-support"] }
