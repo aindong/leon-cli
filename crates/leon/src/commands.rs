@@ -344,8 +344,8 @@ fn proxy(socket: &std::path::Path, autostart: bool) -> Result<(), Fail> {
     let mut up = stream.try_clone().map_err(|e| Fail::Other(e.to_string()))?;
     std::thread::spawn(move || {
         let _ = std::io::copy(&mut std::io::stdin().lock(), &mut up);
-        // the client is gone: exit, which closes the server connection (so its events park at once)
-        std::process::exit(0)
+        // the client is done: the server answers what it sent, then closes (its events park)
+        let _ = up.shutdown(std::net::Shutdown::Write);
     });
     let mut out = std::io::stdout().lock();
     let _ = std::io::copy(&mut &stream, &mut out);

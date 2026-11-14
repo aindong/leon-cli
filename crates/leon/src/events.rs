@@ -91,17 +91,25 @@ fn reconnect(
 ) -> Result<(Client, Option<Value>), Fail> {
     let end = Instant::now() + GIVE_UP;
     let mut wait = Duration::from_millis(100);
+    // One try, which may not outlast `end`: an ssh that hangs (a blackholed network, a prompt
+    // nobody answers) would otherwise hold it for minutes.
+    let attempt = || -> Result<(Client, Option<Value>), Fail> {
+        let lost = |e: std::io::Error| Fail::Unreachable(e.to_string());
+        let c = Client::connect(&server.socket).map_err(lost)?;
+        c.set_timeout(Some(end.saturating_duration_since(Instant::now()).max(Duration::from_millis(500))))
+            .map_err(lost)?;
+        let mut c = c;
+        let fresh = match c.call("session.resume", json!({ "resume": token, "seq": seq })) {
+            Ok(_) => None,
+            Err(Fail::Api(e)) if e.code == "resume_failed" => Some(c.call(method, params.clone())?),
+            Err(f) => return Err(f),
+        };
+        c.set_timeout(None).map_err(lost)?;
+        Ok((c, fresh))
+    };
     loop {
-        match server.connect(false) {
-            Ok(mut c) => match c.call("session.resume", json!({ "resume": token, "seq": seq })) {
-                Ok(_) => return Ok((c, None)),
-                Err(Fail::Api(e)) if e.code == "resume_failed" => {
-                    let snapshot = c.call(method, params.clone())?;
-                    return Ok((c, Some(snapshot)));
-                }
-                Err(Fail::Unreachable(_)) => {}
-                Err(f) => return Err(f),
-            },
+        match attempt() {
+            Ok(done) => return Ok(done),
             Err(Fail::Unreachable(_)) => {}
             Err(f) => return Err(f),
         }

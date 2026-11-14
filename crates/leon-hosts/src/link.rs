@@ -43,16 +43,18 @@ impl Link {
         remove_stale(&runtime);
         let private = std::fs::Permissions::from_mode(0o700);
         let dir = tempfile::Builder::new().prefix("link-").permissions(private).tempdir_in(&runtime)?;
+        // locked under another name first: `remove_stale` elsewhere only tries `lock`
         let lock = std::fs::OpenOptions::new()
             .create_new(true)
             .write(true)
             .mode(0o600)
             .custom_flags(libc::O_NOFOLLOW)
-            .open(dir.path().join("lock"))?;
+            .open(dir.path().join("lock.new"))?;
         // SAFETY: flock on a file we own; the lock ends with the file.
         if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
             return Err(io::Error::last_os_error());
         }
+        std::fs::rename(dir.path().join("lock.new"), dir.path().join("lock"))?;
         let socket = dir.path().join("s");
         let listener = UnixListener::bind(&socket)?;
         std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600))?;
@@ -65,7 +67,11 @@ impl Link {
         let serving = shared.clone();
         std::thread::Builder::new().name("leon-link".into()).spawn(move || {
             block_signals(); // and every thread it starts: `leon attach` takes them with sigwait
-            for conn in listener.incoming().flatten() {
+            for conn in listener.incoming() {
+                let Ok(conn) = conn else {
+                    std::thread::sleep(std::time::Duration::from_millis(50)); // e.g. out of fds: don't spin
+                    continue;
+                };
                 let shared = serving.clone();
                 let _ = std::thread::Builder::new().name("leon-link-conn".into()).spawn(move || serve(conn, &shared));
             }
@@ -102,6 +108,8 @@ fn serve(conn: UnixStream, s: &Shared) {
     };
     let (Some(mut stdin), Some(mut stdout), Ok(mut from)) = (child.stdin.take(), child.stdout.take(), conn.try_clone())
     else {
+        let _ = child.kill();
+        let _ = child.wait();
         return;
     };
     // The client's end closing closes ssh's stdin, so the proxy on the host ends and ssh exits.
