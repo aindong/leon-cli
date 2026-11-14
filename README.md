@@ -1,11 +1,14 @@
 # leon
 
+<p align="center"><img src="brand/marketing/hero.png" alt="leon: keep your work in view" width="100%"></p>
+
 **A fast, scriptable terminal multiplexer for macOS.** Sessions, tabs and split panes live in a
-server that outlives any window. You drive them from a native app, from the `leon` command, from
+server with a stable API. You drive them from a native app, from the `leon` command, from
 Lua, or let your coding agent drive them for you. It's built in Rust, with GPUI for the app.
 
-- **Persistent.** Close the app's window and nothing is lost until you stop the server; every
-  session, tab and pane has a stable ID you can script against.
+- **Persistent layout.** Sessions, tabs, splits and each pane's directory are saved when the server
+  or app stops and come back on the next start, with the same stable IDs you script against. Running
+  programs don't survive yet: quitting the app ends them.
 - **Scriptable from the shell.** `leon run`, `send`, `capture` and `wait` open terminals, type into
   them, read their screens and wait for programs, with fixed exit codes and `--json` everywhere.
 - **Agent-ready.** One command teaches Claude Code and Codex to open panes beside themselves, run
