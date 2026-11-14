@@ -73,6 +73,10 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   signed); opened from Finder it runs with no arguments, which opens the app. `scripts/install.sh`
   copies the app to `~/Applications` and links `~/.local/bin/leon` to the binary inside it. Both
   replace only what they made: an app with our bundle id, or a link whose text is our binary's path.
+- **`LEON_BIN_DIR`.** Every terminal gets the server binary's directory as `LEON_BIN_DIR` and at
+  the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
+  `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an
+  older `leon` in `/usr/local/bin` can win there; the dir is still on PATH.
 - **Docs are tested.** `docs/cli.md` is checked against every `--help`; the `sh` blocks in the docs
   run against the real binary (a bad command line fails); `docs/lua.md`'s examples go through
   `leon config check` and `leon do -e`.

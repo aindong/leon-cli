@@ -89,9 +89,18 @@ pub fn open(
     .map(|(k, v)| (k.to_string(), v.to_string()))
     .collect();
     // `leon` resolves in every terminal, even when the user's PATH lacks where it was installed
-    if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.display().to_string())) {
-        let path = std::env::var("PATH").map_or(dir.clone(), |p| format!("{dir}:{p}"));
-        env.extend([("LEON_BIN_DIR".to_string(), dir), ("PATH".to_string(), path)]);
+    if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(PathBuf::from)) {
+        let path = std::env::var_os("PATH")
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin".into());
+        // no empty entries: one would mean the current directory
+        let entries =
+            std::iter::once(dir.clone()).chain(std::env::split_paths(&path).filter(|p| !p.as_os_str().is_empty()));
+        // join_paths refuses a dir with ':' in it; then the terminal keeps the server's PATH
+        let joined = std::env::join_paths(entries).ok().and_then(|p| p.into_string().ok());
+        if let (Some(dir), Some(path)) = (dir.to_str(), joined) {
+            env.extend([("LEON_BIN_DIR".to_string(), dir.to_string()), ("PATH".to_string(), path)]);
+        }
     }
     let spec = Spec { command: o.command.unwrap_or_default(), cwd: o.cwd.map(PathBuf::from), env };
     let weak = Arc::downgrade(ctx);
