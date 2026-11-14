@@ -402,7 +402,7 @@ fn changelog_names_every_landed_milestone_and_the_api_version() {
     );
     assert!(log.contains("## [Unreleased]"), "an Unreleased section");
     let headings: Vec<&str> = log.lines().filter(|l| l.starts_with("## ")).collect();
-    for tag in ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10", "M11", "M14", "M16a", "M17"] {
+    for tag in ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10", "M11", "M14", "M16a", "M16b", "M17"] {
         let found = headings.iter().any(|h| {
             h.match_indices(tag).any(|(at, _)| !h[at + tag.len()..].starts_with(|c: char| c.is_ascii_alphanumeric()))
         });

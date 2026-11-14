@@ -9,7 +9,7 @@ section is a milestone from [docs/roadmap.md](docs/roadmap.md) and
 [docs/research/next-for-leon.md](docs/research/next-for-leon.md), dated by when it landed on
 `main`. Milestones that haven't landed have no section: M12 (the session switcher; the command
 palette came with M9), M13 (Activity, notifications and `leon notify`; status in the app came with
-M9), M15 (Linux) and M16b (hosts in the app) are still to come.
+M9) and M15 (Linux) are still to come.
 
 ## Reading `api_version`
 
@@ -58,6 +58,21 @@ fields it doesn't know. The full policy is in
   change it), with config bindings and sequences on top.
 - The host terminal is restored on detach, errors, panics, signals, and even when the client is
   killed (a watchdog process).
+
+## M16b: hosts in the app - 2026-11-15
+
+### Added
+
+- The app's sidebar shows This Mac and every host from `leon hosts`, each with its sessions and a
+  dot for its state: connecting, connected, reconnecting, unreachable (with ssh's own words), or
+  needs login (with the advice to run `leon hosts check`).
+- New Session on any connected machine and Add Host… in the command palette; splits, keys and new
+  tabs act on the focused pane's host.
+
+### Changed
+
+- The app and `leon attach -H` resume their event stream after a dropped link instead of attaching
+  afresh, and notice a half-dead link in about 15 s.
 
 ## M16a: remote sessions over SSH - 2026-11-15
 
