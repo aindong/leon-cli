@@ -67,7 +67,7 @@ The decisions, in two parts:
   and the agent skill.
 - [State, packaging and hosts](architecture/state-and-hosts.md): persistence, scrollback and resume
   after a restart, terminal reads, packaging (Leon.app, Linux packages), `LEON_BIN_DIR`, remote
-  hosts and reconnects, tested docs, and naming.
+  hosts and reconnects, the app's hosts, tested docs, and naming.
 
 ## Verification
 

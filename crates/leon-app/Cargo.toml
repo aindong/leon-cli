@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 leon-core.workspace = true
+leon-hosts.workspace = true
 leon-server.workspace = true
 leon-lua.workspace = true
 alacritty_terminal.workspace = true

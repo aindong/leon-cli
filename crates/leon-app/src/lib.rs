@@ -2,6 +2,7 @@
 
 pub mod chrome;
 pub mod embedded;
+pub mod hosts;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod icons;
 #[cfg(all(feature = "gui", target_os = "macos"))]

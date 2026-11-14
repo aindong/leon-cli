@@ -1,6 +1,9 @@
 //! M16a: a "remote" machine for `leon -H` tests. `LEON_SSH` points at a fake ssh that logs its
 //! argv, then runs the remote command with a second env's private runtime and state dirs, a PATH
-//! holding this build's `leon`, and its own HOME. A host named `unreachable…` fails as ssh would.
+//! holding this build's `leon`, and its own HOME. A host named `unreachable…` fails as ssh would,
+//! `login…` fails as ssh does in BatchMode without a key, and while `$FAKE_SSH_DIR/down` exists
+//! every host is refused (a dropped network); while `$FAKE_SSH_DIR/hold` exists ssh waits (a slow
+//! login).
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -12,8 +15,8 @@ use serde_json::Value;
 use super::{stream, Env, Stream};
 
 const FAKE_SSH: &str = r#"#!/bin/sh
-printf '%s\037' "$@" >> "$FAKE_SSH_DIR/argv"
-printf '\n' >> "$FAKE_SSH_DIR/argv"
+argv=$(printf '%s\037' "$@")
+printf '%s\n' "$argv" >> "$FAKE_SSH_DIR/argv" # one write: ssh runs in parallel
 echo $$ >> "$FAKE_SSH_DIR/pids"
 while [ $# -gt 0 ]; do
   case $1 in
@@ -25,7 +28,12 @@ while [ $# -gt 0 ]; do
 done
 host=$1
 shift
-case $host in
+while [ -e "$FAKE_SSH_DIR/hold" ]; do sleep 0.05; done
+if [ -e "$FAKE_SSH_DIR/down" ]; then
+  echo "ssh: connect to host $host port 22: Network is unreachable" >&2; exit 255
+fi
+case ${host#*@} in
+  login*) echo "me@$host: Permission denied (publickey,password)." >&2; exit 255 ;;
   unreachable*) echo "ssh: connect to host $host port 22: Connection refused" >&2; exit 255 ;;
 esac
 cd "$FAKE_HOME" || exit 255

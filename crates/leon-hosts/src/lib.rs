@@ -105,6 +105,15 @@ impl std::fmt::Display for Endpoint {
     }
 }
 
+/// Text a host sent (ssh's stderr, a server's error) as the app may show it: no control or bidi
+/// characters, at most `max` characters, trimmed.
+pub fn shown_text(text: &str, max: usize) -> String {
+    let bidi =
+        |c: char| matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' | '\u{200e}' | '\u{200f}' | '\u{061c}');
+    let kept: String = text.trim().chars().filter(|&c| !c.is_control() && !bidi(c)).take(max).collect();
+    kept.trim().to_string()
+}
+
 /// What ssh runs on the host: a fixed string with nothing from the endpoint in it. It finds
 /// `leon` on PATH, else in ~/.local/bin (where scripts/install.sh links it), else exits 127. Plain
 /// `sh -c '…'` reads the same under sh, bash, zsh and fish login shells.

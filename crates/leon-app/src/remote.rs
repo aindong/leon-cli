@@ -4,15 +4,17 @@
 //! block's frame, and an event means the model is refetched once the lines that came with it are
 //! read. Calls that may run long (Lua actions) get a connection of their own on a thread.
 //! Over a host's link (`connect_retrying`) a dropped event connection is retried with backoff,
-//! and every connection is opened again when it comes back.
+//! every connection is opened again when it comes back, and the event stream resumes after the
+//! last seq seen (remote_link.rs).
 
 use std::collections::HashMap;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use leon_core::program_status::Record;
 use leon_core::screen::{self, Frame, Update};
@@ -20,25 +22,18 @@ use leon_core::{ApiError, Window};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-mod events;
-use events::{attach, fetch, read_events};
+#[path = "remote_fetch.rs"]
+mod fetch_model;
+#[path = "remote_link.rs"]
+mod link;
+use fetch_model::{fetch, read_line};
+use link::Job;
+pub use link::LinkState;
 
 /// How long a UI call waits for its reply before giving up (the server answers in microseconds).
 const CALL_TIMEOUT: Duration = Duration::from_secs(5);
-/// The longest line read from the server: a whole 500 × 1000 screen of one-cell spans fits.
-const MAX_LINE: u64 = 256 << 20;
-
-/// One line, at most `MAX_LINE` bytes; 0 at the end of the stream.
-fn read_line(r: &mut BufReader<UnixStream>, out: &mut String) -> io::Result<usize> {
-    let mut bytes = Vec::new();
-    let n = r.by_ref().take(MAX_LINE + 1).read_until(b'\n', &mut bytes)?;
-    if n as u64 > MAX_LINE {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "a line from the server is too long"));
-    }
-    *out = String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    Ok(n)
-}
-
+/// How long the first call over a link waits.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 /// One session as the app shows it.
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -153,11 +148,34 @@ struct Shared {
     watched: Mutex<Vec<String>>,
     alive: AtomicBool,
     closing: AtomicBool,
+    /// Over a link: whether the connections are up.
+    link: Mutex<LinkState>,
+    /// The resumable stream's token, the last event seq seen, and how often the seq skipped.
+    resume: Mutex<Option<String>>,
+    seq: AtomicU64,
+    gaps: AtomicU64,
+    resumes: AtomicU64,
+    reattaches: AtomicU64,
+    /// When the event connection last brought a line, and when the watchdog pinged it.
+    heard: Mutex<Instant>,
+    ping: Mutex<Option<Instant>>,
 }
 
 impl Shared {
     fn bump(&self) {
         lock(&self.wakers).iter().for_each(|w| w());
+    }
+
+    /// A call on the UI's connection, replaced for the next call when it failed (`Remote::call`).
+    fn call(&self, method: &str, params: Value) -> Result<Value, ApiError> {
+        let mut c = lock(&self.calls);
+        let r = c.call(method, params);
+        if r.as_ref().is_err_and(|e| e.code == "unreachable") {
+            if let Ok(fresh) = Conn::open(&self.socket, Some(CALL_TIMEOUT)) {
+                *c = fresh;
+            }
+        }
+        r
     }
 
     /// Fetch the whole model and replace it; screens of blocks that are gone are dropped.
@@ -171,6 +189,19 @@ impl Shared {
         Ok(())
     }
 
+    /// A stream attached afresh: its token, and the seq its snapshot sits at.
+    fn restart_stream(&self, snapshot: &Value) {
+        *lock(&self.resume) = snapshot["resume"].as_str().map(String::from);
+        self.seq.store(snapshot["seq"].as_u64().unwrap_or(0), Ordering::SeqCst);
+    }
+
+    /// An event's seq: one more than the last, or a gap is counted.
+    fn saw(&self, seq: u64) {
+        if self.seq.swap(seq, Ordering::SeqCst) + 1 != seq {
+            self.gaps.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
     fn send_watch(&self, ids: &[String]) -> io::Result<()> {
         let mut line =
             serde_json::to_vec(&json!({ "id": 0, "method": "block.watch", "params": { "block_ids": ids } }))?;
@@ -179,11 +210,107 @@ impl Shared {
     }
 }
 
+#[derive(Deserialize)]
+struct Pushed {
+    block_id: String,
+    #[serde(flatten)]
+    update: Update,
+}
+
+/// Open an event connection and attach it to every event; returns its reader, its write side
+/// and the snapshot (with a `resume` token when `resumable`).
+fn attach(socket: &Path, resumable: bool, wait: Duration) -> io::Result<(BufReader<UnixStream>, UnixStream, Value)> {
+    let mut c = Conn::open(socket, Some(wait))?;
+    let p = json!({ "event_scope": "all", "resumable": resumable });
+    let snapshot = c.call("session.attach_all", p).map_err(|e| io::Error::other(e.message))?;
+    c.r.get_ref().set_read_timeout(None)?;
+    let write = c.r.get_ref().try_clone()?;
+    Ok((c.r, write, snapshot))
+}
+
+/// The reader thread: apply screens, refetch after events, re-attach after a drop while the
+/// server still answers, and say the server is gone when it doesn't.
+fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
+    loop {
+        let mut stale = false;
+        loop {
+            let mut line = String::new();
+            if matches!(read_line(&mut r, &mut line), Ok(0) | Err(_)) {
+                if shared.closing.load(Ordering::SeqCst) {
+                    return;
+                }
+                match reattach(&shared) {
+                    Some(again) => (r, stale) = (again, true),
+                    None => {
+                        shared.alive.store(false, Ordering::SeqCst);
+                        shared.bump();
+                        return;
+                    }
+                }
+                break;
+            }
+            *lock(&shared.heard) = Instant::now();
+            let Ok(mut v) = serde_json::from_str::<Value>(&line) else { continue };
+            if let Some(s) = v.get_mut("screen") {
+                // a line still on its way for a block no longer watched would revive a stale copy
+                let pushed = serde_json::from_value::<Pushed>(s.take()).ok();
+                if let Some(p) = pushed.filter(|p| lock(&shared.watched).contains(&p.block_id)) {
+                    let mut m = lock(&shared.model);
+                    *m.screen_updates.entry(p.block_id.clone()).or_default() += 1;
+                    let f = m.screens.entry(p.block_id).or_default();
+                    screen::apply(Arc::make_mut(f), p.update);
+                }
+            } else if v.get("event").is_some() {
+                if let Some(seq) = v["seq"].as_u64() {
+                    shared.saw(seq);
+                }
+                stale = true;
+            } else if let Some(e) = v.get("error").filter(|e| !e.is_null()) {
+                eprintln!("leon: the server refused a watch: {e}");
+            }
+            if !r.buffer().contains(&b'\n') {
+                break; // nothing more already read: show what came
+            }
+        }
+        if stale {
+            let _ = shared.refresh();
+        } else {
+            shared.bump();
+        }
+    }
+}
+
+/// A new event connection when the server still answers (it dropped a connection that fell too
+/// far behind, or a link to it came back), with the watched blocks watched again.
+fn reattach(shared: &Shared) -> Option<BufReader<UnixStream>> {
+    let (r, w) = match shared.retry {
+        None => {
+            lock(&shared.fetch).call("server.version", json!({})).ok()?;
+            let (r, w, snapshot) = attach(&shared.socket, false, CALL_TIMEOUT).ok()?;
+            shared.restart_stream(&snapshot);
+            (r, w)
+        }
+        Some(limit) => link::relink(shared, limit)?,
+    };
+    // held while sending, as `Remote::watch` holds it, so a newer set can't be overtaken
+    let watched = lock(&shared.watched);
+    *lock(&shared.events) = w;
+    if shared.closing.load(Ordering::SeqCst) {
+        let _ = lock(&shared.events).shutdown(std::net::Shutdown::Both); // dropped meanwhile
+        return None;
+    }
+    lock(&shared.model).screens.clear(); // the new connection starts with whole screens
+    shared.send_watch(&watched).ok()?;
+    Some(r)
+}
+
 /// A resize the app asked for: the size, and the size the screen had then.
 type Asked = ((u16, u16), (usize, usize));
 
 pub struct Remote {
     shared: Arc<Shared>,
+    /// Over a link, the window's calls go through here (`link::run_queue`).
+    queue: Option<Sender<Job>>,
     /// Per block: the size last asked for and the size the screen had then (`fit`).
     asked: Mutex<HashMap<String, Asked>>,
 }
@@ -205,10 +332,13 @@ impl Remote {
         // binds only in one): a socket in an open dir could be anyone's.
         leon_core::paths::ensure_private_dir(socket.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
         let no_server = |e: &dyn std::fmt::Display| format!("no leon server at {}: {e}", socket.display());
-        let mut calls = Conn::open(socket, Some(CALL_TIMEOUT)).map_err(|e| no_server(&e))?;
+        // the first call over a link waits for ssh to log in and the host's server to start
+        let first = if retry.is_some() { CONNECT_TIMEOUT } else { CALL_TIMEOUT };
+        let mut calls = Conn::open(socket, Some(first)).map_err(|e| no_server(&e))?;
         calls.call("server.version", json!({})).map_err(|e| no_server(&e.message))?;
-        let fetch = Conn::open(socket, Some(CALL_TIMEOUT)).map_err(|e| no_server(&e))?;
-        let (r, events) = attach(socket).map_err(|e| no_server(&e))?;
+        calls.r.get_ref().set_read_timeout(Some(CALL_TIMEOUT)).map_err(|e| no_server(&e))?;
+        let fetch = Conn::open(socket, Some(first)).map_err(|e| no_server(&e))?;
+        let (r, events, snapshot) = attach(socket, retry.is_some(), first).map_err(|e| no_server(&e))?;
         let shared = Arc::new(Shared {
             socket: socket.to_path_buf(),
             retry,
@@ -220,14 +350,36 @@ impl Remote {
             watched: Mutex::default(),
             alive: AtomicBool::new(true),
             closing: AtomicBool::new(false),
+            link: Mutex::new(LinkState::Up),
+            resume: Mutex::default(),
+            seq: AtomicU64::new(0),
+            gaps: AtomicU64::new(0),
+            resumes: AtomicU64::new(0),
+            reattaches: AtomicU64::new(0),
+            heard: Mutex::new(Instant::now()),
+            ping: Mutex::default(),
         });
+        shared.restart_stream(&snapshot);
         shared.refresh().map_err(|e| no_server(&e.message))?;
+        lock(&shared.fetch).r.get_ref().set_read_timeout(Some(CALL_TIMEOUT)).map_err(|e| no_server(&e))?;
         let reader = shared.clone();
         std::thread::Builder::new()
             .name("leon-events".into())
             .spawn(move || read_events(reader, r))
             .map_err(|e| e.to_string())?;
-        Ok(Remote { shared, asked: Mutex::default() })
+        let queue = match retry {
+            None => None,
+            Some(_) => {
+                let (tx, jobs) = std::sync::mpsc::channel();
+                let (q, w) = (Arc::downgrade(&shared), Arc::downgrade(&shared));
+                let spawn =
+                    |name: &str, f: Box<dyn FnOnce() + Send>| std::thread::Builder::new().name(name.into()).spawn(f);
+                spawn("leon-link-calls", Box::new(move || link::run_queue(q, jobs))).map_err(|e| e.to_string())?;
+                spawn("leon-link-watchdog", Box::new(move || link::watchdog(w))).map_err(|e| e.to_string())?;
+                Some(tx)
+            }
+        };
+        Ok(Remote { shared, queue, asked: Mutex::default() })
     }
 
     /// The model as last received. Hold it briefly: the reader thread waits for it.
@@ -239,14 +391,7 @@ impl Remote {
     /// connection that failed (the server closed it, a reply never came) is replaced for the next
     /// call; this one is not sent again, since it may have been done.
     pub fn call(&self, method: &str, params: Value) -> Result<Value, ApiError> {
-        let mut c = lock(&self.shared.calls);
-        let r = c.call(method, params);
-        if r.as_ref().is_err_and(|e| e.code == "unreachable") {
-            if let Ok(fresh) = Conn::open(&self.shared.socket, Some(CALL_TIMEOUT)) {
-                *c = fresh;
-            }
-        }
-        r
+        self.shared.call(method, params)
     }
 
     /// Call a method that changes the model, then refetch it, so what the app shows next
@@ -271,15 +416,13 @@ impl Remote {
         let data = String::from_utf8_lossy(bytes);
         let args = json!({ "data": data });
         let p = json!({ "session_id": session_id, "block_id": block_id, "method": "dev.leon.terminal.write", "args": args });
-        if let Err(e) = self.call("block.method", p) {
-            eprintln!("leon: typing into {block_id} failed: {}", e.message);
-        }
+        self.send("block.method", p);
     }
 
     pub fn resize(&self, session_id: &str, block_id: &str, rows: u16, cols: u16) {
         let args = json!({ "rows": rows, "cols": cols });
         let p = json!({ "session_id": session_id, "block_id": block_id, "method": "dev.leon.terminal.resize", "args": args });
-        let _ = self.call("block.method", p);
+        self.send("block.method", p);
     }
 
     /// Resize a block to (rows, cols) unless that was already asked for while its screen had the

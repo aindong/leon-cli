@@ -1,6 +1,7 @@
 //! The sidebar: the toolbar row, then each session as a quiet label with its tabs as rows under it
-//! (sidebar style), or one row per session (top style, the tabs then in the titlebar). Its right
-//! edge drags to resize it.
+//! (sidebar style), or one row per session (top style, the tabs then in the titlebar). Once there
+//! are hosts, sessions are grouped under their machine's label, This Mac first. Its right edge
+//! drags to resize it.
 
 use super::*;
 
@@ -18,7 +19,18 @@ impl Workspace {
         let t = &DARK;
         let frame = self.pulse();
         let mut items = div().flex().flex_col().gap(px(1.)).px(px(8.)).pt(px(4.));
+        let machines = self.hosts.machines();
+        // with hosts, each machine's label goes before its sessions (rows come in machine order)
+        let grouped = self.grouped();
+        let mut labelled = 0;
         for (i, row) in rows.iter().enumerate() {
+            while grouped && labelled <= row.host {
+                items = items.child(self.host_label(labelled, &machines[labelled], cx));
+                labelled += 1;
+            }
+            if grouped && self.host_collapsed(&machines[row.host].label) {
+                continue;
+            }
             let selected = self.session_id.as_deref() == Some(row.id.as_str());
             if list == SidebarList::SessionsOnly {
                 items = items.child(self.session_row(i, row, selected, frame, cx));
@@ -74,6 +86,10 @@ impl Workspace {
                 );
             }
             items = items.child(div().h(px(6.)));
+        }
+        while grouped && labelled < machines.len() {
+            items = items.child(self.host_label(labelled, &machines[labelled], cx));
+            labelled += 1;
         }
         let width = self.settings.sidebar_width;
         div()

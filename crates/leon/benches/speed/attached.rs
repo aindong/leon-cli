@@ -1,11 +1,15 @@
 //! The attached app's path (M10): the app's own client (`leon_app::remote`) against the release
 //! server, next to the old in-process path (an embedded server, its grid polled every 8 ms as the
 //! app did before M10). Budget: keystroke to screen p50 < 4 ms and p99 < 16 ms; `seq 1 200000`
-//! at most 1.5x the in-process time.
+//! at most 1.5x the in-process time. M16b: keystroke to screen again through a `Link` whose ssh
+//! is a fake that runs the host's command here (a pipe and a process, no network), as the app
+//! reaches a host. Recorded, not budgeted: a real link adds its round trip.
 
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
+
+use std::os::unix::fs::PermissionsExt;
 
 use leon_app::embedded;
 use leon_app::remote::Remote;
@@ -19,8 +23,24 @@ const SIZE: (u16, u16) = (40, 110);
 /// 2 ms gap between two screens of one block, which only a flood should meet.
 const KEY_GAP: Duration = Duration::from_millis(10);
 
+/// ssh for the link run: skip ssh's options and the host, run the host's command here.
+const FAKE_SSH: &str = r#"#!/bin/sh
+while [ $# -gt 0 ]; do
+  case $1 in
+    --) shift; break ;;
+    -p|-o) shift 2 ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+shift
+exec env PATH="$FAKE_PATH" sh -c "$*"
+"#;
+
 pub struct Results {
     pub key: (f64, f64),
+    /// Keystroke to screen through a link.
+    pub key_link: (f64, f64),
     pub seq_in_process: f64,
     pub seq_attached: f64,
 }
@@ -49,7 +69,7 @@ fn until_screen(r: &Remote, changed: &Receiver<()>, id: &str, what: &str, pred: 
 
 /// Type one `x` at a time (`KEY_GAP` apart) into a raw-mode echo program and time until the
 /// client has applied the pushed screen that shows it.
-fn key_latency(r: &Remote, changed: &Receiver<()>, n: usize) -> (f64, f64) {
+fn key_latency(r: &Remote, changed: &Receiver<()>, n: usize, path: &str) -> (f64, f64) {
     assert!(n <= 1500, "the 24×80 screen holds about 1900 echoes");
     let (sid, bid) = session(r, "stty raw echo; echo READY; exec cat >/dev/null");
     r.watch(vec![bid.clone()]);
@@ -66,7 +86,7 @@ fn key_latency(r: &Remote, changed: &Receiver<()>, n: usize) -> (f64, f64) {
     r.watch(vec![]);
     r.call("session.destroy", json!({ "session_id": sid })).unwrap();
     let (p50, p99) = super::percentiles(times);
-    println!("leon attached keystroke to screen: samples={n} gap={KEY_GAP:?} p50={p50:.3} ms p99={p99:.3} ms");
+    println!("leon {path} keystroke to screen: samples={n} gap={KEY_GAP:?} p50={p50:.3} ms p99={p99:.3} ms");
     (p50, p99)
 }
 
@@ -125,7 +145,8 @@ pub fn run(socket: &Path, dir: &Path, samples: usize) -> Results {
     r.on_change(move || {
         let _ = tx.send(());
     });
-    let key = key_latency(&r, &changed, samples.min(1500));
+    let key = key_latency(&r, &changed, samples.min(1500), "attached");
+    let key_link = through_link(dir, samples.min(1500));
     // alternate the two paths, so the machine's load hits both alike
     let (mut inproc, mut attached) = (Vec::new(), Vec::new());
     for _ in 0..SEQ_RUNS {
@@ -138,17 +159,44 @@ pub fn run(socket: &Path, dir: &Path, samples: usize) -> Results {
         "leon seq 1 200000 attached: median={seq_attached:.0} ms all={attached:.0?} ratio={:.2}",
         seq_attached / seq_in_process
     );
-    Results { key, seq_in_process, seq_attached }
+    Results { key, key_link, seq_in_process, seq_attached }
+}
+
+/// Keystroke to screen with the app's client on a `Link` to the same server: `LEON_SSH` is
+/// `FAKE_SSH`, whose `leon server proxy` finds the server through this process's
+/// `LEON_RUNTIME_DIR` (the bench's dir).
+fn through_link(dir: &Path, n: usize) -> (f64, f64) {
+    let ssh = dir.join("fake-ssh");
+    std::fs::write(&ssh, FAKE_SSH).unwrap();
+    std::fs::set_permissions(&ssh, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let bin = dir.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let _ = std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_leon"), bin.join("leon"));
+    std::env::set_var("LEON_SSH", &ssh);
+    std::env::set_var("FAKE_PATH", format!("{}:/usr/bin:/bin", bin.display()));
+    std::env::set_var("LEON_RUNTIME_DIR", dir);
+    std::env::set_var("LEON_STATE_DIR", dir.join("state"));
+    let endpoint: leon_hosts::Endpoint = "ssh://bench".parse().unwrap();
+    let link = leon_hosts::Link::open("bench", &endpoint, false).unwrap();
+    let r =
+        Remote::connect_retrying(link.socket(), Duration::from_secs(60)).expect("the bench attaches through a link");
+    let (tx, changed) = mpsc::channel();
+    r.on_change(move || {
+        let _ = tx.send(());
+    });
+    key_latency(&r, &changed, n, "through a link")
 }
 
 /// The attached rows of the table and the budget's verdict; whether it was met.
 pub fn report(app: &Results) -> bool {
-    println!("\n| attached app | keystroke to screen p50 / p99 | `seq 1 200000` in-process / attached |");
-    println!("|---|---|---|");
+    println!(
+        "\n| attached app | keystroke to screen p50 / p99 | through a link p50 / p99 | `seq 1 200000` in-process / attached |"
+    );
+    println!("|---|---|---|---|");
     let ratio = app.seq_attached / app.seq_in_process;
     println!(
-        "| leon | {:.3} / {:.3} ms | {:.0} / {:.0} ms ({ratio:.2}x) |",
-        app.key.0, app.key.1, app.seq_in_process, app.seq_attached
+        "| leon | {:.3} / {:.3} ms | {:.3} / {:.3} ms | {:.0} / {:.0} ms ({ratio:.2}x) |",
+        app.key.0, app.key.1, app.key_link.0, app.key_link.1, app.seq_in_process, app.seq_attached
     );
     let verdict = if app.within_budget() { "met" } else { "MISSED" };
     println!("\nbudget (p50 < 4 ms, p99 < 16 ms, seq at most 1.5x): {verdict}");

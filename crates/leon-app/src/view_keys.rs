@@ -75,10 +75,10 @@ impl Workspace {
             self.run_action(name, b.args.as_ref(), "key", window, cx);
             return;
         }
-        let Some((sid, block, _)) = self.target() else { return };
+        let Some((sid, block)) = self.local_target() else { return };
         let prefix = (!prefix.is_empty()).then(|| prefix.iter().map(Chord::to_string).collect::<Vec<_>>().join(">"));
         let p = json!({ "session_id": sid, "block_id": block, "key": last.to_string(), "prefix": prefix });
-        self.app.spawn("client.key", p, |r| report("a key binding", r));
+        self.hosts.local().spawn("client.key", p, |r| report("a key binding", r));
     }
 
     /// Run an action by name: the app's own (`client.*`, `pane.*`, `session.*`) here, a config
@@ -92,7 +92,8 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         match name {
-            "session.new" => self.new_session(&NewSession, window, cx),
+            "session.new" => self.new_session_on(self.host_arg(args), cx),
+            "client.host.add" => self.ask_host(cx),
             "client.tab.new" => self.new_tab(&NewTab, window, cx),
             "client.tab.next" => self.step_tab(1, cx),
             "client.tab.previous" => self.step_tab(-1, cx),
@@ -130,7 +131,7 @@ impl Workspace {
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
-                    None => Some(Palette { query: String::new(), selected: 0 }),
+                    None => Some(Palette { query: String::new(), selected: 0, ask: None }),
                 };
                 cx.notify();
             }
@@ -150,33 +151,52 @@ impl Workspace {
             }
             "client.config.reload" => {
                 let inbox = self.inbox.clone();
-                self.app.spawn("server.config_reload", json!({}), move |r| {
+                self.hosts.local().spawn("server.config_reload", json!({}), move |r| {
                     report("the config reload", r);
                     lock(&inbox).asking = false; // fetch the new keymap at the next poll
                 });
                 self.keymap_asked = None;
             }
             n if !n.contains('.') => {
-                let (sid, block) = self.target().map(|(s, b, _)| (Some(s), Some(b))).unwrap_or_default();
+                let (sid, block) = self.local_target().map(|(s, b)| (Some(s), Some(b))).unwrap_or_default();
                 let p = json!({ "action": n, "args": args, "origin": origin, "session_id": sid, "block_id": block });
-                self.app.spawn("client.action", p, |r| report("a config action", r));
+                self.hosts.local().spawn("client.action", p, |r| report("a config action", r));
             }
             other => eprintln!("leon: the app has no action {other}"),
         }
     }
 
-    /// Every action the palette offers, with its shortcut.
+    /// The config's actions run on This Mac's server (the keymap is This Mac's), so they get the
+    /// target pane only when it is there. shortcut: a Lua binding can't reach a host's pane yet.
+    fn local_target(&self) -> Option<(String, String)> {
+        let (sid, block, _) = self.target()?;
+        (self.host == 0).then_some((sid, block))
+    }
+
+    /// Every action the palette offers, with its shortcut, then New Session on each machine.
     fn palette_items(&self) -> Vec<Item> {
         let builtins = palette::BUILTINS.iter().map(|(n, t)| (n.to_string(), t.to_string(), Vec::new()));
         let config = self.keymap.actions.iter().map(|a| (a.name.clone(), a.title.clone(), a.keywords.clone()));
-        builtins
+        let mut items: Vec<Item> = builtins
             .chain(config)
-            .map(|(name, title, keywords)| Item { shortcut: self.keymap.shortcut(&name), name, title, keywords })
-            .collect()
+            .map(|(name, title, keywords)| Item {
+                shortcut: self.keymap.shortcut(&name),
+                name,
+                title,
+                keywords,
+                args: None,
+            })
+            .collect();
+        items.extend(self.host_items());
+        items
     }
 
-    /// The open palette's rows, filtered: (title, shortcut).
+    /// The open palette's rows, filtered: (title, shortcut). While it asks for text (Add Host…),
+    /// its one row: what to type, or why the last try was refused.
     pub fn palette_rows(&self) -> Vec<(String, Option<String>)> {
+        if let Some((_, row)) = self.ask_rows() {
+            return vec![(row, None)];
+        }
         self.palette_matches().into_iter().map(|it| (it.title, it.shortcut)).collect()
     }
 
@@ -190,7 +210,7 @@ impl Workspace {
     }
 
     pub(super) fn palette_matches(&self) -> Vec<Item> {
-        let Some(p) = &self.palette else { return Vec::new() };
+        let Some(p) = self.palette.as_ref().filter(|p| p.ask.is_none()) else { return Vec::new() };
         let items = self.palette_items();
         palette::filter(&items, &p.query).into_iter().map(|i| items[i].clone()).collect()
     }
@@ -224,11 +244,13 @@ impl Workspace {
         let Some(p) = self.palette.as_mut() else { return };
         if named("escape") || toggle {
             self.palette = None;
+        } else if named("enter") && p.ask.is_some() {
+            self.ask_enter(cx);
         } else if named("enter") {
             let pick = matches.into_iter().nth(p.selected);
             self.palette = None;
             if let Some(item) = pick {
-                self.run_action(&item.name, None, "palette", window, cx);
+                self.run_action(&item.name, item.args.as_ref(), "palette", window, cx);
             }
         } else if named("down") || (m.control && ks.key == "n") {
             p.selected = (p.selected + 1).min(matches.len().saturating_sub(1));
@@ -265,7 +287,7 @@ impl Workspace {
                 inbox.asking = true;
                 self.keymap_asked = Some(Instant::now());
                 let back = self.inbox.clone();
-                self.app.spawn("client.keymap", json!({}), move |r| {
+                self.hosts.local().spawn("client.keymap", json!({}), move |r| {
                     let mut inbox = lock(&back);
                     inbox.asking = false;
                     inbox.reply = r.ok();
@@ -281,7 +303,7 @@ impl Workspace {
 
     /// Fetch the keymap and apply it now, waiting for the server (tests, and nothing on a hot path).
     pub fn sync_keymap(&mut self) {
-        if let Ok(km) = self.app.call("client.keymap", json!({})) {
+        if let Ok(km) = self.hosts.local().call("client.keymap", json!({})) {
             self.keymap = Keymap::app(&km);
         }
     }

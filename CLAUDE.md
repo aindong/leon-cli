@@ -1,6 +1,7 @@
 # leon
 
-A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first; `docs/spec.md` is the
+A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first (its decisions are in
+`docs/architecture/*.md`, kept under 20 KB each; a doc test reads all three files); `docs/spec.md` is the
 interface we match and `docs/roadmap.md` the milestone order.
 
 - Checks: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (or `the verify script`).
