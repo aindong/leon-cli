@@ -12,6 +12,7 @@ leon-core = { path = "crates/leon-core" }
 leon-server = { path = "crates/leon-server" }
 leon-lua = { path = "crates/leon-lua" }
 alacritty_terminal = "0.26"
+base64 = "0.22"
 clap = { version = "4.6", features = ["derive", "env"] }
 libc = "0.2"
 mlua = { version = "0.12", features = ["lua51", "vendored", "serialize"] }

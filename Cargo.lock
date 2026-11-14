@@ -414,6 +414,7 @@ name = "leon-core"
 version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
+ "base64",
  "libc",
  "portable-pty",
  "serde",
