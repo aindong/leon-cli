@@ -107,3 +107,23 @@ fn store_never_exceeds_the_cap() {
     }
     assert!(t.store.len() > 64, "the random ids should have filled the store: {}", t.store.len());
 }
+
+#[test]
+fn streams_without_7501_pass_through_byte_for_byte() {
+    let mut checked = 0;
+    for seed in 1..3000u64 {
+        let mut rng = Rng(seed.wrapping_mul(0x2545_f491_4f6c_dd1d));
+        let mut stream = random_stream(&mut rng);
+        // An escape cut off at the end of a read is held for the next one; a plain byte settles it.
+        stream.push(b'x');
+        if stream.windows(4).any(|w| w == b"7501") {
+            continue;
+        }
+        let mut pass = Vec::new();
+        let fed = Tracker::default().feed(&stream, |b| pass.extend_from_slice(b));
+        assert_eq!(pass, stream, "seed {seed}");
+        assert!(fed.changes.is_empty() && fed.reply.is_empty(), "seed {seed}");
+        checked += 1;
+    }
+    assert!(checked > 100, "too few streams without 7501: {checked}");
+}
