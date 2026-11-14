@@ -347,19 +347,26 @@ Print the server's key bindings and modes, as resolved from `init.lua`.
 
 ### `leon api`
 
-List, describe and call the server's API methods directly.
+List, describe and call the server's API methods directly. Block methods (`dev.leon.terminal.*`,
+called through `block.method`) are listed and described too. [api.md](api.md) is the same
+reference as a page, and [integrators.md](integrators.md) explains the socket API and its
+compatibility promise.
 
 ### `leon api list`
 
-List every method.
+List every method with its stability: `stable` (covered by the compatibility policy),
+`experimental` or `internal`. `--json` gives `name`, `stability`, `description`, and `deprecated`
+when the method is on its way out.
 
 ### `leon api describe METHOD`
 
-Show a method's description and JSON Schemas.
+Show a method's stability, description, JSON Schemas and, for the most-used methods, a request
+and response example.
 
 ### `leon api call METHOD [ARGS]`
 
 Call a method with JSON params (inline, `@file`, or `-` for stdin). `-s` fills `session_id`.
+A block method isn't called here: it fails, pointing at `leon block call`.
 
 ```sh
 leon api list

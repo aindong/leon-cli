@@ -10,6 +10,7 @@ use leon_core::layout::Node;
 use leon_core::State;
 
 use crate::blocks::{self, BlockType, Layout};
+use crate::contract::{self, Deprecated, Stability, API_VERSION};
 use crate::Registry;
 
 #[derive(Deserialize, JsonSchema)]
@@ -29,12 +30,25 @@ pub struct SessionRef {
 pub struct MethodDoc {
     pub name: String,
     pub description: String,
+    /// `stable` (covered by the compatibility policy), `experimental` or `internal`.
+    pub stability: Stability,
+    /// Present once the method is on its way out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deprecated: Option<Deprecated>,
     pub input_schema: serde_json::Value,
     pub output_schema: serde_json::Value,
+    /// Example `params`, for the methods that have one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_example: Option<serde_json::Value>,
+    /// The `result` that answers `request_example`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_example: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, JsonSchema)]
 pub struct Help {
+    /// The API's semver (docs/integrators.md#compatibility), apart from the build's version.
+    pub api_version: String,
     pub methods: Vec<MethodDoc>,
     /// Block creators, their flavors, and the block methods `block.method` calls.
     pub block_types: Vec<BlockType>,
@@ -67,7 +81,10 @@ pub struct Stop {
 
 #[derive(Serialize, JsonSchema)]
 pub struct Version {
+    /// The build's version.
     pub version: String,
+    /// The API's semver, as in `help.all`.
+    pub api_version: String,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -232,16 +249,12 @@ pub fn registry() -> Registry {
     let mut r = Registry::default();
     r.add("help.all", "Every method with its description and JSON Schemas.", |ctx, _: NoParams| {
         Ok(Help {
+            api_version: API_VERSION.into(),
             methods: ctx
                 .registry
                 .methods()
                 .iter()
-                .map(|m| MethodDoc {
-                    name: m.name.into(),
-                    description: m.description.into(),
-                    input_schema: m.input_schema.clone(),
-                    output_schema: m.output_schema.clone(),
-                })
+                .map(|m| contract::doc(m.name, m.description, m.input_schema.clone(), m.output_schema.clone()))
                 .collect(),
             block_types: blocks::block_types(),
         })
@@ -262,7 +275,7 @@ pub fn registry() -> Registry {
         Ok(Empty {})
     });
     r.add("server.version", "The server's version.", |ctx, _: NoParams| {
-        Ok(Version { version: ctx.info.version.into() })
+        Ok(Version { version: ctx.info.version.into(), api_version: API_VERSION.into() })
     });
     // The socket loop stops the server once this reply is written (serve.rs).
     r.add(

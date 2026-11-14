@@ -262,6 +262,9 @@ See [docs/lua.md](docs/lua.md).
 - [docs/cli.md](docs/cli.md): every command and flag.
 - [docs/lua.md](docs/lua.md): the config and scripts, with examples that a test runs.
 - [docs/agents.md](docs/agents.md): agents driving leon.
+- [docs/integrators.md](docs/integrators.md): writing a client for leon's socket API in any
+  language, and the compatibility promise. [docs/api.md](docs/api.md): every method.
+  [CHANGELOG.md](CHANGELOG.md): what changed.
 - [docs/architecture.md](docs/architecture.md): how it's built. [docs/spec.md](docs/spec.md): the
   interface it matches. [docs/roadmap.md](docs/roadmap.md): what's next.
 

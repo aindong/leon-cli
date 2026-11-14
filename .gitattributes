@@ -2,3 +2,5 @@
 brand/icon/*.svg linguist-generated
 brand/marketing/*.svg linguist-generated
 brand/marketing/index.html linguist-generated
+docs/api.md linguist-generated
+docs/api-snapshot.json linguist-generated

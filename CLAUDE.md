@@ -9,6 +9,10 @@ interface we match and `docs/roadmap.md` the milestone order.
   `scripts/package-linux.sh`. A test gated to macOS needs a `// macOS only: <reason>` line above the gate.
 - GPUI needs the `runtime_shaders` feature on this machine (no Metal Toolchain installed).
 - Name methods, actions, events and flags as `docs/spec.md` does; env vars are `LEON_*`.
+- The API is a promise (`docs/integrators.md#compatibility`): a new method needs a line in
+  `crates/leon-server/src/contract.rs`; after changing any method, regenerate `docs/api.md` with
+  `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`, and a stable schema change also
+  needs an `API_VERSION` bump and a CHANGELOG.md entry first.
 - Docs are tested: a new or changed command/flag needs `docs/cli.md`, a new app shortcut needs the
   README table, and `sh`/`lua` blocks in the docs must run. Packaging: `scripts/bundle.sh`, `scripts/install.sh`.
 - Terminal tests run a real shell in a PTY; wait for screen text with a timeout, never fixed sleeps.

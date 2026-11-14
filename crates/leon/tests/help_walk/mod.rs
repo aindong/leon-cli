@@ -37,6 +37,25 @@ impl Help {
     }
 }
 
+/// The text of each fenced block in `doc` whose info string is `lang`.
+pub fn blocks(doc: &str, lang: &str) -> Vec<String> {
+    let mut out = vec![];
+    let mut cur: Option<(bool, String)> = None; // (is `lang`, text) inside a fence
+    for line in doc.lines() {
+        if let Some(info) = line.trim_start().strip_prefix("```") {
+            match cur.take() {
+                Some((true, text)) => out.push(text),
+                Some(_) => {}
+                None => cur = Some((info.trim() == lang, String::new())),
+            }
+        } else if let Some((_, text)) = cur.as_mut() {
+            text.push_str(line);
+            text.push('\n');
+        }
+    }
+    out
+}
+
 pub fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }

@@ -11,26 +11,8 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// (file, the fewest `leon` calls its sh blocks must make)
-const DOCS: [(&str, usize); 4] = [("README.md", 8), ("docs/agents.md", 5), ("docs/lua.md", 2), ("docs/cli.md", 5)];
-
-/// The text of each fenced block tagged `sh`.
-fn sh_blocks(doc: &str) -> Vec<String> {
-    let mut out = vec![];
-    let mut cur: Option<(bool, String)> = None; // (is sh, text) inside a fence
-    for line in doc.lines() {
-        if let Some(info) = line.trim_start().strip_prefix("```") {
-            match cur.take() {
-                Some((true, text)) => out.push(text),
-                Some(_) => {}
-                None => cur = Some((info.trim() == "sh", String::new())),
-            }
-        } else if let Some((_, text)) = cur.as_mut() {
-            text.push_str(line);
-            text.push('\n');
-        }
-    }
-    out
-}
+const DOCS: [(&str, usize); 5] =
+    [("README.md", 8), ("docs/agents.md", 5), ("docs/lua.md", 2), ("docs/cli.md", 5), ("docs/integrators.md", 3)];
 
 // `leon` and `leon app` open the GUI, `server run|start` would serve: skip them. A failed call
 // prints a stand-in ID so `id=$(leon run …)` gives later lines something to pass.
@@ -56,7 +38,7 @@ fn doc_shell_lines_parse() {
     for (name, fewest) in DOCS {
         let doc = std::fs::read_to_string(help_walk::repo().join(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
         let _ = std::fs::remove_file(&calls);
-        for block in sh_blocks(&doc) {
+        for block in help_walk::blocks(&doc, "sh") {
             let mut child = Command::new("/bin/sh")
                 .args(["-c", &block])
                 .current_dir(tmp.path())
