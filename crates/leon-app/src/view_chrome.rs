@@ -26,6 +26,7 @@ impl Workspace {
         let t = &DARK;
         div()
             .id(id)
+            .group(id)
             .debug_selector(|| sel(id.into()))
             .flex()
             .flex_none()
@@ -36,7 +37,7 @@ impl Workspace {
             .cursor_pointer()
             .text_color(rgb(t.muted))
             .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
-            .child(icon.at(TOOLBAR_ICON))
+            .child(icon.in_button(TOOLBAR_ICON, t.muted, t.title, id))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |ws, _, window, cx| {
@@ -135,7 +136,7 @@ impl Workspace {
                     .invisible()
                     .group_hover(SharedString::from(format!("tab-{i}")), |d| d.visible())
                     .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
-                    .child(Icon::Close.at(ROW_ICON - 2.))
+                    .child(Icon::Close.at(ROW_ICON - 2., t.muted))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |ws, _, _, cx| {
@@ -174,6 +175,6 @@ pub(super) fn status_mark(i: Indicator, frame: u64) -> gpui::Div {
         .gap(px(4.))
         .text_size(px(SECONDARY_TEXT))
         .text_color(rgb(i.color(&DARK)))
-        .child(icon.at(ROW_ICON).opacity(pulse))
+        .child(icon.at(ROW_ICON, i.color(&DARK)).opacity(pulse))
         .children(progress)
 }

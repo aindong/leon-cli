@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 
-use gpui::{prelude::*, px, svg, AssetSource, SharedString, Svg};
+use gpui::{prelude::*, px, rgb, svg, AssetSource, SharedString, Svg};
 
 /// Toolbar icons and their hit targets, and the icons in rows, tabs and pane headers, in points.
 pub const TOOLBAR_ICON: f32 = 16.;
@@ -50,9 +50,14 @@ icons! {
 }
 
 impl Icon {
-    /// The icon at `size` points, drawn in the element's text colour.
-    pub fn at(self, size: f32) -> Svg {
-        svg().path(self.path()).size(px(size)).flex_none()
+    /// The icon at `size` points in `color`: GPUI's `svg` paints only in a colour set on itself.
+    pub fn at(self, size: f32, color: u32) -> Svg {
+        svg().path(self.path()).size(px(size)).flex_none().text_color(rgb(color))
+    }
+
+    /// `at`, brightening to `hover` while the mouse is over `group` (the button around it).
+    pub fn in_button(self, size: f32, color: u32, hover: u32, group: impl Into<SharedString>) -> Svg {
+        self.at(size, color).group_hover(group, move |s| s.text_color(rgb(hover)))
     }
 }
 

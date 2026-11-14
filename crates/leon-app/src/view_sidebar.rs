@@ -150,7 +150,7 @@ impl Workspace {
                     .invisible()
                     .group_hover(SharedString::from(format!("session-{i}")), |d| d.visible())
                     .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
-                    .child(Icon::Plus.at(ROW_ICON - 2.))
+                    .child(Icon::Plus.at(ROW_ICON - 2., t.muted))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |ws, _, window, cx| {

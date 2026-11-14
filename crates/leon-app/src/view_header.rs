@@ -17,7 +17,7 @@ impl Workspace {
             let (block, name) = (id.to_string(), format!("header-{what}-{id}"));
             div()
                 .id(SharedString::from(name.clone()))
-                .debug_selector(|| sel(name))
+                .group(SharedString::from(name.clone()))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -26,7 +26,8 @@ impl Workspace {
                 .cursor_pointer()
                 .text_color(rgb(t.muted))
                 .hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.title)))
-                .child(icon.at(ROW_ICON))
+                .child(icon.in_button(ROW_ICON, t.muted, t.title, name.clone()))
+                .debug_selector(|| sel(name))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |ws, _, window, cx| {
@@ -61,7 +62,7 @@ impl Workspace {
             .pl(px(10.))
             .pr(px(4.))
             .text_size(px(SECONDARY_TEXT))
-            .child(div().flex_none().text_color(rgb(t.muted)).child(Icon::Terminal.at(ROW_ICON)))
+            .child(div().flex_none().text_color(rgb(t.muted)).child(Icon::Terminal.at(ROW_ICON, t.muted)))
             .child(
                 div()
                     .flex_none()

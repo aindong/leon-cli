@@ -84,7 +84,7 @@ impl Workspace {
                         .px(px(14.))
                         .border_b_1()
                         .border_color(rgb(t.border))
-                        .child(div().text_color(rgb(t.accent)).child(Icon::Search.at(TOOLBAR_ICON)))
+                        .child(div().text_color(rgb(t.accent)).child(Icon::Search.at(TOOLBAR_ICON, t.accent)))
                         .child(prompt),
                 )
                 .child(list),
