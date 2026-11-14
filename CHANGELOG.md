@@ -15,7 +15,7 @@ M9) and M15 (Linux) are still to come.
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.0.0`.
+one is `1.1.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -29,6 +29,21 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+### M21: projects and worktrees as a recipe
+
+#### Added
+
+- `leon new --cwd DIR` (also `leon session new`): caller-relative or absolute directories;
+  missing paths and files are usage errors (exit 2).
+- Optional `cwd` on `session.create`, overriding the first terminal's layout cwd. This additive
+  change raises `api_version` from `1.0.0` to `1.1.0`.
+- Example Lua action and script for project/worktree sessions, with an opt-in ignored-file hook;
+  see [the recipe](docs/recipes.md).
+
+#### Changed
+
+- The spec and the reference app research now have short indexes linking their original sections.
 
 ### M18: a promise for integrators
 

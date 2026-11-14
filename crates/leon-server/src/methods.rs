@@ -106,6 +106,9 @@ pub struct CreateSession {
     pub label: Option<String>,
     /// Label for the session's first window.
     pub window_label: Option<String>,
+    /// Directory for the first terminal, overriding layout.block.options.cwd. Must exist;
+    /// relative paths resolve against the server's cwd. Omitted preserves the layout default.
+    pub cwd: Option<String>,
     /// What the first window holds; default a login shell.
     pub layout: Option<Layout>,
 }
@@ -299,9 +302,16 @@ pub fn registry() -> Registry {
         if ctx.stopping.load(Ordering::SeqCst) {
             return Err(ApiError::new(503, "shutting_down", "the server is stopping"));
         }
+        let mut layout = Layout::block(p.layout);
+        if let Some(cwd) = p.cwd {
+            if !std::path::Path::new(&cwd).is_dir() {
+                return Err(ApiError::bad_request(format!("cwd {cwd:?}: not an existing directory")));
+            }
+            layout.options.cwd = Some(cwd);
+        }
         let mark = st.mark();
         let (session_id, window_id) = st.create_session(p.label.as_deref(), p.window_label.as_deref())?;
-        match blocks::open(ctx, &mut st, &session_id, &window_id, Layout::block(p.layout), None) {
+        match blocks::open(ctx, &mut st, &session_id, &window_id, layout, None) {
             Ok(block_id) => Ok(Created { session_id, window_id, block_id }),
             Err(e) => {
                 let _ = st.destroy_session(&session_id);
