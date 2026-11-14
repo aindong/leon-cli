@@ -12,7 +12,9 @@ use crate::{ApiCmd, Cli, Cmd, ConfigCmd, ServerCmd, SessionCmd, WindowCmd};
 pub fn run(cli: &Cli) -> Result<(), Fail> {
     let socket = socket_path();
     if let Cmd::App = cli.cmd() {
-        return leon_app::run().map_err(Fail::Other);
+        // the app is a client: the server comes first, as `leon server start` makes it
+        start_server(&socket, true, cli.autostart).inspect_err(|e| leon_app::alert(&message(e)))?;
+        return leon_app::run(&socket).map_err(Fail::Other);
     }
     if let Cmd::Server(cmd) = cli.cmd() {
         return server(cli, cmd);
@@ -201,6 +203,25 @@ fn api(c: &mut Client, cli: &Cli, cmd: &ApiCmd) -> Result<(), Fail> {
     Ok(())
 }
 
+/// A running server (perhaps autostarted on demand) is told to stay up; otherwise one starts,
+/// detached and persistent, unless `may_start` is false.
+fn start_server(socket: &std::path::Path, restore: bool, may_start: bool) -> Result<(), Fail> {
+    match Client::connect(socket) {
+        Ok(mut c) => c.call("server.persist", json!({})).map(|_| ()),
+        Err(_) if may_start => spawn_server(socket, false, restore),
+        Err(_) => Err(Fail::Unreachable(format!("no leon server at {}", socket.display()))),
+    }
+}
+
+/// What a failure says, for the alert a Finder launch shows instead of stderr.
+fn message(f: &Fail) -> String {
+    match f {
+        Fail::Api(e) => e.to_string(),
+        Fail::Unreachable(m) | Fail::Other(m) => m.clone(),
+        Fail::Exit(code) => format!("exit status {code}"),
+    }
+}
+
 fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
     let socket = socket_path();
     match cmd {
@@ -226,16 +247,12 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
             };
             rt.block_on(serve).map_err(|e| Fail::Other(e.to_string()))
         }
-        // A running server (perhaps autostarted on demand) is told to stay up; otherwise start one.
-        ServerCmd::Start { restore } => match Client::connect(&socket) {
-            Ok(mut c) => {
-                if !restore {
-                    eprintln!("leon: a server is already running; --restore=false applies only when one starts");
-                }
-                c.call("server.persist", json!({})).map(|_| ())
+        ServerCmd::Start { restore } => {
+            if !restore && Client::connect(&socket).is_ok() {
+                eprintln!("leon: a server is already running; --restore=false applies only when one starts");
             }
-            Err(_) => spawn_server(&socket, false, *restore),
-        },
+            start_server(&socket, *restore, true)
+        }
         ServerCmd::Stop { discard } => {
             let mut c = connect(&socket, false)?;
             // Plain stops send no params, which servers from before `discard` also take.

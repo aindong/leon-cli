@@ -1,6 +1,7 @@
 //! The window: a sidebar of sessions, a tab bar of the selected session's windows, and the active
-//! window's split layout, each pane a terminal painted from the in-process grid. A poll on the
-//! GPUI executor redraws only when a visible terminal or the session model changed.
+//! window's split layout, each pane a terminal painted from the screen the server pushes. A task
+//! on the GPUI executor redraws when the model or a screen changed, woken by the reader thread
+//! (or every `POLL`, for the spinner and the keymap).
 
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
@@ -10,22 +11,21 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::CursorShape;
+use futures::StreamExt;
 use gpui::{
     actions, canvas, div, fill, font, outline, point, prelude::*, px, rgb, size, App, Application, Bounds, Context,
     CursorStyle, FocusHandle, Font, FontStyle, FontWeight, KeyBinding, KeyDownEvent, Menu, MenuItem, MouseButton,
-    MouseMoveEvent, MouseUpEvent, Pixels, SharedString, StrikethroughStyle, Subscription, Task, TextRun,
-    TitlebarOptions, UnderlineStyle, Window, WindowBounds, WindowOptions,
+    MouseMoveEvent, MouseUpEvent, Pixels, PromptButton, PromptLevel, SharedString, StrikethroughStyle, Subscription,
+    Task, TextRun, TitlebarOptions, UnderlineStyle, Window, WindowBounds, WindowOptions,
 };
 use leon_core::layout::Direction;
-use leon_core::terminal::Terminal;
 use leon_lua::keys::Chord;
 use serde_json::{json, Value};
 
-use crate::embedded::Embedded;
 use crate::keymap::{self, Bound, Keymap, Pressed};
 use crate::panes::{self, Divider};
+use crate::remote::Remote;
 use crate::render::{self, Frame};
 use crate::status::{self, Indicator};
 use crate::theme::{Theme, DARK};
@@ -41,6 +41,7 @@ actions!(
         Paste,
         ToggleSidebar,
         Quit,
+        QuitAndEndAll,
         SplitRight,
         SplitDown,
         FocusLeft,
@@ -83,46 +84,57 @@ pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
 }
 
+/// The menu bar. "Quit leon" (⌘Q) detaches and leaves every program running; ending them is the
+/// separate item that asks first.
+pub fn menus() -> Vec<Menu> {
+    vec![
+        Menu {
+            name: "leon".into(),
+            items: vec![
+                MenuItem::action("Quit leon", Quit),
+                MenuItem::action("Quit and End All Sessions…", QuitAndEndAll),
+            ],
+        },
+        Menu {
+            name: "Shell".into(),
+            items: vec![
+                MenuItem::action("New Tab", NewTab),
+                MenuItem::action("New Session", NewSession),
+                MenuItem::separator(),
+                MenuItem::action("Split Right", SplitRight),
+                MenuItem::action("Split Down", SplitDown),
+                MenuItem::action("Zoom Pane", ToggleZoom),
+                MenuItem::separator(),
+                MenuItem::action("Close Pane", ClosePane),
+            ],
+        },
+        Menu { name: "Edit".into(), items: vec![MenuItem::action("Paste", Paste)] },
+        Menu {
+            name: "View".into(),
+            items: vec![
+                MenuItem::action("Toggle Sidebar", ToggleSidebar),
+                MenuItem::separator(),
+                MenuItem::action("Next Tab", NextTab),
+                MenuItem::action("Previous Tab", PreviousTab),
+            ],
+        },
+    ]
+}
+
+/// Keys, menus and quitting. Quitting (⌘Q, the menu, the Dock, logout, closing the window) only
+/// closes the app's connections: the server and every program keep running.
+pub fn install(cx: &mut App) {
+    init(cx);
+    cx.set_menus(menus());
+    cx.on_action(|_: &Quit, cx| cx.quit());
+    cx.on_window_closed(|cx| cx.quit()).detach();
+}
+
 /// Open the app window on `server` and run until it quits.
-pub fn run(server: Embedded) {
+pub fn run(server: Remote) {
     let server = Rc::new(server);
     Application::new().run(move |cx: &mut App| {
-        init(cx);
-        cx.set_menus(vec![
-            Menu { name: "leon".into(), items: vec![MenuItem::action("Quit leon", Quit)] },
-            Menu {
-                name: "Shell".into(),
-                items: vec![
-                    MenuItem::action("New Tab", NewTab),
-                    MenuItem::action("New Session", NewSession),
-                    MenuItem::separator(),
-                    MenuItem::action("Split Right", SplitRight),
-                    MenuItem::action("Split Down", SplitDown),
-                    MenuItem::action("Zoom Pane", ToggleZoom),
-                    MenuItem::separator(),
-                    MenuItem::action("Close Pane", ClosePane),
-                ],
-            },
-            Menu { name: "Edit".into(), items: vec![MenuItem::action("Paste", Paste)] },
-            Menu {
-                name: "View".into(),
-                items: vec![
-                    MenuItem::action("Toggle Sidebar", ToggleSidebar),
-                    MenuItem::separator(),
-                    MenuItem::action("Next Tab", NextTab),
-                    MenuItem::action("Previous Tab", PreviousTab),
-                ],
-            },
-        ]);
-        cx.on_action(|_: &Quit, cx| cx.quit());
-        cx.on_window_closed(|cx| cx.quit()).detach();
-        // However the app quits (menu, Dock, logout), end the programs and remove the socket.
-        let on_quit = server.clone();
-        cx.on_app_quit(move |_| {
-            on_quit.stop();
-            async {}
-        })
-        .detach();
+        install(cx);
         let bounds = Bounds::centered(None, size(px(1100.), px(700.)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -206,8 +218,8 @@ struct KeymapInbox {
     reply: Option<Value>,
 }
 
-/// The terminals on screen, by block id, in leaf order.
-type Panes = Vec<(String, Arc<Terminal>)>;
+/// The blocks on screen, in leaf order.
+type Panes = Vec<String>;
 
 /// A divider being dragged: the split it sets, and where the drag started.
 struct Drag {
@@ -218,7 +230,7 @@ struct Drag {
 }
 
 pub struct Workspace {
-    app: Rc<Embedded>,
+    app: Rc<Remote>,
     drag: Option<Drag>,
     session_id: Option<String>,
     /// Where the selected session sat in the list when last seen.
@@ -246,17 +258,21 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn new(app: Rc<Embedded>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        if app.ctx().state().sessions.is_empty() {
-            let _ = app.call("session.create", json!({}));
+    pub fn new(app: Rc<Remote>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        if app.model().sessions.is_empty() {
+            let _ = app.act("session.create", json!({}));
         }
         let focus = cx.focus_handle();
         window.focus(&focus);
+        // the reader thread wakes the poll at once; one pending wake is enough
+        let (wake, mut woken) = futures::channel::mpsc::channel::<()>(1);
+        app.on_change(move || drop(wake.clone().try_send(())));
         let poll = cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(POLL).await;
+            let timer = cx.background_executor().timer(POLL);
+            futures::future::select(timer, woken.next()).await;
             let alive = this.update(cx, |ws, cx| {
-                if ws.app.stopped() {
-                    cx.quit(); // `leon server stop` from outside: app and server are one process
+                if !ws.app.alive() {
+                    cx.quit(); // the server stopped (`leon server stop`, or the menu's end-all)
                     return;
                 }
                 ws.stats.borrow_mut().report();
@@ -272,7 +288,7 @@ impl Workspace {
             }
         });
         let stats = Stats { enabled: std::env::var("LEON_FRAME_STATS").is_ok_and(|v| v == "1"), ..Stats::default() };
-        let session_id = app.ctx().state().sessions.first().map(|s| s.id.clone());
+        let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |_, _, cx| cx.notify());
         Workspace {
             app,
@@ -306,36 +322,51 @@ impl Workspace {
         self.sidebar
     }
 
-    /// The terminal input goes to (`target`) in the selected session's active window.
-    pub fn terminal(&self) -> Option<Arc<Terminal>> {
-        let (_, id, _) = self.target()?;
-        Some(self.app.ctx().state().block(&id).ok()?.1.terminal.clone())
+    /// The block input goes to (`target`) in the selected session's active window.
+    pub fn target_block(&self) -> Option<String> {
+        self.target().map(|(_, id, _)| id)
+    }
+
+    /// The selected session's active window, as the app last heard it from the server.
+    pub fn active_window(&self) -> Option<leon_core::Window> {
+        let m = self.app.model();
+        let s = m.session(self.session_id.as_deref()?)?;
+        s.windows.get(s.active).cloned()
+    }
+
+    /// The text of a block's screen as the app last received it (None before any screen came).
+    pub fn screen_text(&self, block_id: &str) -> Option<String> {
+        self.app.model().screens.get(block_id).map(|f| f.text())
+    }
+
+    /// The target block and its screen (an empty one until the first arrives: keys typed by then
+    /// still go to the program).
+    fn target_screen(&self) -> Option<(String, String, Arc<render::Frame>)> {
+        let (sid, id, _) = self.target()?;
+        let f = self.app.model().screens.get(&id).cloned().unwrap_or_default();
+        Some((sid, id, f))
     }
 
     /// (session id, target block id, whether it is zoomed) of the selected session's active window.
     fn target(&self) -> Option<(String, String, bool)> {
         let sid = self.session_id.clone()?;
-        let st = self.app.ctx().state();
-        let s = st.session(&sid).ok()?;
+        let m = self.app.model();
+        let s = m.session(&sid)?;
         let w = s.windows.get(s.active)?;
         Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
     }
 
-    /// The active window's layout and the terminals it shows, in leaf order.
+    /// The active window's layout and the blocks it shows, in leaf order.
     fn shown(&self) -> Option<(leon_core::Window, Panes)> {
-        let st = self.app.ctx().state();
-        let s = st.session(self.session_id.as_deref()?).ok()?;
+        let m = self.app.model();
+        let s = m.session(self.session_id.as_deref()?)?;
         let w = s.windows.get(s.active)?;
         let ids: Vec<&str> = match &w.zoomed {
             Some(z) => vec![z.as_str()],
             None => w.layout.as_ref()?.leaves(),
         };
-        let terms = ids
-            .into_iter()
-            .filter_map(|id| s.blocks.iter().find(|b| b.id == id))
-            .map(|b| (b.id.clone(), b.terminal.clone()))
-            .collect();
-        Some((w.clone(), terms))
+        let ids = ids.into_iter().filter(|id| s.blocks.iter().any(|b| b.id == *id)).map(String::from).collect();
+        Some((w.clone(), ids))
     }
 
     /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
@@ -350,12 +381,12 @@ impl Workspace {
     }
 
     fn rows(&self) -> Vec<SessionRow> {
-        let st = self.app.ctx().state();
-        st.sessions
+        let m = self.app.model();
+        m.sessions
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let shows = |b: &leon_core::Block| b.terminal.with_program_status(status::indicator_of);
+                let shows = |b: &crate::remote::Block| status::indicator_of(&b.newest_first());
                 let windows: Vec<WindowRow> = s
                     .windows
                     .iter()
@@ -363,7 +394,7 @@ impl Workspace {
                         id: w.id.clone(),
                         title: w.label.clone().unwrap_or_else(|| {
                             let shown = target(w).and_then(|id| s.blocks.iter().find(|b| b.id == id));
-                            shown.map_or("empty".into(), |b| program_name(&b.terminal.command))
+                            shown.map_or("empty".into(), |b| program_name(&b.command))
                         }),
                         status: status::aggregate(s.blocks.iter().filter(|b| b.window_id == w.id).map(shows)),
                     })
@@ -389,8 +420,7 @@ impl Workspace {
 
     /// The status caption in a pane's corner.
     pub fn pane_caption(&self, block_id: &str) -> Option<String> {
-        let t = self.app.ctx().state().block(block_id).ok()?.1.terminal.clone();
-        t.with_program_status(status::caption_of)
+        status::caption_of(&self.app.model().block(block_id)?.1.newest_first())
     }
 
     /// The spinner frame, when a working indicator is on screen (a sidebar row or a tab).
@@ -407,17 +437,21 @@ impl Workspace {
     }
 
     /// Changes worth a redraw: every session's view (its revision moves with layout, focus, zoom
-    /// and labels) and the content of every pane on screen. Hidden tabs and panes hidden by a zoom
-    /// don't count.
+    /// and labels) and the screen of every pane on screen (only those are watched, so hidden tabs
+    /// and panes hidden by a zoom don't count).
     pub fn signature(&self) -> u64 {
         let mut h = DefaultHasher::new();
+        let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         {
-            let st = self.app.ctx().state();
-            for s in &st.sessions {
+            let m = self.app.model();
+            for s in &m.sessions {
                 (&s.id, &s.label, s.active, s.revision).hash(&mut h);
                 for w in &s.windows {
                     (&w.id, &w.label).hash(&mut h);
                 }
+            }
+            for id in &shown {
+                (id, m.screen_updates.get(id)).hash(&mut h);
             }
         }
         // status shows for every tab and session, shown or not
@@ -429,9 +463,8 @@ impl Workspace {
         self.spinning(&rows).hash(&mut h);
         (self.sidebar, self.font_size.to_bits(), self.pending.len(), self.palette.is_some()).hash(&mut h);
         self.session_id.hash(&mut h);
-        for (id, t) in self.shown().map(|(_, terms)| terms).unwrap_or_default() {
-            (id, Arc::as_ptr(&t) as usize, t.generation()).hash(&mut h);
-            t.with_program_status(status::caption_of).hash(&mut h);
+        for id in &shown {
+            self.pane_caption(id).hash(&mut h);
         }
         h.finish()
     }
@@ -440,7 +473,7 @@ impl Workspace {
     fn call(&mut self, method: &str, mut params: serde_json::Value, cx: &mut Context<Self>) {
         let Some(sid) = self.session_id.clone() else { return };
         params["session_id"] = json!(sid);
-        let _ = self.app.call(method, params);
+        let _ = self.app.act(method, params);
         let rows = self.rows();
         self.settle(&rows);
         cx.notify();

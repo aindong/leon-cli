@@ -1,24 +1,26 @@
-//! The leon app: a GPUI window over an embedded leon server (docs/architecture.md).
+//! The leon app: a GPUI window attached to a leon server over its socket (docs/architecture.md).
+
+use std::path::Path;
 
 pub mod embedded;
 pub mod input;
 pub mod keymap;
 pub mod palette;
 pub mod panes;
+pub mod remote;
 pub mod render;
 pub mod status;
 pub mod theme;
 pub mod view;
 
-/// Start the embedded server and run the app until it quits. Fails before any window opens if
-/// the socket belongs to a server that holds sessions.
-pub fn run() -> Result<(), String> {
-    view::run(embedded::start().inspect_err(|e| alert(e))?);
+/// Attach to the server on `socket` and run the app until it quits; the server keeps running.
+pub fn run(socket: &Path) -> Result<(), String> {
+    view::run(remote::Remote::connect(socket).inspect_err(|e| alert(e))?);
     Ok(())
 }
 
 /// Opened from Finder or the Dock there is no terminal to print to, so say why in an alert.
-fn alert(why: &str) {
+pub fn alert(why: &str) {
     use std::io::IsTerminal;
     // LaunchServices makes launchd (pid 1) the parent; a shell, a script or a test never is
     if std::io::stderr().is_terminal() || std::os::unix::process::parent_id() != 1 {

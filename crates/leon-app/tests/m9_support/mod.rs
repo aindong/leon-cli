@@ -44,7 +44,9 @@ pub fn setup_with_config(init_lua: &str) -> Setup {
 pub fn open<'a>(cx: &'a mut TestAppContext, app: &Rc<Embedded>) -> (Entity<Workspace>, &'a mut VisualTestContext) {
     cx.update(view::init);
     let app = app.clone();
-    let (ws, vcx) = cx.add_window_view(move |window, cx| Workspace::new(app, window, cx));
+    let (ws, vcx) = cx.add_window_view(move |window, cx| {
+        Workspace::new(Rc::new(leon_app::remote::Remote::connect(app.socket()).expect("the app attaches")), window, cx)
+    });
     vcx.simulate_resize(size(px(1400.), px(900.)));
     vcx.run_until_parked();
     (ws, vcx)
@@ -66,8 +68,9 @@ pub fn term(app: &Embedded, block_id: &str) -> Arc<Terminal> {
     app.ctx().state().block(block_id).unwrap().1.terminal.clone()
 }
 
-pub fn focused(ws: &Entity<Workspace>, cx: &mut VisualTestContext) -> Arc<Terminal> {
-    ws.read_with(cx, |ws, _| ws.terminal()).expect("the active window has a terminal")
+pub fn focused(app: &Embedded, ws: &Entity<Workspace>, cx: &mut VisualTestContext) -> Arc<Terminal> {
+    let id = ws.read_with(cx, |ws, _| ws.target_block()).expect("the active window has a terminal");
+    term(app, &id)
 }
 
 /// Poll `pred` for up to 10 s; returns whether it came true.

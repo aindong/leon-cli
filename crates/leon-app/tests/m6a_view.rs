@@ -30,8 +30,9 @@ fn shape(app: &Embedded, ws: &Entity<Workspace>, cx: &mut VisualTestContext) -> 
     (st.sessions.len(), s.windows.len(), s.active)
 }
 
-fn terminal(ws: &Entity<Workspace>, cx: &mut VisualTestContext) -> Arc<Terminal> {
-    ws.read_with(cx, |ws, _| ws.terminal()).expect("the active window has a terminal")
+fn terminal(app: &Embedded, ws: &Entity<Workspace>, cx: &mut VisualTestContext) -> Arc<Terminal> {
+    let id = ws.read_with(cx, |ws, _| ws.target_block()).expect("the active window has a terminal");
+    app.ctx().state().block(&id).unwrap().1.terminal.clone()
 }
 
 fn wait_text(t: &Terminal, pred: impl Fn(&str) -> bool) -> String {
@@ -52,7 +53,9 @@ fn has_line(text: &str, line: &str) -> bool {
 fn open<'a>(cx: &'a mut TestAppContext, app: &Rc<Embedded>) -> (Entity<Workspace>, &'a mut VisualTestContext) {
     cx.update(view::init);
     let app = app.clone();
-    let (ws, vcx) = cx.add_window_view(move |window, cx| Workspace::new(app, window, cx));
+    let (ws, vcx) = cx.add_window_view(move |window, cx| {
+        Workspace::new(Rc::new(leon_app::remote::Remote::connect(app.socket()).expect("the app attaches")), window, cx)
+    });
     vcx.run_until_parked();
     (ws, vcx)
 }
@@ -84,7 +87,7 @@ fn tab_and_session_shortcuts(cx: &mut TestAppContext) {
 fn typing_and_paste_reach_the_shell(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
-    let t = terminal(&ws, cx);
+    let t = terminal(&s.app, &ws, cx);
     cx.simulate_input("echo hi");
     cx.simulate_keystrokes("enter");
     let text = wait_text(&t, |x| has_line(x, "hi"));
@@ -103,7 +106,7 @@ fn typing_and_paste_reach_the_shell(cx: &mut TestAppContext) {
 fn window_resize_resizes_the_pty(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
-    let t = terminal(&ws, cx);
+    let t = terminal(&s.app, &ws, cx);
     cx.simulate_resize(size(px(700.), px(400.)));
     cx.run_until_parked();
     let small = t.size();
@@ -123,7 +126,7 @@ fn cmd_b_toggles_the_sidebar(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
     assert!(ws.read_with(cx, |ws, _| ws.sidebar_visible()));
-    let t = terminal(&ws, cx);
+    let t = terminal(&s.app, &ws, cx);
     let with_sidebar = t.size().1;
     cx.simulate_keystrokes("cmd-b");
     cx.run_until_parked();
@@ -141,10 +144,10 @@ fn closing_the_last_tab_leaves_an_empty_app_that_cmd_n_recovers(cx: &mut TestApp
     cx.simulate_keystrokes("cmd-w");
     assert!(s.app.ctx().state().sessions.is_empty(), "the last tab took its session with it");
     assert_eq!(ws.read_with(cx, |ws, _| ws.session_id()), None);
-    assert!(ws.read_with(cx, |ws, _| ws.terminal()).is_none());
+    assert!(ws.read_with(cx, |ws, _| ws.target_block()).is_none());
     cx.simulate_keystrokes("a enter"); // no terminal: keys go nowhere, nothing panics
     cx.simulate_keystrokes("cmd-n");
     assert_eq!(s.app.ctx().state().sessions.len(), 1);
-    assert!(ws.read_with(cx, |ws, _| ws.terminal()).is_some());
+    assert!(ws.read_with(cx, |ws, _| ws.target_block()).is_some());
     s.app.stop();
 }

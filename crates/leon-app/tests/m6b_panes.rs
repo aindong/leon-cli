@@ -29,7 +29,9 @@ fn setup() -> Setup {
 fn open<'a>(cx: &'a mut TestAppContext, app: &Rc<Embedded>) -> (Entity<Workspace>, &'a mut VisualTestContext) {
     cx.update(view::init);
     let app = app.clone();
-    let (ws, vcx) = cx.add_window_view(move |window, cx| Workspace::new(app, window, cx));
+    let (ws, vcx) = cx.add_window_view(move |window, cx| {
+        Workspace::new(Rc::new(leon_app::remote::Remote::connect(app.socket()).expect("the app attaches")), window, cx)
+    });
     vcx.simulate_resize(size(px(1400.), px(900.)));
     vcx.run_until_parked();
     (ws, vcx)
@@ -84,6 +86,17 @@ fn settle(t: &Terminal) {
             (last, since) = (t.generation(), Instant::now());
         }
     }
+}
+
+/// Whether the signature moves off `before` within 5 s: changes made outside the app reach it as
+/// events and pushed screens, a moment later.
+fn changes(cx: &mut VisualTestContext, sig: &dyn Fn(&mut VisualTestContext) -> u64, before: u64) -> bool {
+    let end = Instant::now() + Duration::from_secs(5);
+    while sig(cx) == before && Instant::now() < end {
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    sig(cx) != before
 }
 
 fn center(b: Bounds<Pixels>) -> gpui::Point<Pixels> {
@@ -342,8 +355,8 @@ fn signature_follows_every_visible_pane_and_nothing_hidden(cx: &mut TestAppConte
     let before = sig(cx);
     let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
     let p = serde_json::json!({ "session_id": sid, "direction": "horizontal", "before_block_id": a, "after_block_id": b, "ratio": 0.3 });
-    s.app.call("session.resize_pane", p).unwrap();
-    assert_ne!(sig(cx), before, "a layout change redraws");
+    s.app.call("session.resize_pane", p).unwrap(); // from outside the app: it hears of it by an event
+    assert!(changes(cx, &sig, before), "a layout change redraws");
     cx.run_until_parked();
     settle(&ta);
     settle(&tb);
@@ -351,7 +364,7 @@ fn signature_follows_every_visible_pane_and_nothing_hidden(cx: &mut TestAppConte
     let before = sig(cx);
     ta.write(b"echo unfocused\r").unwrap();
     wait_text(&ta, |x| has_line(x, "unfocused"));
-    assert_ne!(sig(cx), before, "output in a visible, unfocused pane redraws");
+    assert!(changes(cx, &sig, before), "output in a visible, unfocused pane redraws");
 
     let before = sig(cx);
     cx.simulate_keystrokes("cmd-shift-enter"); // zooms b, hiding a

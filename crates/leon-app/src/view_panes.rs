@@ -22,11 +22,18 @@ impl Workspace {
         let target = target(w).map(str::to_string);
         let several = l.panes.len() > 1;
         let mut out = div().flex_1().relative().bg(rgb(t.bg));
+        self.app.watch(terms.clone()); // only what is on screen is pushed
+        let sid = self.session_id.clone().unwrap_or_default();
         for p in &l.panes {
-            let Some((_, term)) = terms.iter().find(|(id, _)| *id == p.block_id) else { continue };
+            if !terms.contains(&p.block_id) {
+                continue;
+            }
             let focused = target.as_deref() == Some(p.block_id.as_str());
             let id = p.block_id.clone();
-            let (caption, shown) = term.with_program_status(|r| (status::caption_of(r), status::indicator_of(r)));
+            let (caption, shown) = self.app.model().block(&id).map_or((None, None), |(_, b)| {
+                let r = b.newest_first();
+                (status::caption_of(&r), status::indicator_of(&r))
+            });
             let caption = caption.map(|c| {
                 let color = shown.map_or(t.muted, |i| i.color(t));
                 div()
@@ -62,7 +69,13 @@ impl Workspace {
                     } else {
                         gpui::transparent_black()
                     })
-                    .child(terminal_canvas(term.clone(), active && focused, font_size, stats.clone()))
+                    .child(terminal_canvas(
+                        self.app.clone(),
+                        (sid.clone(), id.clone()),
+                        active && focused,
+                        font_size,
+                        stats.clone(),
+                    ))
                     .children(caption)
                     .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.focus_block(&id, cx))),
             );
@@ -123,10 +136,9 @@ impl Workspace {
             (None, Some(_)) => true,
         };
         self.seen_focus = now;
-        if arrived {
-            if let Some(t) = self.terminal() {
-                t.acknowledge();
-            }
+        if let Some((sid, id, _)) = self.target().filter(|_| arrived) {
+            let event = json!({ "session_id": sid, "block_id": id, "event": { "type": "focus" } });
+            let _ = self.app.call("block.event", event);
         }
     }
 }
@@ -167,6 +179,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::focus_up))
             .on_action(cx.listener(Self::focus_down))
             .on_action(cx.listener(Self::toggle_zoom))
+            .on_action(cx.listener(Self::quit_and_end_all))
             .child(self.drag_listener(cx))
             .on_action(cx.listener(Self::new_session))
             .on_action(cx.listener(Self::next_tab))
@@ -208,20 +221,18 @@ pub(super) fn cell_size(window: &Window, pt: f32) -> (Pixels, Pixels) {
     (cell_w, (px(pt) * LINE_HEIGHT).round())
 }
 
-/// Resize `term` to the cells that fit in (w, h), if that changes its size.
-pub(super) fn fit(term: &Terminal, w: Pixels, h: Pixels, cell_w: Pixels, line_h: Pixels) {
+/// The (rows, cols) that fit in (w, h): at least what `Terminal::resize` clamps to, or every
+/// frame would ask for a resize again.
+pub(super) fn cells_in(w: Pixels, h: Pixels, cell_w: Pixels, line_h: Pixels) -> (u16, u16) {
     let cells = |len: Pixels, unit: Pixels, least: u16| ((len / unit).floor().max(0.) as u16).max(least);
-    // At least what `Terminal::resize` clamps to, or every frame would resize again.
-    let (rows, cols) = (cells(h, line_h, 1), cells(w, cell_w, 2));
-    if term.size() != (rows, cols) {
-        let _ = term.resize(rows, cols);
-    }
+    (cells(h, line_h, 1), cells(w, cell_w, 2))
 }
 
-/// Paints one terminal. Prepaint fits the grid to the bounds (resizing the PTY when rows or
-/// columns change) and builds the render model under the terminal's lock; paint draws it.
+/// Paints one block's screen as the server last pushed it. Prepaint asks the server to fit the
+/// grid to the bounds (resizing the PTY when rows or columns change); paint draws the frame.
 pub(super) fn terminal_canvas(
-    term: Arc<Terminal>,
+    app: Rc<Remote>,
+    (sid, block_id): (String, String),
     active: bool,
     font_size: f32,
     stats: Rc<RefCell<Stats>>,
@@ -229,8 +240,9 @@ pub(super) fn terminal_canvas(
     canvas(
         move |bounds, window, _| {
             let (cell_w, line_h) = cell_size(window, font_size);
-            fit(&term, bounds.size.width, bounds.size.height, cell_w, line_h);
-            let frame = term.with_term(|t| render::frame(t, &DARK));
+            let (rows, cols) = cells_in(bounds.size.width, bounds.size.height, cell_w, line_h);
+            app.fit(&sid, &block_id, rows, cols);
+            let frame = app.model().screens.get(&block_id).cloned().unwrap_or_default();
             (frame, cell_w, line_h)
         },
         move |bounds, (frame, cell_w, line_h), window, cx| {

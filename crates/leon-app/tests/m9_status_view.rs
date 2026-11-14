@@ -70,7 +70,7 @@ fn status_in_a_background_session_or_hidden_tab_redraws_and_shows(cx: &mut TestA
     assert_eq!(sessions, vec![None, Some(Indicator::Done)], "its sidebar row shows it");
 
     // an error in the shown tab keeps the session's row at error, so only the hidden tab's mark moves
-    run_until(&focused(&ws, cx), r"printf '\033]7501;state=error\007'; echo e-sent", "e-sent");
+    run_until(&focused(&s.app, &ws, cx), r"printf '\033]7501;state=error\007'; echo e-sent", "e-sent");
     let before = ws.read_with(cx, |ws, _| ws.signature());
     run_until(&term(&s.app, &hidden), DONE, "d-sent");
     assert_ne!(ws.read_with(cx, |ws, _| ws.signature()), before, "a hidden tab's status redraws");
@@ -83,7 +83,7 @@ fn status_in_a_background_session_or_hidden_tab_redraws_and_shows(cx: &mut TestA
 fn the_spinner_redraws_at_most_eight_times_a_second(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
-    let t = focused(&ws, cx);
+    let t = focused(&s.app, &ws, cx);
     run_until(&t, "echo ready", "ready");
     let distinct = |cx: &mut gpui::VisualTestContext| {
         let mut seen = std::collections::HashSet::new();

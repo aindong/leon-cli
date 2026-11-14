@@ -18,8 +18,7 @@ use support::Env;
 /// the window.
 fn open<'a>(cx: &'a mut TestAppContext, env: &Env) -> (Entity<Workspace>, &'a mut VisualTestContext) {
     let remote = Rc::new(Remote::connect(&env.socket()).expect("the app attaches"));
-    let app = remote.clone();
-    cx.update(move |cx| view::install(cx, app));
+    cx.update(view::install);
     let (ws, vcx) = cx.add_window_view(move |window, cx| Workspace::new(remote, window, cx));
     vcx.simulate_resize(size(px(1400.), px(900.)));
     vcx.run_until_parked();
@@ -32,8 +31,8 @@ fn quit(ws: Entity<Workspace>, cx: &mut VisualTestContext) {
     cx.dispatch_action(Quit);
     cx.run_until_parked();
     drop(ws);
-    cx.update(|_, cx| cx.shutdown());
-    cx.run_until_parked();
+    cx.cx.update(|cx| cx.shutdown()); // app-wide: the window goes with it
+    cx.cx.run_until_parked();
 }
 
 /// Poll `f` (letting the window run between tries) for up to 10 s until it returns Some.

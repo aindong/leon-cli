@@ -93,7 +93,7 @@ fn lua_bindings_drive_the_app(cx: &mut TestAppContext) {
     let label = || s.app.ctx().state().session(&sid).unwrap().label.clone();
     assert!(eventually(|| label().as_deref() == Some("marked")), "the config action ran on the server: {:?}", label());
 
-    let t = focused(&ws, cx);
+    let t = focused(&s.app, &ws, cx);
     cx.simulate_input("echo unbound-ok");
     cx.simulate_keystrokes("enter");
     assert!(eventually(|| has_line(&t, "unbound-ok")), "unbound keys reach the pane:\n{}", t.text(true));

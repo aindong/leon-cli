@@ -18,7 +18,9 @@ fn a_divider_follows_small_pointer_moves(cx: &mut TestAppContext) {
     let app = Rc::new(embedded::start_at(dir.path().join("server.sock")).unwrap());
     cx.update(view::init);
     let a2 = app.clone();
-    let (ws, cx) = cx.add_window_view(move |window, cx| Workspace::new(a2, window, cx));
+    let (ws, cx) = cx.add_window_view(move |window, cx| {
+        Workspace::new(Rc::new(leon_app::remote::Remote::connect(a2.socket()).expect("the app attaches")), window, cx)
+    });
     cx.simulate_resize(size(px(1400.), px(900.)));
     cx.run_until_parked();
     cx.simulate_keystrokes("cmd-d");

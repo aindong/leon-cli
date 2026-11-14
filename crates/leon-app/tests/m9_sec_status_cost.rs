@@ -32,7 +32,7 @@ const FLOOD: &str = r"m=$(printf 'QUFB%.0s' $(seq 682)); for i in $(seq 256); do
 fn a_poll_does_not_copy_every_record(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
-    let t = focused(&ws, cx);
+    let t = focused(&s.app, &ws, cx);
     run_until(&t, FLOOD, "r-sent");
     assert!(eventually(|| t.program_status().len() == 256), "256 records stored");
     settle(&t);

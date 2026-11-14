@@ -16,6 +16,8 @@ alacritty_terminal = "0.26"
 base64 = "0.22"
 # runtime_shaders: builds without the Metal Toolchain (docs/architecture.md).
 gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "runtime_shaders"] }
+# futures: the app awaits the reader thread's wake-ups (already in the tree through gpui).
+futures = "0.3"
 clap = { version = "4.6", features = ["derive", "env"] }
 libc = "0.2"
 mlua = { version = "0.12", features = ["lua51", "vendored", "serialize"] }

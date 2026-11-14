@@ -12,16 +12,16 @@ fn splits_and_tabs_start_in_the_focused_panes_cwd(cx: &mut TestAppContext) {
     std::fs::create_dir(&dir).unwrap();
     let want = real(&dir);
     let (ws, cx) = open(cx, &s.app);
-    let first = focused(&ws, cx);
+    let first = focused(&s.app, &ws, cx);
     run_until(&first, &format!("cd '{want}' && echo cd-done"), "cd-done");
 
     cx.simulate_keystrokes("cmd-d");
-    let split = focused(&ws, cx);
+    let split = focused(&s.app, &ws, cx);
     assert!(!std::sync::Arc::ptr_eq(&first, &split), "the split has the focus");
     run_until(&split, "pwd", &want);
 
     cx.simulate_keystrokes("cmd-t");
-    let tab = focused(&ws, cx);
+    let tab = focused(&s.app, &ws, cx);
     run_until(&tab, "pwd", &want);
     s.app.stop();
 }

@@ -52,10 +52,9 @@ impl Workspace {
                 Pressed::Unbound => {}
             }
         }
-        let Some(t) = self.terminal() else { return };
-        let app_cursor = t.with_term(|term| term.mode().contains(TermMode::APP_CURSOR));
-        if let Some(bytes) = crate::input::key_bytes(ks, app_cursor) {
-            let _ = t.write(&bytes);
+        let Some((sid, id, f)) = self.target_screen() else { return };
+        if let Some(bytes) = crate::input::key_bytes(ks, f.app_cursor) {
+            self.app.write(&sid, &id, &bytes);
             cx.stop_propagation();
         }
     }

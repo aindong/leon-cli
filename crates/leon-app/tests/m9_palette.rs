@@ -96,7 +96,7 @@ fn the_palette_opens_filters_runs_and_closes(cx: &mut TestAppContext) {
     assert_eq!(window(&s.app, &ws, cx).1, 1, "escape ran nothing");
 
     // the palette's keys never reach the pane
-    let t = focused(&ws, cx);
+    let t = focused(&s.app, &ws, cx);
     run_until(&t, "echo typed-ok", "typed-ok");
     cx.simulate_keystrokes("cmd-shift-p");
     cx.simulate_input("greet");
