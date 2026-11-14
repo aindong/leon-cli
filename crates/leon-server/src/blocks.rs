@@ -79,17 +79,21 @@ pub fn open(
         return Err(ApiError::bad_request("command needs at least a program name"));
     }
     let id = new_id("block");
-    let env = [
+    let mut env: Vec<(String, String)> = [
         ("LEON_SESSION", session_id),
         ("LEON_BLOCK", id.as_str()),
         ("LEON_SERVER", ctx.info.socket.as_str()),
         ("TERM", "xterm-256color"),
-    ];
-    let spec = Spec {
-        command: o.command.unwrap_or_default(),
-        cwd: o.cwd.map(PathBuf::from),
-        env: env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
-    };
+    ]
+    .iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect();
+    // `leon` resolves in every terminal, even when the user's PATH lacks where it was installed
+    if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.display().to_string())) {
+        let path = std::env::var("PATH").map_or(dir.clone(), |p| format!("{dir}:{p}"));
+        env.extend([("LEON_BIN_DIR".to_string(), dir), ("PATH".to_string(), path)]);
+    }
+    let spec = Spec { command: o.command.unwrap_or_default(), cwd: o.cwd.map(PathBuf::from), env };
     let weak = Arc::downgrade(ctx);
     let block_id = id.clone();
     let terminal = Terminal::spawn(spec, move |notice| {
