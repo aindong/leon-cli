@@ -9,6 +9,7 @@ pub mod methods;
 pub mod persist;
 pub mod registry;
 mod restore;
+pub mod resume;
 pub mod screens;
 pub mod serve;
 
@@ -45,6 +46,8 @@ pub struct Ctx {
     pub shutdown: tokio::sync::Notify,
     /// Attached connections. Only touched with the state lock held, so events and snapshots line up.
     subscribers: Mutex<Vec<Weak<Subscriber>>>,
+    /// Resumable event streams by token (resume.rs).
+    resumable: Mutex<std::collections::HashMap<String, resume::Slot>>,
     /// Where sessions are saved when the server stops; None when they aren't (`server.status`).
     pub state_file: Mutex<Option<std::path::PathBuf>>,
     /// Set by an accepted `server.stop {discard: true}`: the stop saves nothing and forgets the save.
@@ -98,6 +101,7 @@ impl Ctx {
             stopping: AtomicBool::new(false),
             shutdown: tokio::sync::Notify::new(),
             subscribers: Mutex::default(),
+            resumable: Mutex::default(),
             state_file: Mutex::default(),
             discard: AtomicBool::new(false),
             lua: lua::Shared::default(),

@@ -147,14 +147,35 @@ fn a_seq_older_than_the_kept_lines_fails() {
     let r = c1.call("session.attach_all", json!({ "event_scope": "all", "resumable": true }), &mut none);
     let token = r["result"]["resume"].as_str().unwrap().to_string();
     let s = r["result"]["seq"].as_u64().unwrap();
-    let big = "x".repeat(60 << 10);
-    for i in 0..25 {
-        env.ok(&["session", "rename", &sid, &format!("{i}{big}")]);
+    // labels are at most 128 characters: many renames, sent in one go on another connection
+    let mut other = Conn::open(&env);
+    let n = 4000;
+    let mut batch = String::new();
+    for i in 1..=n {
+        let label = format!("{i:0>120}");
+        let req = json!({ "id": i, "method": "session.set_label", "params": { "session_id": sid, "label": label } });
+        batch.push_str(&format!("{req}\n"));
     }
-    let mut seen = vec![];
-    c1.call("session.list", json!({}), &mut seen); // read past every rename's events
+    // written from a thread: the server stops reading while our replies fill its socket
+    let mut w = other.r.get_ref().try_clone().unwrap();
+    let writer = std::thread::spawn(move || w.write_all(batch.as_bytes()).unwrap());
+    for _ in 0..n {
+        other.line().expect("a rename's reply");
+    }
+    writer.join().unwrap();
+    // c1 reads every one of them, so they are all written and the kept lines roll over
+    let last = format!("{n:0>120}");
+    let mut written = 0;
+    loop {
+        let v = c1.line().expect("c1's events");
+        written += v.to_string().len();
+        if v["event"]["payload"]["event"]["payload"]["label"] == last.as_str() {
+            break;
+        }
+    }
+    assert!(written > 1 << 20, "more than the kept 1 MiB went out: {written}");
     drop(c1);
     let mut c2 = Conn::open(&env);
     let r = c2.call("session.resume", json!({ "resume": token, "seq": s }), &mut none);
-    assert_eq!(r["error"]["code"], "resume_failed", "1.5 MiB went out since S: {r}");
+    assert_eq!(r["error"]["code"], "resume_failed", "over 1 MiB went out since S: {r}");
 }
