@@ -169,6 +169,8 @@ pub struct Terminal {
     /// Bytes of output parsed so far.
     output: Arc<AtomicU64>,
     notify: Notify,
+    /// The command a program registered to resume itself after a restart (`set_resume`).
+    resume: Mutex<Option<Vec<String>>>,
 }
 
 impl std::fmt::Debug for Terminal {
@@ -181,6 +183,17 @@ impl Terminal {
     /// Start `spec` on a new PTY. `notify` gets what the terminal reports, on its reader and waiter
     /// threads; `Notice::Exited` comes last, once the child has been reaped and its output read.
     pub fn spawn(spec: Spec, notify: impl Fn(Notice) + Send + Sync + 'static) -> io::Result<Terminal> {
+        Self::spawn_showing(spec, &[], notify)
+    }
+
+    /// Like `spawn`, with `shown` fed to the emulator before any of the program's output: on the
+    /// screen and in the scrollback, never sent to the program. Escapes in it act, so pass only
+    /// text you made inert yourself.
+    pub fn spawn_showing(
+        spec: Spec,
+        shown: &[u8],
+        notify: impl Fn(Notice) + Send + Sync + 'static,
+    ) -> io::Result<Terminal> {
         let notify: Notify = Arc::new(notify);
         let size = PtySize { rows: ROWS, cols: COLS, pixel_width: 0, pixel_height: 0 };
         let pair = native_pty_system().openpty(size).map_err(pty)?;
@@ -231,7 +244,10 @@ impl Terminal {
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
         let seen = Arc::new(Mutex::new(Seen::default()));
         let listener = Listener { writer: writer.clone(), seen: seen.clone() };
-        let term = Arc::new(Mutex::new(Term::new(config, &Size { rows: ROWS, cols: COLS }, listener)));
+        let mut emulator = Term::new(config, &Size { rows: ROWS, cols: COLS }, listener);
+        let mut parser: Processor = Processor::new();
+        parser.advance(&mut emulator, shown);
+        let term = Arc::new(Mutex::new(emulator));
         let tracker = Arc::new(Mutex::new(Tracker::default()));
 
         // Each disconnects when its end is done: the reads at the PTY's EOF, the parsing after the
@@ -286,6 +302,7 @@ impl Terminal {
             pwd,
             output,
             notify: to_self,
+            resume: Mutex::new(None),
         })
     }
 
@@ -398,6 +415,34 @@ impl Terminal {
 }
 
 impl Terminal {
+    pub fn resume(&self) -> Option<Vec<String>> {
+        lock(&self.resume).clone()
+    }
+
+    pub fn set_resume(&self, command: Option<Vec<String>>) {
+        *lock(&self.resume) = command;
+    }
+
+    /// Wait until the program reads a line itself: it is the PTY's foreground process group (no
+    /// job an rc file started is in front) and its line editor has turned canonical mode off. False
+    /// if that hasn't happened by `timeout` or the program exited.
+    pub fn wait_line_editor(&self, timeout: Duration) -> bool {
+        let Some(fd) = lock(&self.master).as_raw_fd() else { return false };
+        let end = std::time::Instant::now() + timeout;
+        while std::time::Instant::now() < end && !self.has_exited() {
+            // SAFETY: reads the termios and foreground group of a PTY fd we own into locals.
+            let ready = unsafe {
+                let mut t: libc::termios = std::mem::zeroed();
+                libc::tcgetattr(fd, &mut t) == 0 && t.c_lflag & libc::ICANON == 0 && libc::tcgetpgrp(fd) == self.pid
+            };
+            if ready {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        false
+    }
+
     /// Hang up a still-running program: its process group (portable-pty makes the child a session
     /// leader) and the terminal's foreground job (e.g. vim started from a shell). An exited
     /// program's group was hung up when it exited, and its ID may belong to someone else by now,

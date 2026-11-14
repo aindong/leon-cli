@@ -128,3 +128,27 @@ fn dropping_hangs_up_the_program() {
     drop(t);
     assert_eq!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), 128 + libc::SIGHUP);
 }
+
+#[test]
+fn the_line_editor_wait_needs_the_shell_in_front() {
+    let (shell, _rx) = spawn(&["sh"]);
+    assert!(shell.wait_line_editor(Duration::from_secs(10)), "an interactive shell reads a line");
+
+    // A job in front with canonical mode off (a picker an rc file started) isn't the shell.
+    let (picker, _rx) = spawn(&["sh", "-c", "set -m; sh -c 'stty -icanon; echo picker-up; sleep 300'"]);
+    screen_until(&picker, |s| s.contains("picker-up"));
+    assert!(!picker.wait_line_editor(Duration::from_millis(300)), "the job in front isn't the shell");
+
+    let (shown, _rx) = {
+        let (tx, rx) = mpsc::channel::<i32>();
+        let spec = Spec { command: vec!["sleep".into(), "300".into()], cwd: None, env: vec![] };
+        let tx = Mutex::new(tx);
+        let t = Terminal::spawn_showing(spec, b"before\r\nthe program", move |n| {
+            if let Notice::Exited(c) = n {
+                let _ = lock(&tx).send(c);
+            }
+        });
+        (t.unwrap(), rx)
+    };
+    assert_eq!(shown.text(true), "before\nthe program", "shown text is on the screen, not sent");
+}
