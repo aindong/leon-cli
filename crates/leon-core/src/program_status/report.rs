@@ -2,9 +2,9 @@
 
 use base64::engine::{general_purpose::GeneralPurpose, DecodePaddingMode, GeneralPurposeConfig};
 use base64::{alphabet, Engine as _};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum State {
     Idle,
@@ -14,7 +14,7 @@ pub enum State {
     Error,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     Permission,
@@ -24,7 +24,7 @@ pub enum Kind {
 
 /// One program's status. `title` and `msg` are decoded, single-line and free of controls and
 /// invisible characters; a renderer must still bidi-isolate them and clip their height.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Record {
     pub state: State,
     #[serde(skip_serializing_if = "Option::is_none")]

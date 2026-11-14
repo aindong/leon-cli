@@ -8,8 +8,10 @@ pub mod model;
 pub mod panes;
 pub mod paths;
 pub mod program_status;
+pub mod screen;
 pub mod target;
 pub mod terminal;
+pub mod theme;
 
 pub use error::ApiError;
 pub use model::{Block, Place, Session, State, Window};

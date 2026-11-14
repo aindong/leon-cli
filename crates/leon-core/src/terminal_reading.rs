@@ -11,7 +11,7 @@ pub(super) struct Reading {
     pub(super) pwd: Arc<Mutex<Option<String>>>,
     pub(super) output: Arc<AtomicU64>,
     /// Bumped after each read is fed, so a renderer can skip unchanged frames.
-    pub(super) changes: Arc<AtomicU64>,
+    pub(super) changes: Arc<watch::Sender<u64>>,
 }
 
 impl Reading {
@@ -47,7 +47,7 @@ impl Reading {
                 lock(&self.tracker).feed(&batch, |bytes| parser.advance(&mut *term, bytes))
             };
             self.output.fetch_add(batch.len() as u64, Ordering::SeqCst);
-            self.changes.fetch_add(1, Ordering::Release);
+            self.changes.send_modify(|g| *g += 1);
             if !fed.reply.is_empty() {
                 self.writer.reply(fed.reply);
             }

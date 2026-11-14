@@ -17,6 +17,7 @@ use alacritty_terminal::index::{Column, Point};
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+use tokio::sync::watch;
 
 use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
 
@@ -154,8 +155,9 @@ pub struct Terminal {
     pid: i32,
     /// Set (under its lock) once the program has exited and before it is reaped.
     exited: Arc<Mutex<bool>>,
-    /// Bumped whenever the screen may have changed, so a renderer can skip unchanged frames.
-    generation: Arc<AtomicU64>,
+    /// Bumped whenever the screen may have changed, so a renderer can skip unchanged frames and a
+    /// server task can wait for the next change (`subscribe`).
+    generation: Arc<watch::Sender<u64>>,
     /// The argv that runs (the login shell's path when `Spec::command` was empty).
     pub command: Vec<String>,
     /// The directory it was started in (None: `$HOME`).
@@ -235,7 +237,7 @@ impl Terminal {
         let (at_eof, eof) = mpsc::channel::<()>();
         let (parsed, drained) = mpsc::channel::<()>();
         let (pwd, output) = (Arc::new(Mutex::new(None)), Arc::new(AtomicU64::new(0)));
-        let generation = Arc::new(AtomicU64::new(0));
+        let generation = Arc::new(watch::channel(0).0);
         let reading = Reading {
             term: term.clone(),
             tracker: tracker.clone(),
@@ -315,7 +317,7 @@ impl Terminal {
     pub fn acknowledge(&self) {
         let gone = lock(&self.tracker).store.acknowledge();
         if !gone.is_empty() {
-            self.generation.fetch_add(1, Ordering::Release);
+            self.generation.send_modify(|g| *g += 1);
         }
         gone.into_iter().for_each(|c| (self.notify)(Notice::ProgramStatus(c)));
     }
@@ -354,13 +356,18 @@ impl Terminal {
         lock(&self.term).resize(Size { rows, cols });
         let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
         lock(&self.master).resize(size).map_err(pty)?;
-        self.generation.fetch_add(1, Ordering::Release);
+        self.generation.send_modify(|g| *g += 1);
         Ok(())
     }
 
     /// Changes so far; a renderer redraws when this moves.
     pub fn generation(&self) -> u64 {
-        self.generation.load(Ordering::Acquire)
+        *self.generation.borrow()
+    }
+
+    /// Wakes on every change to the screen (output parsed, a resize, a status record dropped).
+    pub fn subscribe(&self) -> watch::Receiver<u64> {
+        self.generation.subscribe()
     }
 
     /// Read the emulator's state (grid, cursor, modes) under its lock. Keep `f` short: the
