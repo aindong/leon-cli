@@ -73,14 +73,15 @@ impl Drop for Open {
 }
 
 /// Bind the socket (refusing if a live server already owns it), restore the saved sessions, then
-/// serve `ctx` until stopped (`server.stop`, SIGTERM, SIGINT, or an autostarted server's idle exit),
+/// serve `ctx` until stopped (`server.stop`, SIGTERM, SIGINT, SIGHUP, or an autostarted server's idle exit),
 /// and save the sessions before every program ends.
 pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
     let (listener, ours) = bind(&opts.socket).await?;
     // Before restoring, so a signal from here on saves instead of killing the process.
     let mut term = signal(SignalKind::terminate())?;
     let mut int = signal(SignalKind::interrupt())?;
-    let state_file = opts.persist.as_ref().and_then(|p| persist::start(&ctx, p));
+    let mut hup = signal(SignalKind::hangup())?; // `server run`'s terminal closed
+    let (state_file, _state_lock) = opts.persist.as_ref().and_then(|p| persist::start(&ctx, p)).unzip();
     *crate::events::lock(&ctx.state_file) = state_file.clone();
     let shared = Arc::new(Shared {
         ctx,
@@ -114,6 +115,8 @@ pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
             _ = shared.shutdown.notified() => break,
             _ = term.recv() => break,
             _ = int.recv() => break,
+            _ = hup.recv() => break,
+
             _ = tick.tick() => {
                 let idle = shared.ctx.is_autostarted()
                     && shared.open.load(Ordering::SeqCst) == 0

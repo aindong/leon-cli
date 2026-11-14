@@ -76,18 +76,38 @@ struct SavedBlock {
     command: Vec<String>,
 }
 
-/// Check the state dir is private and restore from it if asked. Returns the file to save to, or
-/// None (with a warning) when the dir isn't safe to keep commands' working dirs in.
-pub fn start(ctx: &Arc<Ctx>, p: &Persist) -> Option<PathBuf> {
+/// Check the state dir is private and no other server uses it, and restore from it if asked.
+/// Returns the file to save to and the lock that keeps the dir ours (hold it until saved), or
+/// None, with a warning, when the dir isn't safe or is taken.
+pub fn start(ctx: &Arc<Ctx>, p: &Persist) -> Option<(PathBuf, fs::File)> {
     let dir = p.file.parent().unwrap_or(Path::new("."));
-    if let Err(e) = leon_core::paths::ensure_private_dir(dir) {
-        eprintln!("leon: warning: sessions won't be saved or restored: {e}");
-        return None;
-    }
+    let taken = leon_core::paths::ensure_private_dir(dir).and_then(|_| lock(dir));
+    let lock = match taken {
+        Ok(lock) => lock,
+        Err(e) => {
+            eprintln!("leon: warning: sessions won't be saved or restored: {e}");
+            return None;
+        }
+    };
     if p.restore {
         restore(ctx, &p.file);
     }
-    Some(p.file.clone())
+    Some((p.file.clone(), lock))
+}
+
+/// An exclusive flock on the dir itself, or an error if another server (another runtime dir) holds it.
+fn lock(dir: &Path) -> io::Result<fs::File> {
+    use std::os::unix::io::AsRawFd;
+    let f = OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW | libc::O_DIRECTORY).open(dir)?;
+    // SAFETY: flock on a file descriptor we own.
+    if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        let e = io::Error::last_os_error();
+        return Err(match e.kind() {
+            io::ErrorKind::WouldBlock => io::Error::other(format!("another leon server uses {}", dir.display())),
+            _ => e,
+        });
+    }
+    Ok(f)
 }
 
 /// Write the sessions to `file`: a 0600 temp file beside it, synced, then renamed over it.
