@@ -23,6 +23,8 @@ pub enum Fail {
     Unreachable(String),
     /// Anything else (exit 1).
     Other(String),
+    /// Exit quietly with this status (`wait` passing on a program's exit status).
+    Exit(i32),
 }
 
 impl From<ApiError> for Fail {

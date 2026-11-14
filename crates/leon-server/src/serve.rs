@@ -101,6 +101,7 @@ pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
             }
         }
     }
+    shared.ctx.end_programs(Duration::from_secs(2)).await;
     // Only remove the socket if the path is still ours; a newer server may have bound it.
     if std::fs::symlink_metadata(&opts.socket).is_ok_and(|m| (m.dev(), m.ino()) == ours) {
         let _ = std::fs::remove_file(&opts.socket);
@@ -179,7 +180,7 @@ async fn connection(stream: UnixStream, shared: &Shared) -> io::Result<()> {
         shared.touch();
         let mut stop = false;
         let reply = match serde_json::from_str::<Request>(&text) {
-            Ok(req) => match shared.ctx.call(&req.method, req.params) {
+            Ok(req) => match shared.ctx.call(&req.method, req.params).await {
                 Ok(result) => {
                     stop = req.method == "server.stop";
                     json!({ "id": req.id, "result": result })
