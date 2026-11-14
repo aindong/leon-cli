@@ -5,6 +5,7 @@ use super::*;
 impl Workspace {
     pub(super) fn render_sidebar(&self, rows: &[SessionRow], cx: &mut Context<Self>) -> impl IntoElement {
         let t = &DARK;
+        let frame = self.spinning(rows).unwrap_or(0);
         let mut list = div().flex().flex_col().gap(px(2.)).px(px(8.));
         for (i, row) in rows.iter().enumerate() {
             let selected = self.session_id.as_deref() == Some(row.id.as_str());
@@ -39,6 +40,7 @@ impl Workspace {
                         ),
                 )
                 .child(div().flex_1().overflow_hidden().text_ellipsis().child(row.title.clone()))
+                .children(row.status.map(|i| status_mark(i, frame)))
                 .child(
                     div()
                         .text_xs()
@@ -120,6 +122,7 @@ impl Workspace {
 
     pub(super) fn render_tabs(&self, row: Option<&SessionRow>, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &DARK;
+        let frame = row.and_then(|r| self.spinning(std::slice::from_ref(r))).unwrap_or(0);
         let mut bar = div()
             .flex()
             .flex_none()
@@ -155,6 +158,7 @@ impl Workspace {
                         .when(!active, |d| {
                             d.text_color(rgb(t.muted)).hover(|d| d.bg(rgb(t.hover)).text_color(rgb(t.text)))
                         })
+                        .children(w.status.map(|s| status_mark(s, frame)))
                         .child(div().flex_1().overflow_hidden().text_ellipsis().child(w.title.clone()))
                         .when(i < 9, |d| d.child(div().text_xs().text_color(rgb(t.muted)).child(format!("⌘{}", i + 1))))
                         .child(
@@ -195,4 +199,9 @@ impl Workspace {
                 .on_mouse_down(MouseButton::Left, cx.listener(|ws, _, window, cx| ws.new_tab(&NewTab, window, cx))),
         )
     }
+}
+
+/// A status glyph in its state's color (a tab, a sidebar row).
+fn status_mark(i: Indicator, frame: u64) -> impl IntoElement {
+    div().flex_none().text_xs().text_color(rgb(i.color(&DARK))).child(status::glyph(i, frame))
 }

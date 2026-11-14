@@ -3112,6 +3112,7 @@ dependencies = [
  "alacritty_terminal",
  "gpui",
  "leon-core",
+ "leon-lua",
  "leon-server",
  "libc",
  "serde_json",

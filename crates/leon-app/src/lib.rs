@@ -2,8 +2,11 @@
 
 pub mod embedded;
 pub mod input;
+pub mod keymap;
+pub mod palette;
 pub mod panes;
 pub mod render;
+pub mod status;
 pub mod theme;
 pub mod view;
 

@@ -18,6 +18,8 @@ pub enum Reason {
     Exited,
     Prompt,
     Reset,
+    /// The user looked at the terminal (the app focused its pane).
+    Seen,
 }
 
 /// What M3 forwards as `terminal.program_status_changed` / `terminal.program_status_removed`.
@@ -89,6 +91,11 @@ impl Store {
     /// A new shell prompt (OSC 133 A): same rule as exit.
     pub fn prompt(&mut self) -> Vec<Change> {
         self.drop_live(Reason::Prompt)
+    }
+
+    /// The user returned to the terminal: `done` and `error` have been seen.
+    pub fn acknowledge(&mut self) -> Vec<Change> {
+        self.remove_where(Reason::Seen, |_, r| matches!(r.state, State::Done | State::Error))
     }
 
     /// RIS wipes every record.

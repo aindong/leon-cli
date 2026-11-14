@@ -96,7 +96,15 @@ what it created. See [docs/agents.md](docs/agents.md).
 | ⌘1 … ⌘9 | Go to tab 1–9 |
 | ⌘V | Paste |
 | ⌘B | Show or hide the sidebar |
+| ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
+| ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
 | ⌘Q | Quit (ends every program) |
+
+These are defaults: a `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
+removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow.
+A pane whose program reports its status (OSC 7501, as agents do) shows a spinner, ⚠ / ? / ⚿ when
+it is blocked, ✓ when done or ✗ on an error, on its tab and its session in the sidebar; done and
+error clear when you go to the pane.
 
 ## Script it in Lua
 

@@ -164,6 +164,7 @@ pub struct Terminal {
     pwd: Arc<Mutex<Option<String>>>,
     /// Bytes of output parsed so far.
     output: Arc<AtomicU64>,
+    notify: Notify,
 }
 
 impl std::fmt::Debug for Terminal {
@@ -245,6 +246,7 @@ impl Terminal {
             changes: generation.clone(),
         };
         let to_reader = notify.clone();
+        let to_self = notify.clone();
         std::thread::spawn(move || {
             reading.run(reader, at_eof, &*to_reader);
             drop(parsed);
@@ -279,6 +281,7 @@ impl Terminal {
             start_cwd,
             pwd,
             output,
+            notify: to_self,
         })
     }
 
@@ -299,6 +302,16 @@ impl Terminal {
     /// The program-status records (OSC 7501), least recently reported first.
     pub fn program_status(&self) -> Vec<(Option<String>, Record)> {
         lock(&self.tracker).store.records()
+    }
+
+    /// The user returned to this terminal: drop its `done` and `error` records (spec lifetime) and
+    /// report the removal like any other. Don't hold the server's state lock: the notice takes it.
+    pub fn acknowledge(&self) {
+        let gone = lock(&self.tracker).store.acknowledge();
+        if !gone.is_empty() {
+            self.generation.fetch_add(1, Ordering::Release);
+        }
+        gone.into_iter().for_each(|c| (self.notify)(Notice::ProgramStatus(c)));
     }
 
     /// Press one key given in binding syntax (`enter`, `ctrl+c`, `up`).

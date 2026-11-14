@@ -20,15 +20,24 @@ fn one(spec: &str) -> leon_lua::keys::Chord {
 fn keystrokes_become_unshifted_binding_chords() {
     let cmd = Modifiers::command();
     assert_eq!(chord(&ks("t", cmd)), Some(one("cmd+t")));
-    assert_eq!(chord(&ks("p", Modifiers { platform: true, shift: true, ..Default::default() })), Some(one("cmd+shift+p")));
+    assert_eq!(
+        chord(&ks("p", Modifiers { platform: true, shift: true, ..Default::default() })),
+        Some(one("cmd+shift+p"))
+    );
     // macOS reports cmd+shift+= as "+" with no shift, and cmd+shift+] as "}"
     assert_eq!(chord(&ks("+", cmd)), Some(one("cmd+shift+=")));
     assert_eq!(chord(&ks("}", cmd)), Some(one("cmd+shift+]")));
     assert_eq!(chord(&ks("=", cmd)), Some(one("cmd+=")));
     assert_eq!(chord(&ks("-", cmd)), Some(one("cmd+-")));
-    assert_eq!(chord(&ks("enter", Modifiers { platform: true, shift: true, ..Default::default() })), Some(one("cmd+shift+enter")));
+    assert_eq!(
+        chord(&ks("enter", Modifiers { platform: true, shift: true, ..Default::default() })),
+        Some(one("cmd+shift+enter"))
+    );
     assert_eq!(chord(&ks("b", Modifiers::control())), Some(one("ctrl+b")));
-    assert_eq!(chord(&ks("left", Modifiers { platform: true, alt: true, ..Default::default() })), Some(one("cmd+alt+left")));
+    assert_eq!(
+        chord(&ks("left", Modifiers { platform: true, alt: true, ..Default::default() })),
+        Some(one("cmd+alt+left"))
+    );
     assert_eq!(chord(&ks("A", Modifiers::shift())), Some(one("shift+a")));
 }
 

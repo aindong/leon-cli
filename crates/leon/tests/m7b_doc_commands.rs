@@ -96,10 +96,10 @@ fn doc_shell_lines_parse() {
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
 
-/// GPUI's "cmd-shift-d" as the README writes it: ⌘⇧D.
+/// A binding's "cmd+shift+d" as the README writes it: ⌘⇧D.
 fn glyphs(binding: &str) -> String {
     binding
-        .split('-')
+        .split('+')
         .map(|w| match w {
             "cmd" => "⌘".to_string(),
             "shift" => "⇧".to_string(),
@@ -118,17 +118,16 @@ fn glyphs(binding: &str) -> String {
 #[test]
 fn readme_lists_the_app_shortcuts() {
     let readme = std::fs::read_to_string(help_walk::repo().join("README.md")).unwrap();
-    let view = std::fs::read_to_string(help_walk::repo().join("crates/leon-app/src/view.rs")).unwrap();
-    let bindings: Vec<&str> = view.split("KeyBinding::new(\"").skip(1).filter_map(|s| s.split('"').next()).collect();
-    assert!(bindings.len() >= 10, "found the app's bindings: {bindings:?}");
+    // the app's built-in shortcuts are the `DEFAULTS` table, one `("key", "action")` per line
+    let keymap = std::fs::read_to_string(help_walk::repo().join("crates/leon-app/src/keymap.rs")).unwrap();
+    let table = keymap.split("pub const DEFAULTS").nth(1).and_then(|t| t.split("];").next()).unwrap();
+    let bindings: Vec<&str> = table.split("(\"").skip(1).filter_map(|s| s.split('"').next()).collect();
+    assert!(bindings.len() >= 15, "found the app's bindings: {bindings:?}");
     for b in bindings {
-        // cmd-{ and cmd-} are the same keys as cmd-shift-[ and cmd-shift-]
-        if b.ends_with('{') || b.ends_with('}') {
-            continue;
-        }
         assert!(readme.contains(&glyphs(b)), "README should list the shortcut {b} as {}", glyphs(b));
     }
     assert!(readme.contains("⌘1"), "README should list ⌘1–⌘9");
+    assert!(readme.contains("⌘Q"), "README should list ⌘Q");
 }
 
 #[test]

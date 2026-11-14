@@ -1,16 +1,26 @@
-//! The workspace's actions and input: splits, focus, divider drags, tabs, paste and keys.
+//! The workspace's actions and input: splits, focus, divider drags, tabs, paste and font size.
 
 use super::*;
 
 impl Workspace {
-    /// Split the target pane; a zoom ends first so the new pane shows.
-    pub(super) fn split(&mut self, direction: Direction, cx: &mut Context<Self>) {
+    /// Split the target pane, the new pane on `side` ("before"/"after") and in the pane's cwd; a
+    /// zoom ends first so the new pane shows.
+    pub(super) fn split(&mut self, direction: Direction, side: &str, cx: &mut Context<Self>) {
         let Some((_, id, zoomed)) = self.target() else { return };
         if zoomed {
             self.call("session.zoom_block", json!({ "block_id": id, "zoom": false }), cx);
         }
-        let p = json!({ "anchor_id": id, "direction": direction, "side": "after", "layout": { "block": {} }, "focus": true });
+        let p = json!({ "anchor_id": id, "direction": direction, "side": side, "layout": self.here(), "focus": true });
         self.call("session.new_split", p, cx);
+    }
+
+    /// A layout for a shell in the target pane's working directory (or the default, `$HOME`).
+    fn here(&self) -> Value {
+        let cwd = self.terminal().and_then(|t| t.cwd()).filter(|d| d.is_dir());
+        match cwd.as_deref().and_then(|d| d.to_str()) {
+            Some(d) => json!({ "block": { "options": { "cwd": d } } }),
+            None => json!({ "block": {} }),
+        }
     }
 
     /// Move focus by direction from the pane on screen; a zoom ends first so the result shows.
@@ -24,11 +34,11 @@ impl Workspace {
     }
 
     pub(super) fn split_right(&mut self, _: &SplitRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.split(Direction::Horizontal, cx);
+        self.split(Direction::Horizontal, "after", cx);
     }
 
     pub(super) fn split_down(&mut self, _: &SplitDown, _: &mut Window, cx: &mut Context<Self>) {
-        self.split(Direction::Vertical, cx);
+        self.split(Direction::Vertical, "after", cx);
     }
 
     pub(super) fn focus_left(&mut self, _: &FocusLeft, _: &mut Window, cx: &mut Context<Self>) {
@@ -167,7 +177,7 @@ impl Workspace {
 
     pub(super) fn new_tab(&mut self, _: &NewTab, window: &mut Window, cx: &mut Context<Self>) {
         match self.session_id.clone() {
-            Some(sid) => drop(self.app.call("session.new_window", json!({ "session_id": sid }))),
+            Some(sid) => drop(self.app.call("session.new_window", json!({ "session_id": sid, "layout": self.here() }))),
             None => self.new_session(&NewSession, window, cx),
         }
         cx.notify();
@@ -201,23 +211,32 @@ impl Workspace {
         cx.notify();
     }
 
-    pub(super) fn key_down(&mut self, ev: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
-        let ks = &ev.keystroke;
-        let m = &ks.modifiers;
-        if m.platform {
-            let digit = ks.key.parse::<usize>().ok().filter(|d| (1..=9).contains(d));
-            if let Some(d) = digit.filter(|_| !(m.control || m.alt || m.shift)) {
-                self.focus_window(d - 1, cx);
-                cx.stop_propagation();
+    /// Set the terminal font size (clamped) and fit every terminal to it at once, hidden tabs too, so
+    /// `capture` and agents see the new size before the tab is shown.
+    pub(super) fn set_font_size(&mut self, pt: f32, window: &mut Window, cx: &mut Context<Self>) {
+        self.font_size = pt.clamp(FONT_SIZES.0, FONT_SIZES.1);
+        let (cell_w, line_h) = cell_size(window, self.font_size);
+        let area = self.pane_area(window);
+        // (terminal, its pane's text area) for every pane of every window, then resize off the lock
+        let fits: Vec<(Arc<Terminal>, panes::Rect)> = {
+            let st = self.app.ctx().state();
+            let mut out = Vec::new();
+            for s in &st.sessions {
+                for w in &s.windows {
+                    let Some(tree) = &w.layout else { continue };
+                    for p in panes::layout(tree, w.zoomed.as_deref(), area, DIVIDER).panes {
+                        if let Some(b) = s.blocks.iter().find(|b| b.id == p.block_id) {
+                            out.push((b.terminal.clone(), p.rect));
+                        }
+                    }
+                }
             }
-            return;
+            out
+        };
+        for (t, r) in fits {
+            fit(&t, px(r.w - 2. * PADDING), px(r.h - 2. * PADDING), cell_w, line_h);
         }
-        let Some(t) = self.terminal() else { return };
-        let app_cursor = t.with_term(|term| term.mode().contains(TermMode::APP_CURSOR));
-        if let Some(bytes) = crate::input::key_bytes(ks, app_cursor) {
-            let _ = t.write(&bytes);
-            cx.stop_propagation();
-        }
+        cx.notify();
     }
 
     pub(super) fn select(&mut self, session: &str, window: Option<usize>, cx: &mut Context<Self>) {

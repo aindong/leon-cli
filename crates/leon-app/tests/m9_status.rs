@@ -28,11 +28,8 @@ fn each_state_maps_to_its_indicator() {
 
 #[test]
 fn the_highest_priority_wins_within_a_pane_and_across_panes() {
-    let recs = vec![
-        (None, rec(State::Done)),
-        (Some("a".into()), rec(State::Working)),
-        (Some("b".into()), rec(State::Error)),
-    ];
+    let recs =
+        vec![(None, rec(State::Done)), (Some("a".into()), rec(State::Working)), (Some("b".into()), rec(State::Error))];
     assert_eq!(indicator(&recs), Some(Indicator::Error), "error beats working and done");
     let mut with_blocked = recs.clone();
     with_blocked.push((Some("c".into()), Record { kind: Some(Kind::Question), ..rec(State::Blocked) }));

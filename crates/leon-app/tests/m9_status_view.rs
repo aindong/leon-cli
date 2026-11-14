@@ -69,9 +69,13 @@ fn status_in_a_background_session_or_hidden_tab_redraws_and_shows(cx: &mut TestA
     let (sessions, _) = ws.read_with(cx, |ws, _| ws.indicators());
     assert_eq!(sessions, vec![None, Some(Indicator::Done)], "its sidebar row shows it");
 
+    // an error in the shown tab keeps the session's row at error, so only the hidden tab's mark moves
+    run_until(&focused(&ws, cx), r"printf '\033]7501;state=error\007'; echo e-sent", "e-sent");
     let before = ws.read_with(cx, |ws, _| ws.signature());
     run_until(&term(&s.app, &hidden), DONE, "d-sent");
     assert_ne!(ws.read_with(cx, |ws, _| ws.signature()), before, "a hidden tab's status redraws");
+    let (sessions, tabs) = ws.read_with(cx, |ws, _| ws.indicators());
+    assert_eq!((sessions[0], tabs), (Some(Indicator::Error), vec![Some(Indicator::Error), Some(Indicator::Done)]));
     s.app.stop();
 }
 
