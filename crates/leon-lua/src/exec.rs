@@ -1,12 +1,16 @@
 //! `leon.exec` and `leon.exec.start`: run a program from an argv (never through a shell), capture
 //! its output, feed its stdin, and stop it at a timeout (SIGTERM, then SIGKILL 2 s later). Inside
 //! an action the timeout is at most the action's time left.
+//!
+//! Each program gets its own process group and signals go to the group, so a shell's children stop
+//! with it. Output is read until the pipes close, but never past the deadline nor more than 2 s
+//! after the program exits: a background child that keeps the pipe open can't stall the caller.
 
 use std::io::{Read, Write};
-use std::os::unix::process::ExitStatusExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use mlua::{IntoLuaMulti, Lua, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value};
@@ -18,6 +22,8 @@ use crate::runtime::{flags, rt};
 const OUTPUT_CAP: usize = 16 << 20;
 /// How long a program gets between SIGTERM and SIGKILL.
 const KILL_GRACE: Duration = Duration::from_secs(2);
+/// How long output is still read after the program exits.
+const PIPE_GRACE: Duration = Duration::from_secs(2);
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
@@ -28,8 +34,15 @@ pub(crate) struct Proc {
     child: Mutex<Child>,
     status: Mutex<Option<ExitStatus>>,
     stdin: Mutex<Option<ChildStdin>>,
-    out: Mutex<Option<JoinHandle<Vec<u8>>>>,
-    err: Mutex<Option<JoinHandle<Vec<u8>>>>,
+    out: Option<Arc<Pipe>>,
+    err: Option<Arc<Pipe>>,
+}
+
+/// One output stream, filled by its reader thread.
+#[derive(Default)]
+struct Pipe {
+    kept: Mutex<Vec<u8>>,
+    closed: AtomicBool,
 }
 
 impl Proc {
@@ -43,8 +56,9 @@ impl Proc {
 
     pub(crate) fn kill(&self, sig: i32) {
         if self.status().is_none() {
-            // SAFETY: kill(2) on our own child's pid, which is not reaped yet (status is None).
-            unsafe { libc::kill(self.pid, sig) };
+            // SAFETY: kill(2) on the process group our unreaped child leads (spawn sets
+            // process_group(0)); while the leader isn't reaped its pgid can't be reused.
+            unsafe { libc::kill(-self.pid, sig) };
         }
     }
 
@@ -70,16 +84,23 @@ impl Proc {
         })
     }
 
-    fn result(&self, lua: &Lua, st: ExitStatus, timed_out: bool) -> mlua::Result<Table> {
+    /// The result table. Output is read until the pipes close, `until`, or `PIPE_GRACE`.
+    fn result(&self, lua: &Lua, st: ExitStatus, timed_out: bool, until: Option<Instant>) -> mlua::Result<Table> {
+        let now = Instant::now();
+        let cutoff = until.map_or(now + PIPE_GRACE, |u| u.max(now + Duration::from_millis(100)).min(now + PIPE_GRACE));
+        let pipes = || self.out.iter().chain(&self.err);
+        while !pipes().all(|p| p.closed.load(Ordering::SeqCst)) && Instant::now() < cutoff {
+            std::thread::sleep(Duration::from_millis(5));
+        }
         let t = lua.create_table()?;
         let code = st.code().unwrap_or(-1);
         t.set("code", code)?;
         t.set("signal", st.signal())?;
         t.set("timed_out", timed_out)?;
         t.set("ok", code == 0 && !timed_out)?;
-        for (k, h) in [("stdout", &self.out), ("stderr", &self.err)] {
-            if let Some(h) = lock(h).take() {
-                t.set(k, lua.create_string(h.join().unwrap_or_default())?)?;
+        for (k, p) in [("stdout", &self.out), ("stderr", &self.err)] {
+            if let Some(p) = p {
+                t.set(k, lua.create_string(&*lock(&p.kept))?)?;
             }
         }
         Ok(t)
@@ -95,15 +116,19 @@ impl Drop for Proc {
     }
 }
 
-fn drain(mut r: impl Read + Send + 'static) -> JoinHandle<Vec<u8>> {
+fn drain(mut r: impl Read + Send + 'static) -> Arc<Pipe> {
+    let p = Arc::new(Pipe::default());
+    let pipe = p.clone();
     std::thread::spawn(move || {
-        let (mut kept, mut buf) = (Vec::new(), [0u8; 8192]);
+        let mut buf = [0u8; 8192];
         while let Ok(n @ 1..) = r.read(&mut buf) {
+            let mut kept = lock(&pipe.kept);
             let room = OUTPUT_CAP.saturating_sub(kept.len());
             kept.extend_from_slice(&buf[..n.min(room)]);
         }
-        kept
-    })
+        pipe.closed.store(true, Ordering::SeqCst);
+    });
+    p
 }
 
 fn bad(msg: impl Into<String>) -> mlua::Error {
@@ -124,7 +149,7 @@ fn spawn(lua: &Lua, argv: Value, opts: Option<&Table>, start: bool) -> mlua::Res
         return Err(bad("leon.exec: argv must be a non-empty list of strings; leon runs no shell"));
     };
     let mut cmd = Command::new(prog);
-    cmd.args(rest);
+    cmd.args(rest).process_group(0);
     let stdin = opts.map(|o| o.get::<Value>("stdin")).transpose()?.unwrap_or(Value::Nil);
     if let Some(o) = opts {
         if flag(o, "clear_env").map_err(|e| bad(e.0))? {
@@ -160,8 +185,8 @@ fn spawn(lua: &Lua, argv: Value, opts: Option<&Table>, start: bool) -> mlua::Res
     }
     let p = Arc::new(Proc {
         pid: child.id() as i32,
-        out: Mutex::new(child.stdout.take().map(drain)),
-        err: Mutex::new(child.stderr.take().map(drain)),
+        out: child.stdout.take().map(drain),
+        err: child.stderr.take().map(drain),
         child: Mutex::new(child),
         status: Mutex::new(None),
         stdin: Mutex::new(pipe),
@@ -184,9 +209,12 @@ impl UserData for Handle {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("wait", |lua, h, secs: Option<f64>| match h.0.wait_until(until(lua, secs)) {
-            Some(st) => h.0.result(lua, st, false)?.into_lua_multi(lua),
-            None => (Value::Nil, "timeout").into_lua_multi(lua),
+        methods.add_method("wait", |lua, h, secs: Option<f64>| {
+            let until = until(lua, secs);
+            match h.0.wait_until(until) {
+                Some(st) => h.0.result(lua, st, false, until)?.into_lua_multi(lua),
+                None => (Value::Nil, "timeout").into_lua_multi(lua),
+            }
         });
         methods.add_method("write", |_, h, data: mlua::LuaString| {
             let mut stdin = lock(&h.0.stdin);
@@ -232,11 +260,12 @@ pub(crate) fn add(lua: &Lua, leon: &Table) -> mlua::Result<()> {
         lua.create_function(|lua, (_, argv, opts): (Value, Value, Option<Table>)| -> mlua::Result<MultiValue> {
             let timeout = opts.as_ref().map(|o| o.get::<Option<f64>>("timeout")).transpose()?.flatten();
             let p = spawn(lua, argv, opts.as_ref(), false)?;
-            let (st, timed_out) = match p.wait_until(until(lua, timeout)) {
+            let until = until(lua, timeout);
+            let (st, timed_out) = match p.wait_until(until) {
                 Some(st) => (st, false),
                 None => (p.stop(), true),
             };
-            p.result(lua, st, timed_out)?.into_lua_multi(lua)
+            p.result(lua, st, timed_out, until)?.into_lua_multi(lua)
         })?,
     )?;
     exec.set_metatable(Some(meta))?;
