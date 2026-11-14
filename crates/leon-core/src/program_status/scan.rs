@@ -1,4 +1,5 @@
-//! Lifts OSC 7501 out of a PTY byte stream, in any chunking, and spots RIS and OSC 133 A on the way.
+//! Lifts OSC 7501 out of a PTY byte stream, in any chunking, and spots RIS, OSC 133 A and OSC 7
+//! (the working directory, which the emulator ignores) on the way.
 
 /// What the scanner hands back, in stream order.
 #[derive(Debug, PartialEq, Eq)]
@@ -31,7 +32,8 @@ enum Mode {
     Prefix,
     /// Inside OSC 7501; `buf` is the payload. `esc`: the last byte was ESC.
     Report { esc: bool },
-    /// Inside another OSC, passing it on; `buf` keeps its first 6 bytes to spot `133;A`.
+    /// Inside another OSC, passing it on; `buf` keeps its first 6 bytes to spot `133;A`, or all of
+    /// an OSC 7 up to the limit.
     Osc,
 }
 
@@ -42,6 +44,11 @@ pub struct Scanner {
     buf: Vec<u8>,
     /// Pass-through bytes not yet handed out.
     pass: Vec<u8>,
+    /// The payload of the last complete OSC 7 (after `7;`), until taken.
+    pwd: Option<Vec<u8>>,
+    /// Payload bytes of the current other OSC so far. vte buffers a whole OSC with no limit, so past
+    /// `MAX_SEQUENCE` the OSC is cancelled (CAN) and the rest, terminator included, is swallowed.
+    osc_len: usize,
 }
 
 impl Scanner {
@@ -62,12 +69,19 @@ impl Scanner {
         self.flush(&mut f);
     }
 
+    /// The last OSC 7 payload since the previous call.
+    pub fn take_pwd(&mut self) -> Option<Vec<u8>> {
+        self.pwd.take()
+    }
+
     fn step(&mut self, b: u8, f: &mut impl FnMut(Piece<'_>)) {
         match self.mode {
             Mode::Ground if b == ESC => self.mode = Mode::Esc { osc: false },
             Mode::Ground => self.pass.push(b),
             Mode::Esc { osc: true } if b == b'\\' => {
-                self.pass.extend_from_slice(b"\x1b\\");
+                if self.osc_len <= MAX_SEQUENCE {
+                    self.pass.extend_from_slice(b"\x1b\\");
+                }
                 self.end_osc(f);
             }
             Mode::Esc { osc } => {
@@ -87,6 +101,7 @@ impl Scanner {
                     self.buf.pop();
                     self.pass.extend_from_slice(&self.buf);
                     self.buf.drain(..2);
+                    self.osc_len = self.buf.len();
                     self.mode = Mode::Osc;
                     self.step(b, f);
                 }
@@ -112,7 +127,9 @@ impl Scanner {
             }
             Mode::Osc => match b {
                 BEL => {
-                    self.pass.push(b);
+                    if self.osc_len <= MAX_SEQUENCE {
+                        self.pass.push(b);
+                    }
                     self.end_osc(f);
                 }
                 ESC => self.mode = Mode::Esc { osc: true },
@@ -121,9 +138,15 @@ impl Scanner {
                     self.end_osc(f);
                 }
                 _ => {
-                    self.pass.push(b);
-                    // vte ignores other C0 bytes inside an OSC.
-                    if self.buf.len() < 6 && b >= 0x20 {
+                    self.osc_len += 1;
+                    if self.osc_len <= MAX_SEQUENCE {
+                        self.pass.push(b);
+                    } else if self.osc_len == MAX_SEQUENCE + 1 {
+                        self.pass.push(CAN); // vte drops the OSC instead of running a cut-off one
+                    }
+                    // vte ignores other C0 bytes inside an OSC. One byte past the limit marks an OSC 7 too long.
+                    let keep = if self.buf.starts_with(b"7;") { MAX_SEQUENCE + 1 } else { 6 };
+                    if self.buf.len() < keep && b >= 0x20 {
                         self.buf.push(b);
                     }
                 }
@@ -158,6 +181,9 @@ impl Scanner {
 
     fn end_osc(&mut self, f: &mut impl FnMut(Piece<'_>)) {
         let prompt = self.buf == b"133;A" || self.buf.starts_with(b"133;A;");
+        if self.buf.starts_with(b"7;") && self.buf.len() <= MAX_SEQUENCE {
+            self.pwd = Some(self.buf[2..].to_vec());
+        }
         self.buf.clear();
         self.mode = Mode::Ground;
         if prompt {

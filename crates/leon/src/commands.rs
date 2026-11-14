@@ -68,7 +68,8 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         }
         Cmd::Session(SessionCmd::Rename { target, label }) => {
             let sid = resolve(&mut c, "session", target, None)?;
-            c.call("session.set_label", json!({ "session_id": sid, "label": label }))?;
+            let r = c.call("session.set_label", json!({ "session_id": sid, "label": label }))?;
+            json_out(cli, &r);
         }
         Cmd::Window(cmd) => window(&mut c, cli, cmd)?,
         Cmd::Run { .. }
@@ -77,6 +78,13 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         | Cmd::Capture { .. }
         | Cmd::Wait { .. }
         | Cmd::Block(_) => crate::blocks::run(&mut c, cli)?,
+        Cmd::Split { .. }
+        | Cmd::Focus { .. }
+        | Cmd::Move { .. }
+        | Cmd::Swap { .. }
+        | Cmd::Zoom { .. }
+        | Cmd::Resize { .. } => crate::layout::run(&mut c, cli)?,
+        Cmd::Events { all } => crate::events::run(&mut c, cli, *all)?,
         Cmd::Api(cmd) => api(&mut c, cli, cmd)?,
     }
     Ok(())
@@ -113,7 +121,10 @@ fn window(c: &mut Client, cli: &Cli, cmd: &WindowCmd) -> Result<(), Fail> {
     match cmd {
         WindowCmd::New { label } => {
             let r = c.call("session.new_window", json!({ "session_id": sid, "window_label": label }))?;
-            println!("{}", r["window_id"].as_str().unwrap_or_default());
+            match cli.json {
+                true => print_json(&r),
+                false => println!("{}", r["window_id"].as_str().unwrap_or_default()),
+            }
         }
         WindowCmd::Ls => {
             let v = c.call("session.view", json!({ "session_id": sid }))?;
@@ -126,11 +137,14 @@ fn window(c: &mut Client, cli: &Cli, cmd: &WindowCmd) -> Result<(), Fail> {
         }
         WindowCmd::Rename { target, label } => {
             let wid = resolve(c, "window", target, Some(&sid))?;
-            c.call("session.set_window_label", json!({ "session_id": sid, "window_id": wid, "label": label }))?;
+            let r =
+                c.call("session.set_window_label", json!({ "session_id": sid, "window_id": wid, "label": label }))?;
+            json_out(cli, &r);
         }
         WindowCmd::Close { target } => {
             let wid = resolve(c, "window", target, Some(&sid))?;
-            c.call("session.close_window", json!({ "session_id": sid, "window_id": wid }))?;
+            let r = c.call("session.close_window", json!({ "session_id": sid, "window_id": wid }))?;
+            json_out(cli, &r);
         }
     }
     Ok(())
@@ -250,7 +264,7 @@ pub(crate) fn pick_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) ->
     }
 }
 
-fn read_args(args: Option<&str>) -> Result<Value, Fail> {
+pub(crate) fn read_args(args: Option<&str>) -> Result<Value, Fail> {
     let text = match args {
         None => return Ok(json!({})),
         Some("-") => std::io::read_to_string(std::io::stdin()).map_err(|e| Fail::Other(e.to_string()))?,
@@ -279,4 +293,11 @@ fn pretty(v: &Value) -> String {
 
 pub(crate) fn print_json(v: &Value) {
     println!("{}", pretty(v));
+}
+
+/// Print a mutation's reply (its `revision`) when `--json` asks for it.
+pub(crate) fn json_out(cli: &Cli, v: &Value) {
+    if cli.json {
+        print_json(v);
+    }
 }

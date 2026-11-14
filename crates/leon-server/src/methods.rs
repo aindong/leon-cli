@@ -6,6 +6,9 @@ use leon_core::ApiError;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use leon_core::layout::Node;
+use leon_core::State;
+
 use crate::blocks::{self, BlockType, Layout};
 use crate::Registry;
 
@@ -107,14 +110,27 @@ pub struct WindowView {
     /// 1-based position in tab order.
     pub position: usize,
     pub active: bool,
+    /// In layout order.
     pub block_ids: Vec<String>,
+    pub layout: Option<Node>,
+    pub focused_block_id: Option<String>,
+    /// The block shown filling the window; the layout is unchanged.
+    pub zoomed_block_id: Option<String>,
 }
 
 #[derive(Serialize, JsonSchema)]
 pub struct SessionView {
     pub session_id: String,
     pub label: Option<String>,
+    /// Bumped by every change to this view.
+    pub revision: u64,
     pub windows: Vec<WindowView>,
+}
+
+/// What a call that changes a session's view returns.
+#[derive(Serialize, JsonSchema)]
+pub struct Revision {
+    pub revision: u64,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -130,6 +146,7 @@ pub struct NewWindow {
 pub struct WindowCreated {
     pub window_id: String,
     pub block_id: String,
+    pub revision: u64,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -172,10 +189,11 @@ pub struct Resolved {
     pub session_id: Option<String>,
 }
 
-fn view(s: &leon_core::Session) -> SessionView {
+pub(crate) fn view(s: &leon_core::Session) -> SessionView {
     SessionView {
         session_id: s.id.clone(),
         label: s.label.clone(),
+        revision: s.revision,
         windows: s
             .windows
             .iter()
@@ -185,10 +203,24 @@ fn view(s: &leon_core::Session) -> SessionView {
                 label: w.label.clone(),
                 position: i + 1,
                 active: i == s.active,
-                block_ids: s.blocks.iter().filter(|b| b.window_id == w.id).map(|b| b.id.clone()).collect(),
+                block_ids: w.layout.as_ref().map_or(vec![], |t| t.leaves().into_iter().map(String::from).collect()),
+                layout: w.layout.clone(),
+                focused_block_id: w.focus.clone(),
+                zoomed_block_id: w.zoomed.clone(),
             })
             .collect(),
     }
+}
+
+pub(crate) fn session_list(st: &State) -> Vec<SessionSummary> {
+    st.sessions
+        .iter()
+        .map(|s| SessionSummary { session_id: s.id.clone(), label: s.label.clone(), windows: s.windows.len() })
+        .collect()
+}
+
+pub(crate) fn revision(st: &State, session_id: &str) -> Revision {
+    Revision { revision: st.revision(session_id) }
 }
 
 pub fn registry() -> Registry {
@@ -236,25 +268,20 @@ pub fn registry() -> Registry {
         Ok(Empty {})
     });
     r.add("session.list", "Every session in order, with its label and window count.", |ctx, _: NoParams| {
-        Ok(SessionList {
-            sessions: ctx
-                .state()
-                .sessions
-                .iter()
-                .map(|s| SessionSummary { session_id: s.id.clone(), label: s.label.clone(), windows: s.windows.len() })
-                .collect(),
-        })
+        Ok(SessionList { sessions: session_list(&ctx.state()) })
     });
     r.add("session.create", "Create a session with one window holding one terminal.", |ctx, p: CreateSession| {
         let mut st = ctx.state();
         if ctx.stopping.load(Ordering::SeqCst) {
             return Err(ApiError::new(503, "shutting_down", "the server is stopping"));
         }
+        let mark = st.mark();
         let (session_id, window_id) = st.create_session(p.label.as_deref(), p.window_label.as_deref())?;
-        match blocks::open(ctx, &mut st, &session_id, &window_id, Layout::block(p.layout)) {
+        match blocks::open(ctx, &mut st, &session_id, &window_id, Layout::block(p.layout), None) {
             Ok(block_id) => Ok(Created { session_id, window_id, block_id }),
             Err(e) => {
                 let _ = st.destroy_session(&session_id);
+                st.forget_since(mark); // all or nothing, events included
                 Err(e)
             }
         }
@@ -264,38 +291,49 @@ pub fn registry() -> Registry {
         Ok(Empty {})
     });
     r.add("session.set_label", "Rename a session.", |ctx, p: SetLabel| {
-        ctx.state().set_session_label(&p.session_id, &p.label)?;
-        Ok(Empty {})
+        let mut st = ctx.state();
+        st.set_session_label(&p.session_id, &p.label)?;
+        Ok(revision(&st, &p.session_id))
     });
-    r.add("session.view", "A session's windows, in tab order.", |ctx, p: SessionRef| {
-        Ok(view(ctx.state().session(&p.session_id)?))
-    });
+    r.add(
+        "session.view",
+        "A session's windows in tab order, each with its layout tree, focused and zoomed block.",
+        |ctx, p: SessionRef| Ok(view(ctx.state().session(&p.session_id)?)),
+    );
     r.add(
         "session.new_window",
         "Add a window (tab) holding one terminal at the end of a session and make it active.",
         |ctx, p: NewWindow| {
             let mut st = ctx.state();
+            let (mark, active) = (st.mark(), st.session(&p.session_id)?.active);
             let window_id = st.new_window(&p.session_id, p.window_label.as_deref())?;
-            match blocks::open(ctx, &mut st, &p.session_id, &window_id, Layout::block(p.layout)) {
-                Ok(block_id) => Ok(WindowCreated { window_id, block_id }),
+            match blocks::open(ctx, &mut st, &p.session_id, &window_id, Layout::block(p.layout), None) {
+                Ok(block_id) => {
+                    Ok(WindowCreated { revision: revision(&st, &p.session_id).revision, window_id, block_id })
+                }
                 Err(e) => {
                     let _ = st.close_window(&p.session_id, &window_id);
+                    st.forget_since(mark); // all or nothing, events included
+                    st.session_mut(&p.session_id)?.active = active;
                     Err(e)
                 }
             }
         },
     );
     r.add("session.close_window", "Close a window; closing the last one destroys the session.", |ctx, p: WindowRef| {
-        ctx.state().close_window(&p.session_id, &p.window_id)?;
-        Ok(Empty {})
+        let mut st = ctx.state();
+        st.close_window(&p.session_id, &p.window_id)?;
+        Ok(revision(&st, &p.session_id))
     });
     r.add("session.focus_window", "Make a window the session's active tab.", |ctx, p: WindowRef| {
-        ctx.state().focus_window(&p.session_id, &p.window_id)?;
-        Ok(Empty {})
+        let mut st = ctx.state();
+        st.focus_window(&p.session_id, &p.window_id)?;
+        Ok(revision(&st, &p.session_id))
     });
     r.add("session.set_window_label", "Rename a window.", |ctx, p: SetWindowLabel| {
-        ctx.state().set_window_label(&p.session_id, &p.window_id, &p.label)?;
-        Ok(Empty {})
+        let mut st = ctx.state();
+        st.set_window_label(&p.session_id, &p.window_id, &p.label)?;
+        Ok(revision(&st, &p.session_id))
     });
     r.add(
         "target.resolve",
@@ -316,6 +354,8 @@ pub fn registry() -> Registry {
         },
     );
     blocks::add(&mut r);
+    crate::layout::add(&mut r);
+    crate::events::add(&mut r);
     r
 }
 

@@ -170,17 +170,35 @@ fn text(value: Option<&str>) -> Option<String> {
 fn safe_text(s: &str) -> bool {
     let mut prev = None;
     for c in s.chars() {
-        let ok = match c {
-            '\u{200d}' => prev.is_some_and(|p| visible(p) || matches!(p, '\u{fe0e}' | '\u{fe0f}')),
-            '\u{200c}' | '\u{fe0e}' | '\u{fe0f}' => prev.is_some_and(visible),
-            _ => !c.is_control() && !invisible(c),
-        };
-        if !ok {
+        if !allowed(c, prev) {
             return false;
         }
         prev = Some(c);
     }
     s.chars().any(visible)
+}
+
+/// `s` without what `safe_text` refuses, for program text we keep rather than drop (titles, pwds).
+pub(crate) fn strip_hidden(s: &str) -> String {
+    let mut prev = None;
+    s.chars()
+        .filter(|&c| {
+            let ok = allowed(c, prev);
+            if ok {
+                prev = Some(c);
+            }
+            ok
+        })
+        .collect()
+}
+
+/// Whether `c` may follow `prev` in shown text.
+fn allowed(c: char, prev: Option<char>) -> bool {
+    match c {
+        '\u{200d}' => prev.is_some_and(|p| visible(p) || matches!(p, '\u{fe0e}' | '\u{fe0f}')),
+        '\u{200c}' | '\u{fe0e}' | '\u{fe0f}' => prev.is_some_and(visible),
+        _ => !c.is_control() && !invisible(c),
+    }
 }
 
 /// Not whitespace and not one of the joiners `safe_text` allows.

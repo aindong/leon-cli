@@ -1,4 +1,5 @@
-//! The socket server: NDJSON requests in, NDJSON responses out (docs/architecture.md).
+//! The socket server: NDJSON requests in, NDJSON responses out, and pushed event lines on
+//! connections that attached (docs/architecture.md).
 //!
 //! Access control is the private runtime dir (leon_core::paths::ensure_private_dir) plus a peer
 //! uid check on every connection: once terminals exist, a connection can run code as the user.
@@ -14,9 +15,15 @@ use leon_core::ApiError;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{UnixListener, UnixStream};
+use tokio::sync::mpsc;
 
-use crate::Ctx;
+use crate::events::{is_attach, Subscriber};
+use crate::{Ctx, Later};
+
+/// Event lines written between two looks at replies and requests.
+const EVENT_BATCH: usize = 64;
 
 /// The longest request line accepted (1 MiB); a longer one gets an error and the connection closes.
 pub const MAX_LINE: usize = 1 << 20;
@@ -169,49 +176,151 @@ fn lock(path: &Path) -> io::Result<std::fs::File> {
     Ok(f)
 }
 
+/// One request line from the client, or the end of a line too long to read.
+enum Line {
+    Text(Vec<u8>),
+    TooLarge,
+}
+
+/// One connection: requests are answered one at a time, in order, while events the connection
+/// attached to are written between replies.
 async fn connection(stream: UnixStream, shared: &Shared) -> io::Result<()> {
     let (read, mut write) = stream.into_split();
+    let (tx, mut lines) = mpsc::channel(1);
+    let reader = tokio::spawn(read_lines(read, tx));
+    let sub = Arc::new(Subscriber::default());
+    let result = serve_lines(&mut lines, &mut write, &sub, shared).await;
+    reader.abort();
+    result
+}
+
+async fn read_lines(read: OwnedReadHalf, tx: mpsc::Sender<Line>) -> io::Result<()> {
     let mut reader = BufReader::new(read);
-    let mut line = Vec::new();
     loop {
-        line.clear();
+        let mut line = Vec::new();
         let n = (&mut reader).take(MAX_LINE as u64 + 1).read_until(b'\n', &mut line).await?;
         if n == 0 {
             return Ok(());
         }
-        if line.len() > MAX_LINE {
-            let e = ApiError::new(413, "request_too_large", format!("requests are at most {MAX_LINE} bytes"));
-            write_line(&mut write, &json!({ "id": null, "error": e })).await?;
-            return Ok(()); // close: the rest of the oversized line is never read
-        }
-        let text = String::from_utf8_lossy(&line);
-        if text.trim().is_empty() {
-            continue;
-        }
-        shared.touch();
-        let mut stop = false;
-        let reply = match serde_json::from_str::<Request>(&text) {
-            Ok(req) => match shared.ctx.call(&req.method, req.params).await {
-                Ok(result) => {
-                    stop = req.method == "server.stop";
-                    json!({ "id": req.id, "result": result })
-                }
-                Err(e) => json!({ "id": req.id, "error": e }),
-            },
-            Err(e) => json!({ "id": null, "error": ApiError::bad_request(format!("not a request: {e}")) }),
-        };
-        write_line(&mut write, &reply).await?;
-        if stop {
-            shared.ctx.shutdown.notify_one(); // only after this connection's own stop reply is out
+        // Stop at an oversized line: the rest of it is never read.
+        let too_large = line.len() > MAX_LINE;
+        let msg = if too_large { Line::TooLarge } else { Line::Text(line) };
+        if tx.send(msg).await.is_err() || too_large {
+            return Ok(());
         }
     }
 }
 
-async fn write_line(write: &mut tokio::net::unix::OwnedWriteHalf, v: &Value) -> io::Result<()> {
-    let mut out = serde_json::to_vec(v)?;
+async fn serve_lines(
+    lines: &mut mpsc::Receiver<Line>,
+    write: &mut OwnedWriteHalf,
+    sub: &Arc<Subscriber>,
+    shared: &Shared,
+) -> io::Result<()> {
+    // Order: a finished call's reply, then the next request, then events, so an event flood can't
+    // hold up replies and an attach reply precedes its events.
+    // The call being answered: its id, whether it stops the server, and its result.
+    let mut pending: Option<(Value, bool, Later<Value>)> = None;
+    loop {
+        tokio::select! {
+            biased;
+            result = async { pending.as_mut().expect("guarded").2.as_mut().await }, if pending.is_some() => {
+                let (id, stop, _) = pending.take().expect("guarded");
+                let stop = stop && result.is_ok();
+                let reply = match result {
+                    Ok(result) => json!({ "id": id, "result": result }),
+                    Err(e) => json!({ "id": id, "error": e }),
+                };
+                if !send(write, &line(&reply), sub).await? {
+                    return Ok(());
+                }
+                if stop {
+                    shared.ctx.shutdown.notify_one(); // only after this connection's own stop reply is out
+                }
+            }
+            msg = lines.recv(), if pending.is_none() => {
+                let text = match msg {
+                    None => return Ok(()),
+                    Some(Line::TooLarge) => {
+                        let e = ApiError::new(413, "request_too_large", format!("requests are at most {MAX_LINE} bytes"));
+                        send(write, &line(&json!({ "id": null, "error": e })), sub).await?;
+                        return Ok(()); // close: the rest of the oversized line is never read
+                    }
+                    Some(Line::Text(text)) => text,
+                };
+                let text = String::from_utf8_lossy(&text);
+                if text.trim().is_empty() {
+                    continue;
+                }
+                shared.touch();
+                match serde_json::from_str::<Request>(&text) {
+                    Ok(req) => {
+                        let later: Later<Value> = if is_attach(&req.method) {
+                            // Here, not in the registry: attaching subscribes this connection.
+                            Box::pin(std::future::ready(shared.ctx.attach(sub, &req.method, req.params)))
+                        } else {
+                            shared.ctx.call(&req.method, req.params)
+                        };
+                        pending = Some((req.id, req.method == "server.stop", later));
+                    }
+                    Err(e) => {
+                        let e = ApiError::bad_request(format!("not a request: {e}"));
+                        if !send(write, &line(&json!({ "id": null, "error": e })), sub).await? {
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+            _ = sub.ready.notified() => {
+                // A batch per pass, so a finished reply waits for at most one batch.
+                for _ in 0..EVENT_BATCH {
+                    match sub.pop() {
+                        Err(_) => return Ok(()), // too far behind: dropped
+                        Ok(None) => break,
+                        Ok(Some(event)) => {
+                            if !send(write, &event, sub).await? {
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+                if sub.has_lines() {
+                    sub.ready.notify_one();
+                }
+            }
+        }
+    }
+}
+
+fn line(v: &Value) -> Vec<u8> {
+    let mut out = serde_json::to_vec(v).expect("json");
     out.push(b'\n');
-    write.write_all(&out).await?;
-    write.flush().await
+    out
+}
+
+/// Write one line. Ok(false) if `sub` is dropped meanwhile: that also frees a connection stuck
+/// writing to a client that stopped reading.
+async fn send(write: &mut OwnedWriteHalf, line: &[u8], sub: &Subscriber) -> io::Result<bool> {
+    let mut out = std::pin::pin!(async {
+        write.write_all(line).await?;
+        write.flush().await
+    });
+    let mut woken = false;
+    let written = loop {
+        tokio::select! {
+            r = &mut out => break r,
+            _ = sub.ready.notified() => {
+                if sub.is_dropped() {
+                    return Ok(false);
+                }
+                woken = true;
+            }
+        }
+    };
+    if woken {
+        sub.ready.notify_one(); // the main loop still has those events to write
+    }
+    written.map(|_| true)
 }
 
 #[cfg(test)]

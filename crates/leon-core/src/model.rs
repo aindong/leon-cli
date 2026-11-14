@@ -1,9 +1,13 @@
-//! Server state: an ordered list of sessions, each with ordered windows (tabs) and the
-//! terminal blocks in them.
+//! Server state: an ordered list of sessions, each with ordered windows (tabs), each window a
+//! layout tree of the terminal blocks in it. Every mutation records its events (events.rs).
 
 use std::collections::VecDeque;
 use std::sync::Arc;
 
+use serde_json::json;
+
+use crate::events::Event;
+use crate::layout::{Direction, Node, Side};
 use crate::target::{resolve, Candidate};
 use crate::terminal::Terminal;
 use crate::{new_id, ApiError};
@@ -15,6 +19,42 @@ const EXITS_KEPT: usize = 1024;
 pub struct Window {
     pub id: String,
     pub label: Option<String>,
+    /// None only while the window's first block is being opened.
+    pub layout: Option<Node>,
+    pub focus: Option<String>,
+    /// The block shown filling the window (display only; the layout stays).
+    pub zoomed: Option<String>,
+}
+
+impl Window {
+    fn new(label: Option<String>) -> Window {
+        Window { id: new_id("window"), label, layout: None, focus: None, zoomed: None }
+    }
+
+    /// Take block `id` out of the tree, collapsing its split; focus moves to its sibling.
+    pub(crate) fn detach(&mut self, id: &str) {
+        let next = self.layout.as_ref().and_then(|t| t.sibling_leaf(id)).map(str::to_string);
+        self.layout = self.layout.take().and_then(|t| t.without(id));
+        if self.focus.as_deref() == Some(id) {
+            self.focus = next;
+        }
+        if self.zoomed.as_deref() == Some(id) {
+            self.zoomed = None;
+        }
+    }
+}
+
+/// Where a new block goes in a window that already has blocks.
+#[derive(Debug, Clone)]
+pub struct Place {
+    /// A block or split in the window.
+    pub anchor: String,
+    pub direction: Direction,
+    pub side: Side,
+    /// The before side's share.
+    pub ratio: f64,
+    /// Focus the new block.
+    pub focus: bool,
 }
 
 /// A terminal in a window. Dropping the last handle to its `terminal` hangs up the program.
@@ -38,6 +78,8 @@ pub struct Session {
     pub active: usize,
     /// In creation order, which is the order block positions count in.
     pub blocks: Vec<Block>,
+    /// Bumped by every change to what `session.view` shows.
+    pub revision: u64,
 }
 
 #[derive(Debug, Default)]
@@ -45,6 +87,10 @@ pub struct State {
     pub sessions: Vec<Session>,
     /// Exit statuses of finished programs, newest last, so `wait` works after a block closed.
     exits: VecDeque<(String, i32)>,
+    /// Events not yet taken (events.rs).
+    pub(crate) outbox: Vec<Event>,
+    /// Sessions whose view changed since the events were last taken.
+    pub(crate) dirty: Vec<String>,
 }
 
 /// Labels are optional, trimmed, and at most 128 characters (docs/spec.md §1).
@@ -67,6 +113,20 @@ impl Session {
             .position(|w| w.id == window_id)
             .ok_or_else(|| ApiError::not_found(format!("no window {window_id} in {}", self.id)))
     }
+
+    /// The index of block `block_id` in `blocks`.
+    pub fn block_index(&self, block_id: &str) -> Result<usize, ApiError> {
+        self.blocks
+            .iter()
+            .position(|b| b.id == block_id)
+            .ok_or_else(|| ApiError::not_found(format!("no block {block_id} in {}", self.id)))
+    }
+
+    /// The index of the window holding block `block_id`.
+    pub fn window_of(&self, block_id: &str) -> Result<usize, ApiError> {
+        let i = self.block_index(block_id)?;
+        self.window_index(&self.blocks[i].window_id)
+    }
 }
 
 impl State {
@@ -85,15 +145,19 @@ impl State {
         window_label: Option<&str>,
     ) -> Result<(String, String), ApiError> {
         let label = clean_label(label)?;
-        let window = Window { id: new_id("window"), label: clean_label(window_label)? };
+        let window = Window::new(clean_label(window_label)?);
         let ids = (new_id("session"), window.id.clone());
-        self.sessions.push(Session { id: ids.0.clone(), label, windows: vec![window], active: 0, blocks: vec![] });
+        let session = json!({ "session_id": ids.0, "label": label });
+        let s = Session { id: ids.0.clone(), label, windows: vec![window], active: 0, blocks: vec![], revision: 0 };
+        self.sessions.push(s);
+        self.emit_server(&ids.0, "session_created", json!({ "session": session }));
         Ok(ids)
     }
 
     pub fn destroy_session(&mut self, id: &str) -> Result<(), ApiError> {
         let i = self.sessions.iter().position(|s| s.id == id).ok_or_else(|| ApiError::session_not_found(id))?;
         self.sessions.remove(i);
+        self.emit_server(id, "session_destroyed", json!({ "session_id": id }));
         Ok(())
     }
 
@@ -101,9 +165,13 @@ impl State {
     pub fn new_window(&mut self, session_id: &str, label: Option<&str>) -> Result<String, ApiError> {
         let label = clean_label(label)?;
         let s = self.session_mut(session_id)?;
-        let id = new_id("window");
-        s.windows.push(Window { id: id.clone(), label });
+        let w = Window::new(label.clone());
+        let id = w.id.clone();
+        s.windows.push(w);
         s.active = s.windows.len() - 1;
+        self.emit(session_id, "window_created", json!({ "window_id": id, "label": label }));
+        self.emit(session_id, "active_window_changed", json!({ "window_id": id }));
+        self.touch(session_id);
         Ok(id)
     }
 
@@ -111,7 +179,9 @@ impl State {
     pub fn close_window(&mut self, session_id: &str, window_id: &str) -> Result<(), ApiError> {
         let s = self.session_mut(session_id)?;
         let i = s.window_index(window_id)?;
+        let was_active = s.windows[s.active].id.clone();
         s.windows.remove(i);
+        let closed: Vec<String> = s.blocks.iter().filter(|b| b.window_id == window_id).map(|b| b.id.clone()).collect();
         s.blocks.retain(|b| b.window_id != window_id);
         if s.windows.is_empty() {
             return self.destroy_session(session_id);
@@ -119,32 +189,88 @@ impl State {
         if s.active >= i && s.active > 0 {
             s.active -= 1;
         }
+        let active = s.windows[s.active].id.clone();
+        for b in closed {
+            self.emit(session_id, "block_closed", json!({ "block_id": b }));
+        }
+        self.emit(session_id, "window_closed", json!({ "window_id": window_id }));
+        if active != was_active {
+            self.emit(session_id, "active_window_changed", json!({ "window_id": active }));
+        }
+        self.touch(session_id);
         Ok(())
     }
 
     /// Make a window the session's active tab.
     pub fn focus_window(&mut self, session_id: &str, window_id: &str) -> Result<(), ApiError> {
         let s = self.session_mut(session_id)?;
-        s.active = s.window_index(window_id)?;
-        Ok(())
-    }
-
-    pub fn add_block(&mut self, session_id: &str, block: Block) -> Result<(), ApiError> {
-        let s = self.session_mut(session_id)?;
-        s.window_index(&block.window_id)?;
-        s.blocks.push(block);
-        Ok(())
-    }
-
-    /// Close a block; a window left without blocks closes too.
-    pub fn close_block(&mut self, session_id: &str, block_id: &str) -> Result<(), ApiError> {
-        let s = self.session_mut(session_id)?;
-        let i = s.blocks.iter().position(|b| b.id == block_id).ok_or_else(|| no_block(block_id))?;
-        let window_id = s.blocks.remove(i).window_id;
-        if s.blocks.iter().all(|b| b.window_id != window_id) {
-            self.close_window(session_id, &window_id)?;
+        let w = s.window_index(window_id)?;
+        if s.active != w {
+            s.active = w;
+            self.emit(session_id, "active_window_changed", json!({ "window_id": window_id }));
+            self.touch(session_id);
         }
         Ok(())
+    }
+
+    /// Add a block to its window: as the whole layout of an empty window (`place` None), or beside
+    /// an anchor in a window that has blocks.
+    pub fn add_block(&mut self, session_id: &str, block: Block, place: Option<&Place>) -> Result<(), ApiError> {
+        let s = self.session_mut(session_id)?;
+        let w = s.window_index(&block.window_id)?;
+        let win = &mut s.windows[w];
+        let id = block.id.clone();
+        match (&mut win.layout, place) {
+            (None, None) => {
+                win.layout = Some(Node::block(&id));
+                win.focus = Some(id.clone());
+            }
+            (Some(tree), Some(p)) => {
+                if !tree.insert(&p.anchor, &id, p.direction, p.side, p.ratio) {
+                    return Err(ApiError::not_found(format!("no block or split {} in {}", p.anchor, win.id)));
+                }
+                if p.focus || win.focus.is_none() {
+                    win.focus = Some(id.clone());
+                }
+            }
+            _ => return Err(ApiError::bad_request("an empty window takes no anchor; a window with blocks needs one")),
+        }
+        s.blocks.push(block);
+        let activated = (place.is_some_and(|p| p.focus) && s.active != w).then(|| s.windows[w].id.clone());
+        if activated.is_some() {
+            s.active = w;
+        }
+        self.emit(session_id, "block_created", json!({ "block_id": id }));
+        if let Some(window_id) = activated {
+            self.emit(session_id, "active_window_changed", json!({ "window_id": window_id }));
+        }
+        self.touch(session_id);
+        Ok(())
+    }
+
+    /// The window (by id) whose layout holds `anchor`, a block or split id.
+    pub fn anchor_window(&self, session_id: &str, anchor: &str) -> Result<String, ApiError> {
+        let s = self.session(session_id)?;
+        let w = s.windows.iter().find(|w| w.layout.as_ref().is_some_and(|t| t.contains(anchor)));
+        Ok(w.ok_or_else(|| ApiError::not_found(format!("no block or split {anchor} in {session_id}")))?.id.clone())
+    }
+
+    /// Close a block, collapsing its split; a window left without blocks closes too.
+    pub fn close_block(&mut self, session_id: &str, block_id: &str) -> Result<(), ApiError> {
+        let s = self.session_mut(session_id)?;
+        let i = s.block_index(block_id)?;
+        let w = s.window_index(&s.blocks[i].window_id)?;
+        s.blocks.remove(i);
+        s.windows[w].detach(block_id);
+        let emptied = s.windows[w].layout.is_none().then(|| s.windows[w].id.clone());
+        self.emit(session_id, "block_closed", json!({ "block_id": block_id }));
+        match emptied {
+            Some(window_id) => self.close_window(session_id, &window_id),
+            None => {
+                self.touch(session_id);
+                Ok(())
+            }
+        }
     }
 
     /// A block's program exited: remember the status, and close the block unless it is kept open.
@@ -153,6 +279,7 @@ impl State {
         if self.exits.len() > EXITS_KEPT {
             self.exits.pop_front();
         }
+        self.emit_block(block_id, "child_exited", json!({ "exit_code": code }));
         let Some(s) = self.sessions.iter_mut().find(|s| s.blocks.iter().any(|b| b.id == block_id)) else {
             return; // closed already, e.g. its session was killed
         };
@@ -194,7 +321,9 @@ impl State {
 
     pub fn set_session_label(&mut self, session_id: &str, label: &str) -> Result<(), ApiError> {
         let label = clean_label(Some(label))?;
-        self.session_mut(session_id)?.label = label;
+        self.session_mut(session_id)?.label = label.clone();
+        self.emit(session_id, "session_label_changed", json!({ "label": label }));
+        self.touch(session_id);
         Ok(())
     }
 
@@ -202,7 +331,9 @@ impl State {
         let label = clean_label(Some(label))?;
         let s = self.session_mut(session_id)?;
         let i = s.window_index(window_id)?;
-        s.windows[i].label = label;
+        s.windows[i].label = label.clone();
+        self.emit(session_id, "window_label_changed", json!({ "window_id": window_id, "label": label }));
+        self.touch(session_id);
         Ok(())
     }
 
@@ -252,8 +383,8 @@ mod tests {
         let mut st = State::default();
         let (s, w0) = st.create_session(None, None).unwrap();
         let w1 = st.new_window(&s, None).unwrap();
-        st.add_block(&s, block("block:a", &w0, false)).unwrap();
-        st.add_block(&s, block("block:b", &w1, true)).unwrap();
+        st.add_block(&s, block("block:a", &w0, false), None).unwrap();
+        st.add_block(&s, block("block:b", &w1, true), None).unwrap();
         st.block_exited("block:b", 2);
         assert_eq!(st.block("block:b").unwrap().1.exit_code, Some(2), "kept open");
         st.block_exited("block:a", 3);

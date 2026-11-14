@@ -20,6 +20,16 @@ agents) drive it through one self-describing API. `docs/spec.md` is the interfac
   response `{"id","result"}` or `{"id","error":{"status","code","message"}}`. Events are pushed on
   the same connection as `{"event":{...},"seq":N}` after a subscribe call. The spec leaves framing
   unspecified; NDJSON is the simplest thing that streams and is easy to debug with `nc -U`.
+- **Events.** `session.attach {session_id}` (that session, block events too) and
+  `session.attach_all {event_scope: session|all}` subscribe the connection and return a snapshot with
+  its `seq`. `seq` is per connection and gapless; events are queued while the state lock is held and
+  the snapshot is taken under it, so the snapshot sits exactly between two events. Event bodies use
+  the spec's CLI JSON shape (`session_event` → `block_event`). A connection more than 8 MiB behind
+  is dropped. Each call that changes a session's view bumps its `revision` once and emits one
+  `session_view_changed`.
+- **Layout.** A window's tiled layout is a tree of `split` nodes (`horizontal` = side by side,
+  `ratio` = the before side's share) with block leaves; focus and zoom are per window. CLI ratios
+  (`--ratio PCT`) are the new or moved pane's share.
 - **Socket path.** `$LEON_RUNTIME_DIR/server.sock`, else `$XDG_RUNTIME_DIR/leon/server.sock`, else
   `~/.local/state/leon/run/server.sock`. Mode 0600.
 - **Terminal emulation.** `alacritty_terminal` (battle-tested, used by Zed). leon scans the PTY byte
