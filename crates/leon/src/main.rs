@@ -3,6 +3,7 @@
 mod blocks;
 mod client;
 mod commands;
+mod skill;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -98,6 +99,42 @@ pub enum Cmd {
     /// Check the Lua config.
     #[command(subcommand)]
     Config(ConfigCmd),
+    /// Teach coding agents (Claude Code, Codex) to drive leon. Needs no server.
+    #[command(subcommand)]
+    Skill(SkillCmd),
+}
+
+#[derive(Subcommand)]
+pub enum SkillCmd {
+    /// Print the guide for agents driving leon (a SKILL.md).
+    Show,
+    /// Install the skill and a session-start hook [default: for each agent found].
+    Setup {
+        #[arg(long, value_enum)]
+        agent: Option<skill::Agent>,
+        /// Print what would change; write nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Replace a SKILL.md leon didn't install (the old one is kept as SKILL.md.leon-backup).
+        #[arg(long)]
+        force: bool,
+    },
+    /// Show each agent's install: current, outdated, missing, foreign or unreadable.
+    Status {
+        #[arg(long, value_enum)]
+        agent: Option<skill::Agent>,
+    },
+    /// Remove what setup installed, and nothing else.
+    Remove {
+        #[arg(long, value_enum)]
+        agent: Option<skill::Agent>,
+        /// Print what would change; write nothing.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Print the agent's leon session and block (run by the session-start hook).
+    #[command(hide = true)]
+    Hook,
 }
 
 #[derive(Subcommand)]

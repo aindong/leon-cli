@@ -17,9 +17,12 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
     if let Cmd::Config(ConfigCmd::Check { path }) = &cli.cmd {
         return config_check(path.clone());
     }
+    if let Cmd::Skill(cmd) = &cli.cmd {
+        return crate::skill::run(cli, cmd);
+    }
     let mut c = connect(&socket, cli.autostart)?;
     match &cli.cmd {
-        Cmd::Server(_) | Cmd::Config(_) => unreachable!(),
+        Cmd::Server(_) | Cmd::Config(_) | Cmd::Skill(_) => unreachable!(),
         Cmd::New { label } | Cmd::Session(SessionCmd::New { label }) => {
             let r = c.call("session.create", json!({ "label": label }))?;
             println!("{}", r["session_id"].as_str().unwrap_or_default());
