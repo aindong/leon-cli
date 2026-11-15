@@ -30,9 +30,23 @@ Key bindings from your `init.lua` work in the app, sequences too, with a hint of
 
 ## Install
 
+Each release has `Leon-<version>-macos-arm64.zip` (Apple Silicon), a tarball and a `.deb` for
+Linux on arm64 and x86_64, and `SHA256SUMS`; `shasum -a 256 -c SHA256SUMS` checks what you
+downloaded. `leon --version` names the release and the commit it was built from. Or build from a
+checkout, as below.
+
 ### macOS
 
-You need macOS 11 or later and a Rust toolchain. From a checkout of this repository:
+You need macOS 11 or later. From a release, unzip `Leon.app` into `~/Applications` and link its
+`leon` command:
+
+```text
+ditto -x -k Leon-*-macos-arm64.zip ~/Applications
+xattr -dr com.apple.quarantine ~/Applications/Leon.app   # signed ad hoc, not notarized
+mkdir -p ~/.local/bin && ln -s ~/Applications/Leon.app/Contents/MacOS/leon ~/.local/bin/leon
+```
+
+To build it yourself you need a Rust toolchain. From a checkout of this repository:
 
 ```sh
 scripts/install.sh
@@ -53,8 +67,8 @@ To build only the app: `scripts/bundle.sh` writes `target/release/Leon.app`.
 ### Linux
 
 On Linux leon is the server, the CLI and `leon attach` (agents and Lua scripts too); the app isn't
-there yet, so `leon` alone in a terminal runs `leon attach`. Build the packages with Docker, from a
-checkout:
+there yet, so `leon` alone in a terminal runs `leon attach`. Install a release's `.deb` or tarball
+as below, or build the packages with Docker, from a checkout:
 
 ```sh
 scripts/package-linux.sh                 # or --arch amd64 / --arch arm64
@@ -257,7 +271,7 @@ and the sidebar then lists only sessions; the app remembers the choice:
 
 With no session open, the app says what to do next:
 
-![The empty state: leon's icon, the tagline, and the keys for a new session and the palette, plus leon skill setup](docs/images/app-empty.png)
+![The empty state: leon's icon, the tagline, and the keys for a new session and the palette, plus leon skill setup and leon hosts add](docs/images/app-empty.png)
 
 ## Script it in Lua
 
