@@ -17,7 +17,8 @@ panes) in a split layout. Every object has a stable ID such as `block:91c0…`.
   then act on its active window's focused block.
 - **The server.** Any command that needs the server starts a personal one if none runs
   (`--autostart=false` or `LEON_AUTOSTART=0` turns that off). The socket lives in
-  `$LEON_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/leon`, else `~/.local/state/leon/run`.
+  `$LEON_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/leon`, else `~/.local/state/leon/run`; its path
+  must fit a Unix socket (under 104 bytes on macOS, 108 on Linux), or leon says so and stops.
 - **Another machine.** `-H HOST` sends any client command to the leon server on another machine,
   through your own `ssh` (see [Hosts](#hosts)).
 

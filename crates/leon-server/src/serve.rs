@@ -192,6 +192,7 @@ async fn bind(socket: &Path) -> io::Result<(UnixListener, (u64, u64))> {
             Err(e) => return Err(io::Error::new(e.kind(), format!("{} is in use: {e}", socket.display()))),
         }
     }
+    leon_core::paths::check_socket_path(socket)?;
     let listener = UnixListener::bind(socket)?;
     std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600))?;
     let m = std::fs::symlink_metadata(socket)?;
