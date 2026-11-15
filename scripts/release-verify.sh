@@ -34,7 +34,7 @@ need minisign jq
 fail() { echo "release-verify.sh: FAIL: $*" >&2; exit 1; }
 
 keys=()
-while read -r line; do
+while read -r line || [ -n "$line" ]; do # a last line with no newline is still a key
   case "$line" in ''|'#'*) ;; *) keys+=("$line") ;; esac
 done < "$keys_file"
 [ ${#keys[@]} -gt 0 ] || fail "$keys_file pins no key: run scripts/release-keys.sh (docs/releases.md#secrets)"
@@ -56,24 +56,36 @@ signed SHA256SUMS
 manifest="$dir/latest.json"
 jq -e '
   def str: type == "string" and length > 0;
-  .schema == 1 and (.version | str) and .tag == "v" + .version and (.commit | str)
-  and (.date | str and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
-  and (.notes_url | str) and (.min_os | type == "object" and all(.[]; str))
+  def line: str and (contains("\n") | not); # a regex $ also matches before a last newline
+  .schema == 1 and (.version | line) and .tag == "v" + .version and (.commit | line)
+  and (.date | line and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
+  and (.notes_url | line) and (.min_os | type == "object" and all(.[]; line))
   and (.files | type == "array" and length > 0)
   and all(.files[];
-    (.name | str and test("^[A-Za-z0-9._-]+$")) and (.kind | IN("app", "cli", "deb"))
+    (.name | line and test("^[A-Za-z0-9._-]+$")) and (.kind | IN("app", "cli", "deb"))
     and (.os | IN("macos", "linux")) and (.arch | IN("arm64", "x86_64"))
-    and .url as $u | .name as $n | ($u | str and endswith("/" + $n))
-    and (.size | type == "number") and (.sha256 | str and test("^[0-9a-f]{64}$")) and (.signature | str))
+    and (.name as $n | .url | line and endswith("/" + $n)) # in parentheses: jq 1.8 binds `as` wider than 1.7
+    and (.size | type == "number") and (.sha256 | line and test("^[0-9a-f]{64}$")) and (.signature | str))
 ' "$manifest" >/dev/null || fail "latest.json does not have the fields docs/releases.md documents"
 
 version=$(jq -r .version "$manifest")
 listed=$(jq -r '.files[].name' "$manifest")
+# `is_listed NAME`: NAME is exactly one of the manifest's files (their names have no spaces)
+is_listed() {
+  local n
+  for n in $listed; do [ "$n" = "$1" ] && return 0; done
+  return 1
+}
+shopt -s dotglob nullglob # hidden files count as files too
 for path in "$dir"/*; do
-  name=$(basename "$path")
-  case "$name" in latest.json|SHA256SUMS|*.minisig) continue ;; esac
-  printf '%s\n' "$listed" | grep -qxF "$name" || fail "$name is not in the manifest: nobody signed it"
+  name=${path##*/}
+  case "$name" in
+    latest.json|SHA256SUMS|latest.json.minisig|SHA256SUMS.minisig) continue ;;
+    *.minisig) is_listed "${name%.minisig}" || fail "$name is the signature of no file in the manifest"; continue ;;
+  esac
+  is_listed "$name" || fail "$name is not in the manifest: nobody signed it"
 done
+shopt -u dotglob nullglob
 [ "$(awk '{ print $2 }' "$dir/SHA256SUMS" | sort)" = "$(printf '%s\n' "$listed" | sort)" ] \
   || fail "SHA256SUMS and latest.json list different files"
 
@@ -89,7 +101,7 @@ done
 
 if [ -n "$complete" ]; then
   while read -r name _; do
-    printf '%s\n' "$listed" | grep -qxF "$name" || fail "--complete, but the release has no $name"
+    is_listed "$name" || fail "--complete, but the release has no $name"
   done <<<"$(release_files "$version")"
 fi
 echo "release-verify.sh: ok: leon $version, $(printf '%s\n' "$listed" | wc -l | tr -d ' ') files: sums, manifest and signatures hold"

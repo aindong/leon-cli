@@ -1,5 +1,7 @@
-# Sourced by scripts/release-manifest.sh, release-verify.sh and release-homebrew.sh: where releases
-# are published, the files a full release has, and a sha256 that runs on macOS and Linux.
+# shellcheck shell=bash
+# Sourced by the other scripts/release-*.sh: where releases are published, the files a full release
+# has, a sha256 that runs on macOS and Linux, and a check for the tools a script needs.
+# shellcheck disable=SC2034 # read by the scripts that source this file
 RELEASE_REPO_URL="https://github.com/aindong/leon-cli"
 
 # The eight files of a full release of version $1, one per line: name kind os arch.

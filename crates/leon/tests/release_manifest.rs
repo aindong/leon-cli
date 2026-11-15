@@ -121,3 +121,82 @@ fn signing_needs_the_key_and_refuses_a_file_it_does_not_know() {
     }
     assert!(release_kit::manifest(&dir, &key, &["--complete"]).status.success());
 }
+
+/// The table's rows for `kind`, `os` and `arch` name every value the manifest can hold, in
+/// backticks, and the `arch` row says the two spellings file names use that the field never does.
+/// A new value, or wording that sends a reader to the file name, fails here.
+#[test]
+fn the_documented_values_are_the_ones_the_manifest_holds() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("files");
+    signed_release(&dir, tmp.path());
+    let m: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("latest.json")).unwrap()).unwrap();
+    let doc = std::fs::read_to_string(repo().join("docs/releases.md")).unwrap();
+    for field in ["kind", "os", "arch"] {
+        let row = doc.lines().find(|l| l.starts_with(&format!("| `files[].{field}` |"))).expect("a row for the field");
+        let meaning = row.split('|').nth(3).unwrap();
+        let held: BTreeSet<&str> = m["files"].as_array().unwrap().iter().map(|f| f[field].as_str().unwrap()).collect();
+        let mut named: BTreeSet<&str> = meaning.split('`').skip(1).step_by(2).collect();
+        if field == "arch" {
+            // the two spellings the row quotes from file names, which the field never holds
+            assert!(named.remove("aarch64") && named.remove("amd64"), "the row says file names differ: {row}");
+            assert!(!row.contains("whatever"), "the row does not send the reader to the file name: {row}");
+        }
+        assert_eq!(held, named, "files[].{field}: the manifest's values (left), the row's (right): {row}");
+    }
+    let names: Vec<&str> = m["files"].as_array().unwrap().iter().map(|f| f["name"].as_str().unwrap()).collect();
+    assert!(names.iter().any(|n| n.contains("aarch64")) && names.iter().any(|n| n.contains("amd64")), "{names:?}");
+    assert!(m["files"].as_array().unwrap().iter().all(|f| f["arch"] != "aarch64" && f["arch"] != "amd64"));
+}
+
+/// The manifest names the commit the files were built from, not whatever checkout signs them:
+/// `scripts/release.sh` records it in the directory (BUILD-COMMIT), and a `LEON_GIT_HASH` that
+/// says otherwise, or no word on the commit at all, stops the signing.
+#[test]
+fn files_built_from_another_commit_are_not_signed_as_this_one() {
+    let tmp = tempfile::tempdir().unwrap();
+    let key = release_kit::key(tmp.path(), "k");
+    let built = "aaaaaaaaaaaa"; // the commit release.sh built; the kit's LEON_GIT_HASH is another
+    let sign = |dir: &std::path::Path, hash: &str| {
+        let env = [("LEON_RELEASE_KEY", key.secret.as_str()), ("LEON_GIT_HASH", hash)];
+        release_kit::script("release-manifest.sh", &["--complete", dir.to_str().unwrap()], &env)
+    };
+    let fresh = |name: &str, record: Option<&str>| {
+        let dir = tmp.path().join(name);
+        release_kit::fake_release(&dir);
+        if let Some(r) = record {
+            std::fs::write(dir.join("BUILD-COMMIT"), format!("{r}\n")).unwrap();
+        }
+        dir
+    };
+
+    let dir = fresh("other", Some(built));
+    let o = sign(&dir, COMMIT);
+    assert!(!o.status.success(), "files built from {built} were signed as {COMMIT}: {}", text(&o));
+    assert!(text(&o).contains(built) && text(&o).contains(COMMIT), "the error names both commits: {}", text(&o));
+    assert!(!dir.join("latest.json").exists(), "nothing is signed");
+
+    // the record alone is enough, and it is what the manifest says; it is not a release file
+    let o = sign(&dir, "");
+    assert!(o.status.success(), "{}", text(&o));
+    let m: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("latest.json")).unwrap()).unwrap();
+    assert_eq!(m["commit"], built);
+    assert!(!dir.join("BUILD-COMMIT").exists(), "the record is consumed: the signed manifest carries the commit now");
+    assert!(verify(&dir, &key.keys_file, &["--complete"]).status.success());
+
+    // a full hash that agrees is fine (CI passes the run's 40-digit commit)
+    let dir = fresh("agree", Some(built));
+    assert!(sign(&dir, &built.repeat(4)[..40]).status.success());
+
+    // no record and no LEON_GIT_HASH: it will not guess from the checkout that happens to run it
+    let dir = fresh("unknown", None);
+    let o = sign(&dir, "");
+    assert!(!o.status.success() && text(&o).contains("LEON_GIT_HASH"), "{}", text(&o));
+    assert!(!dir.join("latest.json").exists());
+
+    for bad in ["not-a-hash", "abc", ""] {
+        let dir = fresh(&format!("bad-{}", bad.len()), Some(bad));
+        let o = sign(&dir, "");
+        assert!(!o.status.success(), "a record of {bad:?} was accepted: {}", text(&o));
+    }
+}

@@ -67,3 +67,67 @@ fn a_release_without_every_homebrew_file_writes_nothing() {
     assert!(!o.status.success(), "a formula with no Linux x86_64 file was written: {}", text(&o));
     assert!(!tap.join("Formula").exists() && !tap.join("Casks").exists(), "nothing is written");
 }
+
+/// The manifest's values end up inside Ruby strings that Homebrew runs on every user's machine, so
+/// a value that could close the string or interpolate is refused, and nothing is written.
+#[test]
+fn a_manifest_value_that_could_escape_a_ruby_string_is_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let good = tmp.path().join("good");
+    signed_release(&good, tmp.path());
+    let manifest = std::fs::read_to_string(good.join("latest.json")).unwrap();
+    type Edit = fn(&mut Value);
+    let edits: [(&str, Edit); 5] = [
+        ("a quote in the version", |m| m["version"] = "0.1.0\"\n  system \"id\"\n  x = \"".into()),
+        ("interpolation in a sha256", |m| m["files"][0]["sha256"] = "#{`id`}".into()),
+        ("a quote in a url", |m| m["files"][2]["url"] = "https://example.invalid/x\"; system(\"id\"); \"".into()),
+        ("interpolation in a url", |m| m["files"][3]["url"] = "https://example.invalid/#{`id`}".into()),
+        ("a url that is not https", |m| m["files"][4]["url"] = "http://example.invalid/leon.tar.gz".into()),
+    ];
+    for (i, (what, edit)) in edits.iter().enumerate() {
+        let (dir, tap) = (tmp.path().join(format!("m{i}")), tmp.path().join(format!("tap{i}")));
+        let mut m: Value = serde_json::from_str(&manifest).unwrap();
+        edit(&mut m);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir(&tap).unwrap();
+        std::fs::write(dir.join("latest.json"), m.to_string()).unwrap();
+        let o = script("release-homebrew.sh", &[dir.to_str().unwrap(), tap.to_str().unwrap()], &[]);
+        assert!(!o.status.success(), "{what}: release-homebrew.sh accepted it: {}", text(&o));
+        assert_eq!(std::fs::read_dir(&tap).unwrap().count(), 0, "{what}: nothing is written");
+    }
+    let (dir, tap) = (good.to_str().unwrap(), tmp.path().join("tap-base"));
+    std::fs::create_dir(&tap).unwrap();
+    let bases = [
+        "https://example.invalid/\"; system(\"id\"); \"",
+        "https://example.invalid/#{`id`}",
+        "ftp://example.invalid/x",
+        "file:///tmp/x\n\"; system(\"id\"); \"", // a good first line does not excuse the second (found in review)
+    ];
+    for base in bases {
+        let o = script("release-homebrew.sh", &["--url-base", base, dir, tap.to_str().unwrap()], &[]);
+        assert!(!o.status.success(), "--url-base {base} was accepted: {}", text(&o));
+        assert_eq!(std::fs::read_dir(&tap).unwrap().count(), 0, "--url-base {base}: nothing is written");
+    }
+    let o =
+        script("release-homebrew.sh", &["--url-base", "file:///tmp/some_dir/x-1.2", dir, tap.to_str().unwrap()], &[]);
+    assert!(o.status.success(), "a plain file:// base is fine: {}", text(&o));
+}
+
+/// The cask spells one URL pattern for both arches instead of copying the manifest's URLs, so a
+/// manifest whose app is somewhere else is refused, not turned into a cask that points elsewhere.
+/// (Found in review.)
+#[test]
+fn an_app_url_the_cask_would_not_reproduce_is_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (good, dir, tap) = (tmp.path().join("good"), tmp.path().join("files"), tmp.path().join("tap"));
+    signed_release(&good, tmp.path());
+    let mut m: Value = serde_json::from_str(&std::fs::read_to_string(good.join("latest.json")).unwrap()).unwrap();
+    let app = m["files"].as_array_mut().unwrap().iter_mut().find(|f| f["kind"] == "app").unwrap();
+    app["url"] = format!("https://downloads.example.org/{}", app["name"].as_str().unwrap()).into();
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::create_dir(&tap).unwrap();
+    std::fs::write(dir.join("latest.json"), m.to_string()).unwrap();
+    let o = script("release-homebrew.sh", &[dir.to_str().unwrap(), tap.to_str().unwrap()], &[]);
+    assert!(!o.status.success(), "the cask ignores the manifest's app URL: {}", text(&o));
+    assert_eq!(std::fs::read_dir(&tap).unwrap().count(), 0, "nothing is written");
+}

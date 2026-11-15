@@ -8,9 +8,15 @@
 # latest.json (docs/releases.md#the-manifest) and a minisign signature (.minisig) beside every
 # release file, SHA256SUMS and latest.json. It never uploads anything.
 #
+# The manifest names the commit the files were built from: scripts/release.sh leaves it in
+# DIR/BUILD-COMMIT, which is read and then removed. Without that file (CI, where the files come
+# from several jobs of one run) LEON_GIT_HASH has to say it; if both are there they must agree.
+# It never takes the commit of the checkout it happens to run in.
+#
 # --complete        fail unless DIR holds all eight files of a full release
 # LEON_RELEASE_KEY  the minisign secret key's text, as `minisign -G -W` wrote it (the GitHub
 #                   secret that scripts/release-keys.sh sets; a throwaway key for a dry run)
+# LEON_GIT_HASH     the commit the files were built from, 12 to 40 hex digits (see above)
 #
 # Needs minisign and jq.
 set -euo pipefail
@@ -22,7 +28,7 @@ dir=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --complete) complete=1; shift ;;
-    -h|--help) sed -n '2,15s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,22s/^# \{0,1\}//p' "$0"; exit 0 ;;
     -*) echo "release-manifest.sh: unknown argument: $1 (try --help)" >&2; exit 2 ;;
     *) [ -z "$dir" ] || { echo "release-manifest.sh: one directory, not also $1" >&2; exit 2; }; dir=$1; shift ;;
   esac
@@ -34,16 +40,33 @@ need minisign jq
 
 version=$("$repo/scripts/release-version.sh")
 tag="v$version"
-commit=${LEON_GIT_HASH:-$(git -C "$repo" rev-parse --short=12 HEAD)}
+hex='^[0-9a-f]{12,40}$'
+commit="" given=${LEON_GIT_HASH:-}
+if [ -f "$dir/BUILD-COMMIT" ]; then
+  commit=$(cat "$dir/BUILD-COMMIT")
+  [[ $commit =~ $hex ]] || { echo "release-manifest.sh: $dir/BUILD-COMMIT does not hold a commit" >&2; exit 1; }
+fi
+if [ -n "$given" ]; then
+  [[ $given =~ $hex ]] || { echo "release-manifest.sh: LEON_GIT_HASH is not a commit: $given" >&2; exit 1; }
+  if [ -n "$commit" ] && [ "${commit:0:12}" != "${given:0:12}" ]; then
+    echo "release-manifest.sh: these files were built from ${commit:0:12}, but LEON_GIT_HASH says ${given:0:12}" >&2
+    exit 1
+  fi
+  commit=$given
+fi
+[ -n "$commit" ] || { echo "release-manifest.sh: which commit were these files built from? scripts/release.sh records it in BUILD-COMMIT; without that file, set LEON_GIT_HASH" >&2; exit 1; }
+commit=${commit:0:12}
 full=$(release_files "$version")
 # `known NAME` prints NAME's line of the full set, or fails
-known() { printf '%s\n' "$full" | awk -v n="$1" '$1 == n { print; found = 1 } END { exit !found }'; }
+known() { printf '%s\n' "$full" | n="$1" awk '$1 == ENVIRON["n"] { print; found = 1 } END { exit !found }'; }
 
 # what an earlier run wrote is made again
 rm -f "$dir"/*.minisig "$dir/SHA256SUMS" "$dir/latest.json"
 files=()
 for path in "$dir"/*; do
+  [ -e "$path" ] || continue # an empty DIR: the glob stays as it is
   name=$(basename "$path")
+  [ "$name" != BUILD-COMMIT ] || continue
   known "$name" >/dev/null \
     || { echo "release-manifest.sh: $name is not a release file of leon $version" >&2; exit 1; }
   files+=("$name")
@@ -55,16 +78,20 @@ if [ -n "$complete" ]; then
   done <<<"$full"
 fi
 
-tmp=$(mktemp -d)
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/leon-release.XXXXXX") # a template: bare mktemp ignores TMPDIR on macOS
 trap 'rm -rf "$tmp"' EXIT
 (umask 077 && printf '%s\n' "$LEON_RELEASE_KEY" > "$tmp/key")
+unset LEON_RELEASE_KEY # nothing started from here on needs it
 sign() { minisign -S -W -s "$tmp/key" -m "$dir/$1" >/dev/null || { echo "release-manifest.sh: minisign could not sign $1" >&2; exit 1; }; }
 
-# the oldest systems the files run on: macOS from the app's Info.plist, glibc from the .deb's Depends
+# the oldest systems the files run on: macOS as scripts/bundle.sh writes it into Info.plist, glibc
+# from the .deb's Depends
 macos="" glibc=""
 for name in "${files[@]}"; do
   case "$name" in
-    *macos*) macos=$(sed -n 's/.*LSMinimumSystemVersion<\/key><string>\(.*\)<\/string>.*/\1/p' "$repo/scripts/bundle.sh") ;;
+    *macos*)
+      macos=$(sed -n 's/.*LSMinimumSystemVersion<\/key><string>\(.*\)<\/string>.*/\1/p' "$repo/scripts/bundle.sh")
+      [ -n "$macos" ] || { echo "release-manifest.sh: scripts/bundle.sh names no LSMinimumSystemVersion" >&2; exit 1; } ;;
     *.deb)
       d=$(mktemp -d "$tmp/deb.XXXXXX")
       (cd "$d" && ar x "$dir/$name" && tar -xf control.tar.* ./control)
@@ -91,4 +118,5 @@ done | jq -s --arg version "$version" --arg tag "$tag" --arg commit "$commit" \
     min_os: ({macos: $macos, linux_glibc: $glibc} | with_entries(select(.value != ""))), files: .}' > "$dir/latest.json"
 sign SHA256SUMS
 sign latest.json
+rm -f "$dir/BUILD-COMMIT" # the signed manifest carries the commit now, and this is not a release file
 echo "release-manifest.sh: leon $version ($commit): ${#files[@]} release files, SHA256SUMS and latest.json are signed in $dir"

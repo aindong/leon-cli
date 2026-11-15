@@ -7,13 +7,15 @@
 # [default: CHANGELOG.md] has no such section or the section is empty.
 set -euo pipefail
 
+case "${1:-}" in -h|--help) sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0 ;; esac
 version=${1:?usage: scripts/release-notes.sh VERSION [CHANGELOG]}
 changelog=${2:-"$(dirname "$0")/../CHANGELOG.md"}
 # index(), not a regex: the dots in a version are dots
 notes=$(awk -v head="## [$version]" '
   index($0, "## [") == 1 { on = (index($0, head) == 1) ; next }
   on { print }' "$changelog")
-if [ -z "${notes//[[:space:]]/}" ]; then
+# tr, not ${notes//[[:space:]]/}: bash 3.2 (macOS) takes ten seconds over a 6 KB section that way
+if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
   echo "release-notes.sh: $changelog has no section for $version (a '## [$version]' heading with text under it)" >&2
   exit 1
 fi

@@ -33,9 +33,23 @@ fn releases_doc_covers_cutting_signing_the_manifest_and_the_tap() {
         "workflow_dispatch",
         "Fine-grained",
         "aindong/homebrew-leon",
+        // the branch flow: work lands on dev, a release is cut from main
+        "pull request from `dev` to `main`",
+        "## Cutting a release",
+        "### When a run fails",
+        "is not on main",
     ] {
         assert!(doc.contains(needle), "docs/releases.md mentions {needle}");
     }
+    // the failures it explains are the scripts' own words
+    let scripts: String = ["release-version.sh", "release-verify.sh"]
+        .iter()
+        .map(|s| std::fs::read_to_string(repo().join("scripts").join(s)).unwrap())
+        .collect();
+    for said in ["is not on main", "pins no key", "its signature is not by a key in"] {
+        assert!(doc.contains(said) && scripts.contains(said), "{said:?} is in the doc and in a script");
+    }
+    assert!(read(".github/workflows/release.yml").contains("exists already") && doc.contains("exists already"));
 
     // every release script is described, and every script the doc names exists
     for e in std::fs::read_dir(repo().join("scripts")).unwrap() {

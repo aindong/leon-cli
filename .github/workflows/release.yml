@@ -12,7 +12,8 @@ permissions:
   contents: read
 
 jobs:
-  # A tag must name the version in Cargo.toml; a run by hand takes the version as it is.
+  # A tag must name the version in Cargo.toml and sit on a commit of main: releases are cut from
+  # main only. A run by hand takes the version as it is, on any branch; it only makes a draft.
   version:
     runs-on: ubuntu-24.04
     outputs:
@@ -21,11 +22,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0 # the history, to see whether main holds the tagged commit
       - id: version
         env:
           TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: |
-          version=$(scripts/release-version.sh ${TAG:+"$TAG"})
+          version=$(scripts/release-version.sh ${TAG:+--on-main "$TAG"})
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   # Leon.app and the CLI tarball, on Apple Silicon and on Intel.
@@ -60,6 +62,7 @@ jobs:
             dist/Leon-*.zip
             dist/leon-*.tar.gz
           if-no-files-found: error
+          retention-days: 1
 
   # The tarball and the .deb, on x86_64 and arm64.
   linux:
@@ -79,6 +82,7 @@ jobs:
           name: files-${{ matrix.runner }}
           path: dist/*
           if-no-files-found: error
+          retention-days: 1
 
   # Sign everything, check it against the keys leon pins, then release: always as a draft first,
   # so releases/latest never points at a release with files still missing.
@@ -88,13 +92,21 @@ jobs:
     permissions:
       contents: write
     env:
-      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.version.outputs.version }}
       TAG: v${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Stop if a release or a draft for this tag exists already
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::a release or a draft for $TAG exists already; delete it before running again (docs/releases.md)"
+            exit 1
+          fi
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: files-*
@@ -104,10 +116,13 @@ jobs:
       - name: Sign every file and write the manifest
         env:
           LEON_RELEASE_KEY: ${{ secrets.LEON_RELEASE_KEY }}
+          LEON_GIT_HASH: ${{ github.sha }} # every job of this run built this commit
         run: scripts/release-manifest.sh --complete dist
       - name: Check the release against the keys leon pins
         run: scripts/release-verify.sh --complete dist
       - name: Create the release as a draft
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           scripts/release-notes.sh "$VERSION" > notes.md
           pre=()
@@ -115,12 +130,18 @@ jobs:
           gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "leon $VERSION" --notes-file notes.md "${pre[@]}" dist/*
       - name: Publish it (a tag push only; a run by hand leaves the draft)
         if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: gh release edit "$TAG" --draft=false
+      # For the tap job. It holds every file's signature, so a run by hand does not upload it:
+      # run artifacts of a public repository can be downloaded by anyone signed in.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           name: manifest
           path: dist/latest.json
           if-no-files-found: error
+          retention-days: 1
 
   # The tap's cask and formula follow a published release. A pre-release is not what
   # `brew upgrade` should bring, and a draft has no download URLs.

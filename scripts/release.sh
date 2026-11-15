@@ -13,7 +13,8 @@
 # (the CLI alone, laid out like the Linux tarball), per Linux arch a tarball and a .deb
 # (scripts/package-linux.sh, needs Docker), and SHA256SUMS. Runs on macOS. A set CARGO_TARGET_DIR
 # is used for the macOS build (its dependencies' cache); the source is still the clone.
-# Signing and the manifest come after: scripts/release-manifest.sh (docs/releases.md).
+# Signing and the manifest come after: scripts/release-manifest.sh (docs/releases.md), which
+# reads the commit these files were built from out of BUILD-COMMIT, written beside them.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -25,7 +26,7 @@ while [ $# -gt 0 ]; do
     --commit) commit=${2:?--commit needs a revision}; shift 2 ;;
     --linux) linux=${2:?--linux needs arm64, amd64, arm64,amd64 or none}; shift 2 ;;
     --out) out=${2:?--out needs a directory}; shift 2 ;;
-    -h|--help) sed -n '2,17s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,18s/^# \{0,1\}//p' "$0"; exit 0 ;;
     *) echo "release.sh: unknown argument: $1 (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -100,5 +101,6 @@ done
 
 cd "$out"
 shasum -a 256 "${files[@]}" > SHA256SUMS
+echo "$hash" > BUILD-COMMIT # for release-manifest.sh: the manifest names this commit, whoever signs
 echo "release.sh: leon $version ($hash), in $out:"
 cat SHA256SUMS

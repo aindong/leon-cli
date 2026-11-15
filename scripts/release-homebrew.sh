@@ -31,6 +31,19 @@ done
 need jq
 manifest="${paths[0]}/latest.json" tap=${paths[1]}
 
+# These values are written into Ruby strings that Homebrew runs on every user's machine: nothing
+# that could close a string or interpolate (a quote, #{}, a backslash, a newline) gets through.
+jq -e 'def plain(re): type == "string" and test(re) and (contains("\n") | not); # $ matches before a last newline
+  (.version | plain("^[0-9A-Za-z.+-]+$"))
+  and (.files | type == "array") and all(.files[];
+    (.name | plain("^[A-Za-z0-9._-]+$")) and (.sha256 | plain("^[0-9a-f]{64}$"))
+    and (.url | plain("^https://[A-Za-z0-9._/-]+$")))' "$manifest" >/dev/null \
+  || { echo "release-homebrew.sh: latest.json has a version, name, sha256 or URL that is not plainly one" >&2; exit 1; }
+plain_url='^(https|file)://[A-Za-z0-9._/-]+$' # [[ =~ ]] matches the whole value; grep would match any one line of it
+if [ -n "$url_base" ] && ! [[ $url_base =~ $plain_url ]]; then
+  echo "release-homebrew.sh: --url-base takes a plain https:// or file:// URL, not $url_base" >&2
+  exit 1
+fi
 version=$(jq -r .version "$manifest")
 # `field KIND OS ARCH FIELD`: one field of the one file that matches, or fail
 field() {
@@ -60,8 +73,11 @@ done
 # the cask spells one URL for both arches; the release has to be named that way
 cask_base=${url_base:-"$RELEASE_REPO_URL/releases/download/v#{version}"}
 for arch in arm64 x86_64; do
-  [ "$(field app macos "$arch" name)" = "Leon-$version-macos-$arch.zip" ] \
-    || { echo "release-homebrew.sh: the app for $arch is not named Leon-$version-macos-$arch.zip" >&2; exit 1; }
+  name="Leon-$version-macos-$arch.zip"
+  [ "$(field app macos "$arch" name)" = "$name" ] \
+    || { echo "release-homebrew.sh: the app for $arch is not named $name" >&2; exit 1; }
+  [ -n "$url_base" ] || [ "$(field app macos "$arch" url)" = "$RELEASE_REPO_URL/releases/download/v$version/$name" ] \
+    || { echo "release-homebrew.sh: the manifest's URL for $name is not the one the cask would download" >&2; exit 1; }
 done
 
 mkdir -p "$tap/Casks" "$tap/Formula"

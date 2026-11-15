@@ -24,24 +24,25 @@ fn a_changed_byte_fails_verification() {
     let zip = format!("Leon-{VERSION}-macos-arm64.zip");
     let deb = format!("leon_{VERSION}_amd64.deb");
     let tarball = format!("leon-{VERSION}-aarch64-linux.tar.gz");
-    type Change = Box<dyn Fn(&Path)>;
+    let other = format!("leon-{VERSION}-x86_64-linux.tar.gz");
+    type Change<'a> = Box<dyn Fn(&Path) + 'a>;
+    // (what was done, the name the error has to mention, how)
     let changes: Vec<(&str, &str, Change)> = vec![
-        ("a byte of the app zip", &zip, Box::new(|d| flip(&d.join(format!("Leon-{VERSION}-macos-arm64.zip"))))),
-        ("a byte of a .deb", &deb, Box::new(|d| flip(&d.join(format!("leon_{VERSION}_amd64.deb"))))),
+        ("a byte of the app zip", &zip, Box::new(|d| flip(&d.join(&zip)))),
+        ("a byte of a .deb", &deb, Box::new(|d| flip(&d.join(&deb)))),
         ("a byte of the manifest", "latest.json", Box::new(|d| flip(&d.join("latest.json")))),
         ("a byte of SHA256SUMS", "SHA256SUMS", Box::new(|d| flip(&d.join("SHA256SUMS")))),
         (
             "another file's signature",
             &tarball,
             Box::new(|d| {
-                let from = d.join(format!("leon-{VERSION}-x86_64-linux.tar.gz.minisig"));
-                std::fs::copy(from, d.join(format!("leon-{VERSION}-aarch64-linux.tar.gz.minisig"))).unwrap();
+                std::fs::copy(d.join(format!("{other}.minisig")), d.join(format!("{tarball}.minisig"))).unwrap();
             }),
         ),
         (
             "a signature removed",
             &tarball,
-            Box::new(|d| std::fs::remove_file(d.join(format!("leon-{VERSION}-aarch64-linux.tar.gz.minisig"))).unwrap()),
+            Box::new(|d| std::fs::remove_file(d.join(format!("{tarball}.minisig"))).unwrap()),
         ),
         ("a file nobody signed", "extra.bin", Box::new(|d| std::fs::write(d.join("extra.bin"), "x").unwrap())),
     ];
@@ -52,6 +53,24 @@ fn a_changed_byte_fails_verification() {
         let o = verify(&dir, &key.keys_file, &["--complete"]);
         assert!(!o.status.success(), "{what}: release-verify.sh still passed: {}", text(&o));
         assert!(text(&o).contains(names), "{what}: the error names {names}: {}", text(&o));
+    }
+}
+
+/// "Any other file in DIR is an error", whatever it is called: a name grep would read as an option,
+/// a name with a newline in it, a signature of nothing, a hidden file. (Found in review.)
+#[test]
+fn a_file_the_manifest_does_not_list_fails_whatever_its_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let good = tmp.path().join("good");
+    let key = signed_release(&good, tmp.path());
+    let zip = format!("Leon-{VERSION}-macos-arm64.zip");
+    let names = [format!("-e{zip}"), format!("evil\n{zip}"), "payload.minisig".to_string(), ".hidden".to_string()];
+    for (i, name) in names.iter().enumerate() {
+        let dir = tmp.path().join(format!("case{i}"));
+        copy_dir(&good, &dir);
+        std::fs::write(dir.join(name), "unsigned").unwrap();
+        let o = verify(&dir, &key.keys_file, &["--complete"]);
+        assert!(!o.status.success(), "an unsigned extra file passed: {name:?}: {}", text(&o));
     }
 }
 
@@ -73,6 +92,12 @@ fn a_key_that_is_not_pinned_fails_verification() {
     // no --keys: leon's pinned keys (crates/leon/release-keys.pub), which a test key is never in
     let o = release_kit::script("release-verify.sh", &["--complete", dir.to_str().unwrap()], &[]);
     assert!(!o.status.success(), "a test key passed against leon's pinned keys: {}", text(&o));
+
+    // a hand-edited keys file whose last line has no newline still pins that key (found in review)
+    let unterminated = tmp.path().join("unterminated.pub");
+    std::fs::write(&unterminated, format!("# a key\n{}", signer.public)).unwrap();
+    let o = verify(&dir, &unterminated, &["--complete"]);
+    assert!(o.status.success(), "the last line is a key too: {}", text(&o));
 
     let none = tmp.path().join("none.pub");
     std::fs::write(&none, "# no key yet\n").unwrap();

@@ -45,8 +45,8 @@ brew install aindong/leon/leon          # the CLI alone, on macOS or Linux
 ```
 
 Pick one: the cask's `leon` is the one inside the app. `brew upgrade` brings new releases.
-Leon.app is signed ad hoc and not notarized, so after the cask installs, and before you open the
-app, remove the quarantine flag that Homebrew puts on a download:
+Leon.app is not notarized by Apple, so macOS will not open it while it carries the quarantine flag
+that Homebrew puts on a download. After the cask installs, and before you open the app, remove it:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Leon.app
@@ -57,9 +57,16 @@ xattr -dr com.apple.quarantine /Applications/Leon.app
 Each release is at <https://github.com/aindong/leon-cli/releases/latest>: `Leon-<version>-macos-<arch>.zip`
 (Leon.app), a tarball of the CLI for macOS and for Linux, and a `.deb`, each for arm64 and x86_64.
 On macOS, unzip the app into `/Applications` and run the `xattr` command above (a file from a
-browser is quarantined too). On Debian or Ubuntu, `dpkg -i leon_*.deb` as root; anywhere else,
-unpack the tarball and put its `leon` on your `PATH`. Every file is signed:
-[docs/releases.md](docs/releases.md#checking-a-download) says how to check one.
+browser is quarantined too). On Linux, with the file for your machine downloaded:
+
+```sh
+dpkg -i leon_*.deb                               # Debian or Ubuntu, as root
+tar xzf leon-*-linux.tar.gz -C ~/.local          # anywhere else: unpack it,
+ln -s ~/.local/leon-*-linux/leon ~/.local/bin/   # and put its leon on your PATH
+```
+
+Every file is signed: [docs/releases.md](docs/releases.md#checking-a-download) says how to check
+one.
 
 ### From source
 

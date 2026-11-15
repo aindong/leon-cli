@@ -71,10 +71,32 @@ fn a_hand_started_run_stays_a_draft_and_only_one_job_can_write() {
     let tap = yml.split("\n  homebrew:\n").nth(1).expect("a homebrew job");
     assert!(tap.contains(&format!("    {tag_push} && ")), "only a tag push touches the tap: {tap}");
 
+    // a release or draft left from an earlier run stops this one before anything is signed
+    let exists = step(&steps, "exists already");
+    assert!(exists.contains("gh release view \"$TAG\"") && exists.contains("exit 1"), "{exists}");
+    assert!(yml.find("exists already").unwrap() < yml.find("scripts/release-manifest.sh").unwrap());
+    // the write token is given to the steps that call gh, not to the whole job
+    let with_token: Vec<&String> = steps.iter().filter(|s| s.contains("GH_TOKEN")).collect();
+    assert_eq!(with_token.len(), 3, "three steps talk to GitHub: view, create, edit");
+    assert!(with_token.iter().all(|s| s.contains("gh release ") && s.starts_with("      - ")), "{with_token:#?}");
+    // the manifest holds every signature: a hand-started run must not leave it as a public artifact
+    let manifest = step(&steps, "name: manifest\n");
+    assert!(manifest.contains("uses: actions/upload-artifact") && manifest.contains(tag_push), "{manifest}");
+    let uploads = yml.matches("uses: actions/upload-artifact").count();
+    assert_eq!(yml.matches("retention-days: 1").count(), uploads, "run artifacts are kept one day");
+
+    // releases are cut from main only: a tag's commit has to be on main, which needs the history;
+    // a run by hand has no tag and is not checked (it only makes a draft)
+    let version = yml.split("\n  version:\n").nth(1).unwrap().split("\n  macos:\n").next().unwrap();
+    assert!(version.contains("fetch-depth: 0"), "the version job fetches the history: {version}");
+    assert!(version.contains("scripts/release-version.sh ${TAG:+--on-main \"$TAG\"}"), "{version}");
+
     assert!(yml.contains("\npermissions:\n  contents: read\n"), "the default token only reads");
     assert_eq!(yml.matches("contents: write").count(), 1, "one job may write releases");
     assert_eq!(yml.matches("secrets.LEON_RELEASE_KEY").count(), 1, "the signing key reaches one step");
-    assert!(step(&steps, "secrets.LEON_RELEASE_KEY").contains("scripts/release-manifest.sh"));
+    let sign = step(&steps, "secrets.LEON_RELEASE_KEY");
+    assert!(sign.contains("scripts/release-manifest.sh"));
+    assert!(sign.contains("LEON_GIT_HASH: ${{ github.sha }}"), "the manifest is told the run's commit: {sign}");
     for uses in yml.lines().filter_map(|l| l.trim().trim_start_matches("- ").strip_prefix("uses: ")) {
         let pin = uses.split('@').nth(1).unwrap_or("").split(' ').next().unwrap();
         assert!(pin.len() == 40 && pin.bytes().all(|b| b.is_ascii_hexdigit()), "pinned by commit: {uses}");

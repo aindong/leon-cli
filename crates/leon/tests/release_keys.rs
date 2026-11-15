@@ -39,13 +39,15 @@ impl Kit {
         self.tmp.path().join(name)
     }
 
+    /// `release-keys.sh --keys <this kit's pinned.pub> ARGS`.
     fn keys(&self, args: &[&str]) -> Output {
+        self.keys_at(&self.path("pinned.pub"), args)
+    }
+
+    fn keys_at(&self, keys_file: &Path, args: &[&str]) -> Output {
         let path = format!("{}:{}", self.path("bin").display(), std::env::var("PATH").unwrap());
-        let mut all = vec!["--keys", "pinned.pub"];
+        let mut all = vec!["--keys", keys_file.to_str().unwrap()];
         all.extend(args);
-        let pinned = self.path("pinned.pub");
-        let all: Vec<&str> =
-            all.iter().map(|a| if *a == "pinned.pub" { pinned.to_str().unwrap() } else { a }).collect();
         let (gh, tmp) = (self.path("gh"), self.path("tmp"));
         script(
             "release-keys.sh",
@@ -89,6 +91,18 @@ fn the_secret_goes_to_gh_only_and_the_public_key_is_pinned() {
     assert!(left.is_empty(), "the key files are gone from TMPDIR: {left:?}");
     let head = std::fs::read_to_string(kit.path("pinned.pub")).unwrap();
     assert!(head.starts_with("# the keys leon trusts\n"), "the file's own lines are kept: {head}");
+    assert!(head.contains("\n# LEON_RELEASE_KEY, added 20"), "the key's line says which secret it is: {head}");
+}
+
+/// The secret is not set unless its public key can be pinned: a secret whose public half exists
+/// nowhere is a key nobody can check, and the script would then refuse to replace it. (Found in review.)
+#[test]
+fn a_key_that_cannot_be_pinned_is_not_stored_as_the_secret() {
+    let kit = Kit::new();
+    let o = kit.keys_at(&kit.path("no-such-dir/pinned.pub"), &[]);
+    assert!(!o.status.success() && text(&o).contains("no-such-dir/pinned.pub"), "{}", text(&o));
+    assert!(!kit.path("gh/LEON_RELEASE_KEY").exists(), "the secret was set with no public key pinned: {}", text(&o));
+    assert_eq!(std::fs::read_dir(kit.path("tmp")).unwrap().count(), 0, "and no key was made");
 }
 
 #[test]

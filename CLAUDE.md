@@ -17,9 +17,10 @@ A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first (its decis
 - Docs are tested: a new or changed command/flag needs `docs/cli.md`, a new app shortcut needs the
   README table, and `sh`/`lua` blocks in the docs must run. Packaging: `scripts/bundle.sh`, `scripts/install.sh`;
   a release: `scripts/release.sh` (every package from a clean clone, with `scripts/notices.sh`'s
-  license notices, which need the crates fetched: build first). A tag `vX.Y.Z` publishes one
-  (`docs/releases.md`); `latest.json`'s fields are a contract, and the release tests need
-  `minisign` and `jq`.
+  license notices, which need the crates fetched: build first). Work lands on `dev`; a
+  release is a PR from `dev` to `main`, then a tag `vX.Y.Z` on `main`, which publishes it
+  (`docs/releases.md`); after changing a release script, run `scripts/release-dry-run.sh`.
+  `latest.json`'s fields are a contract, and the release tests need `minisign` and `jq`.
 - Terminal tests run a real shell in a PTY; wait for screen text with a timeout, never fixed sleeps.
 - Tests that start a server set both `LEON_RUNTIME_DIR` and `LEON_STATE_DIR` to temp dirs (use
   `tests/support::Env`), or they restore and overwrite the real `~/.local/state/leon` sessions.

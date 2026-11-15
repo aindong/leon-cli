@@ -2,10 +2,12 @@
 # release-dry-run.sh: build a release on this Mac and prove it signs and verifies, with a key that
 # is made for the run and thrown away. Nothing is tagged, pushed or uploaded.
 #
-#   scripts/release-dry-run.sh [--out DIR] [release.sh arguments, e.g. --linux none]
+#   scripts/release-dry-run.sh [--out DIR] [--linux ARCHES]
 #
-# --out DIR  where the files go [default: target/release-files/dry-run]
+# --out DIR       where the files go [default: target/release-files/dry-run]
+# --linux ARCHES  as scripts/release.sh takes it: arm64, amd64, arm64,amd64 or none
 #
+# Needs minisign and jq, and Docker unless --linux none.
 # Runs scripts/release.sh, signs with scripts/release-manifest.sh, checks with
 # scripts/release-verify.sh, then changes one byte of a release file and of the manifest and
 # expects the check to fail each time. Exits 0 only if all of that held. The files stay in DIR,
@@ -13,15 +15,18 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
+. "$repo/scripts/release-files.sh"
 out="$repo/target/release-files/dry-run"
 args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) out=${2:?--out needs a directory}; shift 2 ;;
-    -h|--help) sed -n '2,12s/^# \{0,1\}//p' "$0"; exit 0 ;;
-    *) args+=("$1"); shift ;;
+    -h|--help) sed -n '2,15s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    --linux) args+=("$1" "${2:?--linux needs arm64, amd64, arm64,amd64 or none}"); shift 2 ;;
+    *) echo "release-dry-run.sh: unknown argument: $1 (try --help)" >&2; exit 2 ;;
   esac
 done
+need minisign jq # before a build that takes minutes
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
