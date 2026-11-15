@@ -314,6 +314,8 @@ impl Workspace {
         let woke = wake.clone();
         app.on_change(move || woke());
         crate::notify::on_click(wake.clone());
+        let mut term = scroll::TermUi::default();
+        term.wake = Some(wake.clone());
         let hosts = Hosts::new(app.clone(), hosts, wake);
         let poll = cx.spawn(async move |this, cx| loop {
             let timer = cx.background_executor().timer(POLL);
@@ -324,11 +326,15 @@ impl Workspace {
                     return;
                 }
                 ws.poll_hosts();
+                let replied = ws.poll_terms();
+                if let Some(text) = ws.term.clip.take() {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                }
                 ws.poll_attention(cx);
                 ws.stats.borrow_mut().report();
                 ws.refresh_keymap(cx);
                 let now = ws.signature();
-                if now != ws.seen || ws.sliding() {
+                if now != ws.seen || ws.sliding() || replied {
                     ws.seen = now;
                     cx.notify();
                 }
@@ -385,7 +391,7 @@ impl Workspace {
             font_size: FONT_SIZE,
             epoch: Instant::now(),
             seen_focus: None,
-            term: scroll::TermUi::default(),
+            term,
             floats: Default::default(),
             _poll: poll,
             _activation: activation,

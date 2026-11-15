@@ -2,13 +2,20 @@
 //! reports to a program that asked for the mouse (shift selects anyway), cmd+hover and cmd+click
 //! on links; copy and select-all.
 
+use std::collections::HashMap;
+
 use gpui::{ClipboardItem, Modifiers, MouseDownEvent};
 use leon_core::mouse::Button;
+use leon_core::program_status::strip_hidden;
+use leon_core::screen::{Lines, Span};
 use leon_core::search::{needs_confirm, Kind, Link, Pos, Range, Selected};
 
 use super::scroll::{mods, Sel};
 use super::*;
 use crate::scrollback;
+
+/// How many times a copy over a link asks the host for rows it doesn't hold (each reply is capped).
+const COPY_FETCHES: u32 = 64;
 
 fn button(b: MouseButton) -> Option<Button> {
     match b {
@@ -42,8 +49,21 @@ impl Workspace {
 
     pub(super) fn mouse_down(&mut self, id: &str, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         if ev.modifiers.platform && ev.button == MouseButton::Left {
-            if let Some(link) = self.link_at(id, ev.position) {
-                self.open_link(link.uri, window, cx);
+            // the link cmd+hover found here; on This Mac, asked now if it hasn't (over a link the
+            // hover's reply may still be on its way, and nothing waits for one)
+            let pos = self.pos_at(id, ev.position);
+            let hovered = self
+                .term
+                .hovered
+                .clone()
+                .filter(|(b, l)| b == id && pos.is_some_and(|p| (l.start..=l.end).contains(&p)));
+            let link =
+                hovered.map(|(_, l)| l).or_else(|| self.link_at(id, ev.position).filter(|_| !self.app.is_link()));
+            if let Some(link) = link {
+                // a host's uri opens without asking only when it is the text drawn there
+                let checked =
+                    !self.app.is_link() || self.drawn_over(id, link.start, link.end).as_ref() == Some(&link.uri);
+                self.open_link(link.uri, checked, window, cx);
             }
             return;
         }
@@ -104,8 +124,13 @@ impl Workspace {
 
     pub(super) fn mouse_up(&mut self, id: &str, ev: &MouseUpEvent, cx: &mut Context<Self>) {
         let pv = self.term.panes.entry(id.to_string()).or_default();
-        if let Some(b) = pv.reporting.take() {
-            self.report(id, "release", Some(b), ev.position, &ev.modifiers);
+        if let Some(held) = pv.reporting {
+            // the button that came up; the tracked one stays held while another is let go
+            let up = button(ev.button);
+            if up == Some(held) {
+                pv.reporting = None;
+            }
+            self.report(id, "release", up, ev.position, &ev.modifiers);
             return;
         }
         let Some(s) = pv.selection.as_mut().filter(|s| s.dragging) else { return };
@@ -120,31 +145,96 @@ impl Workspace {
     /// Ask the server what the selection covers now. A simple one covers nothing until the drag
     /// leaves the cell it started on.
     fn update_selection(&mut self, id: &str) {
-        let Some(s) = self.term.panes.get(id).and_then(|p| p.selection.as_ref()) else { return };
-        let range = if s.kind == Kind::Simple && s.anchor == s.head {
-            None
-        } else {
-            self.selected(id, s, false).map(|g| Range { start: g.start, end: g.end })
-        };
-        if let Some(s) = self.term.panes.get_mut(id).and_then(|p| p.selection.as_mut()) {
-            s.range = range;
+        let Some(s) = self.term.panes.get_mut(id).and_then(|p| p.selection.as_mut()) else { return };
+        if s.kind == Kind::Simple && s.anchor == s.head {
+            s.range = None;
+            return;
         }
+        self.ask_range(id);
     }
 
-    /// What the server makes of selection `s` on pane `id`, with its text if asked.
-    pub(super) fn selected(&self, id: &str, s: &Sel, text: bool) -> Option<Selected> {
-        let args = json!({ "kind": s.kind, "anchor": s.anchor, "head": s.head, "text": text });
-        serde_json::from_value(self.term_call(id, "selection", args).ok()?).ok()
+    /// Have the server's range for pane `id`'s selection put on it (over a link on a later poll,
+    /// and only while the selection is still the one asked about).
+    pub(super) fn ask_range(&mut self, id: &str) {
+        let Some(s) = self.term.panes.get(id).and_then(|p| p.selection.as_ref()) else { return };
+        let asked = (s.kind, s.anchor, s.head);
+        let args = json!({ "kind": s.kind, "anchor": s.anchor, "head": s.head, "text": false });
+        let block = id.to_string();
+        self.term_call_latest(&format!("selection {id}"), id, "selection", args, move |ws, got| {
+            let got = got.ok().and_then(|v| serde_json::from_value::<Selected>(v).ok());
+            let still = |s: &&mut Sel| (s.kind, s.anchor, s.head) == asked;
+            if let Some(s) = ws.term.panes.get_mut(&block).and_then(|p| p.selection.as_mut()).filter(still) {
+                s.range = got.map(|g| Range { start: g.start, end: g.end });
+            }
+        });
     }
 
-    /// Copy pane `id`'s selection to the clipboard.
-    pub(super) fn copy(&self, id: &str, cx: &mut Context<Self>) {
+    /// Copy pane `id`'s selection to the clipboard: the server's text on This Mac (it knows which
+    /// lines wrapped); over a link the text of the cells the app draws, never the host's reply.
+    pub(super) fn copy(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some(s) = self.term.panes.get(id).and_then(|p| p.selection.as_ref()).filter(|s| s.range.is_some()) else {
             return;
         };
-        if let Some(text) = self.selected(id, s, true).and_then(|g| g.text) {
+        if let (true, Some(r)) = (self.app.is_link(), s.range) {
+            self.copy_drawn(id, r, s.kind == Kind::Block, HashMap::new(), COPY_FETCHES);
+        } else {
+            let args = json!({ "kind": s.kind, "anchor": s.anchor, "head": s.head, "text": true });
+            let got = self.term_call(id, "selection", args).ok();
+            self.term.clip = got.and_then(|v| serde_json::from_value::<Selected>(v).ok()).and_then(|g| g.text);
+        }
+        if let Some(text) = self.term.clip.take() {
             cx.write_to_clipboard(ClipboardItem::new_string(text));
         }
+    }
+
+    /// Over a link: the text of range `r`'s cells (`block`: the same columns on each line), from
+    /// the screen, the history cache and `got`, onto `term.clip`. Rows not held yet are fetched
+    /// from the host (up to `tries` more times), and this runs again with them once they come.
+    fn copy_drawn(&mut self, id: &str, r: Range, block: bool, mut got: HashMap<usize, Vec<Span>>, tries: u32) {
+        let live = self.live(id);
+        let mut lines = Vec::new();
+        for line in r.start.line..=r.end.line {
+            let spans = match line.checked_sub(live.view.scrolled) {
+                Some(l) => live.rows.get(l).cloned().unwrap_or_default(),
+                None => match got.remove(&line).or_else(|| self.cached_row(id, line).map(|r| r.spans.clone())) {
+                    Some(spans) => spans,
+                    None if tries == 0 => return eprintln!("leon: not copied: the host didn't send the rows"),
+                    None => {
+                        let block_id = id.to_string();
+                        let args = json!({ "from": line, "count": r.end.line + 1 - line });
+                        return self.term_call_then(id, "lines", args, move |ws, reply| {
+                            let rows = reply.ok().and_then(|v| serde_json::from_value::<Lines>(v).ok());
+                            let rows = rows.map(|l| l.rows).unwrap_or_default();
+                            // rows already held, and only rows in the history
+                            got.extend(
+                                rows.into_iter().filter(|row| row.line >= line).map(|row| (row.line, row.spans)),
+                            );
+                            ws.copy_drawn(&block_id, r, block, got, tries - 1);
+                        });
+                    }
+                },
+            };
+            if let Some((from, to)) = scrollback::covered(r.start, r.end, block, line, live.cols) {
+                lines.push(scrollback::text_of(&spans, live.cols, from, to));
+            }
+        }
+        self.term.clip = Some(lines.join("\n"));
+    }
+
+    /// The text drawn over `start..=end` of pane `id` (a link wrapped over rows is joined); None
+    /// when a row of it isn't held.
+    fn drawn_over(&self, id: &str, start: Pos, end: Pos) -> Option<String> {
+        let live = self.live(id);
+        let mut text = String::new();
+        for line in start.line..=end.line {
+            let row = match line.checked_sub(live.view.scrolled) {
+                Some(l) => live.rows.get(l)?.clone(),
+                None => self.cached_row(id, line)?.spans.clone(),
+            };
+            let (from, to) = scrollback::covered(start, end, false, line, live.cols)?;
+            text.push_str(&scrollback::text_of(&row, live.cols, from, to));
+        }
+        Some(text)
     }
 
     /// Select everything pane `id` keeps: the scrollback and the screen.
@@ -159,6 +249,7 @@ impl Workspace {
         cx.notify();
     }
 
+    /// The link at `at` on pane `id`, asked of This Mac's server and waited for.
     fn link_at(&self, id: &str, at: gpui::Point<Pixels>) -> Option<Link> {
         let pos = self.pos_at(id, at)?;
         let got = self.term_call(id, "link_at", json!(pos)).ok()?;
@@ -166,15 +257,25 @@ impl Workspace {
     }
 
     /// With cmd held the link under the mouse is underlined; asked again only when the mouse
-    /// leaves the link it is on.
+    /// leaves the link it is on (over a link the answer comes on a later poll, for where the
+    /// mouse was then).
     pub(super) fn hover(&mut self, id: &str, at: gpui::Point<Pixels>, cmd: bool, cx: &mut Context<Self>) {
         let pos = self.pos_at(id, at);
         let on = |(b, l): &(String, Link)| b == id && pos.is_some_and(|p| (l.start..=l.end).contains(&p));
-        let now = match (cmd, &self.term.hovered) {
-            (false, _) => None,
-            (true, Some(h)) if on(h) => return,
-            (true, _) => self.link_at(id, at).map(|l| (id.to_string(), l)),
+        let pos = match (cmd, &self.term.hovered, pos) {
+            (true, Some(h), _) if on(h) => return,
+            (true, _, Some(pos)) => pos,
+            _ => return self.set_hovered(None, cx),
         };
+        let block = id.to_string();
+        self.term_call_latest("link_at", id, "link_at", json!(pos), move |ws, got| {
+            let link = got.ok().and_then(|v| serde_json::from_value::<Option<Link>>(v).ok()).flatten();
+            ws.term.hovered = link.map(|l| (block, l));
+        });
+        cx.notify();
+    }
+
+    fn set_hovered(&mut self, now: Option<(String, Link)>, cx: &mut Context<Self>) {
         if now.as_ref().map(|(_, l)| &l.uri) != self.term.hovered.as_ref().map(|(_, l)| &l.uri) {
             self.term.hovered = now;
             cx.notify();
@@ -197,20 +298,21 @@ impl Workspace {
         }
     }
 
-    /// Open `uri` with the system handler: a web link at once, anything else after showing it.
-    fn open_link(&mut self, uri: String, window: &mut Window, cx: &mut Context<Self>) {
+    /// Open `uri` with the system handler: a web link that was `checked` at once, anything else
+    /// after showing it.
+    fn open_link(&mut self, uri: String, checked: bool, window: &mut Window, cx: &mut Context<Self>) {
         let open = self.term.opener.clone();
         let go = move |uri: &str, cx: &mut App| match &open {
             Some(f) => f(uri),
             None => cx.open_url(uri),
         };
-        if !needs_confirm(&uri) {
+        if checked && !needs_confirm(&uri) {
             go(&uri, cx);
             return;
         }
         let buttons = [PromptButton::Ok("Open".into()), PromptButton::Cancel("Cancel".into())];
-        let plain = leon_core::search::decoded(&uri);
-        let detail = if plain == uri { uri.clone() } else { format!("{uri}\n\nwhich opens {plain}") };
+        let (shown, plain) = (strip_hidden(&uri), strip_hidden(&leon_core::search::decoded(&uri)));
+        let detail = if plain == shown { shown } else { format!("{shown}\n\nwhich opens {plain}") };
         let answer = window.prompt(PromptLevel::Info, "Open this link?", Some(&detail), &buttons, cx);
         cx.spawn(async move |_, cx| {
             if answer.await == Ok(0) {

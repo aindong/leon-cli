@@ -133,9 +133,7 @@ impl Tui {
             return self.say(format!("not pasting {} bytes: at most {MAX_PASTE} go in one paste", text.len()));
         }
         let event = json!({ "session_id": t.sid, "block_id": t.block, "event": { "type": "paste", "data": text } });
-        if let Err(e) = self.remote.call("block.event", event) {
-            self.say(e.message);
-        }
+        self.remote.send_then("block.event", event, self.noted());
     }
 
     /// A config binding: an action with a dot is ours, one without is the config's (run on the
@@ -234,20 +232,27 @@ impl Tui {
                 let toward = &name["pane.focus.".len()..];
                 self.act("session.focus_direction", json!({ "session_id": sid, "direction": toward }));
             }
-            "pane.float" => drop(self.act("session.float_block", json!({ "session_id": sid, "block_id": t.block }))),
-            "pane.zoom" => drop(self.act("session.zoom_block", json!({ "session_id": sid, "block_id": t.block }))),
-            "pane.close" => drop(self.act("block.close", json!({ "session_id": sid, "block_id": t.block }))),
+            "pane.float" => self.act("session.float_block", json!({ "session_id": sid, "block_id": t.block })),
+            "pane.zoom" => self.act("session.zoom_block", json!({ "session_id": sid, "block_id": t.block })),
+            "pane.close" => self.act("block.close", json!({ "session_id": sid, "block_id": t.block })),
             other => self.say(format!("leon attach has no action {other}")),
         }
         Flow::Go
     }
 
-    /// A layout for a shell in the target pane's working directory (or the default, `$HOME`).
+    /// A layout for a shell in the target pane's working directory (or the default, `$HOME`). Over
+    /// a link the model's cwd, as the app's `here` does: no wait on the link, and the path is the
+    /// host's, so it can't be checked here.
     fn here(&self, t: &Target) -> Value {
-        let p = json!({ "session_id": t.sid, "block_id": t.block, "method": "dev.leon.terminal.pwd" });
-        let pwd =
-            self.remote.call("block.method", p).ok().and_then(|r| r["path"].as_str().map(std::path::PathBuf::from));
-        match pwd.filter(|d| d.is_dir()).as_deref().and_then(|d| d.to_str()) {
+        let cwd = match self.remote.is_link() {
+            true => self.remote.model().block(&t.block).and_then(|(_, b)| b.cwd.clone()),
+            false => {
+                let p = json!({ "session_id": t.sid, "block_id": t.block, "method": "dev.leon.terminal.pwd" });
+                let pwd = self.remote.call("block.method", p).ok();
+                pwd.and_then(|r| r["path"].as_str().map(String::from)).filter(|d| std::path::Path::new(d).is_dir())
+            }
+        };
+        match cwd {
             Some(d) => json!({ "block": { "options": { "cwd": d } } }),
             None => json!({ "block": {} }),
         }
