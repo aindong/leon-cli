@@ -5,7 +5,6 @@
 mod release_kit;
 mod update_kit;
 
-use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
@@ -203,6 +202,7 @@ fn a_good_archive_keeps_the_executable_bit_and_links_that_stay_inside() {
 #[cfg(target_os = "macos")]
 #[test]
 fn a_zip_with_a_bad_entry_is_refused() {
+    use std::io::Write;
     use zip::write::SimpleFileOptions;
     type Zip = zip::ZipWriter<std::io::Cursor<Vec<u8>>>;
     let exe = SimpleFileOptions::default().unix_permissions(0o755);
