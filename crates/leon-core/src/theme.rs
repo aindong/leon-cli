@@ -65,8 +65,9 @@ pub const DARK: Theme = Theme {
     link: 0xE6AA91,
 };
 
-/// leon's light theme: Iron text on Parchment, Sand chrome, Oxide for focus and links, and the
-/// status colours deepened until they read at 4.5:1 on Parchment and Sand.
+/// leon's light theme: Iron text on Parchment, Sand chrome, Oxide for the cursor and links (a
+/// deeper Oxide for focus and accent text, to read at 4.5:1 on Sand and its hover), and the status
+/// colours deepened until they read at 4.5:1 on Parchment and Sand.
 pub const LIGHT: Theme = Theme {
     fg: 0x292521,
     bg: 0xF5F0E7,
@@ -81,7 +82,7 @@ pub const LIGHT: Theme = Theme {
     text: 0x292521,
     title: 0x1F1C19,
     muted: 0x65594F,
-    accent: 0xB64C32,
+    accent: 0x97432E,
     selected: 0xE5DCD5,
     brand: 0xB64C32,
     working: 0x9C4019,
