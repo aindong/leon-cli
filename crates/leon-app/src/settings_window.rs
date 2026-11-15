@@ -253,13 +253,20 @@ impl Render for SettingsWindow {
                 .child(self.font_section(&t, cx))
                 .child(self.toggles_section(&t, cx));
         }
-        let footer = match (&self.error, self.saving) {
-            (_, true) => div().text_color(rgb(t.muted)).child("Saving…"),
-            (Some(e), _) => div().text_color(rgb(t.error)).child(e.clone()),
+        let (text, color) = match (&self.error, self.saving) {
+            (_, true) => ("Saving…".to_string(), t.muted),
+            (Some(e), _) => (e.clone(), t.error),
             (None, _) => {
-                div().text_color(rgb(t.muted)).child(format!("Every change is written to {}", shown(&self.config)))
+                let home = std::env::var_os("HOME").map(PathBuf::from);
+                (format!("Every change is written to {}", home_relative(&self.config, home.as_deref())), t.muted)
             }
         };
+        let full: SharedString = self.config.display().to_string().into();
+        let footer = div()
+            .id("settings-footer")
+            .text_color(rgb(color))
+            .child(text)
+            .tooltip(move |_, cx| cx.new(|_| crate::view::Tip(full.clone(), t)).into());
         div()
             .id("settings")
             .track_focus(&self.focus)
@@ -297,10 +304,11 @@ impl Render for SettingsWindow {
     }
 }
 
-/// `path` with the home folder as `~`.
-fn shown(path: &Path) -> String {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    match home.as_deref().and_then(|h| path.strip_prefix(h).ok()) {
+/// `path` with the `home` folder as `~`, so the window (and every screenshot of it) doesn't show
+/// the login name; the full path is the footer's tooltip.
+pub fn home_relative(path: &Path, home: Option<&Path>) -> String {
+    match home.and_then(|h| path.strip_prefix(h).ok()) {
+        Some(rest) if rest.as_os_str().is_empty() => "~".into(),
         Some(rest) => format!("~/{}", rest.display()),
         None => path.display().to_string(),
     }
