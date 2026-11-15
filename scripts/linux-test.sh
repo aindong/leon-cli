@@ -30,7 +30,7 @@ fi
 grep -rn --include='*.rs' '// macOS only: ' crates/*/src crates/*/tests crates/*/benches |
     sed 's|:[0-9]*:[[:space:]]*// macOS only: |: |; s/^/skipped on Linux: /' || true
 
-PACKAGES="zsh lsof" # zle's paths, and m16a_link_private's check for TCP sockets
+PACKAGES="zsh lsof minisign jq" # zle's paths, m16a_link_private's check for TCP sockets, the release tests
 in_image bash -c '
     set -euo pipefail
     cargo clippy --locked --workspace --exclude leon-app --all-targets -- -D warnings

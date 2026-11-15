@@ -1,0 +1,165 @@
+# A tag vX.Y.Z builds every release file, signs it, publishes a GitHub Release and updates the
+# Homebrew tap. Started by hand it stops at a draft release, for testing. docs/releases.md tells
+# the whole story. Actions are pinned by commit, with their tag beside them.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # A tag must name the version in Cargo.toml; a run by hand takes the version as it is.
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: version
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          version=$(scripts/release-version.sh ${TAG:+"$TAG"})
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  # Leon.app and the CLI tarball, on Apple Silicon and on Intel.
+  macos:
+    needs: version
+    strategy:
+      matrix:
+        runner: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    env:
+      HAS_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-11
+        with:
+          toolchain: "1.100.0"
+      - run: scripts/release.sh --linux none --out dist
+      - name: Developer ID signing (skipped without the secret)
+        if: env.HAS_DEVELOPER_ID != 'true'
+        run: echo "::notice::APPLE_DEVELOPER_ID is not set, so Leon.app is signed ad hoc and not notarized (docs/releases.md#developer-id)"
+      - name: Developer ID signing (not built yet)
+        if: env.HAS_DEVELOPER_ID == 'true'
+        run: |
+          echo "::error::APPLE_DEVELOPER_ID is set, but Developer ID signing is not built yet (docs/releases.md#developer-id)"
+          exit 1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: files-${{ matrix.runner }}
+          path: |
+            dist/Leon-*.zip
+            dist/leon-*.tar.gz
+          if-no-files-found: error
+
+  # The tarball and the .deb, on x86_64 and arm64.
+  linux:
+    needs: version
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/package-linux.sh
+      - run: mkdir dist && cp target/linux/*/leon-*-linux.tar.gz target/linux/*/leon_*.deb dist/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: files-${{ matrix.runner }}
+          path: dist/*
+          if-no-files-found: error
+
+  # Sign everything, check it against the keys leon pins, then release: always as a draft first,
+  # so releases/latest never points at a release with files still missing.
+  publish:
+    needs: [version, macos, linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.version.outputs.version }}
+      TAG: v${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: files-*
+          path: dist
+          merge-multiple: true
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+      - name: Sign every file and write the manifest
+        env:
+          LEON_RELEASE_KEY: ${{ secrets.LEON_RELEASE_KEY }}
+        run: scripts/release-manifest.sh --complete dist
+      - name: Check the release against the keys leon pins
+        run: scripts/release-verify.sh --complete dist
+      - name: Create the release as a draft
+        run: |
+          scripts/release-notes.sh "$VERSION" > notes.md
+          pre=()
+          case "$VERSION" in *-*) pre=(--prerelease) ;; esac
+          gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "leon $VERSION" --notes-file notes.md "${pre[@]}" dist/*
+      - name: Publish it (a tag push only; a run by hand leaves the draft)
+        if: github.event_name == 'push'
+        run: gh release edit "$TAG" --draft=false
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: manifest
+          path: dist/latest.json
+          if-no-files-found: error
+
+  # The tap's cask and formula follow a published release. A pre-release is not what
+  # `brew upgrade` should bring, and a draft has no download URLs.
+  homebrew:
+    needs: [version, publish]
+    if: github.event_name == 'push' && !contains(needs.version.outputs.version, '-')
+    runs-on: ubuntu-24.04
+    env:
+      HAS_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Homebrew tap (skipped without the secret)
+        if: env.HAS_TAP_TOKEN != 'true'
+        run: echo "::notice::HOMEBREW_TAP_TOKEN is not set, so the Homebrew tap was not updated (docs/releases.md#homebrew)"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.HAS_TAP_TOKEN == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.HAS_TAP_TOKEN == 'true'
+        with:
+          repository: ${{ github.repository_owner }}/homebrew-leon
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: env.HAS_TAP_TOKEN == 'true'
+        with:
+          name: manifest
+          path: dist
+      - name: Update the cask and the formula
+        if: env.HAS_TAP_TOKEN == 'true'
+        run: |
+          scripts/release-homebrew.sh dist tap
+          cd tap
+          git add Casks Formula
+          if git diff --cached --quiet; then
+            echo "the tap already has leon $VERSION"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "leon $VERSION"
+          git push

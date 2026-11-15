@@ -1,0 +1,3 @@
+# The minisign public keys that leon's releases are signed with, one per line. The updater accepts
+# a release file only if its signature verifies against one of them (docs/releases.md).
+# scripts/release-keys.sh adds a line; nothing else should. No key yet: the first release needs one.

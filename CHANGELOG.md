@@ -28,6 +28,21 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### Releases
+
+#### Added
+
+- A release workflow (`.github/workflows/release.yml`): a tag `vX.Y.Z` builds the app for macOS
+  on arm64 and x86_64, the CLI tarballs, and the Linux tarballs and `.deb`s, signs every file with
+  minisign, and publishes a GitHub Release with a manifest (`latest.json`) at a stable address.
+  Started by hand it stops at a draft. [docs/releases.md](docs/releases.md) has the manifest
+  format, the secrets and key rotation.
+- `leon-<version>-<arch>-macos.tar.gz`: the CLI alone for macOS, from `scripts/release.sh`.
+- A Homebrew tap, `aindong/homebrew-leon`, with a cask for Leon.app and a formula for the CLI,
+  rewritten by each release.
+- `scripts/release-dry-run.sh` builds, signs and checks a release locally with a throwaway key;
+  `scripts/release-verify.sh` checks any release's sums, manifest and signatures.
+
 ### Daily-driver polish
 
 #### Added
