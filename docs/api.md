@@ -4729,15 +4729,25 @@ same facts for the server you run.
 
 ### `block.watch`
 
-*experimental*. On a socket connection, receive these blocks' screens as `{"screen":{block_id, full, lines, cols, rows, cursor, app_cursor, bracketed_paste}}` lines: a whole screen first (`full`), then only the rows that changed. No seq: each line is a diff against the last one for that block. Replaces the set watched before; `[]` stops.
+*experimental*. On a socket connection, receive these blocks' screens as `{"screen":{block_id, full, lines, cols, rows, cursor, app_cursor, bracketed_paste}}` lines: a whole screen first (`full`), then only the rows that changed. No seq: each line is a diff against the last one for that block. Replaces the set watched before; `[]` stops. `palette` sets the colours this connection's screens are resolved with (leon-dark's by default); a new one sends every screen again, whole.
 
 **Input:** 
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `block_ids` | [string] | yes | The blocks whose screens this connection gets, replacing the last set; `[]` stops them all. |
+| `palette` | `Palette` \| null |  | The colours to resolve this connection's screens with [default: leon-dark's]. A new palette sends every watched screen again, whole. |
 
 **Output:** none
+
+**`Palette`:** A client's terminal colours, as 0xRRGGBB numbers: the default text and background, the cursor and ANSI 0–15.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `fg` | integer (uint32) | yes |  |
+| `bg` | integer (uint32) | yes |  |
+| `cursor` | integer (uint32) | yes |  |
+| `ansi` | [integer (uint32)] | yes |  |
 
 <details><summary>JSON Schemas</summary>
 
@@ -4754,12 +4764,63 @@ same facts for the server you run.
         "items": {
           "type": "string"
         }
+      },
+      "palette": {
+        "description": "The colours to resolve this connection's screens with [default: leon-dark's]. A new palette\nsends every watched screen again, whole.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Palette"
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     },
     "additionalProperties": false,
     "required": [
       "block_ids"
-    ]
+    ],
+    "$defs": {
+      "Palette": {
+        "description": "A client's terminal colours, as 0xRRGGBB numbers: the default text and background, the cursor\nand ANSI 0–15.",
+        "type": "object",
+        "properties": {
+          "fg": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "bg": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "cursor": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "ansi": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "minItems": 16,
+            "maxItems": 16
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "fg",
+          "bg",
+          "cursor",
+          "ansi"
+        ]
+      }
+    }
   },
   "output_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -6107,6 +6168,7 @@ the method's full name as `method` and its input as `args`. The output is `block
 |---|---|---|---|
 | `from` | integer (uint) | yes | The first line's absolute number (the screen's top row is `scrolled`). |
 | `count` | integer (uint) | yes | How many lines, at most 1000. |
+| `palette` | `Palette` \| null |  | The colours to resolve them with, as `block.watch` takes them [default: leon-dark's]. |
 
 **Output:** 
 
@@ -6115,6 +6177,15 @@ the method's full name as `method` and its input as `args`. The output is `block
 | `scrolled` | integer (uint) | yes |  |
 | `history` | integer (uint) | yes |  |
 | `rows` | [`Row`] | yes |  |
+
+**`Palette`:** A client's terminal colours, as 0xRRGGBB numbers: the default text and background, the cursor and ANSI 0–15.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `fg` | integer (uint32) | yes |  |
+| `bg` | integer (uint32) | yes |  |
+| `cursor` | integer (uint32) | yes |  |
+| `ansi` | [integer (uint32)] | yes |  |
 
 **`Row`:** One row of a screen update: its spans and its backgrounds (without the line).
 
@@ -6165,13 +6236,64 @@ the method's full name as `method` and its input as `args`. The output is `block
         "type": "integer",
         "format": "uint",
         "minimum": 0
+      },
+      "palette": {
+        "description": "The colours to resolve them with, as `block.watch` takes them [default: leon-dark's].",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Palette"
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     },
     "additionalProperties": false,
     "required": [
       "from",
       "count"
-    ]
+    ],
+    "$defs": {
+      "Palette": {
+        "description": "A client's terminal colours, as 0xRRGGBB numbers: the default text and background, the cursor\nand ANSI 0–15.",
+        "type": "object",
+        "properties": {
+          "fg": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "bg": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "cursor": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "ansi": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "minItems": 16,
+            "maxItems": 16
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "fg",
+          "bg",
+          "cursor",
+          "ansi"
+        ]
+      }
+    }
   },
   "output_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
