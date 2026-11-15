@@ -139,9 +139,17 @@ fn serve(conn: UnixStream, s: &Arc<Shared>) {
     }
     let autostart = !s.reached.load(Ordering::SeqCst);
     let mut cmd = s.endpoint.ssh(autostart, s.batch.load(Ordering::SeqCst));
-    // SAFETY: between fork and exec only sigemptyset and sigprocmask, both async-signal-safe.
+    // ssh gets its stdio and no other descriptor of ours. macOS makes a pipe (a socket, an
+    // accepted connection) first and marks it close-on-exec second, so an ssh forked between the
+    // two by another connection's thread kept that connection's pipes for as long as it ran. One
+    // of them is the pipe `spawn` reads until its own ssh has started: that `spawn` never came
+    // back, and its connection was never served.
+    let mut room = vec![[0; 2]; if cfg!(target_os = "macos") { LISTED_FDS } else { 0 }];
+    // SAFETY: between fork and exec only `only_stdio`, sigemptyset and sigprocmask, all
+    // async-signal-safe.
     unsafe {
-        cmd.pre_exec(|| {
+        cmd.pre_exec(move || {
+            only_stdio(&mut room);
             let mut none: libc::sigset_t = std::mem::zeroed();
             libc::sigemptyset(&mut none);
             match libc::sigprocmask(libc::SIG_SETMASK, &none, std::ptr::null_mut()) {
@@ -236,6 +244,47 @@ fn remove_stale(runtime: &Path) {
     }
 }
 
+/// Descriptors `only_stdio`'s list has room for; a process with more takes the slow way.
+const LISTED_FDS: usize = 4096;
+
+/// For a forked child, before exec: mark every descriptor past stderr close-on-exec, so the
+/// program started gets its stdio only. Marked, not closed: `spawn`'s own pipe still has to
+/// report a failed exec. `room` holds the list of descriptors on macOS (a `proc_fdinfo` each),
+/// made before the fork since nothing may allocate after it.
+///
+/// # Safety
+/// Only async-signal-safe calls: proc_pidinfo (one syscall), getpid, fcntl and getdtablesize, or
+/// on Linux the close_range syscall.
+unsafe fn only_stdio(room: &mut [[i32; 2]]) {
+    #[cfg(target_os = "macos")]
+    {
+        let size = std::mem::size_of_val(room) as libc::c_int;
+        let got = libc::proc_pidinfo(libc::getpid(), libc::PROC_PIDLISTFDS, 0, room.as_mut_ptr().cast(), size);
+        if got > 0 && got < size {
+            for [fd, _kind] in &room[..got as usize / std::mem::size_of::<[i32; 2]>()] {
+                if *fd > 2 {
+                    libc::fcntl(*fd, libc::F_SETFD, libc::FD_CLOEXEC);
+                }
+            }
+        } else {
+            // no list, or more descriptors than room: every number the table holds (10 ms and
+            // more under a high limit, which is why there is a list)
+            for fd in 3..libc::getdtablesize() {
+                libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
+            }
+        }
+    }
+    // shortcut: the syscall is Linux 5.11's; an older kernel refuses it and nothing is marked.
+    // Linux makes its own pipes close-on-exec in one step, so only a descriptor some other
+    // library opened would stay: walk /proc/self/fd if one ever matters.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = room;
+        let (first, last, flags) = (3, libc::c_uint::MAX as libc::c_long, libc::CLOSE_RANGE_CLOEXEC as libc::c_long);
+        libc::syscall(libc::SYS_close_range, first as libc::c_long, last, flags);
+    }
+}
+
 /// The uid of the process at the other end (std's `peer_cred` isn't stable).
 fn peer_uid(conn: &UnixStream) -> Option<libc::uid_t> {
     let fd = conn.as_raw_fd();
@@ -275,6 +324,20 @@ fn block_signals() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_stdio_marks_a_descriptor_with_its_list_and_without_room_for_one() {
+        for room in [LISTED_FDS, 0] {
+            // SAFETY: a copy of stdin (not close-on-exec, as a dup is), marked, read back, closed.
+            unsafe {
+                let fd = libc::dup(0);
+                assert!(fd > 2, "{}", io::Error::last_os_error());
+                only_stdio(&mut vec![[0; 2]; room]);
+                assert_ne!(libc::fcntl(fd, libc::F_GETFD) & libc::FD_CLOEXEC, 0, "with room for {room}");
+                libc::close(fd);
+            }
+        }
+    }
 
     #[test]
     fn a_hosts_words_are_kept_printable_and_short() {
