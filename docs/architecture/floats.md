@@ -4,6 +4,9 @@ Part of [docs/architecture.md](../architecture.md). The model, server methods, C
 `leon attach` side (M20a) is in [Protocol and clients](protocol-and-clients.md); this is how the
 app draws and moves them (M20b).
 
+![A float over a split](../images/app-float.png)
+![The scratch drawer open below the tiles](../images/app-drawer.png)
+
 - **One copy of the overlays.** The shared client (`leon_app::remote`) keeps each window's
   `floating` and `docked` from `session.view` in `Session::overlays` (by window id), and each
   block's label. It reads only the fields it knows, since a newer server may add some and the
