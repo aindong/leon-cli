@@ -28,13 +28,14 @@ d=$(cd "$(mktemp -d)" && pwd -P) # the real path, so the app writes HOME as ~
 chmod 700 "$d"
 mkdir -m 700 -p "$d/run" "$d/state" "$d/dev/run" "$d/dev/state"
 home=$d/home
-mkdir -p "$home/bin" "$home/src/auth" "$home/src/site" "$home/src/infra" "$home/src/api" "$home/src/deploy"
+mkdir -p "$home/bin" "$home/.config/leon" "$home/src/auth" "$home/src/site" "$home/src/infra" "$home/src/api" "$home/src/deploy"
 # a neutral shell: no user or host in the prompt or the title
 cat >"$home/.zshrc" <<'EOF'
 PROMPT='%1~ %% '
 unsetopt PROMPT_SP
 EOF
-cat >"$d/init.lua" <<'EOF'
+# in the demo's HOME, where Settings names it from ~
+cat >"$home/.config/leon/init.lua" <<'EOF'
 leon.action{ name = "tail_log", title = "Tail the server log", run = function() end }
 leon.bind("cmd+shift+l", "tail_log")
 leon.bind("ctrl+b>c", "client.tab.new")
@@ -42,7 +43,7 @@ leon.bind("ctrl+b>%", "pane.split.right")
 leon.bind("ctrl+b>\"", "pane.split.down")
 leon.bind("ctrl+b>z", "pane.zoom")
 EOF
-: >"$d/none.lua"
+: >"$home/.config/leon/none.lua"
 
 # show TITLE TEXTFILE [OSC7501 PAIRS]: a "program" that sets its title and status and shows the
 # text, again after each resize (the app sizes the pane after it started)
@@ -137,8 +138,8 @@ $ make release
 EOF
 
 base=(env -u LEON_SESSION -u LEON_BLOCK -u ZDOTDIR HOME="$home" SHELL=/bin/zsh PATH="$home/bin:$PATH")
-here() { "${base[@]}" LEON_RUNTIME_DIR="$d/run" LEON_STATE_DIR="$d/state" LEON_CONFIG="$d/init.lua" "$leon" "$@"; }
-dev() { "${base[@]}" LEON_RUNTIME_DIR="$d/dev/run" LEON_STATE_DIR="$d/dev/state" LEON_CONFIG="$d/none.lua" "$leon" "$@"; }
+here() { "${base[@]}" LEON_RUNTIME_DIR="$d/run" LEON_STATE_DIR="$d/state" LEON_CONFIG="$home/.config/leon/init.lua" "$leon" "$@"; }
+dev() { "${base[@]}" LEON_RUNTIME_DIR="$d/dev/run" LEON_STATE_DIR="$d/dev/state" LEON_CONFIG="$home/.config/leon/none.lua" "$leon" "$@"; }
 
 # the devbox: ssh's argv ends with HOST CMD; this one serves the second server, and build-box fails
 cat >"$d/ssh" <<EOF
@@ -148,7 +149,7 @@ case "\$host" in
   *build-box*) echo "ssh: connect to host build-box port 22: Connection refused" >&2; exit 255 ;;
 esac
 exec env -u LEON_SESSION -u LEON_BLOCK HOME="$home" SHELL=/bin/zsh LEON_RUNTIME_DIR="$d/dev/run" \
-  LEON_STATE_DIR="$d/dev/state" LEON_CONFIG="$d/none.lua" "$leon" server proxy
+  LEON_STATE_DIR="$d/dev/state" LEON_CONFIG="$home/.config/leon/none.lua" "$leon" server proxy
 EOF
 chmod +x "$d/ssh"
 
@@ -164,7 +165,7 @@ trap cleanup EXIT
 # a tab (window) in SESSION running `show` in DIR; prints its block id
 tab() { here -s "$1" run --keep-open -c "$home/src/$2" -- show "$3" "$d/$4.txt" "${5:-}"; }
 
-here config check "$d/init.lua" >/dev/null # a broken demo config would quietly drop the palette's action
+here config check "$home/.config/leon/init.lua" >/dev/null # a broken demo config would quietly drop the palette's action
 here server start >/dev/null
 here new auth >/dev/null
 claude=$(here -s auth run --keep-open -c "$home/src/auth" -- show "Fix the flaky login test" "$d/claude.txt" \
@@ -193,7 +194,7 @@ cat >"$d/state/app.json" <<EOF
 EOF
 
 open_app() {
-  "${base[@]}" LEON_RUNTIME_DIR="$d/run" LEON_STATE_DIR="$d/state" LEON_CONFIG="$d/init.lua" LEON_SSH="$d/ssh" \
+  "${base[@]}" LEON_RUNTIME_DIR="$d/run" LEON_STATE_DIR="$d/state" LEON_CONFIG="$home/.config/leon/init.lua" LEON_SSH="$d/ssh" \
     "$leon" app >/dev/null 2>&1 &
   app_pid=$!
   sleep 4

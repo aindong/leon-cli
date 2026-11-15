@@ -16,6 +16,7 @@ fn row(place: &str, status: Indicator, waited: u64, now: Instant) -> Row {
         session_id: "session:x".into(),
         block_id: format!("block:{place}"),
         place: place.into(),
+        title: place.rsplit(" › ").next().unwrap().into(),
         status,
         caption: None,
         since: now - Duration::from_secs(waited),

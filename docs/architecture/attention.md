@@ -9,7 +9,8 @@ of [the architecture](../architecture.md).
   palette's box over `switcher::rank`: every tab of every connected machine as `host › session ›
   tab` with its status glyph, plus a block when the query matches the title its program set; no
   query lists the tabs most recently shown first (the window ids the app saw on screen), a query
-  runs the palette's fuzzy filter with recency breaking ties. ↩ goes there (`session.focus_block`
+  runs the palette's fuzzy filter, and among equal matches what needs the user (blocked, error,
+  done) comes first, then the more recent. ↩ goes there (`session.focus_block`
   or `session.focus_window` on that machine); ⌘↩ moves the tab's shown block beside the focused
   pane with `session.move_block` when both are on the same machine (from another session it
   joins this one, tmux's `join-pane`; its program keeps its `LEON_SESSION`, so leon commands in it

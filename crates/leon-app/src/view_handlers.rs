@@ -241,7 +241,7 @@ impl Workspace {
     }
 
     /// Ask once, naming how many sessions end; on yes, stop the server (it saves, then every
-    /// program ends) and quit. The app quits anyway when the server goes.
+    /// program ends) and quit, without the notice a server stopped from outside leaves.
     pub(super) fn quit_and_end_all(&mut self, _: &QuitAndEndAll, window: &mut Window, cx: &mut Context<Self>) {
         let app = self.hosts.local().clone(); // This Mac's server; hosts keep theirs
         let n = app.model().sessions.len();
@@ -249,9 +249,11 @@ impl Workspace {
         let detail = "Every program in them stops. Quit leon (⌘Q) instead to leave them running.";
         let buttons = [PromptButton::Ok("End All Sessions".into()), PromptButton::Cancel("Cancel".into())];
         let answer = window.prompt(PromptLevel::Warning, &format!("End {what} and quit?"), Some(detail), &buttons, cx);
-        cx.spawn(async move |_, cx| {
+        cx.spawn(async move |this, cx| {
             if answer.await == Ok(0) {
+                let _ = this.update(cx, |ws, _| ws.ending = true);
                 if let Err(e) = app.call("server.stop", json!({})) {
+                    let _ = this.update(cx, |ws, _| ws.ending = false);
                     eprintln!("leon: can't stop the server: {}", e.message);
                     return;
                 }
@@ -259,6 +261,30 @@ impl Workspace {
             }
         })
         .detach();
+    }
+
+    /// Start It Again: run this leon as it was started (`leon app` starts the server first), with
+    /// its environment (the private LEON_* dirs), then quit. Not GPUI's restart, which `open`s an
+    /// unbundled binary in Terminal with none of that environment.
+    pub(super) fn start_again(&mut self, cx: &mut Context<Self>) {
+        let exe = match std::env::current_exe() {
+            Ok(exe) => exe,
+            Err(e) => return eprintln!("leon: can't find leon to start it again: {e}"),
+        };
+        // it must start the server even when this one was told not to (`--autostart=false`)
+        let args: Vec<_> =
+            std::env::args_os().skip(1).filter(|a| !a.to_string_lossy().starts_with("--autostart")).collect();
+        if !self.platform {
+            let args = args.iter().map(|a| a.to_string_lossy().into_owned());
+            self.relaunched = Some(std::iter::once(exe.display().to_string()).chain(args).collect());
+            return;
+        }
+        use std::os::unix::process::CommandExt;
+        let mut again = std::process::Command::new(&exe);
+        match again.args(&args).env("LEON_AUTOSTART", "true").process_group(0).spawn() {
+            Ok(_) => cx.quit(),
+            Err(e) => eprintln!("leon: can't start leon again: {e}"),
+        }
     }
 
     pub(super) fn toggle_sidebar(&mut self, _: &ToggleSidebar, _: &mut Window, cx: &mut Context<Self>) {

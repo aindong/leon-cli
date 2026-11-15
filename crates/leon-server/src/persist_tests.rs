@@ -173,6 +173,15 @@ fn a_version_1_file_still_loads() {
 }
 
 #[tokio::test]
+async fn a_block_saved_before_titles_were_still_loads() {
+    let mut v = saved_json().await;
+    for b in v["sessions"][0]["blocks"].as_array_mut().unwrap() {
+        assert!(b.as_object_mut().unwrap().remove("title").is_some(), "a title is saved now");
+    }
+    assert_eq!(check_json(&v), Ok(()));
+}
+
+#[tokio::test]
 async fn m20_persist_hidden_float_only_and_drawer_roundtrip() {
     let c = ctx();
     let r = c
