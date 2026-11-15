@@ -190,12 +190,8 @@ impl Keymap {
             })
             .collect();
         let settings = &km["settings"];
-        let on = |name: &str| settings[name] != false; // on unless the config turned it off
-        let notify = crate::attention::Settings {
-            blocked: on("notify_blocked"),
-            error: on("notify_error"),
-            done: on("notify_done"),
-        };
+        let on = |name: &str| settings["notifications"][name] != false; // on unless the config turned it off
+        let notify = crate::attention::Settings { blocked: on("blocked"), error: on("error"), done: on("done") };
         Keymap {
             generation: km["generation"].as_u64().unwrap_or(0),
             bindings,

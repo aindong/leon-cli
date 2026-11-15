@@ -26,12 +26,8 @@ pub struct ClientSettings {
     pub repeat_time: u64,
     /// Regular expressions hints match besides the built-in ones (group 1, if any, is the text).
     pub hint_patterns: Vec<String>,
-    /// Notify when a block becomes blocked (default true).
-    pub notify_blocked: bool,
-    /// Notify when a block reports an error (default true).
-    pub notify_error: bool,
-    /// Notify when a long run finishes while the app is in the background (default true).
-    pub notify_done: bool,
+    /// Which notifications the app posts (`notifications.*`, default all).
+    pub notifications: crate::settings::Notifications,
 }
 
 #[derive(Serialize, JsonSchema, PartialEq)]
@@ -147,13 +143,15 @@ pub(super) fn keymap(l: &Loaded) -> Keymap {
             .iter()
             .map(|u| UnbindView { key: u.key.sequence(), mode: u.key.mode.clone(), action: u.action.clone() })
             .collect(),
-        settings: ClientSettings {
-            copy_on_select: c.copy_on_select.unwrap_or(false),
-            repeat_time: c.repeat_time.unwrap_or(leon_lua::REPEAT_TIME),
-            hint_patterns: c.hint_patterns.clone(),
-            notify_blocked: c.notify_blocked.unwrap_or(true),
-            notify_error: c.notify_error.unwrap_or(true),
-            notify_done: c.notify_done.unwrap_or(true),
+        settings: {
+            let s = &c.settings;
+            let n = &s.notifications;
+            ClientSettings {
+                copy_on_select: s.copy_on_select,
+                repeat_time: s.repeat_time,
+                hint_patterns: s.hint_patterns.clone(),
+                notifications: crate::settings::Notifications { done: n.done, blocked: n.blocked, error: n.error },
+            }
         },
     }
 }

@@ -84,18 +84,31 @@ impl Workspace {
             let label = |i: usize| machines.get(i).map_or("another machine", |m| m.label.as_str());
             let (there, here) = (label(host), label(self.host));
             let note = format!("Can't split: that pane is on {there}, and a pane joins only a window on its own machine ({here} here). ↩ goes there.");
-            self.palette =
-                Some(Palette { query: String::new(), selected: 0, ask: None, switch: true, note: Some(note) });
+            match self.palette.as_mut() {
+                Some(p) => p.note = Some(note), // ⌘↩ left it open: the row stays picked
+                None => {
+                    self.palette =
+                        Some(Palette { query: String::new(), selected: 0, ask: None, switch: true, note: Some(note) })
+                }
+            }
             cx.notify();
             return;
         }
+        self.palette = None;
         if a["split"] == true && host == self.host {
             let moved = block.map(String::from).or_else(|| {
                 let m = self.app.model();
                 let w = m.session(&sid)?.windows.iter().find(|w| Some(w.id.as_str()) == wid)?.clone();
                 target(&w).map(String::from)
             });
-            if let (Some(moved), Some((_, here, _))) = (moved, self.target()) {
+            // a floating or docked focus can't be an anchor: join beside a tiled pane instead
+            let here = self.target().and_then(|(sid, b, _)| {
+                let m = self.app.model();
+                let s = m.session(&sid)?;
+                let l = s.windows.get(s.active)?.layout.as_ref()?;
+                Some(if l.contains(&b) { b } else { l.leaves().first()?.to_string() })
+            });
+            if let (Some(moved), Some(here)) = (moved, here) {
                 if moved != here {
                     let p = json!({ "block_id": moved, "anchor_block_id": here });
                     self.call("session.move_block", p, cx);
@@ -110,7 +123,7 @@ impl Workspace {
     pub(super) fn go_to(
         &mut self,
         host: usize,
-        sid: &str,
+        sid_given: &str,
         window: Option<&str>,
         block: Option<&str>,
         cx: &mut Context<Self>,
@@ -119,7 +132,9 @@ impl Workspace {
         if self.host != host {
             return; // that machine isn't connected now
         }
-        self.session_id = Some(sid.to_string());
+        // a block can have joined another session since `sid` was read (a notice, a stale row)
+        let sid = block.and_then(|b| self.app.model().block(b).map(|(s, _)| s.id.clone()));
+        self.session_id = Some(sid.unwrap_or_else(|| sid_given.to_string()));
         match (block, window) {
             (Some(b), _) => self.call("session.focus_block", json!({ "block_id": b }), cx),
             (None, Some(w)) => self.call("session.focus_window", json!({ "window_id": w }), cx),

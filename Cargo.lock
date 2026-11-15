@@ -3333,6 +3333,7 @@ dependencies = [
  "portable-pty",
  "regex",
  "regex-syntax",
+ "roxmltree",
  "schemars",
  "serde",
  "serde_json",

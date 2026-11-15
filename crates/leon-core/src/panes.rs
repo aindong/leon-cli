@@ -40,6 +40,9 @@ impl State {
         let tree = s.windows[to].layout.as_mut().expect("the anchor is in it");
         assert!(tree.insert(anchor_id, block_id, direction, side, ratio), "the anchor is in it");
         s.blocks[i].window_id = s.windows[to].id.clone();
+        if from != to {
+            s.windows[to].zoomed = None; // tmux's join-pane unzooms too: the pane must show
+        }
         if s.empty_window(from) {
             let emptied = s.windows[from].id.clone();
             self.close_window(session_id, &emptied)?;
@@ -76,6 +79,7 @@ impl State {
         block.window_id = t.windows[tw].id.clone();
         let tree = t.windows[tw].layout.as_mut().expect("the anchor is in it");
         assert!(tree.insert(anchor_id, block_id, direction, side, ratio), "the anchor is in it");
+        t.windows[tw].zoomed = None;
         t.blocks.push(block);
         self.touch(from);
         self.touch(to);

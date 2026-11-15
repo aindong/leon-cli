@@ -148,7 +148,7 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   ids (shortcut). The palette lists New Session on each connected machine (`session.new {host}`)
   and Add Host… (`client.host.add`): a label, then an endpoint, each checked as `leon hosts add`
   checks them (`leon_hosts::hosts::add`), and saved through the hosts API.
-- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.3.0`), apart
+- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.4.0`), apart
   from the build's version. Each method doc carries `stability` (`stable`, `experimental`,
   `internal`), and optionally `deprecated` (`since`, `replacement`, `removal`) and the spec's
   `request_example`/`response_example`; all of it comes from one table,
@@ -160,6 +160,14 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   `docs/api-snapshot.json` holds the stable schemas (prose dropped, refs inlined); tests fail when
   either drifts, and the snapshot can only be re-blessed (`LEON_BLESS=1`) with a new
   `API_VERSION`. The policy is in docs/integrators.md.
+- **Themes and settings (M22a).** The theme model is `leon_core::theme` (the app re-exports it):
+  `DARK` is the app's colours, `LIGHT` Iron on Parchment, and `theme::import` reads Ghostty theme
+  files (also the format leon stores themes in, with its own chrome keys) and iTerm2 XML plists.
+  An import keeps only the terminal palette and mixes the chrome from its background and
+  foreground. Settings live only in init.lua: `leon_lua::Settings` is typed with defaults and
+  records each key's `file:line`, `leon_lua::rewrite` edits one literal in a `leon.set` call and
+  proves the edit by loading it before renaming it over the file, and the server's
+  `server.settings` and `settings_changed` carry names, not colours; M22b resolves the names.
 - **Docs are tested.** `docs/cli.md` is checked against every `--help`; the `sh` blocks in the docs
   run against the real binary (a bad command line fails); `docs/lua.md`'s examples go through
   `leon config check` and `leon do -e`.

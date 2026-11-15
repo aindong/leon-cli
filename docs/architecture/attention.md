@@ -12,7 +12,8 @@ of [the architecture](../architecture.md).
   runs the palette's fuzzy filter with recency breaking ties. ↩ goes there (`session.focus_block`
   or `session.focus_window` on that machine); ⌘↩ moves the tab's shown block beside the focused
   pane with `session.move_block` when both are on the same machine (from another session it
-  joins this one, tmux's `join-pane`; its program keeps its `LEON_SESSION`). On a row of another
+  joins this one, tmux's `join-pane`; its program keeps its `LEON_SESSION`; a floating focus anchors on
+  a tiled pane, and a zoomed window unzooms). On a row of another
   machine the switcher stays open and says a pane can't join a window on a different machine. Activity
   (`client.sidebar.activity.toggle`, ⌘⇧A, a toolbar button) takes the sidebar's place, shown even
   in top style or with the sidebar hidden. `attention::Tracker` looks at every machine's model at
@@ -23,8 +24,8 @@ of [the architecture](../architecture.md).
   count, nothing at 0. `attention::Notifier` turns changes into notices: entering blocked or error
   (not for a block on screen while the window is key), or done after at least 30 s of working while
   the app is in the background; one per block and state a minute and four a minute in all, the rest
-  folded into one "N more" notice later; `leon.set("notify_blocked" | "notify_error" |
-  "notify_done", false)` turns a kind off (carried in `client.keymap`'s settings). Text is the
+  folded into one "N more" notice later; `leon.set("notifications.blocked" |
+  "notifications.error" | "notifications.done", false)` turns a kind off (carried in `client.keymap`'s settings). Text is the
   host › session › tab names and the record's caption with OSC 7501's hidden characters (`strip_hidden`) and line separators removed, the caption
   cut first so the state always shows,
   at most 120 chars. Notices go through `UNUserNotificationCenter` (`objc2`, already in GPUI's tree),

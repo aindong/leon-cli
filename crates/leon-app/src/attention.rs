@@ -198,7 +198,7 @@ impl Tracker {
     }
 }
 
-/// Which notices are on (`leon.set("notify_blocked", false)` and so on).
+/// Which notices are on (`leon.set("notifications.blocked", false)` and so on).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Settings {
     pub blocked: bool,
