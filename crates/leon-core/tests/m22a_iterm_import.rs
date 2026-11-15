@@ -56,6 +56,19 @@ fn integer_components_work_too() {
 }
 
 #[test]
+fn per_appearance_keys_fill_in_for_missing_plain_ones() {
+    let body = colour("Background Color (Light)", "1", "1", "1")
+        + &colour("Background Color (Dark)", "0", "0", "0")
+        + &colour("Foreground Color", "1", "1", "1")
+        + &colour("Foreground Color (Dark)", "0.5", "0.5", "0.5")
+        + &colour("Ansi 1 Color (Dark)", "1", "0", "0");
+    let t = parse(plist(&body).as_bytes()).unwrap();
+    assert_eq!(t.bg, 0, "the dark background stands in, the light one is left out");
+    assert_eq!(t.fg, 0xFFFFFF, "a plain key wins over its dark one");
+    assert_eq!(t.ansi[1], 0xFF0000);
+}
+
+#[test]
 fn malformed_plists_are_clear_errors() {
     let fg = colour("Foreground Color", "1", "1", "1");
     let bg = colour("Background Color", "0", "0", "0");

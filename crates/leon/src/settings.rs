@@ -44,7 +44,7 @@ pub enum ThemeCmd {
     Import {
         /// The theme file.
         file: PathBuf,
-        /// The theme's name [default: the file's name without its extension].
+        /// The theme's name [default: the file's name, less .itermcolors or .theme].
         #[arg(long)]
         name: Option<String>,
     },
@@ -88,7 +88,11 @@ pub fn theme(cli: &Cli, cmd: &ThemeCmd) -> Result<(), Fail> {
             let t = import::parse(&bytes).map_err(|e| Fail::Other(format!("{shown}: {e}")))?;
             let name = match name {
                 Some(n) => n.clone(),
-                None => file.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(),
+                // Ghostty names have dots in them ("Hopscotch.256"): strip only a theme extension
+                None => {
+                    let n = file.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                    [".itermcolors", ".theme"].iter().find_map(|x| n.strip_suffix(x)).unwrap_or(&n).to_string()
+                }
             };
             settings::check_name(&name).map_err(Fail::Other)?;
             if theme::builtin(&name).is_some() {

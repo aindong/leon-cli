@@ -50,6 +50,13 @@ fn import_list_and_show() {
     let o = theme(&env, &["import", file.to_str().unwrap()]);
     assert!(o.status.success(), "{}", text(&o));
     assert!(env.dir.path().join("conf/themes/Harbor.theme").is_file());
+
+    // Ghostty names have dots; only .itermcolors and .theme come off
+    let dotted = env.dir.path().join("Harbor.256");
+    std::fs::write(&dotted, HARBOR).unwrap();
+    let o = theme(&env, &["import", dotted.to_str().unwrap()]);
+    assert!(o.status.success(), "{}", text(&o));
+    assert!(env.dir.path().join("conf/themes/Harbor.256.theme").is_file());
 }
 
 #[test]

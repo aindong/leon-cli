@@ -69,7 +69,7 @@ fn malformed_ghostty_files_are_clear_errors() {
         (b"", "no background"),
         (b"# only a comment\n", "no background"),
         (b"background = #00000g\nforeground = #ffffff\n", "line 1"),
-        (b"background = #000\nforeground = #ffffff\n", "line 1"),
+        (b"background = #0000\nforeground = #ffffff\n", "line 1"),
         (b"background = #000000\nforeground = #ffffff\npalette = 300=#000000\n", "line 3"),
         (b"background = #000000\nforeground = #ffffff\npalette = x=#000000\n", "line 3"),
         (b"background = #000000\nforeground = #ffffff\npalette = 1\n", "line 3"),

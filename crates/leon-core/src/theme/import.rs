@@ -78,12 +78,17 @@ fn clip(s: &str) -> String {
     out
 }
 
-/// `#rrggbb` or `rrggbb`.
+/// `#rrggbb`, `rrggbb`, or Ghostty's short `#rgb`.
 fn hex(s: &str) -> Option<u32> {
     let digits = s.strip_prefix('#').unwrap_or(s);
-    (digits.len() == 6 && digits.bytes().all(|b| b.is_ascii_hexdigit()))
-        .then(|| u32::from_str_radix(digits, 16).ok())
-        .flatten()
+    if !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    match digits.len() {
+        6 => u32::from_str_radix(digits, 16).ok(),
+        3 => u32::from_str_radix(&digits.chars().flat_map(|c| [c, c]).collect::<String>(), 16).ok(),
+        _ => None,
+    }
 }
 
 fn ghostty(text: &str) -> Result<Given, String> {
@@ -96,7 +101,10 @@ fn ghostty(text: &str) -> Result<Given, String> {
         let at = |m: String| format!("line {}: {m}", n + 1);
         let colour = |v: &str| hex(v).ok_or_else(|| at(format!("{:?} is not a #rrggbb colour", clip(v))));
         let (key, value) = line.split_once('=').ok_or_else(|| at(format!("{:?} is not `key = value`", clip(line))))?;
-        let (key, value) = (key.trim(), value.trim());
+        let value = value.trim();
+        // Ghostty takes one pair of double quotes off a value
+        let value = value.strip_prefix('"').and_then(|v| v.strip_suffix('"')).unwrap_or(value);
+        let key = key.trim();
         if key == "palette" {
             let (i, c) =
                 value.split_once('=').ok_or_else(|| at(format!("palette {:?} is not N=#rrggbb", clip(value))))?;
@@ -143,7 +151,9 @@ fn iterm(text: &str) -> Result<Given, String> {
     }
     let dict = root.children().find(|n| n.is_element()).filter(|n| n.has_tag_name("dict"));
     let dict = dict.ok_or("not an iTerm2 colour file: the plist's top level isn't a <dict> of colours")?;
-    let mut g = Given::default();
+    // iTerm2 3.5 profiles can keep a colour per appearance (`Ansi 0 Color (Dark)`): the dark one
+    // stands in when a plain key is missing, the light one is left out.
+    let (mut g, mut dark) = (Given::default(), Given::default());
     let mut items = dict.children().filter(|n| n.is_element());
     while let Some(k) = items.next() {
         if !k.has_tag_name("key") {
@@ -151,22 +161,37 @@ fn iterm(text: &str) -> Result<Given, String> {
         }
         let name = &clip(k.text().unwrap_or_default());
         let value = items.next().ok_or_else(|| format!("{name} has no value"))?;
-        let key = match name.as_str() {
+        if name.ends_with(" (Light)") {
+            continue;
+        }
+        let (into, base) = match name.strip_suffix(" (Dark)") {
+            Some(base) => (&mut dark, base),
+            None => (&mut g, name.as_str()),
+        };
+        let key = match base {
             "Background Color" => "background",
             "Foreground Color" => "foreground",
             "Cursor Color" => "cursor-color",
             "Selection Color" => "selection-background",
-            _ => match name.strip_prefix("Ansi ").and_then(|n| n.strip_suffix(" Color")) {
+            _ => match base.strip_prefix("Ansi ").and_then(|n| n.strip_suffix(" Color")) {
                 Some(i) => {
                     let i = i.parse::<usize>().ok().filter(|i| *i < 16);
                     let i = i.ok_or_else(|| format!("{name} is not an ANSI colour (they are 0 to 15)"))?;
-                    g.ansi[i] = Some(component_dict(value).map_err(|e| format!("{name}: {e}"))?);
+                    into.ansi[i] = Some(component_dict(value).map_err(|e| format!("{name}: {e}"))?);
                     continue;
                 }
                 None => continue, // Bold Color, Link Color, Badge Color…: nothing in leon draws them
             },
         };
-        g.named.push((key.into(), component_dict(value).map_err(|e| format!("{name}: {e}"))?));
+        into.named.push((key.into(), component_dict(value).map_err(|e| format!("{name}: {e}"))?));
+    }
+    for (key, c) in dark.named {
+        if g.get(&key).is_none() {
+            g.named.push((key, c));
+        }
+    }
+    for (slot, d) in g.ansi.iter_mut().zip(dark.ansi) {
+        *slot = slot.or(d);
     }
     for (key, name) in [("background", "Background Color"), ("foreground", "Foreground Color")] {
         if g.get(key).is_none() {

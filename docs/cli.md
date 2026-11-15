@@ -450,7 +450,7 @@ Print each theme's name and whether it is dark or light, the built-in ones first
 
 Read a Ghostty theme file or an iTerm2 `.itermcolors` file (an XML plist; convert a binary one with
 `plutil -convert xml1`) and store it as a leon theme. `--name` names it; the default is the file's
-name without its extension. The app's colours around the panes are mixed from the theme's
+name, less `.itermcolors` or `.theme`. The app's colours around the panes are mixed from the theme's
 background and foreground, and the status colours come from `leon-dark` or `leon-light`, whichever
 matches. A file that isn't a theme exits 1 with what is wrong and on which line, as does a name
 that is taken (remove the old file first), built in, or not a plain file name.
