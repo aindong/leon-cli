@@ -3,13 +3,26 @@
 
 use super::*;
 
+/// The widest a header's title gets, and what the header's other parts take from a pane's width
+/// (the padding, the icon, a status mark and the hidden controls, which keep their room).
+const TITLE_MAX: f32 = 320.;
+const HEADER_PARTS: f32 = 170.;
+
 impl Workspace {
-    pub(super) fn render_header(&self, id: &str, focused: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    /// `width`: the pane's, which the title shares with the header's other parts.
+    pub(super) fn render_header(
+        &self,
+        id: &str,
+        focused: bool,
+        width: f32,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let t = &self.theme;
         let shown = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
         let caption = self.header_caption(id);
         let frame = self.pulse();
-        let title = self.pane_title(id).unwrap_or_default();
+        let (title, tip) = self.header_title(id, (width - HEADER_PARTS).min(TITLE_MAX), cx);
+        let theme = self.theme;
         let group = SharedString::from(format!("pane-{id}"));
         let overlay = self.is_overlay(id);
         let control = |what: &'static str, icon: Icon, action: &'static str, cx: &mut Context<Self>| {
@@ -63,8 +76,14 @@ impl Workspace {
             .child(div().flex_none().text_color(rgb(t.muted)).child(Icon::Terminal.at(ROW_ICON, t.muted)))
             .child(
                 div()
+                    .id(SharedString::from(format!("header-title-{id}")))
+                    .debug_selector(|| sel(format!("header-title-{id}")))
+                    .when_some(tip, |d, tip| {
+                        let tip = SharedString::from(tip);
+                        d.tooltip(move |_, cx| cx.new(|_| super::bars::Tip(tip.clone(), theme)).into())
+                    })
                     .flex_shrink()
-                    .max_w(px(320.))
+                    .max_w(px(TITLE_MAX))
                     .overflow_hidden()
                     .min_w(px(0.))
                     .line_clamp(1)

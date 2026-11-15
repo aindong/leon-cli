@@ -131,9 +131,9 @@ impl Workspace {
         let header = headers.then(|| match grab {
             Some(g) => div()
                 .on_mouse_down(MouseButton::Left, self.grab_listener(&id, g, cx))
-                .child(self.render_header(&id, focused, cx))
+                .child(self.render_header(&id, focused, rect.w, cx))
                 .into_any_element(),
-            None => self.render_header(&id, focused, cx).into_any_element(),
+            None => self.render_header(&id, focused, rect.w, cx).into_any_element(),
         });
         let name = format!("{kind}-{id}");
         div()
@@ -160,7 +160,7 @@ impl Workspace {
                         .left_0()
                         .right_0()
                         .bg(rgb(t.bg))
-                        .child(self.render_header(&id, focused, cx)),
+                        .child(self.render_header(&id, focused, rect.w, cx)),
                 )
             })
             .child(self.terminal_area(&id, on_link, cx).child(canvas))

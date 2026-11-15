@@ -172,6 +172,7 @@ impl Render for Tip {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let t = &self.1;
         div()
+            .debug_selector(|| sel("tooltip".into()))
             .px(px(8.))
             .py(px(4.))
             .rounded(px(5.))
