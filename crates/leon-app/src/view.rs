@@ -58,7 +58,8 @@ actions!(
         ToggleZoom,
         Copy,
         SelectAll,
-        Find
+        Find,
+        OpenSettings
     ]
 );
 
@@ -99,7 +100,13 @@ pub fn install(cx: &mut App) {
     init(cx);
     cx.set_menus(menus());
     cx.on_action(|_: &Quit, cx| cx.quit());
-    cx.on_window_closed(|cx| cx.quit()).detach();
+    // closing the Settings window leaves the app running; closing the workspace's quits it
+    cx.on_window_closed(|cx| {
+        if !cx.windows().iter().any(|w| w.downcast::<Workspace>().is_some()) {
+            cx.quit()
+        }
+    })
+    .detach();
 }
 
 /// Open the app window on `server` and run until it quits.
@@ -263,6 +270,8 @@ pub struct Workspace {
     /// The config the local server loaded, from its keymap: where the theme files and the
     /// Settings window's init.lua are.
     config_path: Option<PathBuf>,
+    /// The Settings window, while it is open.
+    settings_window: Option<gpui::WindowHandle<crate::settings_window::SettingsWindow>>,
     /// Where the spinner's clock starts.
     epoch: Instant,
     /// The pane last seen with the focus, and whether the window was active: a change is the user
@@ -403,6 +412,7 @@ impl Workspace {
             dark,
             refit: false,
             config_path: None,
+            settings_window: None,
             epoch: Instant::now(),
             seen_focus: None,
             term: scroll::TermUi::default(),
@@ -520,6 +530,7 @@ mod hosts_view;
 mod keys;
 #[path = "view_look.rs"]
 mod look_view;
+pub use look_view::is_dark;
 #[path = "view_menus.rs"]
 mod menus;
 #[path = "view_model.rs"]

@@ -4,7 +4,7 @@
 use super::*;
 
 /// macOS is in dark mode.
-pub(super) fn is_dark(a: gpui::WindowAppearance) -> bool {
+pub fn is_dark(a: gpui::WindowAppearance) -> bool {
     matches!(a, gpui::WindowAppearance::Dark | gpui::WindowAppearance::VibrantDark)
 }
 
@@ -51,6 +51,15 @@ impl Workspace {
         }
         self.look = look;
         self.use_theme();
+    }
+
+    /// Show the Settings window: open it, or bring the open one forward.
+    pub(super) fn open_settings(&mut self, cx: &mut Context<Self>) {
+        let open = self.settings_window.is_some_and(|h| h.update(cx, |_, window, _| window.activate_window()).is_ok());
+        if !open {
+            let Some(config) = self.config_path() else { return };
+            self.settings_window = crate::settings_window::SettingsWindow::open(config, self.hosts.local().clone(), cx);
+        }
     }
 
     /// macOS switched between light and dark.

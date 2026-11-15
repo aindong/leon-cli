@@ -23,6 +23,7 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("client.font.decrease", "Decrease Font Size"),
     ("client.font.reset", "Reset Font Size"),
     ("client.config.reload", "Reload Config"),
+    ("client.settings", "Settings…"),
     ("pane.paste", "Paste"),
     ("pane.copy", "Copy"),
     ("pane.select_all", "Select All"),

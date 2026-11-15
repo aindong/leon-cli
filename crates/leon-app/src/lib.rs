@@ -18,6 +18,7 @@ pub mod panes;
 pub mod remote;
 pub mod render;
 pub mod scrollback;
+pub mod settings_window;
 pub mod stamp;
 pub mod status;
 pub mod switcher;

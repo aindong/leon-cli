@@ -9,6 +9,8 @@ pub fn menus() -> Vec<Menu> {
         Menu {
             name: "leon".into(),
             items: vec![
+                MenuItem::action("Settings…", OpenSettings),
+                MenuItem::separator(),
                 MenuItem::action("Quit leon", Quit),
                 MenuItem::action("Quit and End All Sessions…", QuitAndEndAll),
             ],
