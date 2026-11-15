@@ -1,8 +1,8 @@
 //! Daily-driver F12 (.agent/plans/2026-11-15-cli-docs-polish.md, criterion 7), the research run's
 //! own repro: `leon -H … attach` over system ssh to an sshd in a Linux container, `docker pause`,
 //! `echo during-pause⏎` typed, unpause. Before the fix the remote prompt kept `ec`. Skips (and
-//! says why) without Docker, a Linux build (`LEON_LINUX_BIN`, else scripts/package-linux.sh's
-//! target/linux/<arch>/leon) or an image.
+//! says why) without Docker, a Linux build (`LEON_LINUX_BIN`, else target/<arch>-unknown-linux-*/release/leon,
+//! else scripts/package-linux.sh's target/linux/<arch>/leon) or an image.
 
 mod support;
 
@@ -23,9 +23,15 @@ fn linux_bin(arch: &str) -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("LEON_LINUX_BIN") {
         return Some(PathBuf::from(p)).filter(|p| p.exists());
     }
+    // as m16a_docker_sshd finds it: a cross build, else scripts/package-linux.sh's binary
+    let target = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target");
     let deb_arch = if matches!(arch, "aarch64" | "arm64") { "arm64" } else { "amd64" };
-    Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../target/linux/{deb_arch}/leon")))
-        .filter(|p| p.exists())
+    let arch = if arch == "arm64" { "aarch64" } else { arch };
+    ["gnu", "musl"]
+        .iter()
+        .map(|libc| target.join(format!("{arch}-unknown-linux-{libc}/release/leon")))
+        .chain([target.join(format!("linux/{deb_arch}/leon"))])
+        .find(|p| p.exists())
 }
 
 /// `docker ARGS NAME` when dropped.

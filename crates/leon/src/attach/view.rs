@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use super::draw::{self, Bar};
 use super::keys::{self, After};
 use super::picker::{self, Picker};
-use super::typing::Send;
+use super::typing::Out;
 use super::{Flow, Mode, Tui};
 
 /// The app's limit for one paste (a request over the server's 1 MiB would drop the connection).
@@ -30,10 +30,7 @@ impl Tui {
     fn reconnecting(&self) -> Option<String> {
         match (&self.host, self.remote.link_state()) {
             (Some(h), LinkState::Reconnecting { attempt, .. }) => {
-                let lost = match self.typing.dropped {
-                    0 => String::new(),
-                    n => format!(", {n} {} not sent", if n == 1 { "key" } else { "keys" }),
-                };
+                let lost = self.typing.not_sent().map(|n| format!(", {n}")).unwrap_or_default();
                 Some(format!("reconnecting to {h} (try {attempt})…{lost}"))
             }
             _ => None,
@@ -144,24 +141,27 @@ impl Tui {
     }
 
     /// Send what `typing` asks for; its answer comes back as `Msg::Typed`. Dropped keys are noted.
-    pub(super) fn send_typed(&mut self, next: Send) {
+    pub(super) fn send_typed(&mut self, next: Out) {
         let tx = self.tx.clone();
         let done = move |r: Result<Value, leon_core::ApiError>| {
             let _ = tx.send(super::Msg::Typed(r.is_ok()));
         };
         match next {
-            Send::Nothing => {}
-            Send::Probe => self.remote.send_then("server.version", json!({}), done),
-            Send::Write(sid, block, bytes) => {
+            Out::Nothing => {}
+            Out::Probe => self.remote.send_then("server.version", json!({}), done),
+            Out::Write(sid, block, bytes) => {
                 let args = json!({ "data": String::from_utf8_lossy(&bytes) });
                 let p =
                     json!({ "session_id": sid, "block_id": block, "method": "dev.leon.terminal.write", "args": args });
                 self.remote.send_then("block.method", p, done);
             }
+            Out::Paste(sid, block, text) => {
+                let p = json!({ "session_id": sid, "block_id": block, "event": { "type": "paste", "data": text } });
+                self.remote.send_then("block.event", p, done);
+            }
         }
-        if let (n @ 1.., Some(h)) = (self.typing.dropped, &self.host) {
-            let keys = if n == 1 { "key" } else { "keys" };
-            self.say(format!("{n} {keys} not sent: the link to {h} stalled or dropped"));
+        if let (Some(n), Some(h)) = (self.typing.not_sent(), &self.host) {
+            self.say(format!("{n}: the link to {h} stalled or dropped"));
         }
     }
 
@@ -174,6 +174,11 @@ impl Tui {
         let Some(t) = self.target() else { return };
         if text.len() > MAX_PASTE {
             return self.say(format!("not pasting {} bytes: at most {MAX_PASTE} go in one paste", text.len()));
+        }
+        if self.remote.is_link() {
+            let up = self.remote.link_state() == LinkState::Up;
+            let next = self.typing.paste(&t.sid, &t.block, text, up, std::time::Instant::now());
+            return self.send_typed(next);
         }
         let event = json!({ "session_id": t.sid, "block_id": t.block, "event": { "type": "paste", "data": text } });
         if let Err(e) = self.remote.call("block.event", event) {

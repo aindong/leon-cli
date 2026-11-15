@@ -151,7 +151,7 @@ pub enum Cmd {
         #[arg(long = "for", value_parser = blocks::parse_duration)]
         timeout: Option<std::time::Duration>,
         /// Wait until the screen or scrollback shows TEXT instead (a prompt, a "ready" line).
-        #[arg(long, value_name = "TEXT")]
+        #[arg(long, value_name = "TEXT", value_parser = clap::builder::NonEmptyStringValueParser::new())]
         text: Option<String>,
     },
     /// Float a block, create a floating terminal, or return one to the tiled tree.

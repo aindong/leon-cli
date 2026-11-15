@@ -173,7 +173,7 @@ leon block close "$id"
 Drive an interactive program:
 
 ```sh
-id=$(leon run --label py -- python3)
+id=$(leon run --label py -- python3 -q)   # -q: no banner, so only the answer holds "42"
 leon wait -b "$id" --text '>>>' --for 10s  # its prompt: typing before it shows can be lost
 leon send -b "$id" 'print(6 * 7)'; leon send-key -b "$id" enter
 leon wait -b "$id" --text 42 --for 10s; leon capture -b "$id" --trim | tail -3

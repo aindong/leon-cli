@@ -74,7 +74,7 @@ leon wait "$id"; echo "tests exited $?"
 leon capture -b "$id" --trim | tail -40
 
 # drive a REPL
-py=$(leon run --label py -- python3)
+py=$(leon run --label py -- python3 -q)       # -q: no banner to match
 leon wait -b "$py" --text '>>>' --for 10s     # its prompt, before typing
 leon send -b "$py" 'print(6 * 7)'
 leon send-key -b "$py" enter

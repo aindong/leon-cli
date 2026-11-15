@@ -101,7 +101,9 @@ watchdog process does it even after SIGKILL. Killed by a signal, it exits 128 + 
 Over `-H`, the status bar says `reconnecting to HOST (try N)…` while a dropped link is retried,
 and keys reach the pane whole or not at all. After a second with no word from the host, typed keys
 wait for a quick check of the link before they go; if it fails, or the link is reconnecting, they
-are dropped, and the bar says how many keys were not sent. Type them again once it is back.
+are dropped, and the bar says how many keys were not sent. Type them again once it is back. A
+paste waits in line with the keys. One limit: a stall that starts within that second, mid-word,
+can still catch the keys already on their way, and those may arrive late.
 
 ## Sessions
 

@@ -112,11 +112,13 @@ fn targets(agent: Option<Agent>, for_setup: bool) -> Result<Vec<Target>, Fail> {
     let mut found = vec![];
     for (dir, t) in all {
         let name = t.agent.name();
-        let (mut t, why) = match on_path(name) {
-            _ if dir.is_dir() => (t, format!("found {}", dir.display())),
+        let (mut t, why) = if dir.is_dir() {
+            (t, format!("found {}", dir.display()))
+        } else if let Some(p) = on_path(name) {
             // installed but never run: its home dir comes with the hook
-            Some(p) => (target(t.agent, true)?.1, format!("found {name} on PATH ({})", p.display())),
-            None => continue,
+            (target(t.agent, true)?.1, format!("found {name} on PATH ({})", p.display()))
+        } else {
+            continue;
         };
         t.why = Some(why);
         found.push(t);
@@ -398,6 +400,15 @@ fn change_all(
                 entry["error"] = json!(why);
             }
             Ok(list) => {
+                // an agent's home dir that setup makes is private, as its history will be in it
+                if let (true, false, Some(dir)) = (setup, dry_run, t.hook.as_ref().and_then(|h| h.parent())) {
+                    if !dir.exists() {
+                        use std::os::unix::fs::DirBuilderExt;
+                        if let Err(e) = std::fs::DirBuilder::new().recursive(true).mode(0o700).create(dir) {
+                            eprintln!("leon: {}: {e}", dir.display());
+                        }
+                    }
+                }
                 let mut broke = false;
                 let mut files = vec![];
                 for c in &list {

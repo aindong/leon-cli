@@ -63,7 +63,8 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   the new one, so after a second with no answer on the call connection keys wait (up to 4 KiB)
   behind a `server.version` probe and go in one write when it answers; a failed probe or write
   drops every key waiting, as does a key typed while the link reconnects, and the bar counts the
-  keys not sent. A stall that starts within that second can still catch the one write then in
+  keys not sent; after a drop, keys go on dropping until the call that was out answers, and a paste
+  waits in the same line as the keys. A stall that starts within that second can still catch the one write then in
   flight; ruling that out needs writes the server can tell apart from a replaced connection's.
   While attached, stderr is
   /dev/null, so ssh's errors during a reconnect aren't shown. Instead `leon attach`'s status bar

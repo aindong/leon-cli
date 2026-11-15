@@ -127,21 +127,26 @@ impl Remote {
         text.lines().map(|l| l.split('\x1f').filter(|a| !a.is_empty()).map(str::to_string).collect()).collect()
     }
 
-    /// SIGKILL every transport still running: each fake ssh became `leon server proxy` by exec, so
-    /// only pids whose command still says so are killed (a finished one's pid may be reused).
-    /// Returns how many were killed.
+    /// SIGKILL every transport still running; returns how many were killed.
     pub fn kill_transports(&self) -> usize {
+        self.signal_transports(libc::SIGKILL)
+    }
+
+    /// Send `sig` to every transport still running (SIGSTOP stalls the link, SIGCONT resumes it):
+    /// each fake ssh became `leon server proxy` by exec, so only pids whose command still says so
+    /// are signalled (a finished one's pid may be reused). Returns how many were.
+    pub fn signal_transports(&self, sig: i32) -> usize {
         let pids = std::fs::read_to_string(self.fake.path().join("pids")).unwrap_or_default();
-        let mut killed = 0;
+        let mut hit = 0;
         for pid in pids.lines().filter_map(|p| p.trim().parse::<i32>().ok()) {
             let out = Command::new("ps").args(["-o", "command=", "-p", &pid.to_string()]).output().unwrap();
             if String::from_utf8_lossy(&out.stdout).contains("server proxy") {
                 // SAFETY: a signal to a process this test started
-                unsafe { libc::kill(pid, libc::SIGKILL) };
-                killed += 1;
+                unsafe { libc::kill(pid, sig) };
+                hit += 1;
             }
         }
-        killed
+        hit
     }
 
     /// Wait until `pred` holds, for up to 10 s.

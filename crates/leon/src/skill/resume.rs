@@ -103,9 +103,12 @@ fn print_mode() -> bool {
     false
 }
 
-/// `-p`, `--print` or `--print=…` among the options, before any `--`.
+/// `-p` (also among short flags written together, `-cp`), `--print` or `--print=…` among the
+/// options, before any `--`.
 fn print_flag(argv: &[String]) -> bool {
-    argv.iter().skip(1).take_while(|a| *a != "--").any(|a| a == "-p" || a == "--print" || a.starts_with("--print="))
+    let short =
+        |a: &str| a.strip_prefix('-').is_some_and(|f| f.contains('p') && f.chars().all(|c| c.is_ascii_alphabetic()));
+    argv.iter().skip(1).take_while(|a| *a != "--").any(|a| short(a) || a == "--print" || a.starts_with("--print="))
 }
 
 struct Process {
@@ -159,7 +162,7 @@ fn argv(pid: i32) -> Option<Vec<String>> {
         buf
     };
     buf.truncate(size);
-    let argc = i32::from_ne_bytes(buf.get(..4)?.try_into().ok()?) as usize;
+    let argc = usize::try_from(i32::from_ne_bytes(buf.get(..4)?.try_into().ok()?)).ok()?;
     let rest = &buf[4..];
     let rest = &rest[rest.iter().position(|&b| b == 0)?..];
     let rest = &rest[rest.iter().position(|&b| b != 0)?..];
@@ -196,10 +199,12 @@ mod tests {
     #[test]
     fn print_flags_before_a_double_dash() {
         let v = |s: &str| s.split(' ').map(String::from).collect::<Vec<_>>();
-        for yes in ["claude -p hi", "node /x/claude --print hi", "claude --print=json", "claude --model m -p"] {
+        for yes in
+            ["claude -p hi", "node /x/claude --print hi", "claude --print=json", "claude --model m -p", "claude -cp q"]
+        {
             assert!(print_flag(&v(yes)), "{yes}");
         }
-        for no in ["claude", "claude --resume abc", "claude -- -p", "-p", "claude -pc", "claude --printer"] {
+        for no in ["claude", "claude --resume abc", "claude -- -p", "-p", "claude -c", "claude --printer", "claude -"] {
             assert!(!print_flag(&v(no)), "{no}");
         }
     }

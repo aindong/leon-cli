@@ -99,7 +99,7 @@ From any terminal (the server starts by itself):
 
 ```sh
 leon new demo                                    # 1. a session called "demo"
-leon -s demo run --label py -- python3           # 2. run a program in a new tab
+leon -s demo run --label py -- python3 -q        # 2. run a program in a new tab
 leon -s demo wait -b py --text '>>>'             #    and wait for its prompt
 leon -s demo send -b py 'print(6 * 7)'           # 3. type into it (no Enter yet)
 leon -s demo send-key -b py enter                # 4. press Enter
@@ -163,7 +163,9 @@ leon hosts check
 
 A dropped Wi-Fi link is retried for a minute: `leon events` and the app resume without losing or
 repeating an event, and `leon attach` says it is reconnecting, then reconnects and redraws. Keys typed while the link
-is stalled or down arrive whole or not at all: the status bar says how many were not sent. Use ssh keys or an agent: each connection is its own ssh session.
+is stalled or down arrive whole or not at all, and the status bar says how many were not sent
+(a stall that starts mid-word, within a second of the last reply, can still catch the keys already
+on their way). Use ssh keys or an agent: each connection is its own ssh session.
 
 The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
 and tabs and a dot for its connection. A remote pane works like a local one, with the host's name in

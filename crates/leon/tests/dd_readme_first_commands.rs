@@ -49,9 +49,8 @@ fn the_readmes_first_commands_read_back_42() {
         let lines: Vec<&str> = out.lines().collect();
         let typed =
             lines.iter().position(|l| l.contains("print(6 * 7)")).unwrap_or_else(|| panic!("run {run}:\n{out}"));
-        let banner = lines.iter().position(|l| l.starts_with("Python 3") || l.contains("Type \"help\""));
-        assert!(banner.is_some_and(|b| b < typed), "run {run}: the line was typed before Python started:\n{out}");
-        assert!(lines[typed].starts_with(">>> "), "run {run}: typed at the prompt:\n{out}");
+        // typed before Python read it, the tty echoes the line on its own, with no `>>> ` before it
+        assert!(lines[typed].starts_with(">>> "), "run {run}: the line was typed before Python's prompt:\n{out}");
         assert_eq!(lines.get(typed + 1).map(|l| l.trim()), Some("42"), "run {run}:\n{out}");
         let _ = env.cmd().env("PATH", &path).args(["server", "stop"]).output();
     }

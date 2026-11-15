@@ -118,10 +118,12 @@ pub fn add(r: &mut Registry) {
                 if st.session(&p.session_id)?.overlay(&wid).docked.iter().any(|d| d.side == DockSide::Bottom) {
                     return Err(ApiError::bad_request("bottom already has a dock"));
                 }
-                // the session's current directory: where the focused pane is, if it still exists
+                // the session's current directory: where the focused pane's live program is, if that
+                // still exists; an exited one's cwd is only the last OSC 7 path its output named
                 let s = st.session(&p.session_id)?;
-                let cwd = s.windows[s.active].focus.as_deref().and_then(|id| st.block(id).ok());
-                let cwd = cwd.and_then(|(_, b)| b.terminal.shown_cwd()).filter(|d| std::path::Path::new(d).is_dir());
+                let focused = s.windows[s.active].focus.as_deref().and_then(|id| st.block(id).ok());
+                let live = focused.filter(|(_, b)| b.exit_code.is_none());
+                let cwd = live.and_then(|(_, b)| b.terminal.shown_cwd()).filter(|d| std::path::Path::new(d).is_dir());
                 let options = blocks::TerminalOptions { cwd, ..Default::default() };
                 let spec = blocks::BlockSpec { label: Some(p.label), options, ..Default::default() };
                 let id = blocks::open(ctx, &mut st, &p.session_id, &wid, spec, place.as_ref())?;
