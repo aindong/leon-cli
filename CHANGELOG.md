@@ -59,6 +59,11 @@ fields it doesn't know. The full policy is in
   a probe of the link; if it fails they are all dropped, and so are keys typed while it
   reconnects, and the status bar says how many were not sent. A paste waits in the same line, so
   it can't pass keys typed before it. (F12)
+- On macOS, opening a host (`-H`, the app's hosts) could wait 30 s and then fail with `the leon
+  server can't be reached: Resource temporarily unavailable`. The ssh started for one of a
+  link's connections could inherit the pipes of another that was starting at the same moment,
+  which then was never served. ssh now gets its stdin, stdout and stderr and nothing else.
+- A clicked notification wakes every window, not only the one opened last.
 
 No schema changed, so `api_version` stays `1.5.0`.
 
