@@ -7,7 +7,8 @@ use crate::layout::{swapped, Direction, Side, Toward};
 use crate::{ApiError, State};
 
 impl State {
-    /// Put `block_id` beside `anchor_id` (any window of the session); an emptied window closes.
+    /// Put `block_id` beside `anchor_id` (any window of the session); an emptied window closes. A
+    /// block of another session joins this one (tmux's join-pane).
     pub fn move_block(
         &mut self,
         session_id: &str,
@@ -21,6 +22,10 @@ impl State {
             return Err(ApiError::bad_request("a block can't move beside itself"));
         }
         check_ratio(ratio)?;
+        let home = self.block(block_id)?.0.id.clone();
+        if home != session_id {
+            return self.join_block(&home, session_id, block_id, anchor_id, direction, side, ratio);
+        }
         let s = self.session_mut(session_id)?;
         let (from, to, i) = (s.window_of(block_id)?, s.window_of(anchor_id)?, s.block_index(block_id)?);
         if !s.windows[to].layout.as_ref().is_some_and(|t| t.contains(anchor_id)) {
@@ -41,6 +46,43 @@ impl State {
         }
         self.touch(session_id);
         Ok(self.revision(session_id))
+    }
+
+    /// `move_block` from session `from`: the block leaves its window there (an emptied window
+    /// closes, and with it a session left without windows) and is tiled beside `anchor_id` in
+    /// session `to`. Its program keeps the `LEON_SESSION` it started with.
+    #[allow(clippy::too_many_arguments)]
+    fn join_block(
+        &mut self,
+        from: &str,
+        to: &str,
+        block_id: &str,
+        anchor_id: &str,
+        direction: Direction,
+        side: Side,
+        ratio: f64,
+    ) -> Result<u64, ApiError> {
+        let t = self.session(to)?;
+        let tw = t.window_of(anchor_id)?;
+        if !t.windows[tw].layout.as_ref().is_some_and(|l| l.contains(anchor_id)) {
+            return Err(ApiError::bad_request("anchor must be tiled"));
+        }
+        let s = self.session_mut(from)?;
+        let (fw, i) = (s.window_of(block_id)?, s.block_index(block_id)?);
+        s.detach_placed(fw, block_id);
+        let mut block = s.blocks.remove(i);
+        let emptied = s.empty_window(fw).then(|| s.windows[fw].id.clone());
+        let t = self.session_mut(to)?;
+        block.window_id = t.windows[tw].id.clone();
+        let tree = t.windows[tw].layout.as_mut().expect("the anchor is in it");
+        assert!(tree.insert(anchor_id, block_id, direction, side, ratio), "the anchor is in it");
+        t.blocks.push(block);
+        self.touch(from);
+        self.touch(to);
+        if let Some(w) = emptied {
+            self.close_window(from, &w)?;
+        }
+        Ok(self.revision(to))
     }
 
     /// Blocks trade places, across windows too; each window's focus and zoom stay where they were.
@@ -267,5 +309,38 @@ mod tests {
         add(&mut st, &s, &w, "block:d", Some("block:a"));
         assert_eq!(st.session(&s).unwrap().active, 0);
         assert!(names(&mut st).iter().any(|e| e.contains("active_window_changed")));
+    }
+
+    #[test]
+    fn a_block_of_another_session_joins_this_one() {
+        let mut st = State::default();
+        let (here, w) = st.create_session(None, None).unwrap();
+        add(&mut st, &here, &w, "block:a", None);
+        let (there, tw) = st.create_session(None, None).unwrap();
+        add(&mut st, &there, &tw, "block:b", None);
+        let tw2 = st.new_window(&there, None).unwrap();
+        add(&mut st, &there, &tw2, "block:c", None);
+        st.take_events();
+
+        st.move_block(&here, "block:b", "block:a", Vertical, After, 0.5).unwrap();
+        let h = st.session(&here).unwrap();
+        assert_eq!(h.windows[0].layout.as_ref().unwrap().leaves(), ["block:a", "block:b"]);
+        assert_eq!(st.block("block:b").unwrap().0.id, here, "it is in this session now");
+        assert_eq!(st.block("block:b").unwrap().1.window_id, w);
+        let t = st.session(&there).unwrap();
+        assert_eq!(t.windows.len(), 1, "its emptied tab closed");
+        let changed: Vec<String> = st.take_events().iter().map(|e| e.body.to_string()).collect();
+        for sid in [&here, &there] {
+            assert!(
+                changed.iter().any(|e| e.contains("session_view_changed") && e.contains(sid.as_str())),
+                "{changed:?}"
+            );
+        }
+
+        // the last block of a session takes the session with it; a block can't join beside itself
+        st.move_block(&here, "block:c", "block:b", Horizontal, Before, 0.3).unwrap();
+        assert!(st.session(&there).is_err(), "the emptied session closed");
+        assert!(st.move_block(&here, "block:a", "block:a", Vertical, After, 0.5).is_err());
+        assert!(st.move_block(&here, "block:nope", "block:a", Vertical, After, 0.5).is_err());
     }
 }

@@ -11,7 +11,9 @@ of [the architecture](../architecture.md).
   query lists the tabs most recently shown first (the window ids the app saw on screen), a query
   runs the palette's fuzzy filter with recency breaking ties. ↩ goes there (`session.focus_block`
   or `session.focus_window` on that machine); ⌘↩ moves the tab's shown block beside the focused
-  pane with `session.move_block` when both are in the selected session, else goes there. Activity
+  pane with `session.move_block` when both are on the same machine (from another session it
+  joins this one, tmux's `join-pane`; its program keeps its `LEON_SESSION`). On a row of another
+  machine the switcher stays open and says a pane can't join a window on a different machine. Activity
   (`client.sidebar.activity.toggle`, ⌘⇧A, a toolbar button) takes the sidebar's place, shown even
   in top style or with the sidebar hidden. `attention::Tracker` looks at every machine's model at
   each poll: each block with a status becomes a row, blocked (its kind), error, done (unseen:

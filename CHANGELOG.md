@@ -13,7 +13,7 @@ section is a milestone from [docs/roadmap.md](docs/roadmap.md) and
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.2.0`.
+one is `1.3.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -28,7 +28,15 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
-### Loose ends after M12–M21
+### Loose ends after M12–M21 (API `1.3.0`)
+
+#### Changed
+
+- `session.move_block` takes a block from any session: one from another session joins the
+  anchor's session, beside the anchor (tmux's `join-pane`); a session it empties closes. The
+  moved program keeps the `LEON_SESSION` it started with.
+- ⌘↩ in the session switcher puts a pane of another session on this machine in a split beside
+  the focused one; on a row of another machine it says why it can't, and ↩ still goes there.
 
 #### Fixed
 

@@ -152,7 +152,7 @@ impl Workspace {
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
-                    None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: false }),
+                    None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: false, note: None }),
                 };
                 cx.notify();
             }
