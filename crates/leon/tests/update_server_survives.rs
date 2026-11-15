@@ -45,14 +45,14 @@ impl Drop for Started<'_> {
 fn a_running_server_survives(leon: Install, nap: &str) {
     let rel = Release::new();
     let srv = rel.serve();
-    // the installed leon starts its own server: that server runs the binary the update replaces
+    let server = Started(&leon); // before there is a server: it is stopped however this ends
+                                 // the installed leon starts its own server: that server runs the binary the update replaces
     let o = run(
         leon.cmd(&rel, &srv).env("LEON_AUTOSTART", "1").env("SHELL", "/bin/sh").args(["run", "--", "sleep", nap]),
         60,
     );
     assert_eq!(o.code, 0, "a session with a running program: {}", o.text());
     let block = o.out.trim().to_string();
-    let server = Started(&leon);
     let pid = server.pid();
     let exe = release_kit::sh(&leon.home, &format!("ps -o command= -p {pid}"));
     assert!(exe.contains(leon.exe.to_str().unwrap()), "the server runs the installed binary: {exe}");

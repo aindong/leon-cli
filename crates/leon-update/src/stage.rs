@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 use crate::RELEASES;
 
 pub(crate) const NAME: &str = ".leon-update";
+/// The file that marks a staging directory as one leon made.
+const MARK: &str = "made-by-leon";
 
 pub(crate) struct Staging {
     pub dir: PathBuf,
@@ -63,7 +65,14 @@ impl Staging {
         let io = |e: std::io::Error| format!("can't clear {}: {e}", dir.display());
         lock.set_permissions(std::fs::Permissions::from_mode(0o700)).map_err(io)?;
         // what a killed update left: ours to remove, now that the lock says nobody is using it
+        // only what leon made: an empty directory, or one with the mark leon leaves in its own.
+        // A directory of this name that the user made by hand, with their files in it, stays.
+        let mut entries = std::fs::read_dir(&dir).map_err(io)?;
+        if entries.next().is_some() && !dir.join(MARK).is_file() {
+            return Err(in_the_way());
+        }
         clear(&dir).map_err(io)?;
+        std::fs::write(dir.join(MARK), "leon's staging directory for an update; safe to delete\n").map_err(io)?;
         Ok(Staging { dir, lock })
     }
 }

@@ -209,12 +209,12 @@ pub fn install(cfg: &Config, release: &Release, target: &Target, say: &mut dyn F
         Command::new(&leon).arg("--version").env("LEON_AUTOSTART", "0").stdin(std::process::Stdio::null()).output();
     // its first line: the version, or why it could not start
     let first = |bytes: &[u8]| String::from_utf8_lossy(bytes).lines().next().unwrap_or_default().to_string();
-    let says = match ran {
-        Ok(o) if o.stdout.is_empty() => first(&o.stderr),
-        Ok(o) => first(&o.stdout),
-        Err(e) => e.to_string(),
+    let (ran_well, says) = match ran {
+        Ok(o) if o.stdout.is_empty() => (false, first(&o.stderr)),
+        Ok(o) => (o.status.success(), first(&o.stdout)),
+        Err(e) => (false, e.to_string()),
     };
-    if says.split_whitespace().nth(1) != Some(&release.version) {
+    if !ran_well || says.split_whitespace().nth(1) != Some(&release.version) {
         return Err(format!(
             "the leon in {} does not run as leon {} here (it said \"{says}\")",
             file.name, release.version
@@ -229,6 +229,8 @@ pub fn install(cfg: &Config, release: &Release, target: &Target, say: &mut dyn F
     cfg.step("installing");
     swap(&new, &target.root)
         .map_err(|e| format!("can't replace {}: {e}; nothing was changed", target.root.display()))?;
+    // the rename itself, on disk; nothing to undo if this fails
+    let _ = std::fs::File::open(parent).and_then(|dir| dir.sync_all());
     cfg.step("installed");
     Ok(()) // dropping the staging directory removes it, with the old app in it
 }

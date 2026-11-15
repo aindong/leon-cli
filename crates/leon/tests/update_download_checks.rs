@@ -113,6 +113,21 @@ fn a_leon_that_is_not_the_promised_version_is_refused() {
 }
 
 #[test]
+fn a_leon_that_fails_to_run_is_refused() {
+    // it prints the promised version and then fails: a leon that does not start is not installed
+    let rel = Release::unsigned();
+    let leon = rel.tmp.path().join("failing-leon");
+    std::fs::write(&leon, format!("#!/bin/sh\necho \"leon {} (fake)\"\nexit 1\n", update_kit::VERSION)).unwrap();
+    std::fs::set_permissions(&leon, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    rel.put(&name("cli"), &tarball(&name("cli"), &leon));
+    rel.sign();
+    let (srv, leon) = (rel.serve(), Install::cli());
+    let before = leon.state();
+    assert_refused(&leon.update(&rel, &srv, &[]), &[&name("cli"), "does not run as leon"]);
+    leon.assert_unchanged(before, "a leon that fails to run");
+}
+
+#[test]
 fn the_right_file_is_taken() {
     let rel = Release::new();
     let (srv, leon) = (rel.serve(), Install::cli());

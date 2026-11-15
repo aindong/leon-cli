@@ -64,6 +64,16 @@ fn something_else_named_like_the_staging_directory_is_left_alone() {
     std::fs::remove_file(&staging).unwrap();
     assert_eq!(leon.state(), before, "nothing was installed either time");
 
+    // a directory of that very name that leon did not make: the user's files stay
+    std::fs::create_dir(&staging).unwrap();
+    std::fs::write(staging.join("canary"), "keep me").unwrap();
+    assert_refused(&leon.update(&rel, &srv, &[]), &[staging.to_str().unwrap(), "in the way"]);
+    assert_eq!(std::fs::read_to_string(staging.join("canary")).unwrap(), "keep me");
+    std::fs::remove_dir_all(&staging).unwrap();
+    // an empty one is taken over: what a crash between making it and marking it leaves
+    std::fs::create_dir(&staging).unwrap();
+    assert_eq!(leon.state(), before, "nothing was installed either time");
+
     // a directory with a name that only looks alike is not leon's to clear
     let lookalike = leon.exe.parent().unwrap().join(".leon-update-old");
     std::fs::create_dir(&lookalike).unwrap();

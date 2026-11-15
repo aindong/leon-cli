@@ -31,8 +31,10 @@ fn a_request_carries_the_host_a_fixed_user_agent_and_nothing_else() {
         assert_eq!(names, ["host", "user-agent"], "only what a request must have: {head}");
         // the real version, not the one the test seam claims: a fixed string per build
         assert_eq!(agent, format!("leon/{VERSION}"), "{head}");
+        // apart from the agent, whose text is fixed: a user named leon is not in the request
+        let rest = head.replace(&format!("leon/{VERSION}"), "");
         for private in [user.as_str(), host.trim(), leon.home.to_str().unwrap()] {
-            assert!(private.len() < 3 || !head.contains(private), "the request holds {private:?}: {head}");
+            assert!(private.len() < 3 || !rest.contains(private), "the request holds {private:?}: {head}");
         }
         assert!(!head.contains('?'), "no query string: {head}");
     }

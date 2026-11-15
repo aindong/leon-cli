@@ -145,7 +145,9 @@ fn zip(file: std::fs::File, name: &str, into: &Path) -> Result<(), String> {
         }
         // create_new: an archive that names one path twice does not overwrite, or follow a link
         let mut out = std::fs::OpenOptions::new().write(true).create_new(true).open(&dest).map_err(io)?;
-        let wrote = std::io::copy(&mut (&mut entry).take(MAX_UNPACKED + 1), &mut out).map_err(io)?;
+        // no more than is left of the cap, plus the byte that shows an entry went over it
+        let left = MAX_UNPACKED - total + 1;
+        let wrote = std::io::copy(&mut (&mut entry).take(left), &mut out).map_err(io)?;
         count(name, &mut total, wrote)?;
         let mode = entry.unix_mode().unwrap_or(0o644) & 0o755;
         out.set_permissions(std::fs::Permissions::from_mode(mode)).map_err(io)?;
