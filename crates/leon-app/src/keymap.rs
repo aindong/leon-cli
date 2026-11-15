@@ -49,31 +49,6 @@ pub const DEFAULTS: &[(&str, &str)] = &[
 pub const APP_DEFAULTS: &[(&str, &str)] =
     &[("shift+pageup", "client.scroll.page_up"), ("shift+pagedown", "client.scroll.page_down")];
 
-/// US-layout shifted symbols and the key they are on: macOS reports cmd+shift+= as `+`.
-const SHIFTED: [(char, char); 21] = [
-    ('~', '`'),
-    ('!', '1'),
-    ('@', '2'),
-    ('#', '3'),
-    ('$', '4'),
-    ('%', '5'),
-    ('^', '6'),
-    ('&', '7'),
-    ('*', '8'),
-    ('(', '9'),
-    (')', '0'),
-    ('_', '-'),
-    ('+', '='),
-    ('{', '['),
-    ('}', ']'),
-    ('|', '\\'),
-    (':', ';'),
-    ('"', '\''),
-    ('<', ','),
-    ('>', '.'),
-    ('?', '/'),
-];
-
 /// A keystroke as a binding chord, written unshifted (spec §4), or None for a key binding syntax
 /// has no name for. shortcut: assumes a US layout for shifted symbols; physical keys (`[KeyA]`)
 /// never match since GPUI keystrokes carry no key code.
@@ -83,8 +58,9 @@ pub fn chord(ks: &Keystroke) -> Option<Chord> {
     let mut mods = leon_lua::keys::Mods { cmd: m.platform, ctrl: m.control, alt: m.alt, shift: m.shift };
     let mut chars = ks.key.chars();
     let name = match (chars.next(), chars.next()) {
-        (Some(c), None) => match SHIFTED.iter().find(|(s, _)| *s == c) {
-            Some((_, base)) => {
+        // macOS reports cmd+shift+= as `+`
+        (Some(c), None) => match leon_core::keys::unshifted(c) {
+            Some(base) => {
                 mods.shift = true;
                 base.to_string()
             }
@@ -102,9 +78,9 @@ fn config_seq(key: &str) -> Option<Vec<Chord>> {
     let mut seq = parse(key).ok()?.seq;
     for c in &mut seq {
         if let Key::Char(ch) = c.key {
-            if let Some((_, base)) = SHIFTED.iter().find(|(s, _)| *s == ch) {
+            if let Some(base) = leon_core::keys::unshifted(ch) {
                 c.mods.shift = true;
-                c.key = Key::Char(*base);
+                c.key = Key::Char(base);
             }
         }
     }
@@ -226,7 +202,7 @@ impl Keymap {
             actions,
             copy_on_select: settings["copy_on_select"] == true,
             notify,
-            repeat_time: Duration::from_millis(settings["repeat_time"].as_u64().unwrap_or(REPEAT_TIME)),
+            repeat_time: Duration::from_millis(settings["repeat_time"].as_u64().unwrap_or(leon_lua::REPEAT_TIME)),
             hint_patterns: settings["hint_patterns"]
                 .as_array()
                 .map(|a| a.iter().filter_map(|p| p.as_str().map(String::from)).collect())
@@ -280,9 +256,6 @@ impl Keymap {
         Some(b.seq.iter().map(glyphs).collect::<Vec<_>>().join(" "))
     }
 }
-
-/// tmux's `repeat-time` default, for a keymap that doesn't say.
-const REPEAT_TIME: u64 = 500;
 
 /// The window after a repeatable binding ran (tmux `bind -r`): until it closes, a key that
 /// completes a repeatable binding after the same prefix runs it with no prefix typed. Any other

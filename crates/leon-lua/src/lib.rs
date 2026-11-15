@@ -19,6 +19,9 @@ use std::path::{Path, PathBuf};
 use keys::KeySpec;
 use serde_json::Value;
 
+/// tmux's `repeat-time` default, in milliseconds, for a config that doesn't set `repeat_time`.
+pub const REPEAT_TIME: u64 = 500;
+
 /// Everything a config file declared, in the order it was declared.
 #[derive(Debug, Default, Clone)]
 pub struct Config {
@@ -38,7 +41,7 @@ pub struct Config {
     /// `leon.set("copy_on_select", true)`: the app copies a selection as it is made. None is off.
     pub copy_on_select: Option<bool>,
     /// `leon.set("repeat_time", ms)`: how long after a repeatable binding its keys work without the
-    /// prefix. None leaves the client's default (500 ms); 0 turns repeat off.
+    /// prefix. None leaves the default (`REPEAT_TIME`); 0 turns repeat off.
     pub repeat_time: Option<u64>,
     /// `leon.set("hint_patterns", {...})`: regular expressions hints match besides the built-in ones.
     pub hint_patterns: Vec<String>,

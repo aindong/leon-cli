@@ -93,9 +93,6 @@ pub struct Reloaded {
     pub logs: Vec<String>,
 }
 
-/// tmux's `repeat-time` default, in milliseconds.
-const REPEAT_TIME: u64 = 500;
-
 pub(super) fn keymap(l: &Loaded) -> Keymap {
     let c = &l.cfg;
     Keymap {
@@ -152,7 +149,7 @@ pub(super) fn keymap(l: &Loaded) -> Keymap {
             .collect(),
         settings: ClientSettings {
             copy_on_select: c.copy_on_select.unwrap_or(false),
-            repeat_time: c.repeat_time.unwrap_or(REPEAT_TIME),
+            repeat_time: c.repeat_time.unwrap_or(leon_lua::REPEAT_TIME),
             hint_patterns: c.hint_patterns.clone(),
             notify_blocked: c.notify_blocked.unwrap_or(true),
             notify_error: c.notify_error.unwrap_or(true),
