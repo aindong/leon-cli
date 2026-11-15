@@ -53,7 +53,9 @@ fn a_crashed_server_comes_back_with_its_latest_sessions() {
 fn an_idle_server_does_not_rewrite_its_file() {
     let env = Env::new();
     env.ok(&["server", "start"]);
-    env.ok(&["new", "quiet"]);
+    // a program that prints nothing: a shell's first prompt, however late it comes, is a change
+    let quiet = r#"{"label":"quiet","layout":{"block":{"options":{"command":["sleep","300"]}}}}"#;
+    env.ok(&["api", "call", "session.create", quiet]);
     let file = env.state_dir().join("sessions.json");
     let end = Instant::now() + Duration::from_secs(5);
     while !file.exists() {
