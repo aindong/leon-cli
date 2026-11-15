@@ -144,7 +144,7 @@ fn serve(conn: UnixStream, s: &Arc<Shared>) {
     // two by another connection's thread kept that connection's pipes for as long as it ran. One
     // of them is the pipe `spawn` reads until its own ssh has started: that `spawn` never came
     // back, and its connection was never served.
-    let mut room = vec![[0; 2]; if cfg!(target_os = "macos") { LISTED_FDS } else { 0 }];
+    let mut room = fd_room();
     // SAFETY: between fork and exec only `only_stdio`, sigemptyset and sigprocmask, all
     // async-signal-safe.
     unsafe {
@@ -244,8 +244,14 @@ fn remove_stale(runtime: &Path) {
     }
 }
 
-/// Descriptors `only_stdio`'s list has room for; a process with more takes the slow way.
-const LISTED_FDS: usize = 4096;
+/// Room for `only_stdio`'s list (macOS): the whole descriptor table, not a likely count, since
+/// an older kernel lists only the numbers below the room it is given. Pages never written cost
+/// nothing.
+fn fd_room() -> Vec<[i32; 2]> {
+    // SAFETY: getdtablesize has no preconditions.
+    let table = if cfg!(target_os = "macos") { unsafe { libc::getdtablesize() } } else { 0 };
+    vec![[0; 2]; table.max(0) as usize]
+}
 
 /// For a forked child, before exec: mark every descriptor past stderr close-on-exec, so the
 /// program started gets its stdio only. Marked, not closed: `spawn`'s own pipe still has to
@@ -267,14 +273,14 @@ unsafe fn only_stdio(room: &mut [[i32; 2]]) {
                 }
             }
         } else {
-            // no list, or more descriptors than room: every number the table holds (10 ms and
+            // no list, or one that filled its room: every number the table holds (10 ms and
             // more under a high limit, which is why there is a list)
             for fd in 3..libc::getdtablesize() {
                 libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
             }
         }
     }
-    // shortcut: the syscall is Linux 5.11's; an older kernel refuses it and nothing is marked.
+    // shortcut: the flag is Linux 5.11's; an older kernel refuses it and nothing is marked.
     // Linux makes its own pipes close-on-exec in one step, so only a descriptor some other
     // library opened would stay: walk /proc/self/fd if one ever matters.
     #[cfg(target_os = "linux")]
@@ -327,7 +333,7 @@ mod tests {
 
     #[test]
     fn only_stdio_marks_a_descriptor_with_its_list_and_without_room_for_one() {
-        for room in [LISTED_FDS, 0] {
+        for room in [fd_room().len(), 0] {
             // SAFETY: a copy of stdin (not close-on-exec, as a dup is), marked, read back, closed.
             unsafe {
                 let fd = libc::dup(0);

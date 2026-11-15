@@ -42,4 +42,15 @@ fn ssh_inherits_no_descriptor_but_its_stdio() {
     let fds: Vec<i32> = listed.split_whitespace().filter_map(|fd| fd.parse().ok()).collect();
     assert!(fds.contains(&0) && fds.contains(&2), "the listing has ssh's stdio: {listed:?}");
     assert!(!fds.contains(&planted), "ssh inherited descriptor {planted}: {fds:?}");
+
+    // The descriptors are marked, not closed: the pipe `spawn` hears a failed exec through is
+    // one of them, and an ssh that can't be run must still be said.
+    std::env::set_var("LEON_SSH", dir.path().join("no-such-ssh"));
+    let link = leon_hosts::Link::open("box", &endpoint, false).unwrap();
+    let _conn = UnixStream::connect(link.socket()).unwrap();
+    let end = Instant::now() + Duration::from_secs(30);
+    while !link.last_error().is_some_and(|e| e.contains("can't run")) {
+        assert!(Instant::now() < end, "no reason for an ssh that isn't there: {:?}", link.last_error());
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
