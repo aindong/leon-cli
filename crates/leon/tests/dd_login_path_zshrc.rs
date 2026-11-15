@@ -1,6 +1,9 @@
 //! F1 as a zsh user meets it: tools put on PATH in ~/.zshrc (nvm, Claude Code's ~/.local/bin)
 //! must be found by a server started with launchd's environment, as they are in the user's tab.
 
+// macOS only: zsh is the default login shell there and Leon.app-from-Finder is the F1 case; Linux images may lack /bin/zsh
+#![cfg(target_os = "macos")]
+
 mod support;
 
 use std::os::unix::fs::PermissionsExt;
@@ -8,8 +11,6 @@ use std::process::Command;
 
 use support::Env;
 
-// macOS only: zsh is the default login shell there and Leon.app-from-Finder is the F1 case; Linux images may lack /bin/zsh
-#[cfg(target_os = "macos")]
 #[test]
 fn a_tool_on_the_zshrc_path_is_found_by_a_finder_started_server() {
     let env = Env::new();
