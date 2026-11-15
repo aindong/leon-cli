@@ -62,18 +62,25 @@ A version with a `-` in it (`0.2.0-rc.1`) becomes a pre-release and leaves the t
   tag and fix whichever is wrong.
 - **"pins no key"** or **"its signature is not by a key in …"** (publish): the secret and
   `crates/leon/release-keys.pub` don't belong together. See [Secrets](#secrets).
-- **"a release or a draft for vX.Y.Z exists already"** (publish): an earlier run got as far as its
-  draft. Delete it (`gh release delete vX.Y.Z`) and re-run the failed jobs.
+- **"a release or a draft for vX.Y.Z exists already"** (publish): an earlier run got as far as
+  creating it. If it is a draft, delete it (`gh release delete vX.Y.Z`) and re-run the failed
+  jobs. If it is already published, leave it: the release is out, and deleting it would break the
+  address updaters read. Only the tap can be behind then; write it by hand with
+  `scripts/release-homebrew.sh` from that release's `latest.json`.
 
-Nothing is published before every check has passed, so a failed run leaves at most a draft.
+Nothing is published before every check has passed.
+
+The on-`main` check guards against a mistaken tag; it is not access control. It accepts any commit
+that `main` holds, and nothing compares the version with the latest release, so tag the newest
+commit of `main`.
 
 ### A test run
 
 Start the workflow by hand (`workflow_dispatch`: the Actions tab, or `gh workflow run release.yml
 --ref BRANCH`, on any branch; GitHub allows this once the workflow file is on the default branch,
 `dev`). The release stays a **draft**, no tag is created, and the tap is not touched. Delete the
-draft afterwards
-(`gh release delete vX.Y.Z`); publishing one by hand would create its tag and start a second run.
+draft afterwards (`gh release delete vX.Y.Z`). Never publish a test draft: that would put out a
+build of a branch nobody checked, signed with the real key, and create its tag.
 
 A test run signs with the real key, so the files in its draft are as trusted as a release's.
 Start one only from a commit you would release. The signatures stay in the draft, which only
@@ -106,7 +113,8 @@ Repository secrets, under Settings, Secrets and variables, Actions:
 anyone who can push a branch can take the signing key and the tap token, not only use them. Give
 push access only to people you would trust with a release. To narrow it further, put both secrets
 in an Environment that only `v*` tags may use and that needs a reviewer, and add a tag rule for
-`v*`. That is not set up.
+`v*`. That is not set up, and `scripts/release-keys.sh` would then have to set the Environment's
+secret instead of the repository's.
 
 ## Signatures
 

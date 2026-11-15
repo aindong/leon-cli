@@ -61,6 +61,8 @@ jq -e '
   and (.date | line and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
   and (.notes_url | line) and (.min_os | type == "object" and all(.[]; line))
   and (.files | type == "array" and length > 0)
+  and ([.files[].name] | length == (unique | length)) # one entry per file, and per platform:
+  and ([.files[] | [.kind, .os, .arch]] | length == (unique | length)) # a reader must not have to choose
   and all(.files[];
     (.name | line and test("^[A-Za-z0-9._-]+$")) and (.kind | IN("app", "cli", "deb"))
     and (.os | IN("macos", "linux")) and (.arch | IN("arm64", "x86_64"))
