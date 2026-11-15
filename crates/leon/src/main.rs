@@ -8,7 +8,9 @@ mod commands;
 mod events;
 mod hosts;
 mod layout;
+mod login_path;
 mod script;
+mod server;
 mod settings;
 mod skill;
 
@@ -421,7 +423,7 @@ pub enum ServerCmd {
     Run {
         #[arg(long, hide = true)]
         autostarted: bool,
-        /// Restore the sessions saved when the last server stopped.
+        /// Restore the sessions the last server saved.
         #[arg(long, default_value = "true", num_args = 0..=1, require_equals = true,
               default_missing_value = "true", value_parser = BoolishValueParser::new())]
         restore: bool,
@@ -431,7 +433,7 @@ pub enum ServerCmd {
     },
     /// Start a server in the background (does nothing if one runs).
     Start {
-        /// Restore the sessions saved when the last server stopped.
+        /// Restore the sessions the last server saved.
         #[arg(long, default_value = "true", num_args = 0..=1, require_equals = true,
               default_missing_value = "true", value_parser = BoolishValueParser::new())]
         restore: bool,

@@ -106,7 +106,8 @@ Create a session and print its ID. Same as `leon session new`.
 
 - `-c, --cwd DIR`: start the first terminal in this existing directory. Relative paths resolve
   against the caller's working directory. A missing path or a file exits 2 (usage error).
-  Omitted uses the server's home directory.
+  Omitted uses the server's home directory. With `-H` the path is the host's: it must be
+  absolute, and the host checks it.
 
 ### `leon ls`
 
@@ -173,12 +174,14 @@ Close a window and end its programs. Closing a session's last window destroys th
 ### `leon run [FLAGS] -- CMD…`
 
 Run a command in a new window and print the new block's ID. The command runs directly, not
-through a shell; for pipes or `&&`, use `leon run -- sh -c '…'`.
+through a shell; for pipes or `&&`, use `leon run -- sh -c '…'`. It is found on your login shell's
+PATH, even when the server was started by Leon.app from Finder.
 
 - `--label LABEL`: name the block, so `-b LABEL` finds it.
 - `--keep-open`: keep the block after the program exits, so you can still read its output.
 - `--wait`: wait for the program and exit with its status.
-- `-c, --cwd DIR`: working directory (default: the current directory).
+- `-c, --cwd DIR`: working directory (default: the current directory; with `-H`, the host's
+  home, and `DIR` must be an absolute path there).
 
 ```sh
 leon run --label tests --keep-open -- cargo test
@@ -254,43 +257,7 @@ leon block close "$id"
 
 ## Layout
 
-### `leon focus TARGET`
-
-Focus a block, or move focus `left`, `right`, `up`, `down`, `next` or `prev` in the active window.
-
-- `--wrap`: with nothing in that direction, go round to the far side.
-
-### `leon move [BLOCK] DIRECTION ANCHOR`
-
-Put a block (default: the focused one) beside `ANCHOR`, to its `right`, `left`, `above` or
-`below`. Both must be in the same session; they may be in different windows.
-
-- `--ratio PCT`: the moved block's share of the space (default 50).
-
-### `leon swap BLOCK OTHER`
-
-Two blocks trade places.
-
-### `leon zoom [BLOCK]`
-
-Show a block filling its window, or stop. Toggles by default.
-
-- `--on`: zoom in, even if already zoomed.
-- `--off`: zoom out, even if not zoomed.
-
-### `leon resize [BLOCK]`
-
-Set a block's share of the split it is in.
-
-- `--ratio PCT`: the block's share, 1–99 (required).
-
-```sh
-leon focus left
-leon move logs below tests --ratio 30
-leon zoom -b tests --on
-leon swap logs tests
-leon resize -b logs --ratio 25
-```
+`leon focus`, `move`, `swap`, `zoom` and `resize` are in [cli/layout.md](cli/layout.md).
 
 ## Blocks
 
@@ -412,18 +379,19 @@ Run, start, stop or check the server.
 ### `leon server run`
 
 Run the server in the foreground. Sessions are saved in `$LEON_STATE_DIR` (default
-`~/.local/state/leon`) when it stops, and restored when it starts. A restored block runs a fresh
-shell under the text it showed before, and offers its resume command if a program registered one;
+`~/.local/state/leon`) while it runs and when it stops, and restored when it starts. After a crash
+they come back as they were a second or two before it, with each pane's text from up to a minute
+before. A restored block runs a fresh shell under the text it showed before, and offers its resume command if a program registered one;
 nothing else that ran is run again.
 
 - `--config PATH`: the Lua config (default as for `leon config check`).
-- `--restore[=BOOL]`: restore the sessions saved when the last server stopped (default true).
+- `--restore[=BOOL]`: restore the sessions the last server saved (default true).
 
 ### `leon server start`
 
 Start a server in the background. Does nothing if one runs (except make it persistent).
 
-- `--restore[=BOOL]`: restore the sessions saved when the last server stopped (default true).
+- `--restore[=BOOL]`: restore the sessions the last server saved (default true).
 
 ### `leon server stop`
 
@@ -458,6 +426,9 @@ leon -H ssh://me@devbox ls
 leon hosts add devbox ssh://me@devbox
 leon -H devbox attach
 ```
+
+This machine's working directory means nothing on the host: with `-H`, `run`, `split` and `new`
+start in the host's home unless `--cwd` gives an absolute path there (a relative one exits 2).
 
 `leon server run|start|proxy`, `leon app`, `leon config check`, `leon skill` and `leon hosts` are
 about this machine and refuse `-H`; `leon server status` and `leon server stop` work over it.

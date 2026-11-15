@@ -67,8 +67,7 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
                 Some(split) => (pick_session(c, cli, None)?, split.to_string()),
                 None => pick_block(c, cli, None)?,
             };
-            let here = std::env::current_dir().map_err(|e| Fail::Other(format!("no current directory: {e}")))?;
-            let cwd = here.join(cwd.as_deref().unwrap_or(".".as_ref()));
+            let cwd = crate::commands::block_cwd(cli, cwd.as_deref())?;
             let command = (!command.is_empty()).then_some(command);
             let options = json!({ "command": command, "cwd": cwd, "exit": { "on_completion": !keep_open } });
             let (direction, side) = place(*edge);

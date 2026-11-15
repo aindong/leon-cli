@@ -19,8 +19,8 @@ fn m22a_documented_contract() {
         assert!(lua.contains(&format!("`{key}`")), "docs/lua.md doesn't document the setting {key}");
     }
     assert!(lua.contains("settings_changed") && lua.contains("server.settings"), "docs/lua.md");
-    let changelog = include_str!("../../../CHANGELOG.md");
-    assert!(changelog.contains("M22a") && changelog.contains("server.settings"), "CHANGELOG.md");
+    let changelog = include_str!("../../../docs/changelog-milestones.md");
+    assert!(changelog.contains("M22a") && changelog.contains("server.settings"), "the milestones' changelog");
     let minor: u64 = leon_server::API_VERSION.split('.').nth(1).unwrap().parse().unwrap();
     assert!(minor >= 3, "server.settings is a new stable method: a minor bump");
     assert!(leon_server::contract::named().any(|m| m == "server.settings"), "contract.rs lists server.settings");

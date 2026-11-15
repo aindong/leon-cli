@@ -64,7 +64,7 @@ pub struct Status {
     /// True when a client started this server on demand; it exits once idle.
     pub autostarted: bool,
     pub sessions: usize,
-    /// Where sessions are saved on stop; null when they aren't (the state dir isn't private).
+    /// Where sessions are saved, while running and on stop; null when they aren't (the state dir isn't private).
     pub state_file: Option<String>,
 }
 

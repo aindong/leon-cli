@@ -481,6 +481,7 @@ mod keys;
 mod look_view;
 #[path = "view_start.rs"]
 mod start;
+pub(crate) use bars::Tip;
 pub use look_view::is_dark;
 pub use start::{init, install, quits, run};
 #[path = "view_menus.rs"]

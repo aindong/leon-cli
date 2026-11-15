@@ -59,7 +59,7 @@ each other's pipes: pass `--test-threads=1`) and writes `$HOME/.cache/rosetta` (
 
 ## Decisions
 
-The decisions, in five parts:
+The decisions, in six parts:
 
 - [Protocol and clients](architecture/protocol-and-clients.md): the wire protocol, events, layout,
   the socket path, terminal emulation, Lua (config, runtime, bounds), the app, the screen transport,
@@ -72,9 +72,9 @@ The decisions, in five parts:
 - [Floats and drawers in the app](architecture/floats.md): the shared client's overlays, where
   floats and drawers go, dragging them through the server, slides and Reduce Motion.
 - [State, packaging and hosts](architecture/state-and-hosts.md): persistence, scrollback and resume
-  after a restart, terminal reads, packaging (Leon.app, Linux packages), `LEON_BIN_DIR`, remote
-  hosts and reconnects, the app's hosts, the API contract, tested
-  docs, and naming.
+  after a restart, terminal reads, packaging (Leon.app, Linux packages), the login shell's PATH,
+  `LEON_BIN_DIR`, the API contract, tested docs, and naming.
+- [Hosts](architecture/hosts.md): remote hosts and reconnects, and the app's hosts.
 
 ## Verification
 

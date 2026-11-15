@@ -112,7 +112,8 @@ leon block call set_resume -b "$LEON_BLOCK" '{"command": null}'
 
 On restore the block follows the `resume` setting in `init.lua` (`leon.set("resume", "ask")`):
 `"ask"` (the default) types the command at the new prompt and waits for Enter (Ctrl-C skips it),
-`"always"` runs it, `"never"` ignores it.
+`"always"` runs it, `"never"` ignores it. A command is offered at one restart: once typed it isn't saved again, so a
+skipped or stale one doesn't come back each time. A resumed agent's hook registers it again.
 
 ## Program status: let the user see what the agent is doing
 
