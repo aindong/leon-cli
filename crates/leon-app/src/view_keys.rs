@@ -9,8 +9,14 @@ impl Workspace {
     pub(super) fn key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let ks = &ev.keystroke;
         let chord = keymap::chord(ks);
+        // every key closes the repeat window; only a repeatable one opens it again
+        let mut repeat = std::mem::take(&mut self.repeat);
         if self.palette.is_some() {
             self.palette_key(ks, chord.as_ref(), window, cx);
+            cx.stop_propagation();
+            return;
+        }
+        if self.mode_key(ks, chord.as_ref(), cx) {
             cx.stop_propagation();
             return;
         }
@@ -25,6 +31,15 @@ impl Workspace {
             cx.notify();
             cx.stop_propagation();
             return;
+        }
+        if let Some(c) = chord.as_ref().filter(|_| self.pending.is_empty()) {
+            let now = Instant::now();
+            if let Some((b, prefix)) = repeat.press(c, now, |p, k| self.keymap.repeatable(p, k)) {
+                self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, now);
+                self.run_binding(b, prefix, c, window, cx);
+                cx.stop_propagation();
+                return;
+            }
         }
         if let Some(c) = &chord {
             let escape = c.key == leon_lua::keys::Key::Named("escape") && c.mods == Default::default();
@@ -43,6 +58,7 @@ impl Workspace {
                 }
                 Pressed::Run(b) => {
                     let prefix = std::mem::take(&mut self.pending);
+                    self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, Instant::now());
                     self.run_binding(b, prefix, c, window, cx);
                     cx.stop_propagation();
                     return;
@@ -93,6 +109,7 @@ impl Workspace {
     ) {
         match name {
             "session.new" => self.new_session_on(self.host_arg(args), cx),
+            "session.switch" => self.switch_action(args, cx),
             "client.host.add" => self.ask_host(cx),
             "client.tab.new" => self.new_tab(&NewTab, window, cx),
             "client.tab.next" => self.step_tab(1, cx),
@@ -123,6 +140,10 @@ impl Workspace {
             "pane.close" => self.close_pane(&ClosePane, window, cx),
             "pane.paste" => self.paste(&Paste, window, cx),
             "client.sidebar.toggle" => self.toggle_sidebar(&ToggleSidebar, window, cx),
+            "client.sidebar.activity.toggle" => {
+                self.activity = !self.activity;
+                cx.notify();
+            }
             "client.tab_style.toggle" => self.toggle_tab_style(cx),
             "client.pane_header.reveal" => self.toggle_pane_headers(cx),
             "client.font.increase" => self.set_font_size(self.font_size + 1., window, cx),
@@ -131,7 +152,7 @@ impl Workspace {
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
-                    None => Some(Palette { query: String::new(), selected: 0, ask: None }),
+                    None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: false }),
                 };
                 cx.notify();
             }
@@ -146,6 +167,7 @@ impl Workspace {
                 }
             }
             "client.find.open" | "client.find.next" | "client.find.previous" => self.find_action(name, cx),
+            "client.copy_mode" | "client.hints" => self.mode_action(name, cx),
             "client.scroll.page_up" | "client.scroll.page_down" | "client.scroll.top" | "client.scroll.bottom" => {
                 self.scroll_action(name, cx)
             }
@@ -211,6 +233,9 @@ impl Workspace {
 
     pub(super) fn palette_matches(&self) -> Vec<Item> {
         let Some(p) = self.palette.as_ref().filter(|p| p.ask.is_none()) else { return Vec::new() };
+        if p.switch {
+            return self.switcher_items(&p.query);
+        }
         let items = self.palette_items();
         palette::filter(&items, &p.query).into_iter().map(|i| items[i].clone()).collect()
     }
@@ -237,19 +262,36 @@ impl Workspace {
     ) {
         let m = &ks.modifiers;
         let named = |name: &str| ks.key == name && !m.platform && !m.control;
-        let toggle = chord.is_some_and(|c| {
-            matches!(self.keymap.press(&[], c), Pressed::Run(b) if b.action.as_deref() == Some("client.palette.toggle"))
+        let bound = chord.and_then(|c| match self.keymap.press(&[], c) {
+            Pressed::Run(b) => b.action,
+            _ => None,
         });
+        // the key of the list on screen closes it; the other one's key changes to that list
+        let want_switch = match bound.as_deref() {
+            Some("session.switch") => Some(true),
+            Some("client.palette.toggle") => Some(false),
+            _ => None,
+        };
+        let toggle = want_switch.is_some_and(|w| self.palette.as_ref().is_some_and(|p| p.switch == w));
+        if let (Some(w), false, Some(p)) = (want_switch, toggle, self.palette.as_mut()) {
+            (p.switch, p.query, p.selected, p.ask) = (w, String::new(), 0, None);
+            cx.notify();
+            return;
+        }
         let matches = self.palette_matches();
         let Some(p) = self.palette.as_mut() else { return };
         if named("escape") || toggle {
             self.palette = None;
         } else if named("enter") && p.ask.is_some() {
             self.ask_enter(cx);
-        } else if named("enter") {
+        } else if named("enter") || (ks.key == "enter" && m.platform && p.switch) {
             let pick = matches.into_iter().nth(p.selected);
             self.palette = None;
-            if let Some(item) = pick {
+            if let Some(mut item) = pick {
+                if m.platform {
+                    item.args.get_or_insert_with(|| json!({}))["split"] = json!(true);
+                    // ⌘↩: in a split
+                }
                 self.run_action(&item.name, item.args.as_ref(), "palette", window, cx);
             }
         } else if named("down") || (m.control && ks.key == "n") {

@@ -186,8 +186,36 @@ pub(crate) fn leon_table(lua: &Lua, script: bool) -> mlua::Result<Table> {
     Ok(leon)
 }
 
-fn bind(lua: &Lua, (key, target, args): (String, Value, Option<Value>)) -> Result<(), Bad> {
+/// `leon.bind`'s options (the 4th argument): `repeats` (tmux `bind -r`; `["repeat"]` too, since
+/// `repeat` is a Lua keyword).
+fn bind_options(opts: Option<Value>) -> Result<bool, Bad> {
+    let t = match opts {
+        None => return Ok(false),
+        Some(Value::Table(t)) => t,
+        Some(v) => {
+            return Err(format!("options must be a table like {{ repeats = true }}, got {}", v.type_name()).into())
+        }
+    };
+    for pair in t.pairs::<Value, Value>() {
+        let (k, _) = pair?;
+        let name = k.to_string().unwrap_or_default();
+        if name != "repeats" && name != "repeat" {
+            return Err(format!("unknown option {name:?}: the option is repeats").into());
+        }
+    }
+    Ok(flag(&t, "repeats")? || flag(&t, "repeat")?)
+}
+
+fn bind(lua: &Lua, (key, target, args, opts): (String, Value, Option<Value>, Option<Value>)) -> Result<(), Bad> {
     let key = keys::parse(&key)?;
+    if let Some(Value::Table(t)) = &args {
+        if t.contains_key("repeats")? || t.contains_key("repeat")? {
+            return Err(
+                "repeats is an option, the 4th argument: leon.bind(key, action, nil, { repeats = true })".into()
+            );
+        }
+    }
+    let repeats = bind_options(opts)?;
     let (target, func) = match target {
         Value::String(s) => {
             let name = s.to_string_lossy();
@@ -238,7 +266,7 @@ fn bind(lua: &Lua, (key, target, args): (String, Value, Option<Value>)) -> Resul
     }
     st.next_id += 1;
     let id = st.next_id;
-    st.entries.push(Entry { id, b: Binding { key, target, source }, func });
+    st.entries.push(Entry { id, b: Binding { key, target, source, repeats }, func });
     Ok(())
 }
 
@@ -352,6 +380,7 @@ fn bindings(lua: &Lua, filter: Option<Table>) -> Result<Table, Bad> {
         t.set("key", b.key.sequence())?;
         t.set("mode", b.key.mode)?;
         t.set("source", b.source)?;
+        t.set("repeats", b.repeats)?;
         match b.target {
             Target::Action { name, args } => {
                 t.set("action", name)?;

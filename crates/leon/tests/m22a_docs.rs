@@ -3,7 +3,7 @@
 
 #[test]
 fn m22a_documented_contract() {
-    let cli = include_str!("../../../docs/cli.md");
+    let cli = include_str!("../../../docs/cli/settings.md");
     for text in [
         "### `leon theme list`",
         "### `leon theme import FILE",
@@ -12,7 +12,7 @@ fn m22a_documented_contract() {
         "### `leon config set KEY VALUE`",
         ".itermcolors",
     ] {
-        assert!(cli.contains(text), "docs/cli.md misses {text}");
+        assert!(cli.contains(text), "docs/cli/settings.md misses {text}");
     }
     let lua = include_str!("../../../docs/lua.md");
     for key in leon_lua::settings::KEYS {

@@ -117,6 +117,7 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         | Cmd::SendKey { .. }
         | Cmd::Capture { .. }
         | Cmd::Wait { .. }
+        | Cmd::Notify(_)
         | Cmd::Block(_) => crate::blocks::run(&mut c, cli)?,
         Cmd::Float { .. }
         | Cmd::Toggle { .. }
@@ -425,3 +426,14 @@ fn new_directory(path: &std::path::Path) -> Result<std::path::PathBuf, Fail> {
     }
     Ok(dir)
 }
+
+/// The `--help` footer.
+pub(crate) const EXIT_CODES: &str = "\
+Exit codes:
+  0    ok
+  1    failed
+  2    bad command line
+  3    target not found or ambiguous
+  4    server unreachable
+  130  interrupted (Ctrl-C)
+  `wait` and `run --wait` exit with the program's own status.";

@@ -24,18 +24,14 @@ impl Workspace {
                     .iter()
                     .map(|w| WindowRow {
                         id: w.id.clone(),
-                        title: w.label.clone().unwrap_or_else(|| {
-                            let shown = target(w).and_then(|id| s.blocks.iter().find(|b| b.id == id));
-                            shown
-                                .map_or("empty".into(), |b| b.title.clone().unwrap_or_else(|| program_name(&b.command)))
-                        }),
+                        title: switcher::tab_title(s, w),
                         status: status::aggregate(s.blocks.iter().filter(|b| b.window_id == w.id).map(shows)),
                     })
                     .collect();
                 SessionRow {
                     host,
                     id: s.id.clone(),
-                    title: s.label.clone().unwrap_or_else(|| format!("Session {}", i + 1)),
+                    title: switcher::session_title(s, i),
                     status: status::aggregate(windows.iter().map(|w| w.status)),
                     windows,
                     active: s.active,
@@ -94,7 +90,11 @@ impl Workspace {
     pub fn places(&self) -> Places {
         // with no session and no host the sidebar has nothing to list: the empty state takes the window
         let listed = self.grouped() || self.hosts.remotes().any(|(_, r)| !r.model().sessions.is_empty());
-        chrome::places(self.settings.tab_style, self.sidebar && listed)
+        let mut places = chrome::places(self.settings.tab_style, self.sidebar && listed || self.activity);
+        if self.activity {
+            places.sidebar = Some(SidebarList::Activity);
+        }
+        places
     }
 
     /// Save the settings, when this workspace has a place for them.
@@ -190,6 +190,7 @@ impl Workspace {
         (st.tab_style, st.pane_headers, st.sidebar_width.to_bits()).hash(&mut h);
         self.session_id.hash(&mut h);
         self.find_due().hash(&mut h);
+        self.activity_signature(&mut h);
         // each header draws its own pane's state, which its tab's may hide
         for id in &shown {
             let state = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));

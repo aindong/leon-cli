@@ -24,14 +24,16 @@ pub enum ConfigCmd {
     Reload,
     /// Print a setting from init.lua, or every setting without KEY. Needs no server.
     Get {
-        /// theme, font.family, font.size, notifications.done|blocked|error, copy_on_select or resume.
+        /// theme, font.family, font.size, notifications.done|blocked|error, copy_on_select,
+        /// repeat_time, hint_patterns or resume.
         key: Option<String>,
     },
     /// Set a setting in init.lua, keeping the rest of the file, and reload a running server.
     Set {
         /// The setting, as `config get` names it.
         key: String,
-        /// The value; for theme a NAME, or dark=NAME,light=NAME to follow the OS.
+        /// The value; for theme a NAME, or dark=NAME,light=NAME to follow the OS; for hint_patterns a
+        /// JSON list of strings.
         value: String,
     },
 }
@@ -196,6 +198,7 @@ fn parse_value(key: &str, text: &str) -> Value {
     match Settings::default().get(key) {
         Some(Value::Bool(_)) if text == "true" || text == "false" => Value::Bool(text == "true"),
         Some(Value::Number(_)) => text.trim().parse::<f64>().map_or_else(|_| text.into(), Value::from),
+        Some(Value::Array(_)) => serde_json::from_str(text).unwrap_or_else(|_| text.into()),
         Some(Value::Object(_)) if text.contains('=') => {
             let pairs: Option<serde_json::Map<String, Value>> = text
                 .split(',')

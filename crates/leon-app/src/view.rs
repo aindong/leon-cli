@@ -33,6 +33,7 @@ use crate::panes::{self, Divider, GAP};
 use crate::remote::Remote;
 use crate::render::{self, Frame};
 use crate::status::{self, Indicator};
+use crate::switcher;
 use crate::theme::{Theme, DARK, SECONDARY_TEXT, UI_TEXT};
 
 actions!(
@@ -155,6 +156,8 @@ struct Palette {
     selected: usize,
     /// Asking for text instead of listing actions (Add Host…), with the last refusal.
     ask: Option<(hosts_view::Ask, Option<String>)>,
+    /// The session switcher (⌘K): places to go instead of actions.
+    switch: bool,
 }
 
 /// The last `client.keymap` reply, handed over from the runtime thread that fetched it.
@@ -232,7 +235,21 @@ pub struct Workspace {
     keymap_asked: Option<Instant>,
     /// The chords of a sequence typed so far (`ctrl+b`).
     pending: Vec<Chord>,
+    /// The window after a repeatable binding ran (tmux `bind -r`).
+    repeat: keymap::Repeat,
     palette: Option<Palette>,
+    /// Window ids of the tabs shown, most recent first (the switcher's order).
+    recent: Vec<String>,
+    /// The Activity list shows in the sidebar's place.
+    activity: bool,
+    attention: crate::attention::Tracker,
+    notifier: crate::attention::Notifier,
+    /// The Dock badge as last set.
+    dock: Option<String>,
+    /// Post notifications and set the Dock badge (the real app; never tests).
+    platform: bool,
+    /// The window is the key window: the user is looking at leon.
+    window_active: bool,
     font_size: f32,
     /// Where the spinner's clock starts.
     epoch: Instant,
@@ -261,7 +278,10 @@ impl Workspace {
             eprintln!("leon: can't read the hosts list: {e}");
             Vec::new()
         });
-        Self::with_hosts(app, settings_path(), hosts, window, cx)
+        let mut ws = Self::with_hosts(app, settings_path(), hosts, window, cx);
+        ws.platform = true;
+        crate::notify::prepare();
+        ws
     }
 
     /// A workspace with the settings in `path` (the defaults when it is None or unreadable).
@@ -290,6 +310,7 @@ impl Workspace {
             Arc::new(move || drop(wake.lock().unwrap_or_else(|e| e.into_inner()).try_send(())));
         let woke = wake.clone();
         app.on_change(move || woke());
+        crate::notify::on_click(wake.clone());
         let hosts = Hosts::new(app.clone(), hosts, wake);
         let poll = cx.spawn(async move |this, cx| loop {
             let timer = cx.background_executor().timer(POLL);
@@ -300,6 +321,7 @@ impl Workspace {
                     return;
                 }
                 ws.poll_hosts();
+                ws.poll_attention(cx);
                 ws.stats.borrow_mut().report();
                 ws.refresh_keymap(cx);
                 let now = ws.signature();
@@ -314,7 +336,10 @@ impl Workspace {
         });
         let stats = Stats::new();
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
-        let activation = cx.observe_window_activation(window, |_, _, cx| cx.notify());
+        let activation = cx.observe_window_activation(window, |ws, window, cx| {
+            ws.window_active = window.is_window_active();
+            cx.notify()
+        });
         // the window's frame and display are kept with the settings, and saved when the app quits
         // or the window closes (closing drops the workspace before the quit it asks for)
         let bounds = cx.observe_window_bounds(window, |ws, window, cx| {
@@ -345,7 +370,15 @@ impl Workspace {
             inbox: Arc::default(),
             keymap_asked: None,
             pending: Vec::new(),
+            repeat: keymap::Repeat::default(),
             palette: None,
+            recent: Vec::new(),
+            activity: false,
+            attention: Default::default(),
+            notifier: Default::default(),
+            dock: None,
+            platform: false,
+            window_active: window.is_window_active(),
             font_size: FONT_SIZE,
             epoch: Instant::now(),
             seen_focus: None,
@@ -445,8 +478,12 @@ impl Workspace {
     }
 }
 
+#[path = "view_activity.rs"]
+mod activity;
 #[path = "view_bars.rs"]
 mod bars;
+#[path = "view_copy.rs"]
+mod copy;
 #[path = "view_find.rs"]
 mod find;
 #[path = "view_handlers.rs"]
@@ -475,6 +512,8 @@ mod select;
 mod sidebar;
 #[path = "view_stats.rs"]
 mod stats;
+#[path = "view_switch.rs"]
+mod switch;
 use bars::status_mark;
 pub use menus::menus;
 use paint::*;

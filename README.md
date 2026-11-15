@@ -182,6 +182,23 @@ leon block close "$id"
 It knows where it is from `LEON_SESSION` and `LEON_BLOCK`, labels what it opens, and closes only
 what it created. See [docs/agents.md](docs/agents.md).
 
+## Know what needs you
+
+⌘K switches to any session, tab or block on any host, the most recent first, and ⌘⇧A lists what
+needs you: blocked first (with what it is waiting for), then errors, finished runs you haven't
+looked at, and work in progress. The toolbar button for it shows how many blocks are blocked, and so
+does the Dock. Leon.app also sends a notification when a block blocks or fails, or when a run of 30 s
+or more ends while you're in another app; clicking it takes you to the pane. A tool that can't print
+OSC 7501 reports for its own block with `leon notify`:
+
+```text
+leon notify --state blocked --title "Deploy" --body "approve the rollout?"
+```
+
+![The session switcher over the panes, filtered to "api", with each row's host, session and tab](docs/images/app-switcher.png)
+
+![The Activity list in the sidebar: two blocked agents with their questions, a failed deploy, a finished README review and builds in progress, and the blocked count on the toolbar](docs/images/app-activity.png)
+
 ## App shortcuts
 
 | Keys | Action |
@@ -199,11 +216,15 @@ what it created. See [docs/agents.md](docs/agents.md).
 | ⌘A | Select everything in the pane, scrollback too |
 | ⌘F | Find in the pane: ↩ and ⇧↩ step, ⌥C case, ⌥R regex, esc closes |
 | ⌘G, ⌘⇧G | Next, previous match |
+| ⌘⇧C | Copy mode: vi keys over the scrollback (h j k l, w b, 0 $, g ⇧G, ⌃U ⌃D), v and ⇧V select, / and ? search with n and ⇧N, y copies, esc or q leaves |
+| ⌘⇧H | Hints: a label on every URL, path, hash, IP and long number on screen; type one to copy it, in upper case to type it into the pane |
 | ⇧PageUp, ⇧PageDown | Scroll a page back, forward |
 | ⌘↑, ⌘↓ | Scroll to the oldest line, back to the bottom |
 | ⌘B | Show or hide the sidebar |
 | ⌘⇧S | Tabs in the sidebar or in the titlebar (saved for the next launch) |
 | ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
+| ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same session) |
+| ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
 | ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
 

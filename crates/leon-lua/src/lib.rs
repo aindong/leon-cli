@@ -69,6 +69,9 @@ pub struct Binding {
     pub target: Target,
     /// `file:line` of the `leon.bind` call.
     pub source: String,
+    /// `{ repeats = true }` (tmux `bind -r`): after this sequence, its last key works again without
+    /// the prefix for `repeat_time`.
+    pub repeats: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]

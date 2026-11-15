@@ -34,6 +34,9 @@ pub(super) struct TermUi {
     pub(super) mouse_at: Option<gpui::Point<Pixels>>,
     /// Opens a link; None is the system handler (tests put a recorder here).
     pub(super) opener: Option<Opener>,
+    /// Copy mode and hints, on the pane they started on (`view_copy.rs`).
+    pub(super) copy: Option<crate::copy_mode::CopyMode>,
+    pub(super) hints: Option<super::copy::Hints>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -95,12 +98,14 @@ impl Workspace {
     }
 
     /// Before a pane is drawn: a new size or screen starts its numbering over (the cache,
-    /// selection and scroll go), a history clear drops what's gone, and missing rows are fetched.
+    /// selection and scroll go, copy mode too if its lines went, and hints label the view again), a history clear drops
+    /// what's gone, and missing rows are fetched.
     pub(super) fn sync_pane(&mut self, id: &str) {
         let live = self.live(id);
         let key = (live.lines, live.cols, live.view.alt_screen);
         let pv = self.term.panes.entry(id.to_string()).or_default();
-        if pv.key != key || live.view.history < pv.history {
+        let renumbered = pv.key != key || live.view.history < pv.history;
+        if renumbered {
             *pv = PaneView { key, ..PaneView::default() };
         }
         pv.history = live.view.history;
@@ -110,8 +115,19 @@ impl Workspace {
         }
         pv.top = scrollback::clamp(&live, pv.top);
         let missing = scrollback::compose(&live, pv.top, &pv.cache).missing;
+        self.check_copy(id);
+        if renumbered {
+            // hints label the new view again
+            if self.term.hints.take_if(|h| h.block == id).is_some() {
+                self.open_hints(id.to_string());
+            }
+        }
         if let Some(&first) = missing.first() {
             self.fetch(id, first.saturating_sub(FETCH / 2).max(oldest), live.lines + FETCH);
+            // a reply trimmed to its byte cap can end before `first`: ask from there, or it never comes
+            if !self.term.panes.get(id).is_some_and(|p| p.cache.contains_key(&first)) {
+                self.fetch(id, first, live.lines + FETCH);
+            }
         }
     }
 
@@ -124,6 +140,21 @@ impl Workspace {
         }
         let scrolled = lines.scrolled;
         pv.cache.extend(lines.rows.into_iter().filter(|r| r.line < scrolled).map(|r| (r.line, r)));
+    }
+
+    /// History line `line` of pane `id`, if cached.
+    pub(super) fn cached_row(&self, id: &str, line: usize) -> Option<&Row> {
+        self.term.panes.get(id)?.cache.get(&line)
+    }
+
+    /// History line `line` of pane `id`, fetched with the rows around it when it isn't cached.
+    pub(super) fn history_row(&mut self, id: &str, line: usize) -> Option<Row> {
+        if let Some(r) = self.cached_row(id, line) {
+            return Some(r.clone());
+        }
+        let (oldest, _) = scrollback::bounds(&self.live(id));
+        self.fetch(id, line.saturating_sub(FETCH / 2).max(oldest), FETCH);
+        self.cached_row(id, line).cloned()
     }
 
     /// What pane `id` shows now.

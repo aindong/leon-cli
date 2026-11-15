@@ -363,6 +363,17 @@ pub struct SetResume {
     pub command: Option<Vec<String>>,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReportStatus {
+    /// `working`, `blocked`, `done` or `error` (also `idle`, or `clear` to remove the record).
+    pub state: String,
+    /// One line of text, at most 192 bytes.
+    pub title: Option<String>,
+    /// One line of text, at most 2048 bytes.
+    pub msg: Option<String>,
+}
+
 #[derive(Serialize, JsonSchema)]
 pub struct TermSize {
     pub rows: u16,
@@ -468,6 +479,16 @@ static TERMINAL_METHODS: LazyLock<Vec<TermMethod>> = LazyLock::new(|| {
                     crate::restore::check_command(c).map_err(ApiError::bad_request)?;
                 }
                 t.set_resume(a.command);
+                Ok(Empty {})
+            },
+        ),
+        term_method(
+            "report_status",
+            "Set the block's root program-status record as if its program had sent the OSC 7501 report \
+             (`leon notify`), for tools that can't write one to the terminal. The spec's limits apply; text \
+             OSC 7501 would drop (controls, line breaks, invisible characters) is a 400.",
+            |t, a: ReportStatus| {
+                t.report_status(&a.state, a.title.as_deref(), a.msg.as_deref()).map_err(ApiError::bad_request)?;
                 Ok(Empty {})
             },
         ),

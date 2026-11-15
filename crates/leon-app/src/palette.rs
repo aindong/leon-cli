@@ -3,6 +3,7 @@
 /// The app's own actions the palette offers, as (action name, title).
 pub const BUILTINS: &[(&str, &str)] = &[
     ("session.new", "New Session"),
+    ("session.switch", "Switch Session or Tab…"),
     ("client.tab.new", "New Tab"),
     ("pane.split.right", "Split Right"),
     ("pane.split.down", "Split Below"),
@@ -15,6 +16,7 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("client.tab.next", "Next Tab"),
     ("client.tab.previous", "Previous Tab"),
     ("client.sidebar.toggle", "Toggle Sidebar"),
+    ("client.sidebar.activity.toggle", "Show or Hide Activity"),
     ("client.tab_style.toggle", "Toggle Tab Style"),
     ("client.pane_header.reveal", "Show or Hide Pane Headers"),
     ("client.font.increase", "Increase Font Size"),
@@ -27,6 +29,8 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("client.find.open", "Find"),
     ("client.find.next", "Find Next"),
     ("client.find.previous", "Find Previous"),
+    ("client.copy_mode", "Copy Mode"),
+    ("client.hints", "Hints: Copy What's on Screen"),
     ("client.scroll.page_up", "Scroll Up a Page"),
     ("client.scroll.page_down", "Scroll Down a Page"),
     ("client.scroll.top", "Scroll to the Top"),

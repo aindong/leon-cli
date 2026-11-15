@@ -23,7 +23,7 @@ same facts for the server you run.
 - [target](#target): 1
 - [block](#block): 5
 - [client](#client): 3
-- [Block methods: dev.leon.terminal](#block-methods-devleonterminal): 13
+- [Block methods: dev.leon.terminal](#block-methods-devleonterminal): 14
 
 ## help
 
@@ -454,6 +454,8 @@ same facts for the server you run.
 | `font` | `Font` | yes |  |
 | `notifications` | `Notifications` | yes |  |
 | `copy_on_select` | boolean | yes | The app copies a selection to the clipboard as it is made. |
+| `repeat_time` | integer (uint64) | yes | Milliseconds after a repeatable binding during which its keys work without the prefix (0 turns repeat off). |
+| `hint_patterns` | [string] | yes | Regular expressions hints match besides the built-in ones. |
 | `resume` | string | yes | What a restored block does with its program's resume command: `ask`, `always` or `never`. |
 
 **`ThemeChoice`:** A theme name for each OS appearance (the same one for both unless init.lua gives two).
@@ -470,13 +472,13 @@ same facts for the server you run.
 | `family` | string | yes |  |
 | `size` | number | yes | Points, from 8 to 32. |
 
-**`Notifications`:** Which program states may post a system notification.
+**`Notifications`:** Which notifications the app posts.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `done` | boolean | yes |  |
-| `blocked` | boolean | yes |  |
-| `error` | boolean | yes |  |
+| `done` | boolean | yes | A long run finished while the app was in the background. |
+| `blocked` | boolean | yes | A block became blocked. |
+| `error` | boolean | yes | A block reported an error. |
 
 <details><summary>JSON Schemas</summary>
 
@@ -527,6 +529,19 @@ same facts for the server you run.
             "description": "The app copies a selection to the clipboard as it is made.",
             "type": "boolean"
           },
+          "repeat_time": {
+            "description": "Milliseconds after a repeatable binding during which its keys work without the prefix\n(0 turns repeat off).",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "hint_patterns": {
+            "description": "Regular expressions hints match besides the built-in ones.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "resume": {
             "description": "What a restored block does with its program's resume command: `ask`, `always` or `never`.",
             "type": "string"
@@ -537,6 +552,8 @@ same facts for the server you run.
           "font",
           "notifications",
           "copy_on_select",
+          "repeat_time",
+          "hint_patterns",
           "resume"
         ]
       },
@@ -574,16 +591,19 @@ same facts for the server you run.
         ]
       },
       "Notifications": {
-        "description": "Which program states may post a system notification.",
+        "description": "Which notifications the app posts.",
         "type": "object",
         "properties": {
           "done": {
+            "description": "A long run finished while the app was in the background.",
             "type": "boolean"
           },
           "blocked": {
+            "description": "A block became blocked.",
             "type": "boolean"
           },
           "error": {
+            "description": "A block reported an error.",
             "type": "boolean"
           }
         },
@@ -4953,6 +4973,7 @@ same facts for the server you run.
 | `action` | string \| null |  |  |
 | `args` | any |  |  |
 | `fn` | boolean | yes | Bound to a Lua function. |
+| `repeats` | boolean | yes | After the sequence, its last key works again without the prefix for `repeat_time`. |
 | `source` | string | yes | `file:line`. |
 
 **`ModeView`:**
@@ -4990,6 +5011,17 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `copy_on_select` | boolean | yes | Copy a selection to the clipboard as it is made (default false). |
+| `repeat_time` | integer (uint64) | yes | Milliseconds after a repeatable binding (`repeats`) during which its keys work without the prefix (default 500; 0 turns repeat off). |
+| `hint_patterns` | [string] | yes | Regular expressions hints match besides the built-in ones (group 1, if any, is the text). |
+| `notifications` | `Notifications` | yes | Which notifications the app posts (`notifications.*`, default all). |
+
+**`Notifications`:** Which notifications the app posts.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `done` | boolean | yes | A long run finished while the app was in the background. |
+| `blocked` | boolean | yes | A block became blocked. |
+| `error` | boolean | yes | A block reported an error. |
 
 <details><summary>JSON Schemas</summary>
 
@@ -5082,6 +5114,10 @@ same facts for the server you run.
             "description": "Bound to a Lua function.",
             "type": "boolean"
           },
+          "repeats": {
+            "description": "After the sequence, its last key works again without the prefix for `repeat_time`.",
+            "type": "boolean"
+          },
           "source": {
             "description": "`file:line`.",
             "type": "string"
@@ -5090,6 +5126,7 @@ same facts for the server you run.
         "required": [
           "key",
           "fn",
+          "repeats",
           "source"
         ]
       },
@@ -5193,10 +5230,53 @@ same facts for the server you run.
           "copy_on_select": {
             "description": "Copy a selection to the clipboard as it is made (default false).",
             "type": "boolean"
+          },
+          "repeat_time": {
+            "description": "Milliseconds after a repeatable binding (`repeats`) during which its keys work without the\nprefix (default 500; 0 turns repeat off).",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "hint_patterns": {
+            "description": "Regular expressions hints match besides the built-in ones (group 1, if any, is the text).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notifications": {
+            "description": "Which notifications the app posts (`notifications.*`, default all).",
+            "$ref": "#/$defs/Notifications"
           }
         },
         "required": [
-          "copy_on_select"
+          "copy_on_select",
+          "repeat_time",
+          "hint_patterns",
+          "notifications"
+        ]
+      },
+      "Notifications": {
+        "description": "Which notifications the app posts.",
+        "type": "object",
+        "properties": {
+          "done": {
+            "description": "A long run finished while the app was in the background.",
+            "type": "boolean"
+          },
+          "blocked": {
+            "description": "A block became blocked.",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "A block reported an error.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "done",
+          "blocked",
+          "error"
         ]
       }
     }
@@ -5918,6 +5998,63 @@ the method's full name as `method` and its input as `args`. The output is `block
 
 </details>
 
+### `dev.leon.terminal.report_status`
+
+*experimental*. Set the block's root program-status record as if its program had sent the OSC 7501 report (`leon notify`), for tools that can't write one to the terminal. The spec's limits apply; text OSC 7501 would drop (controls, line breaks, invisible characters) is a 400.
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `state` | string | yes | `working`, `blocked`, `done` or `error` (also `idle`, or `clear` to remove the record). |
+| `title` | string \| null |  | One line of text, at most 192 bytes. |
+| `msg` | string \| null |  | One line of text, at most 2048 bytes. |
+
+**Output:** none
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "ReportStatus",
+    "type": "object",
+    "properties": {
+      "state": {
+        "description": "`working`, `blocked`, `done` or `error` (also `idle`, or `clear` to remove the record).",
+        "type": "string"
+      },
+      "title": {
+        "description": "One line of text, at most 192 bytes.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "msg": {
+        "description": "One line of text, at most 2048 bytes.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "state"
+    ]
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Empty",
+    "type": "object"
+  }
+}
+```
+
+</details>
+
 ### `dev.leon.terminal.program_status`
 
 *stable*. The OSC 7501 program-status records.
@@ -5962,7 +6099,7 @@ the method's full name as `method` and its input as `args`. The output is `block
 
 ### `dev.leon.terminal.lines`
 
-*experimental*. Rows by absolute line number, from the scrollback and the screen, as `block.watch` sends them; lines no longer kept are left out. With the numbering they were read under.
+*experimental*. Rows by absolute line number, from the scrollback and the screen, as `block.watch` sends them; lines no longer kept are left out, and so are the last ones past 4 MiB (ask again for them). With the numbering they were read under.
 
 **Input:** 
 

@@ -32,8 +32,10 @@ last good config. `leon config check` exits 1 in both cases.
 
 `leon.bind(key, action[, args])` binds a key to an action. Keys are modifiers plus one key joined
 by `+`: `cmd`, `ctrl`, `alt` (also `opt`), `shift`, and a character or `enter escape tab space
-backspace delete left right up down home end pageup pagedown f1`–`f12`. Write keys unshifted
-(`cmd+shift+=`, not `cmd++`). A **sequence** joins keys with `>`, like tmux's prefix key.
+backspace delete left right up down home end pageup pagedown f1`–`f12`. A shifted symbol works as
+typed or unshifted: `ctrl+b>%` and `ctrl+b>shift+5`, `cmd++` and `cmd+shift+=` are the same keys
+(on a US layout). Key names ignore case, so a capital letter is written `shift+f`. A **sequence**
+joins keys with `>`, like tmux's prefix key.
 
 ```lua
 leon.bind("cmd+t", "client.tab.new")
@@ -52,6 +54,98 @@ The app runs its own actions (`client.*`, `pane.*`, `session.*`, listed in its c
 
 `leon.unbind(key)` removes a key's bindings, including the app's defaults, and returns how many it
 removed. `leon.bindings()` lists the bindings made so far.
+
+### Repeat keys
+
+A 4th argument `{ repeats = true }` makes a sequence repeatable, like tmux's `bind -r`: after
+`ctrl+b>h` runs, `h` alone runs it again for `repeat_time` (500 ms unless you set it), and each
+repeat starts the time over. Any repeatable key after the same prefix works in that window, so
+`ctrl+b h h l` goes left twice and right once. Another key ends the window and does what it would
+have done with no prefix typed. (`repeat` is a Lua keyword, so the option is `repeats`;
+`["repeat"] = true` works too.) The app's default keys don't repeat. A repeatable Lua function
+runs again each time, the same as when its whole sequence is typed.
+
+```lua
+leon.bind("ctrl+b>h", "pane.focus.left", nil, { repeats = true })
+leon.bind("ctrl+b>l", "pane.focus.right", nil, { repeats = true })
+leon.set("repeat_time", 400)
+```
+
+### A tmux-style preset
+
+Prefix `ctrl+b`, then the key tmux uses. `hjkl` repeat, so `ctrl+b h h h` walks three panes left.
+`ctrl+b [` is copy mode (⌘⇧C in the app) and `ctrl+b F` hints (⌘⇧H). In `leon attach` the same
+sequences come after its prefix, except copy mode and hints, which only the app has so far.
+
+```lua
+-- tmux-style keys: ctrl+b, then tmux's key
+leon.bind("ctrl+b>%", "pane.split.right")
+leon.bind("ctrl+b>\"", "pane.split.down")
+leon.bind("ctrl+b>h", "pane.focus.left", nil, { repeats = true })
+leon.bind("ctrl+b>j", "pane.focus.down", nil, { repeats = true })
+leon.bind("ctrl+b>k", "pane.focus.up", nil, { repeats = true })
+leon.bind("ctrl+b>l", "pane.focus.right", nil, { repeats = true })
+leon.bind("ctrl+b>z", "pane.zoom")
+leon.bind("ctrl+b>x", "pane.close")
+leon.bind("ctrl+b>c", "client.tab.new")
+leon.bind("ctrl+b>n", "client.tab.next")
+leon.bind("ctrl+b>p", "client.tab.previous")
+leon.bind("ctrl+b>[", "client.copy_mode")
+leon.bind("ctrl+b>shift+f", "client.hints")
+leon.set("repeat_time", 500)
+```
+
+### Moving between vim and leon (vim-navigator)
+
+The same ctrl+h/j/k/l move between vim's windows and leon's panes. leon's side is a function
+binding: when vim (or nvim) is the pane's foreground program the key goes on to vim, else leon
+moves the focus. It asks `ps` for the pane's terminal, about 10 ms a key.
+
+```lua
+-- vim-navigator: ctrl+h/j/k/l go to vim when vim or nvim is in front, else to leon's panes
+local function vim_in_front()
+  local p = leon.block.call("dev.leon.terminal", "process", {})
+  if not p then return false end
+  local r = leon.exec({ "ps", "-o", "tty=", "-p", tostring(p.pid) }, { timeout = 1 })
+  local tty = r.ok and r.stdout:match("%S+")
+  if not tty then return false end
+  r = leon.exec({ "ps", "-o", "stat=,args=", "-t", tty }, { timeout = 1 })
+  for stat, program in (r.stdout or ""):gmatch("(%S+)%s+(%S+)[^\n]*") do
+    local name = program:match("([^/]+)$")
+    if stat:find("+", 1, true) and (name == "vim" or name == "nvim" or name == "vi") then
+      return true
+    end
+  end
+  return false
+end
+
+for key, dir in pairs{ h = "left", j = "down", k = "up", l = "right" } do
+  leon.bind("ctrl+" .. key, function(ctx)
+    if vim_in_front() then return false end -- not handled: the key goes on to vim
+    leon.session.focus_direction{ direction = dir }
+    return true
+  end)
+end
+```
+
+vim's side moves between its windows and, at an edge, runs `leon focus`. Every leon pane has
+`LEON_BLOCK` and `LEON_SESSION` set, so `leon focus left` moves in the pane's own session, and
+outside leon the mapping stays inside vim:
+
+```vim
+" ~/.vimrc: at the edge of vim's windows, hand the move to leon
+function! s:Go(key, dir) abort
+  let l:was = winnr()
+  execute 'wincmd ' . a:key
+  if winnr() == l:was && !empty($LEON_BLOCK)
+    call system('leon focus ' . a:dir)
+  endif
+endfunction
+nnoremap <silent> <C-h> :call <SID>Go('h', 'left')<CR>
+nnoremap <silent> <C-j> :call <SID>Go('j', 'down')<CR>
+nnoremap <silent> <C-k> :call <SID>Go('k', 'up')<CR>
+nnoremap <silent> <C-l> :call <SID>Go('l', 'right')<CR>
+```
 
 ## Modes
 
@@ -133,23 +227,24 @@ any`, and a `?` suffix for optional ones.
 
 ## Settings
 
-`leon.set(name, value)` sets one of leon's settings. init.lua is the only place they live:
-`leon config get KEY` reads them, and `leon config set KEY VALUE` edits the `leon.set` call in place
-(docs/cli.md). The app applies `copy_on_select` today; `theme`, `font.*` and `notifications.*`
-are read and reported by the server, and the app starts following them in the next release (M22b). A bad value is a skipped call with a
-`file:line` message, and the setting keeps its default.
+`leon.set(name, value)` sets a setting. init.lua is the only place settings live; `leon config
+get` and `set` ([cli/settings.md](cli/settings.md)) read and edit them in place. The app follows
+`theme` and `font.*` from M22b and the rest now. A bad value is a skipped call with a `file:line`
+message, and the setting keeps its default.
 
 | Setting | Takes | Default |
 |---|---|---|
 | `theme` | a theme name, or `{ dark = NAME, light = NAME }` to follow the OS appearance | `"leon-dark"` |
 | `font.family` | a font's name | `"Menlo"` |
 | `font.size` | points, 8 to 32 | `13` |
-| `notifications.done`, `notifications.blocked`, `notifications.error` | `true` or `false`: may a program reaching that state post a system notification | `true` |
+| `notifications.done`, `notifications.blocked`, `notifications.error` | `true` or `false` (below) | `true` |
 | `copy_on_select` | `true` or `false` | `false` |
+| `repeat_time` | milliseconds, 0 (off) to 10000 | `500` |
+| `hint_patterns` | a list of regular expressions, at most 32 | `{}` |
 | `resume` | `"ask"`, `"always"` or `"never"` | `"ask"` |
 
-`theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored in `themes/` beside
-init.lua; an unknown name is an error.
+`theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored; an unknown name is
+an error.
 
 ```lua
 leon.set("theme", { dark = "leon-dark", light = "leon-light" })
@@ -175,6 +270,34 @@ leon.set("resume", "always")
 
 ```lua
 leon.set("copy_on_select", true)
+```
+
+`repeat_time` is how long, in milliseconds, a repeatable binding's keys work without the prefix
+(above; 0 to 10000, default 500, 0 turns repeat off).
+
+`hint_patterns` adds regular expressions (Rust syntax) to what the app's hints label. Hints
+(`client.hints`, ⌘⇧H) put a short label on every URL, path, git hash, UUID, `0x` number, IPv4
+address and number of four or more digits the pane shows; type a label to copy its text, or type it
+in upper case to type the text into the pane. A pattern with a group labels what the group matched.
+At most 32 patterns, each at most 256 bytes; a bad one is refused when the config loads.
+
+```lua
+leon.set("hint_patterns", { "[A-Z]+-\\d+", "sha256:([0-9a-f]{12})" })
+```
+
+`client.copy_mode` (⌘⇧C) is the app's keyboard copy mode over the scrollback, with vi keys:
+`h j k l`, `w b`, `0 $`, `g G`, ctrl+u and ctrl+d move; `v` selects characters and `V` lines; `/`
+and `?` search down and up, `n` and `N` step; `y` (or Enter) copies the selection and leaves; Esc
+or `q` leaves.
+
+The app notifies you (macOS banners, only from the bundled Leon.app) when a block becomes blocked
+(`notifications.blocked`), reports an error (`notifications.error`), or finishes a run of 30 s or
+more while the app is in the background (`notifications.done`). Each defaults to `true`; set it to
+`false` to turn that kind off. Blocked and error don't notify for the pane you are looking at, a block notifies at most
+once a minute per state, and at most four notices go out a minute in all (the rest come as one).
+
+```lua
+leon.set("notifications.done", false)
 ```
 
 The server reports the effective settings, defaults filled in and `theme` always as
@@ -282,7 +405,7 @@ print("timed out:", slow.timed_out)
 | `leon.unbind(key)` | config | Remove a key's bindings; returns the count. |
 | `leon.mode(name[, {exclusive, prefix}])` | config | Declare a mode; `prefix` (one key) is `leon attach`'s for the `attach` mode. |
 | `leon.bindings([filter])`, `leon.modes()` | config | List bindings and modes made so far. |
-| `leon.set(name, value)` | config | A setting (Settings, above): `theme`, `font.family`, `font.size`, `notifications.*`, `copy_on_select`, `resume`. |
+| `leon.set(name, value)` | config | A setting (Settings, above): `theme`, `font.family`, `font.size`, `notifications.*`, `copy_on_select`, `repeat_time`, `hint_patterns`, `resume`. |
 | `leon.action{name, title, run, description?, args?}` | both | Define an action. |
 | `leon.invoke(name[, args])` | both | Run an action (nested at most 16 deep). |
 | `leon.session.<method>(params)` | both | Call a session method; fills `session_id`. |

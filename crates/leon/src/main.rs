@@ -22,7 +22,7 @@ use client::Fail;
 pub use settings::{ConfigCmd, ThemeCmd};
 
 #[derive(Parser)]
-#[command(name = "leon", version, about = "A fast, scriptable terminal multiplexer.", after_help = EXIT_CODES)]
+#[command(name = "leon", version, about = "A fast, scriptable terminal multiplexer.", after_help = commands::EXIT_CODES)]
 pub struct Cli {
     /// Start a personal server when none is running.
     #[arg(long, global = true, env = "LEON_AUTOSTART", default_value = "true", num_args = 0..=1,
@@ -134,6 +134,8 @@ pub enum Cmd {
         #[arg(long)]
         trim: bool,
     },
+    /// Report a status for your own block (-b, else $LEON_BLOCK), as an OSC 7501 report would.
+    Notify(blocks::NotifyArgs),
     /// Wait for a terminal's program to exit, and exit with its status.
     Wait {
         /// The block to wait for [default: -b, else $LEON_BLOCK].
@@ -519,16 +521,6 @@ pub enum ApiCmd {
         args: Option<String>,
     },
 }
-
-const EXIT_CODES: &str = "\
-Exit codes:
-  0    ok
-  1    failed
-  2    bad command line
-  3    target not found or ambiguous
-  4    server unreachable
-  130  interrupted (Ctrl-C)
-  `wait` and `run --wait` exit with the program's own status.";
 
 fn main() -> ExitCode {
     let cli = Cli::parse(); // usage errors exit 2 here

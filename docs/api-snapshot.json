@@ -2745,6 +2745,17 @@
               "copy_on_select": {
                 "type": "boolean"
               },
+              "repeat_time": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "hint_patterns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "resume": {
                 "type": "string"
               }
@@ -2754,6 +2765,8 @@
               "font",
               "notifications",
               "copy_on_select",
+              "repeat_time",
+              "hint_patterns",
               "resume"
             ]
           },

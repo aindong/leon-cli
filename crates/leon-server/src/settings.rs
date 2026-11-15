@@ -21,6 +21,11 @@ pub struct Effective {
     pub notifications: Notifications,
     /// The app copies a selection to the clipboard as it is made.
     pub copy_on_select: bool,
+    /// Milliseconds after a repeatable binding during which its keys work without the prefix
+    /// (0 turns repeat off).
+    pub repeat_time: u64,
+    /// Regular expressions hints match besides the built-in ones.
+    pub hint_patterns: Vec<String>,
     /// What a restored block does with its program's resume command: `ask`, `always` or `never`.
     pub resume: String,
 }
@@ -39,11 +44,14 @@ pub struct Font {
     pub size: f64,
 }
 
-/// Which program states may post a system notification.
-#[derive(Serialize, Deserialize, JsonSchema)]
+/// Which notifications the app posts.
+#[derive(Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct Notifications {
+    /// A long run finished while the app was in the background.
     pub done: bool,
+    /// A block became blocked.
     pub blocked: bool,
+    /// A block reported an error.
     pub error: bool,
 }
 

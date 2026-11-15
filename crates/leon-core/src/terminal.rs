@@ -30,6 +30,8 @@ mod process;
 use process::{reap, wait_exit};
 #[path = "terminal_reading.rs"]
 mod reading;
+#[path = "terminal_status.rs"]
+mod status;
 #[path = "terminal_view.rs"]
 mod view;
 use reading::{Reading, Reported};
@@ -333,27 +335,6 @@ impl Terminal {
     /// Queue input for the program; never blocks.
     pub fn write(&self, data: &[u8]) -> io::Result<()> {
         self.writer.input(data.to_vec())
-    }
-
-    /// The program-status records (OSC 7501), least recently reported first.
-    pub fn program_status(&self) -> Vec<(Option<String>, Record)> {
-        lock(&self.tracker).store.records()
-    }
-
-    /// Look at the program-status records, most recently reported first, without copying them
-    /// (the app reads them on every poll).
-    pub fn with_program_status<R>(&self, f: impl FnOnce(&[&Record]) -> R) -> R {
-        f(&lock(&self.tracker).store.newest_first())
-    }
-
-    /// The user returned to this terminal: drop its `done` and `error` records (spec lifetime) and
-    /// report the removal like any other. Don't hold the server's state lock: the notice takes it.
-    pub fn acknowledge(&self) {
-        let gone = lock(&self.tracker).store.acknowledge();
-        if !gone.is_empty() {
-            self.generation.send_modify(|g| *g += 1);
-        }
-        gone.into_iter().for_each(|c| (self.notify)(Notice::ProgramStatus(c)));
     }
 
     /// Whether the program asked for bracketed paste (a line editor does while it reads a line).

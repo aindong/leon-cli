@@ -106,3 +106,16 @@ fn a_symlinked_config_stays_a_symlink() {
     assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
     assert_eq!(std::fs::read_to_string(&real).unwrap(), "leon.set(\"font.size\", 16)\n");
 }
+
+#[test]
+fn a_list_setting_round_trips() {
+    let (env, path) = setup("-- hints\nleon.set(\"hint_patterns\", { \"OLD-\\\\d+\" }) -- tickets\n");
+    assert_eq!(get(&env, &path, "hint_patterns"), r#"["OLD-\\d+"]"#);
+    let o = config(&env, &path, &["set", "hint_patterns", r#"["TICKET-\\d+", "id=(\\w+)"]"#]);
+    assert!(o.status.success(), "{}", text(&o));
+    let now = std::fs::read_to_string(&path).unwrap();
+    assert!(now.starts_with("-- hints\n") && now.ends_with(" -- tickets\n"), "{now}");
+    assert_eq!(get(&env, &path, "hint_patterns"), r#"["TICKET-\\d+","id=(\\w+)"]"#);
+    let o = config(&env, &path, &["set", "hint_patterns", "TICKET"]);
+    assert_eq!(o.status.code(), Some(1), "a bare word is not a list: {}", text(&o));
+}

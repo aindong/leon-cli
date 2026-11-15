@@ -22,6 +22,7 @@ fn settings_method_and_change_event() {
     assert_eq!(s["theme"], serde_json::json!({ "dark": "leon-dark", "light": "leon-dark" }), "{r}");
     assert_eq!(s["notifications"]["blocked"], true, "{r}");
     assert_eq!(s["copy_on_select"], false, "{r}");
+    assert_eq!((s["repeat_time"].as_u64(), &s["hint_patterns"]), (Some(500), &serde_json::json!([])), "{r}");
     assert!(r["sources"]["font.size"].as_str().unwrap().ends_with("init.lua:2"), "{r}");
 
     let mut events = env.events(&["--all"]);

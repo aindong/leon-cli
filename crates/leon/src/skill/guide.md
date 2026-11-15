@@ -80,6 +80,19 @@ leon wait "$id" --for 2m     # give up after 2 minutes and exit 1
 running (a dev server, a REPL), don't wait on it: poll `leon capture` for the text you expect, with
 your own deadline.
 
+## Tell the user you need them
+
+```sh
+leon notify --state blocked --title "Deploy" --body "approve the rollout?"   # waiting on the user
+leon notify --state done --title "Tests pass"                                # finished
+```
+
+reports a status for your own block (`$LEON_BLOCK`; `-b` names another of yours): it shows on the
+tab and in the app's Activity list, and blocked, error and a long run's done raise a notification.
+`--state` is `working`, `blocked`, `done` (the default) or `error`; `--title` and `--body` are one
+line each. Use it when you stop to ask, and when a long job ends; don't report on blocks that
+aren't yours.
+
 ## Look around
 
 ```sh

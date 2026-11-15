@@ -90,6 +90,7 @@ const STABILITY: &[(&str, Stability)] = &[
     ("dev.leon.terminal.process", Stable),
     ("dev.leon.terminal.set_resume", Stable),
     ("dev.leon.terminal.program_status", Stable),
+    ("dev.leon.terminal.report_status", Experimental),
     ("dev.leon.terminal.lines", Experimental),
     ("dev.leon.terminal.find", Experimental),
     ("dev.leon.terminal.selection", Experimental),

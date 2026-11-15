@@ -17,12 +17,19 @@ impl Workspace {
             .pr(px(8.))
             .child(self.tool("toolbar-sidebar", Icon::Sidebar, "client.sidebar.toggle", cx))
             .child(div().flex_1())
+            .child(self.activity_button(cx))
             .child(self.tool("toolbar-palette", Icon::Command, "client.palette.toggle", cx))
             .child(self.tool("toolbar-new", Icon::Plus, "session.new", cx))
     }
 
     /// One toolbar button: an icon that runs `action`.
-    fn tool(&self, id: &'static str, icon: Icon, action: &'static str, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn tool(
+        &self,
+        id: &'static str,
+        icon: Icon,
+        action: &'static str,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let t = &DARK;
         div()
             .id(id)
@@ -96,12 +103,9 @@ impl Workspace {
             }
         }
         bar.child(div().flex_1()).when(hidden, |d| {
-            d.child(self.tool("toolbar-palette", Icon::Command, "client.palette.toggle", cx)).child(self.tool(
-                "toolbar-new",
-                Icon::Plus,
-                "session.new",
-                cx,
-            ))
+            d.child(self.activity_button(cx))
+                .child(self.tool("toolbar-palette", Icon::Command, "client.palette.toggle", cx))
+                .child(self.tool("toolbar-new", Icon::Plus, "session.new", cx))
         })
     }
 

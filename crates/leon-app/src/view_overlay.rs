@@ -65,10 +65,13 @@ impl Workspace {
         if let Some((_, row)) = &ask {
             list = list.child(div().px(px(16.)).py(px(6.)).text_color(rgb(t.muted)).child(row.clone()));
         } else if matches.is_empty() {
-            list = list.child(div().px(px(16.)).py(px(6.)).text_color(rgb(t.muted)).child("No matching actions"));
+            let none =
+                if self.switcher_open() { "No matching sessions, tabs or blocks" } else { "No matching actions" };
+            list = list.child(div().px(px(16.)).py(px(6.)).text_color(rgb(t.muted)).child(none));
         }
         let prompt = if query.is_empty() {
-            let placeholder = ask.map_or("Type an action…".to_string(), |(p, _)| p);
+            let typing = if self.switcher_open() { "Go to a session, tab or block…" } else { "Type an action…" };
+            let placeholder = ask.map_or(typing.to_string(), |(p, _)| p);
             div().text_color(rgb(t.muted)).child(placeholder)
         } else {
             div().text_color(rgb(t.text)).child(query)

@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 8] = [
+pub const KEYS: [&str; 10] = [
     "theme",
     "font.family",
     "font.size",
@@ -18,6 +18,8 @@ pub const KEYS: [&str; 8] = [
     "notifications.blocked",
     "notifications.error",
     "copy_on_select",
+    "repeat_time",
+    "hint_patterns",
     "resume",
 ];
 
@@ -31,11 +33,14 @@ pub struct ThemeChoice {
     pub light: String,
 }
 
-/// Which program states may post a system notification.
+/// The app's notifications (docs/architecture/attention.md), by kind.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Notifications {
+    /// A long run finished while the app was in the background.
     pub done: bool,
+    /// A block became blocked.
     pub blocked: bool,
+    /// A block reported an error.
     pub error: bool,
 }
 
@@ -47,12 +52,17 @@ pub struct Settings {
     pub notifications: Notifications,
     /// The app copies a selection to the clipboard as it is made.
     pub copy_on_select: bool,
+    /// Milliseconds after a repeatable binding during which its keys work without the prefix; 0
+    /// turns repeat off.
+    pub repeat_time: u64,
+    /// Regular expressions hints match besides the built-in ones.
+    pub hint_patterns: Vec<String>,
     /// What a restored block does with its program's resume command.
     pub resume: Resume,
 }
 
 impl Default for Settings {
-    /// Today's app: the dark theme whatever the OS, Menlo 13, every notification.
+    /// Today's app: the dark theme whatever the OS, Menlo 13, every notification, 500 ms repeat.
     fn default() -> Self {
         let dark = "leon-dark".to_string();
         Settings {
@@ -61,6 +71,8 @@ impl Default for Settings {
             font_size: 13.,
             notifications: Notifications { done: true, blocked: true, error: true },
             copy_on_select: false,
+            repeat_time: 500, // tmux's repeat-time default
+            hint_patterns: vec![],
             resume: Resume::Ask,
         }
     }
@@ -75,6 +87,8 @@ impl Settings {
             "font": { "family": self.font_family, "size": self.font_size },
             "notifications": { "done": n.done, "blocked": n.blocked, "error": n.error },
             "copy_on_select": self.copy_on_select,
+            "repeat_time": self.repeat_time,
+            "hint_patterns": self.hint_patterns,
             "resume": self.resume.as_str(),
         })
     }
@@ -127,6 +141,11 @@ impl Settings {
             "notifications.blocked" => self.notifications.blocked = flag()?,
             "notifications.error" => self.notifications.error = flag()?,
             "copy_on_select" => self.copy_on_select = flag()?,
+            "repeat_time" => match v.as_f64() {
+                Some(ms) if ms.fract() == 0. && (0. ..=10_000.).contains(&ms) => self.repeat_time = ms as u64,
+                _ => return Err("repeat_time is whole milliseconds, 0 to 10000 (0 turns repeat off)".into()),
+            },
+            "hint_patterns" => self.hint_patterns = hint_patterns(v)?,
             "resume" => {
                 let r = Resume::ALL.into_iter().find(|r| v.as_str() == Some(r.as_str()));
                 self.resume = r.ok_or("resume must be \"ask\", \"always\" or \"never\"")?;
@@ -137,6 +156,40 @@ impl Settings {
             _ => return Err(format!("unknown setting {key:?}; the settings are {}", KEYS.join(", "))),
         }
         Ok(())
+    }
+}
+
+/// A list of at most `MAX_PATTERNS` strings, each a regular expression leon_core::hints compiles.
+fn hint_patterns(v: &Value) -> Result<Vec<String>, String> {
+    use leon_core::hints::{compile, MAX_PATTERNS};
+    let list = match v {
+        Value::Array(list) => list.as_slice(),
+        Value::Object(o) if o.is_empty() => &[], // Lua's `{}`
+        Value::Object(_) => {
+            return Err("hint_patterns must be a list of regular expressions, not a table with keys".into())
+        }
+        v => return Err(format!("hint_patterns must be a list of regular expressions, got {}", kind(v))),
+    };
+    if list.len() > MAX_PATTERNS {
+        return Err(format!("at most {MAX_PATTERNS} hint patterns, got {}", list.len()));
+    }
+    list.iter()
+        .map(|p| {
+            let p = p.as_str().ok_or("hint_patterns holds strings only")?;
+            compile(p)?;
+            Ok(p.to_string())
+        })
+        .collect()
+}
+
+/// A JSON value's type as Lua names it, for messages.
+fn kind(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "nil",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) | Value::Object(_) => "table",
     }
 }
 

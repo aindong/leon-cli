@@ -104,6 +104,8 @@ pub fn literal(value: &Value) -> String {
             let fields: Vec<String> = o.iter().map(|(k, v)| format!("{} = {}", name(k), literal(v))).collect();
             format!("{{ {} }}", fields.join(", "))
         }
+        Value::Array(list) if list.is_empty() => "{}".into(),
+        Value::Array(list) => format!("{{ {} }}", list.iter().map(literal).collect::<Vec<_>>().join(", ")),
         v => v.to_string(), // true, false
     }
 }
@@ -203,17 +205,22 @@ fn call(src: &str, at: usize) -> Option<Call> {
     Some(Call { key, value, fields })
 }
 
-/// `{ name = "string", … }` from the `{` at `at`: its span and each field's string span.
+/// `{ name = "string", … }` or `{ "string", … }` from the `{` at `at`: its span and each field's
+/// string span (a list's fields have no name).
 fn table(src: &str, at: usize) -> Option<(Range<usize>, Fields)> {
     let b = src.as_bytes();
     let (mut i, mut fields) = (skip(src, at + 1), vec![]);
     while b.get(i)? != &b'}' {
-        let len = src[i..].find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))?;
-        (len > 0).then_some(())?;
-        let name = src[i..i + len].to_string();
-        i = skip(src, i + len);
-        (b.get(i) == Some(&b'=')).then_some(())?;
-        let (_, span) = lua_string(src, skip(src, i + 1))?;
+        let mut name = String::new();
+        if !matches!(b[i], b'"' | b'\'') {
+            let len = src[i..].find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))?;
+            (len > 0).then_some(())?;
+            name = src[i..i + len].to_string();
+            i = skip(src, i + len);
+            (b.get(i) == Some(&b'=')).then_some(())?;
+            i = skip(src, i + 1);
+        }
+        let (_, span) = lua_string(src, i)?;
         i = skip(src, span.end);
         fields.push((name, span));
         match b.get(i)? {

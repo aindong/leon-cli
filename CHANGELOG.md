@@ -7,9 +7,7 @@ Everything that changes in leon, newest first. The format follows
 leon has had no release yet: every build so far is version 0.1.0. Until the first release, each
 section is a milestone from [docs/roadmap.md](docs/roadmap.md) and
 [docs/research/next-for-leon.md](docs/research/next-for-leon.md), dated by when it landed on
-`main`. Milestones that haven't landed have no section: M12 (the session switcher; the command
-palette came with M9), M13 (Activity, notifications and `leon notify`; status in the app came with
-M9) and M15 (Linux) are still to come.
+`main`. Milestones that haven't landed have no section: M15 (Linux) is still to come.
 
 ## Reading `api_version`
 
@@ -40,14 +38,72 @@ fields it doesn't know. The full policy is in
 - `leon theme list`, `leon theme import FILE [--name NAME]` (Ghostty theme files and iTerm2
   `.itermcolors`, stored in `themes/` beside init.lua) and `leon theme show NAME`.
 - Settings in init.lua: `leon.set` takes `theme` (a name, or `{dark, light}` to follow the OS),
-  `font.family`, `font.size`, `notifications.done|blocked|error`, as well as `copy_on_select` and
-  `resume`. `leon config get [KEY]` reads them; `leon config set KEY VALUE` edits init.lua in
+  `font.family`, `font.size`, `notifications.done|blocked|error`, as well as `copy_on_select`,
+  `repeat_time`, `hint_patterns` and `resume`. `leon config get [KEY]` reads them; `leon config set KEY VALUE` edits init.lua in
   place, keeping comments, and refuses a key set by code it can't rewrite.
-- `server.settings` (stable): the effective settings and where each was set, and the
+- `server.settings` (stable): every effective setting and where each was set, and the
   `settings_changed` event when a reload changes them. This additive change raises `api_version`
   from `1.2.0` to `1.3.0`.
 
-The app doesn't use the themes or the new settings yet; that is M22b.
+#### Changed
+
+- The notification switches are `notifications.blocked`, `notifications.error` and
+  `notifications.done` (M13 shipped them unreleased as `notify_*`; those names are gone), and
+  `client.keymap`'s settings carry them as `notifications`.
+
+The app doesn't use the themes, fonts or `leon config set` yet; that is M22b.
+
+### M19: tmux migrants
+
+#### Added
+
+- Repeatable bindings: `leon.bind(key, target, args, { repeats = true })`, like tmux's `bind -r`,
+  in the app and `leon attach`, with `leon.set("repeat_time", ms)` (default 500).
+- Copy mode in the app (⌘⇧C, `client.copy_mode`): vi keys over the scrollback, `v`/`V` selections,
+  `/` and `?` search with `n`/`N`, `y` copies.
+- Hints in the app (⌘⇧H, `client.hints`): labels on the URLs, paths, git hashes, UUIDs, hex and IP
+  addresses and long numbers on screen; a label copies, in upper case it types the text into the
+  pane. `leon.set("hint_patterns", {...})` adds patterns.
+- docs/lua.md: a tmux-style preset and a vim-navigator recipe.
+- `repeats` on `client.keymap` bindings and `repeat_time` and `hint_patterns` in its settings
+  (`internal`).
+
+#### Changed
+
+- `leon actions` lists the app's own actions after the config's.
+- Shifted symbols (`&`, `|`, `%`, `"`, …) in bindings are documented as accepted as typed.
+
+### M12 + M13: switch fast, and know which agent needs you
+
+#### Added
+
+- The session switcher (⌘K, `session.switch`): every tab on every host, and a block when the query
+  matches its title, with its status; the most recently used first. ↩ goes there; ⌘↩ moves the
+  pane beside the focused one when both are in the same session.
+- Activity (⌘⇧A, `client.sidebar.activity.toggle`, a toolbar button): every block that needs you
+  across hosts, blocked (with its kind), error, done-unseen, then working with its progress, each
+  with how long it has waited; a click goes to the pane, which clears its done or error.
+- The blocked count on the Activity button and the Dock icon, shown only when something is blocked.
+- Notifications from Leon.app (UNUserNotificationCenter) when a block blocks or errors, or a run of
+  30 s or more finishes while the app is in the background; once a minute per block and state, four
+  a minute in all; `leon.set("notifications.blocked" | "notifications.error" |
+  "notifications.done", false)` turns a kind off. Clicking one goes to its pane.
+- `leon notify [-b BLOCK] [--state working|blocked|done|error] [--title T] [--body B]` and the
+  experimental block method `dev.leon.terminal.report_status`: a status for your own block, held to
+  the OSC 7501 rules.
+
+#### Changed
+
+- The app and `leon attach` read at most 16 MiB per line from a server (was 256 MiB). The server
+  splits a screen update past 4 MiB into several lines and trims `dev.leon.terminal.lines` replies
+  to 4 MiB of rows (ask again for the rest).
+- Applying a screen update is linear in its size, whatever a server sends; a line given twice
+  takes its last row, and a row keeps at most a line's worth of spans, text and backgrounds.
+- A line past the cap ends the connection instead of re-attaching to it; event and screen lines
+  are parsed into their types, so a server gets about a byte of the app's memory per byte it sends.
+  Names and status text from a server are stripped of hidden characters before they are shown.
+- The docs' screenshots are retaken with a neutral demo (`scripts/demo-shots.sh`), and a test keeps
+  the user's login and machine name out of them.
 
 ### M20a — Floating panes and drawers (API `1.2.0`)
 
