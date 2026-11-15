@@ -1,5 +1,6 @@
 //! M15 criterion 5 (.agent/plans/2026-11-15-m15-linux-server-cli.md): the CI workflow has a macOS
-//! job with the full gate and Linux jobs on both arches running the server + CLI suite.
+//! job with the full gate and Linux jobs on both arches running the server + CLI suite. Also when
+//! it runs: once per push to a PR, and on `main` and `dev` (the why is in ci.yml's comments).
 
 mod help_walk;
 
@@ -23,13 +24,14 @@ fn jobs(ci: &str) -> Vec<(String, String)> {
 }
 
 /// The lines under a top-level key such as `on:`, up to the next top-level key, without comments.
+/// Each keeps its indent: a key moved out of its parent is a different workflow.
 fn section<'a>(ci: &'a str, key: &str) -> Vec<&'a str> {
     ci.lines()
         .skip_while(|l| l.trim_end() != format!("{key}:"))
         .skip(1)
         .take_while(|l| l.starts_with(' ') || l.starts_with('#') || l.is_empty())
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(str::trim_end)
+        .filter(|l| !l.is_empty() && !l.trim_start().starts_with('#'))
         .collect()
 }
 
@@ -37,24 +39,20 @@ fn ci() -> String {
     std::fs::read_to_string(help_walk::repo().join(".github/workflows/ci.yml")).expect("ci.yml exists")
 }
 
-/// A push to a PR branch is one run (the `pull_request` one), not two; a merge into `dev` and a
-/// release merge into `main` still start a run of their own.
 #[test]
 fn a_push_to_a_pr_branch_starts_one_run() {
     let ci = ci();
-    assert_eq!(section(&ci, "on"), ["push:", "branches: [main, dev]", "pull_request:"], "the triggers: {ci}");
+    assert_eq!(section(&ci, "on"), ["  push:", "    branches: [main, dev]", "  pull_request:"], "the triggers: {ci}");
 }
 
-/// A newer push cancels the PR's older run. A run on `main` or `dev` is in a group of its own (its
-/// run id), so no later run cancels it or takes its place while it waits.
 #[test]
 fn a_new_push_cancels_the_prs_older_run_and_never_one_on_main_or_dev() {
     let ci = ci();
     assert_eq!(
         section(&ci, "concurrency"),
         [
-            "group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}",
-            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+            "  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}",
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
         ],
         "the concurrency block: {ci}"
     );
