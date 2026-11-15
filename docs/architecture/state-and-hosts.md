@@ -51,8 +51,14 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   and fish must also have turned bracketed paste on, which their line editors do and a key an rc
   file reads (oh-my-zsh's update question, compinit's `read -q`) doesn't. bash and sh are taken at
   canonical mode alone. dash (Debian's `sh`) has no line editor and never turns canonical mode
-  off, so a dash login shell is offered nothing: the wait gives up and types nothing. The command
-  stays registered until replaced or cleared; with `"always"` the
+  off, so a dash login shell is offered nothing: the wait gives up and types nothing. A command is
+  offered once: when it has been typed (under `"ask"` or `"always"`), the restored block still shows
+  it (`block inspect`) but it isn't saved again, so the next restart doesn't type the same stale
+  command; a program that resumes registers again (the skill hook does on every agent start), and
+  that registration is offered next time. A generation count, not the command's text, says which
+  registration was typed, so an agent re-registering the same command isn't lost. Under `"never"`,
+  or when the wait gives up, nothing is typed and the command is kept. A restart before the user
+  presses Enter loses the offer, though its text stays in the restored scrollback. With `"always"` the
   private state file is a place that runs the commands programs registered, which is why `"ask"` is
   the default.
 - **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of

@@ -3,13 +3,42 @@
 
 use super::*;
 
+/// A resume command, how many times one was registered, and whether a restore typed this one.
+#[derive(Default)]
+pub(crate) struct Registered {
+    command: Option<Vec<String>>,
+    generation: u64,
+    offered: bool,
+}
+
 impl Terminal {
     pub fn resume(&self) -> Option<Vec<String>> {
-        lock(&self.resume).clone()
+        lock(&self.resume).command.clone()
     }
 
     pub fn set_resume(&self, command: Option<Vec<String>>) {
-        *lock(&self.resume) = command;
+        let mut r = lock(&self.resume);
+        *r = Registered { command, generation: r.generation + 1, offered: false };
+    }
+
+    /// Which registration is current, for `resume_offered`.
+    pub fn resume_generation(&self) -> u64 {
+        lock(&self.resume).generation
+    }
+
+    /// A restore typed registration `generation` at the prompt: it isn't saved again, so the next
+    /// restart doesn't offer it a second time. A registration made since is left alone.
+    pub fn resume_offered(&self, generation: u64) {
+        let mut r = lock(&self.resume);
+        if r.generation == generation {
+            r.offered = true;
+        }
+    }
+
+    /// The command to save: none once a restore has offered it.
+    pub fn resume_to_save(&self) -> Option<Vec<String>> {
+        let r = lock(&self.resume);
+        r.command.clone().filter(|_| !r.offered)
     }
 
     /// Whether the program reads a line itself now: it is the PTY's foreground process group (no

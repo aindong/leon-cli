@@ -42,6 +42,10 @@ fields it doesn't know. The full policy is in
 - Sessions are saved while the server runs (a second after a change, the screens' text once a
   minute), not only when it stops. After a crash the next start restored the save from the last
   clean stop: sessions closed since came back, and new ones were gone.
+- A resume command is offered at one restart, not at every restart after it: once it has been
+  typed at the restored prompt it isn't saved again (`block inspect` still shows it until then). A
+  skipped or stale `claude --resume <id>` used to be typed again at every restart. A program that
+  resumes registers again, as the skill hook does.
 - A program that isn't on PATH fails with `can't start the program: NAME isn't on PATH` instead
   of a message listing every PATH entry.
 

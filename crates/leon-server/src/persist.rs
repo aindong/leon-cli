@@ -252,7 +252,7 @@ fn snapshot(st: &State) -> Saved {
                 cwd: saveable(b.terminal.cwd()),
                 command: b.terminal.command.clone(),
                 scrollback: Some(restore::inert(&b.terminal.text(true), cap)).filter(|t| !t.is_empty()),
-                resume: b.terminal.resume(),
+                resume: b.terminal.resume_to_save(),
             })
             .collect(),
     });
@@ -301,10 +301,10 @@ fn restore_session(ctx: &Arc<Ctx>, s: SavedSession, how: &restore::Restoring) ->
             let cwd = b.cwd.clone().filter(|d| d.is_dir());
             let shown = restore::shown(b.scrollback.as_deref(), b.resume.is_some(), how);
             let terminal = Arc::new(crate::blocks::spawn(ctx, &session_id, &b.block_id, vec![], cwd, &shown)?);
+            terminal.set_resume(b.resume.clone()); // first: the offer marks this registration
             if let Some(command) = &b.resume {
                 restore::offer(&terminal, command, how.policy);
             }
-            terminal.set_resume(b.resume);
             let (id, label, window_id, keep_open) = (b.block_id, b.label, b.window_id, b.keep_open);
             Ok(Block { id, label, window_id, keep_open, exit_code: None, terminal })
         })
