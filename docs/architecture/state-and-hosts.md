@@ -148,7 +148,7 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   ids (shortcut). The palette lists New Session on each connected machine (`session.new {host}`)
   and Add Host… (`client.host.add`): a label, then an endpoint, each checked as `leon hosts add`
   checks them (`leon_hosts::hosts::add`), and saved through the hosts API.
-- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.2.0`), apart
+- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.3.0`), apart
   from the build's version. Each method doc carries `stability` (`stable`, `experimental`,
   `internal`), and optionally `deprecated` (`since`, `replacement`, `removal`) and the spec's
   `request_example`/`response_example`; all of it comes from one table,
