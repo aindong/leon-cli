@@ -13,7 +13,10 @@ leon skill setup             # install for every agent it finds
 leon skill status            # current, outdated, missing, foreign or unreadable
 ```
 
-`leon skill setup` installs two things for each agent it finds (`--agent claude|codex` picks one):
+`leon skill setup` installs two things for each agent it finds: one whose config dir exists, or
+whose program (`claude`, `codex`) is on your PATH, even if you have never run it. It prints, for
+each agent, why it was picked and each file it wrote. With neither found it writes only the shared
+`~/.agents/skills/leon/` (other agents read it too) and says so. `--agent claude|codex` picks one:
 
 | | Claude Code | Codex |
 |---|---|---|

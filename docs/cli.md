@@ -470,7 +470,10 @@ Print the guide for agents driving leon (a SKILL.md).
 
 ### `leon skill setup`
 
-Install the skill and a session-start hook for each agent found. The hook runs
+Install the skill and a session-start hook for each agent found: Claude Code or Codex when its
+config dir (`~/.claude`, `~/.codex`) exists or its program (`claude`, `codex`) is on PATH. It
+prints why it picked each agent and every file it wrote; with no agent found it installs only the
+shared `~/.agents/skills/leon/SKILL.md` and says to pass `--agent`. The hook runs
 `leon skill hook --agent claude|codex`, which tells the agent where it is and records how to
 resume its session after a restart (see [agents.md](agents.md)).
 

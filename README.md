@@ -184,7 +184,8 @@ screens under a "reconnecting" note.
 leon skill setup
 ```
 
-installs a skill and a session-start hook for Claude Code and Codex. Then, working in a leon
+installs a skill and a session-start hook for Claude Code and Codex (each one whose config dir
+exists or whose program is on your PATH; it says which, and why). Then, working in a leon
 terminal, ask "run the tests beside you", and the agent does what you would:
 
 ```sh

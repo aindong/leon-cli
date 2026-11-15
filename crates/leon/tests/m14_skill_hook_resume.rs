@@ -152,6 +152,7 @@ fn setup_upgrades_the_old_hook_command() {
             .env("CODEX_HOME", &codex)
             .env("LEON_RUNTIME_DIR", rt.path())
             .env("LEON_AUTOSTART", "0")
+            .env("PATH", "/usr/bin:/bin") // not this machine's claude or codex
             .output()
             .unwrap();
         assert!(o.status.success(), "leon {args:?}: {}", String::from_utf8_lossy(&o.stderr));

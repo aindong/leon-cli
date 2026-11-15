@@ -72,6 +72,8 @@ struct Target {
     agent: Agent,
     skill: PathBuf,
     hook: Option<PathBuf>,
+    /// Why setup without `--agent` picked it, for the report.
+    why: Option<String>,
 }
 
 fn env_dir(name: &str) -> Option<PathBuf> {
@@ -93,11 +95,12 @@ fn target(agent: Agent, named: bool) -> Result<(PathBuf, Target), Fail> {
         }
     };
     let hook = (named || dir.is_dir()).then_some(hook);
-    Ok((dir, Target { agent, skill, hook }))
+    Ok((dir, Target { agent, skill, hook, why: None }))
 }
 
-/// The agents a command covers. Setup without `--agent` picks the installed ones; with none found,
-/// the Codex skill path alone (~/.agents/skills, read by other agents too). Status and remove cover all.
+/// The agents a command covers. Setup without `--agent` picks each agent whose home dir exists or
+/// whose program is on PATH; with none found, the Codex skill path alone (~/.agents/skills, read by
+/// other agents too). Status and remove cover all.
 fn targets(agent: Option<Agent>, for_setup: bool) -> Result<Vec<Target>, Fail> {
     if let Some(a) = agent {
         return Ok(vec![target(a, for_setup)?.1]);
@@ -106,11 +109,38 @@ fn targets(agent: Option<Agent>, for_setup: bool) -> Result<Vec<Target>, Fail> {
     if !for_setup {
         return Ok(all.into_iter().map(|(_, t)| t).collect());
     }
-    let found: Vec<Target> = all.into_iter().filter(|(dir, _)| dir.is_dir()).map(|(_, t)| t).collect();
+    let mut found = vec![];
+    for (dir, t) in all {
+        let name = t.agent.name();
+        let (mut t, why) = match on_path(name) {
+            _ if dir.is_dir() => (t, format!("found {}", dir.display())),
+            // installed but never run: its home dir comes with the hook
+            Some(p) => (target(t.agent, true)?.1, format!("found {name} on PATH ({})", p.display())),
+            None => continue,
+        };
+        t.why = Some(why);
+        found.push(t);
+    }
     if found.is_empty() {
-        return Ok(vec![target(Agent::Codex, false)?.1]);
+        let mut t = target(Agent::Codex, false)?.1;
+        t.why = Some(
+            "no Claude Code or Codex found (not on PATH, no config dir): only the shared skill, which other \
+             agents read too; pass --agent claude or --agent codex to add one"
+                .into(),
+        );
+        return Ok(vec![t]);
     }
     Ok(found)
+}
+
+/// `program`'s path in a PATH dir, if one holds it as an executable file.
+fn on_path(program: &str) -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .filter(|d| d.is_absolute())
+        .map(|d| d.join(program))
+        .find(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0))
 }
 
 fn skill_state(path: &Path) -> State {
@@ -357,6 +387,9 @@ fn change_all(
     let mut report = vec![];
     for t in targets {
         let mut entry = json!({ "agent": t.agent.name() });
+        if let Some(why) = &t.why {
+            entry["why"] = json!(why);
+        }
         let mut notes = vec![];
         match changes(t) {
             Err(why) => {
@@ -405,6 +438,9 @@ fn change_all(
     } else {
         for e in &report {
             println!("{}: {}", e["agent"].as_str().unwrap_or(""), e["status"].as_str().unwrap_or(""));
+            if let Some(why) = e["why"].as_str() {
+                println!("  {why}");
+            }
             for f in e["files"].as_array().into_iter().flatten() {
                 let action = f["action"].as_str().unwrap_or("");
                 let action =
