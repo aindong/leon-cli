@@ -102,9 +102,11 @@ jobs:
       - name: Stop if a release or a draft for this tag exists already
         env:
           GH_TOKEN: ${{ github.token }}
+        # asked of the API, which lists drafts too; if the call fails the step fails, it never reads as "none"
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::error::a release or a draft for $TAG exists already; delete it before running again (docs/releases.md)"
+          found=$(gh api "repos/$GH_REPO/releases" --paginate --jq '.[] | select(.tag_name == env.TAG) | .html_url')
+          if [ -n "$found" ]; then
+            echo "::error::a release or a draft for $TAG exists already ($found); see docs/releases.md before running again"
             exit 1
           fi
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

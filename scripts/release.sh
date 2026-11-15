@@ -60,6 +60,7 @@ mkdir -p "$out"
 if [ -f "$out/SHA256SUMS" ]; then
   (cd "$out" && awk '{ print $2 }' SHA256SUMS | while read -r f; do case "$f" in */*) ;; *) rm -f -- "$f" ;; esac; done && rm SHA256SUMS)
 fi
+rm -f "$out/BUILD-COMMIT" # written again at the end; a build that fails must not leave the last one's
 files=()
 
 echo "release.sh: cargo build --locked --release -p leon"

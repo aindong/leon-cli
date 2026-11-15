@@ -200,3 +200,25 @@ fn files_built_from_another_commit_are_not_signed_as_this_one() {
         assert!(!o.status.success(), "a record of {bad:?} was accepted: {}", text(&o));
     }
 }
+
+/// What the signer signs, the verifier accepts: a hidden file in the directory (Finder's
+/// `.DS_Store`) is refused by the signer by name, not signed past and then rejected. (Found in review.)
+#[test]
+fn a_directory_the_signer_accepts_is_one_the_verifier_accepts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("files");
+    release_kit::fake_release(&dir);
+    std::fs::write(dir.join(".DS_Store"), "Bud1").unwrap();
+    let key = release_kit::key(tmp.path(), "k");
+
+    let signed = release_kit::manifest(&dir, &key, &["--complete"]);
+    assert!(
+        !signed.status.success() && text(&signed).contains(".DS_Store"),
+        "the refusal names the file: {}",
+        text(&signed)
+    );
+    assert!(!dir.join("latest.json").exists(), "nothing is signed");
+    std::fs::remove_file(dir.join(".DS_Store")).unwrap();
+    assert!(release_kit::manifest(&dir, &key, &["--complete"]).status.success());
+    assert!(verify(&dir, &key.keys_file, &["--complete"]).status.success());
+}
