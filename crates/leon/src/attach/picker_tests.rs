@@ -9,6 +9,7 @@ fn session(label: &str) -> Session {
         windows: Vec::new(),
         blocks: Vec::new(),
         overlays: Default::default(),
+        tiled_focus: Default::default(),
     }
 }
 

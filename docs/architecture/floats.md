@@ -26,7 +26,9 @@ app draws and moves them (M20b).
 - **Drawing.** A float or drawer is the same tile as a pane (header with title, host and status;
   terminal; find bar), always with its header. Its header controls are unfloat and close instead
   of split and zoom. Floats get a 1 px border (Amber when focused, else the border colour) and a
-  shadow, and are drawn after the drawers in z-order. A click focuses the pane under it
+  shadow, and are drawn after the drawers in z-order. A tab is named by its tiles, never by a
+  float or drawer that has the focus: the client remembers each window's tile focused last
+  across refetches (`Session::named_tile`), since the server keeps only the focus. A click focuses the pane under it
   (`session.focus_block`, which raises a float).
 - **Dragging.** A float's header moves it, its edges and corners resize it (never under
   160×80 px, never out of the window), and a drawer's divider sets its size (0.05–0.95; a size

@@ -77,6 +77,7 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
             windows,
             blocks: Vec::new(),
             overlays,
+            tiled_focus: Default::default(),
         };
         for b in blocks["blocks"].as_array().into_iter().flatten() {
             let p =
