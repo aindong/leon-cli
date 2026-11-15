@@ -113,12 +113,14 @@ async function check(root = __dirname) {
   };
   const seams = ['left', 'right', 'top', 'bottom'].map((name, edge) => [name, strip(0, 3, edge) - strip(6, 9, edge)]);
   expect(seams.every(([, gap]) => Math.abs(gap) <= 10), `no seam: the outer 3 px against 6 to 9 px in, mean luminance: ${seams.map(([name, gap]) => `${name} ${gap.toFixed(1)}`).join(', ')}`);
-  // every slot shows its source: the optical icon at 16 px, the master at every other size
-  for (const file of require('node:fs').readdirSync(icon('Leon.iconset')).filter(f => f.endsWith('.png')).sort()) {
-    const slot = sharp(icon(`Leon.iconset/${file}`)), { width } = await slot.metadata();
-    const source = width === 16 ? sharp(icon('leon-small.svg'), { density: 288 }) : master.clone();
-    const { psnr, mean } = compare(await onGrey(slot), await onGrey(source.resize(width, width)));
-    expect(psnr >= 40, `${file} is the ${width === 16 ? 'optical icon' : 'master'} at ${width} px: ${psnr.toFixed(1)} dB, mean difference ${mean.toFixed(2)}`);
+  // all ten slots are there, each at its own size and showing its source: the optical icon at 16 px, the master elsewhere
+  for (const size of [16, 32, 128, 256, 512]) for (const factor of [1, 2]) {
+    const file = `icon_${size}x${size}${factor === 2 ? '@2x' : ''}.png`, px = size * factor;
+    const slot = sharp(icon(`Leon.iconset/${file}`)), { width, height } = await slot.metadata().catch(() => ({}));
+    if (width !== px || height !== px) { expect(false, `${file} is ${px} × ${px}: ${width ? `${width} × ${height}` : 'missing or unreadable'}`); continue; }
+    const source = px === 16 ? sharp(icon('leon-small.svg'), { density: 288 }) : master.clone();
+    const { psnr, mean } = compare(await onGrey(slot), await onGrey(source.resize(px, px)));
+    expect(psnr >= 40, `${file} is the ${px === 16 ? 'optical icon' : 'master'} at ${px} px: ${psnr.toFixed(1)} dB, mean difference ${mean.toFixed(2)}`);
   }
   const tile = master.clone().extract({ left: TILE.x, top: TILE.y, width: TILE.width, height: TILE.height }).resize(BANNER.width, BANNER.height);
   const banner = sharp(path.join(root, '../docs/images/banner.png')).extract(BANNER);
