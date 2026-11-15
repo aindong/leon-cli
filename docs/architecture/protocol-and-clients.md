@@ -47,8 +47,9 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   the saved sessions), then attaches over the socket (`leon_app::remote`). Quitting the app (⌘Q,
   the menu, closing the window) only closes its connections: every program keeps running, and the
   next launch shows the same sessions and screens. "Quit and End All Sessions…" asks once, naming
-  how many sessions end, then calls `server.stop`; the app quits whenever the server goes away
-  (it re-attaches if only its event connection was dropped). The client uses three connections:
+  how many sessions end, calls `server.stop` and quits. A server that goes away otherwise
+  (`leon server stop`) leaves the window saying so, with Start It Again (this leon run again, which
+  starts the server) and Quit; it re-attaches if only its event connection was dropped. The client uses three connections:
   UI calls (keys, layout changes; one that changes the model refetches it before returning), model
   refetches, and events plus screens, read on a thread. The client keeps a copy of the model
   (sessions, windows, layout trees, blocks, program-status records), refetched after each batch of
