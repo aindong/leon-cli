@@ -31,3 +31,7 @@ A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first (its decis
   (temp HOME, neutral prompt and titles, private LEON_* dirs, a fake devbox). No image name, README
   text or picture may show the user's login or hostname; `cargo test -p leon --test m13_privacy`
   checks names, bytes and OCR'd text, and a look at each picture covers the rest.
+- The app icon is built, never drawn: `brand/icon/leon-original-280.png` is the art, and
+  `node brand/build-assets.cjs` makes the master and every picture of it, the README banner's icon
+  included (`brand/README.md` has the steps). Don't edit the master by hand or run an image
+  generator or AI upscaler on it; `node brand/check-icon.cjs` compares the pixels.
