@@ -186,6 +186,9 @@ impl State {
         if !s.overlay(&s.windows[w].id).contains(id) {
             return Err(ApiError::bad_request("block is already tiled"));
         }
+        if let Some(t) = &s.windows[w].layout {
+            t.check_insert(t.id(), None)?;
+        }
         s.detach_placed(w, id);
         match &mut s.windows[w].layout {
             None => s.windows[w].layout = Some(Node::block(id)),

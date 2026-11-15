@@ -4,10 +4,11 @@ Everything that changes in leon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the API follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) through its `api_version`.
 
-leon has had no release yet: every build so far is version 0.1.0. Until the first release, each
-section is a milestone from [docs/roadmap.md](docs/roadmap.md) and
-[docs/research/next-for-leon.md](docs/research/next-for-leon.md), dated by when it landed on
-`main`. Milestones that haven't landed have no section: M15 (Linux) is still to come.
+0.1.0 is the first release. Its section sums up what it brings; under it, each milestone from
+[docs/roadmap.md](docs/roadmap.md) and [docs/research/next-for-leon.md](docs/research/next-for-leon.md)
+keeps its own notes, dated by when it landed on `main`. Milestones that haven't landed have no
+section: M22b (themes and settings in the app) and the app on Linux (M15's second part; Linux has
+the server, the CLI and `leon attach`).
 
 ## Reading `api_version`
 
@@ -49,6 +50,58 @@ fields it doesn't know. The full policy is in
 - leon-light: the selected row is a step deeper than a hovered one, and the accent, secondary and
   status colours are a little darker, so all of them read at 4.5:1 on every surface.
 
+## [0.1.0] - not yet tagged
+
+The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
+
+### What you get
+
+- **Sessions that outlive every window.** A server owns sessions, tabs, split panes and their
+  programs. Close the app, quit your terminal or drop your ssh link, and everything keeps running.
+  When the server itself stops, the layout, each pane's directory and its scrollback come back on
+  the next start, and an agent's resume command (`claude --resume …`) waits at the new prompt
+  (`leon.set("resume", "always")` runs it).
+- **A native macOS app.** Sessions and tabs in a sidebar or the titlebar, split panes with headers,
+  floating panes and drawers, scrollback, selection, find, copy mode, hints, links and mouse
+  support, a command palette, and ⌘K to switch to any tab on any machine.
+- **Know which agent needs you.** Programs report working, blocked, done or error (OSC 7501, or
+  `leon notify`). The app shows it on tabs and pane headers, lists what needs you under Activity
+  (⌘⇧A), badges the Dock, and sends a notification when you're elsewhere.
+- **Scriptable from the shell.** `leon run`, `send`, `capture`, `wait`, `split`, `events` and the
+  rest, with `--json` and fixed exit codes. `leon api` reaches every method of a versioned socket
+  API, with a compatibility promise and a reference in docs/api.md.
+- **Agent-ready.** `leon skill setup` teaches Claude Code and Codex to open panes beside
+  themselves, run your tests there and read the results.
+- **Lua.** Key bindings, sequences, modes, repeatable keys and your own actions in `init.lua`;
+  scripts with `leon do` that react to events; settings, themes (`leon theme`) and
+  `leon config get/set`.
+- **Any terminal, any machine.** `leon attach` is a tmux-like client in any terminal. `-H HOST`
+  drives the leon server on another machine over your own ssh, and the app shows each host's
+  sessions in its sidebar.
+- **Packages.** Leon.app for Apple Silicon Macs, and a tarball and a `.deb` for Linux on arm64 and
+  x86_64, each with LICENSE and the third-party notices. `scripts/release.sh` builds them all from
+  a clean checkout and prints their SHA-256 sums.
+
+### Fixed in the release audit ([docs/audit-0.1.0.md](docs/audit-0.1.0.md))
+
+- A server could open only about 80 panes when it started with a low open-file limit, which is
+  what launchd gives the app: past that, new panes failed with "Too many open files". The server
+  now raises its own limit, up to 10240.
+- On macOS, a second server could unlink the socket of a live server that was too busy to accept
+  connections, leaving every program running but out of reach. A server now holds `server.lock`
+  for its whole life, and no one unlinks a socket while it is held.
+- A window split more than about 60 levels deep, or more than 1024 blocks, saved fine but then
+  couldn't be loaded, so the next start set every session aside. A window now nests at most 32
+  splits, and a server holds at most 1024 blocks; past either, `session.new_split`,
+  `session.move_block` and the like answer 400. Schemas are unchanged.
+
+### Added
+
+- `leon --version` names the commit: `leon 0.1.0 (1a2b3c4d5e6f)`.
+- `LICENSE` and `THIRD-PARTY-NOTICES.txt` (every crate built in, with its license) in Leon.app's
+  resources, the Linux tarball and the `.deb`'s docs.
+- `scripts/release.sh`: builds every package from a clean checkout of one commit and writes
+  `SHA256SUMS`. It never tags, pushes or uploads.
 ### Joined panes, their events, long socket paths (API `1.5.0`)
 
 #### Fixed
