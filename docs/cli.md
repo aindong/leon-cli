@@ -180,12 +180,18 @@ PATH, even when the server was started by Leon.app from Finder.
 - `--label LABEL`: name the block, so `-b LABEL` finds it.
 - `--keep-open`: keep the block after the program exits, so you can still read its output.
 - `--wait`: wait for the program and exit with its status.
+- `--output[=true|false]`: with `--wait`, print the program's text after the ID line once it
+  exits: what `leon capture --trim` would show, scrollback and screen. On by default when stdout
+  is not a terminal (an agent's or a script's `$(…)`), off on a terminal. To read the text, `run`
+  keeps the block open until it has been read, then closes it (unless `--keep-open`); a
+  `run --wait` killed before then leaves its block open, as `--keep-open` would.
 - `-c, --cwd DIR`: working directory (default: the current directory; with `-H`, the host's
   home, and `DIR` must be an absolute path there).
 
 ```sh
 leon run --label tests --keep-open -- cargo test
-leon run --wait -- make
+leon run --wait -- make                       # in a script: make's output, then its status
+leon run --wait --output=false -- make        # the status alone
 ```
 
 ### `leon split [FLAGS] [-- CMD…]`
@@ -227,9 +233,13 @@ Wait for a terminal's program to exit, and exit with its status (default block: 
 `$LEON_BLOCK`).
 
 - `--for DURATION`: give up after this long (`500ms`, `10s`, `2m`) and exit 1.
+- `--text TEXT`: wait until the block's screen or scrollback shows `TEXT` instead, and exit 0
+  (text already there counts). Exits 1 after `--for`, or if the block closes first. For a
+  program that keeps running: a prompt, a dev server's "ready" line.
 
 ```sh
 id=$(leon run --keep-open -- python3)
+leon wait -b "$id" --text '>>>' --for 10s    # Python's prompt: now it reads what you type
 leon send -b "$id" 'print(6 * 7)'
 leon send-key -b "$id" enter
 leon capture -b "$id" --trim

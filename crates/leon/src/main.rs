@@ -112,6 +112,10 @@ pub enum Cmd {
         /// Wait for the program and exit with its status.
         #[arg(long)]
         wait: bool,
+        /// With --wait, print the program's text when it exits [default: when stdout isn't a terminal].
+        #[arg(long, requires = "wait", num_args = 0..=1, require_equals = true,
+              default_missing_value = "true", value_parser = BoolishValueParser::new())]
+        output: Option<bool>,
         /// Working directory [default: the current directory].
         #[arg(short = 'c', long = "cwd")]
         cwd: Option<PathBuf>,
@@ -146,6 +150,9 @@ pub enum Cmd {
         /// Give up after this long (e.g. 500ms, 10s, 2m) and exit 1.
         #[arg(long = "for", value_parser = blocks::parse_duration)]
         timeout: Option<std::time::Duration>,
+        /// Wait until the screen or scrollback shows TEXT instead (a prompt, a "ready" line).
+        #[arg(long, value_name = "TEXT")]
+        text: Option<String>,
     },
     /// Float a block, create a floating terminal, or return one to the tiled tree.
     Float {

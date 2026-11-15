@@ -100,8 +100,10 @@ From any terminal (the server starts by itself):
 ```sh
 leon new demo                                    # 1. a session called "demo"
 leon -s demo run --label py -- python3           # 2. run a program in a new tab
+leon -s demo wait -b py --text '>>>'             #    and wait for its prompt
 leon -s demo send -b py 'print(6 * 7)'           # 3. type into it (no Enter yet)
 leon -s demo send-key -b py enter                # 4. press Enter
+leon -s demo wait -b py --text 42                #    and wait for the answer
 leon -s demo capture -b py --trim                # 5. read its screen: 42
 ```
 

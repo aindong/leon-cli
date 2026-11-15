@@ -44,7 +44,9 @@ block's ID. The command runs directly, not through a shell: for pipes, `&&` or g
 - `--label NAME`: name the block so you and the user can find it (`-b NAME`). Label what you create.
 - `--keep-open`: keep the terminal after the program exits, so you can still read its output.
   Without it the block closes when the program ends.
-- `--wait`: wait for the program and exit with its status.
+- `--wait`: wait for the program and exit with its status. Your stdout is not a terminal, so it
+  also prints the program's text after the ID line: `leon run --wait -- cargo test` gives you the
+  output and the status in one call (`--output=false` for the status alone).
 - `-c DIR` / `--cwd DIR`: working directory (default: yours).
 
 To put a terminal beside you instead of in a new tab, use `leon split` (same flags plus
@@ -80,8 +82,8 @@ leon wait "$id" --for 2m     # give up after 2 minutes and exit 1
 ```
 
 `leon wait` with the full block ID works even after the block has closed. For a program that keeps
-running (a dev server, a REPL), don't wait on it: poll `leon capture` for the text you expect, with
-your own deadline.
+running (a dev server, a REPL), wait for the text you expect instead:
+`leon wait "$id" --text 'Listening on' --for 30s` exits 0 once it shows, 1 at the deadline.
 
 ## Tell the user you need them
 
@@ -172,7 +174,8 @@ Drive an interactive program:
 
 ```sh
 id=$(leon run --label py -- python3)
+leon wait -b "$id" --text '>>>' --for 10s  # its prompt: typing before it shows can be lost
 leon send -b "$id" 'print(6 * 7)'; leon send-key -b "$id" enter
-leon capture -b "$id" --trim | tail -3     # repeat until the answer shows up
+leon wait -b "$id" --text 42 --for 10s; leon capture -b "$id" --trim | tail -3
 leon send-key -b "$id" ctrl+d              # python exits; the block closes
 ```

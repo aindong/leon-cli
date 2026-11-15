@@ -1,5 +1,6 @@
 //! Terminal commands: run, send, send-key, capture, wait, and `block ls|inspect|close`.
 
+use std::io::IsTerminal;
 use std::time::Duration;
 
 use leon_core::terminal::NAMESPACE as TERMINAL;
@@ -34,20 +35,35 @@ pub enum NotifyState {
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
     match cli.cmd() {
-        Cmd::Run { label, keep_open, wait, cwd, command } => {
+        Cmd::Run { label, keep_open, wait, output, cwd, command } => {
             let cwd = crate::commands::block_cwd(cli, cwd.as_deref())?;
-            let options = json!({ "command": command, "cwd": cwd, "exit": { "on_completion": !keep_open } });
+            let print = *wait && output.unwrap_or_else(|| !std::io::stdout().is_terminal());
+            // the block's text goes with it, so it stays open until it has been read
+            let on_completion = !keep_open && !print;
+            let options = json!({ "command": command, "cwd": cwd, "exit": { "on_completion": on_completion } });
             let layout = json!({ "block": { "label": label, "options": options } });
-            let r = if no_session_named(c, cli)? {
-                c.call("session.create", json!({ "layout": layout }))?
+            let (sid, r) = if no_session_named(c, cli)? {
+                let r = c.call("session.create", json!({ "layout": layout }))?;
+                (r["session_id"].as_str().unwrap_or_default().to_string(), r)
             } else {
                 let sid = pick_session(c, cli, None)?;
-                c.call("session.new_window", json!({ "session_id": sid, "layout": layout }))?
+                let r = c.call("session.new_window", json!({ "session_id": sid, "layout": layout }))?;
+                (sid, r)
             };
             let block_id = r["block_id"].as_str().unwrap_or_default().to_string();
             println!("{block_id}");
             if *wait {
-                return wait_for(c, &block_id, None);
+                let status = wait_for(c, &block_id, None);
+                if print {
+                    // a block closed meanwhile (by hand, or its session) has no text left: say nothing
+                    if let Ok(r) = method(c, &sid, &block_id, "format", json!({ "format": "text", "trim": true })) {
+                        println!("{}", r["text"].as_str().unwrap_or_default());
+                    }
+                    if !keep_open {
+                        let _ = c.call("block.close", json!({ "session_id": sid, "block_id": block_id }));
+                    }
+                }
+                return status;
             }
         }
         Cmd::Send { text } => {
@@ -81,7 +97,11 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
             let r = method(c, &sid, &bid, "format", json!({ "format": "text", "trim": trim }))?;
             println!("{}", r["text"].as_str().unwrap_or_default());
         }
-        Cmd::Wait { target: block, timeout } => {
+        Cmd::Wait { target: block, timeout, text: Some(text) } => {
+            let (sid, bid) = pick_block(c, cli, block.as_deref())?;
+            return wait_text(c, &sid, &bid, text, *timeout);
+        }
+        Cmd::Wait { target: block, timeout, text: None } => {
             let query = block_query(cli, block.as_deref());
             let id = match pick_block(c, cli, block.as_deref()) {
                 Ok((_, bid)) => bid,
@@ -158,6 +178,27 @@ fn wait_for(c: &mut Client, block_id: &str, timeout: Option<Duration>) -> Result
         Some(0) => Ok(()),
         Some(code) => Err(Fail::Exit(code as i32)),
         None => Err(Fail::Other("the server sent no exit code".into())),
+    }
+}
+
+/// Poll the block's text until it holds `text`. shortcut: reads the whole scrollback each time;
+/// a server-side wait would be cheaper for a long one over a slow link.
+fn wait_text(c: &mut Client, sid: &str, bid: &str, text: &str, timeout: Option<Duration>) -> Result<(), Fail> {
+    let end = timeout.map(|t| std::time::Instant::now() + t);
+    loop {
+        match method(c, sid, bid, "format", json!({ "format": "text" })) {
+            Ok(r) if r["text"].as_str().is_some_and(|t| t.contains(text)) => return Ok(()),
+            Ok(_) => {}
+            Err(Fail::Api(e)) if e.code == "not_found" => {
+                return Err(Fail::Other(format!("the block closed before {text:?} showed")))
+            }
+            Err(f) => return Err(f),
+        }
+        if end.is_some_and(|end| std::time::Instant::now() >= end) {
+            let waited = timeout.unwrap_or_default();
+            return Err(Fail::Other(format!("{text:?} didn't show within {waited:?}")));
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
 }
 

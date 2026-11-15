@@ -75,8 +75,10 @@ leon capture -b "$id" --trim | tail -40
 
 # drive a REPL
 py=$(leon run --label py -- python3)
+leon wait -b "$py" --text '>>>' --for 10s     # its prompt, before typing
 leon send -b "$py" 'print(6 * 7)'
 leon send-key -b "$py" enter
+leon wait -b "$py" --text 42 --for 10s
 leon capture -b "$py" --trim | tail -3
 
 # clean up what I created, and only that
@@ -90,8 +92,10 @@ The rules the guide gives agents:
 - Close what you created when you're done; never close the user's blocks or your own `LEON_BLOCK`.
 - Don't read or type into the user's terminals unless asked: screens hold secrets, and keys you
   send run in their shell.
-- For a program that keeps running (a dev server, a REPL), don't `leon wait`; poll `leon capture`
-  for the text you expect, with your own deadline.
+- For a program that keeps running (a dev server, a REPL), don't wait for it to exit: wait for the
+  text you expect, `leon wait -b ID --text TEXT --for 30s`.
+- `leon run --wait -- CMD` from an agent prints the program's text and exits with its status, in
+  one call.
 - Use `--json` for output you parse, and `leon api list` / `leon api describe` for anything the
   commands don't cover.
 
