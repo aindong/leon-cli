@@ -1,0 +1,5 @@
+{
+  "env": {
+    "VERIFY_TIMEOUT": "1800"
+  }
+}
