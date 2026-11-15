@@ -3,7 +3,6 @@
 
 use leon_app::keymap::{Bound, Pressed};
 use leon_app::panes;
-use leon_app::remote::LinkState;
 use leon_lua::keys::Chord;
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::{Position, Rect};
@@ -14,8 +13,9 @@ use super::keys::{self, After};
 use super::picker::{self, Picker};
 use super::{Flow, Mode, Tui};
 
-/// The app's limit for one paste (a request over the server's 1 MiB would drop the connection).
-const MAX_PASTE: usize = 400 << 10;
+// keys and pastes into the pane, over a link whole or not at all
+#[path = "view_link.rs"]
+mod link;
 
 /// The tab being shown: its session, the block keys go to, and whether it is zoomed.
 struct Target {
@@ -25,14 +25,6 @@ struct Target {
 }
 
 impl Tui {
-    /// While the link to the host is retried: which try, for the bar.
-    fn reconnecting(&self) -> Option<String> {
-        match (&self.host, self.remote.link_state()) {
-            (Some(h), LinkState::Reconnecting { attempt, .. }) => Some(format!("reconnecting to {h} (try {attempt})…")),
-            _ => None,
-        }
-    }
-
     fn session_id(&self) -> Option<&str> {
         match &self.mode {
             Mode::Attached(sid) => Some(sid),
@@ -119,31 +111,6 @@ impl Tui {
                 self.pending.clear();
                 Flow::Go
             }
-        }
-    }
-
-    /// Type a key into the focused pane, encoded for its cursor-key mode.
-    fn forward(&self, k: &KeyEvent) {
-        let Some(t) = self.target() else { return };
-        let app_cursor = self.remote.model().screens.get(&t.block).is_some_and(|f| f.app_cursor);
-        if let Some(bytes) = keys::bytes(k, app_cursor) {
-            self.remote.write(&t.sid, &t.block, &bytes);
-        }
-    }
-
-    pub(super) fn paste(&mut self, text: &str) {
-        if let Mode::Picker(p, _) = &mut self.mode {
-            p.query.push_str(text.lines().next().unwrap_or_default());
-            p.selected = 0;
-            return;
-        }
-        let Some(t) = self.target() else { return };
-        if text.len() > MAX_PASTE {
-            return self.say(format!("not pasting {} bytes: at most {MAX_PASTE} go in one paste", text.len()));
-        }
-        let event = json!({ "session_id": t.sid, "block_id": t.block, "event": { "type": "paste", "data": text } });
-        if let Err(e) = self.remote.call("block.event", event) {
-            self.say(e.message);
         }
     }
 

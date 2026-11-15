@@ -187,7 +187,7 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   Code: `$CLAUDE_CONFIG_DIR` (`~/.claude`) `skills/leon` + `settings.json`; Codex: `~/.agents/skills/leon`
   + `$CODEX_HOME` (`~/.codex`) `hooks.json`. Settings edits keep key order, back up once to
   `<file>.leon-backup`, write atomically through symlinks, and refuse files that aren't the expected
-  JSON shape. Not yet: OpenCode/Pi, `--project`, `--session-naming`.
+  JSON shape. Without `--agent`, an agent whose config dir exists or whose program is on PATH. Not yet: OpenCode/Pi, `--project`, `--session-naming`.
 
 - **Floating panes and drawers (M20a).** Terminal ownership stays in `Session.blocks`;
   `Session.overlays` maps window IDs to floating and docked placements separately from

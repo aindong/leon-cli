@@ -13,7 +13,10 @@ leon skill setup             # install for every agent it finds
 leon skill status            # current, outdated, missing, foreign or unreadable
 ```
 
-`leon skill setup` installs two things for each agent it finds (`--agent claude|codex` picks one):
+`leon skill setup` installs two things for each agent it finds: one whose config dir exists, or
+whose program (`claude`, `codex`) is on your PATH, even if you have never run it. It prints, for
+each agent, why it was picked and each file it wrote. With neither found it writes only the shared
+`~/.agents/skills/leon/` (other agents read it too) and says so. `--agent claude|codex` picks one:
 
 | | Claude Code | Codex |
 |---|---|---|
@@ -71,9 +74,11 @@ leon wait "$id"; echo "tests exited $?"
 leon capture -b "$id" --trim | tail -40
 
 # drive a REPL
-py=$(leon run --label py -- python3)
+py=$(leon run --label py -- python3 -q)       # -q: no banner to match
+leon wait -b "$py" --text '>>>' --for 10s     # its prompt, before typing
 leon send -b "$py" 'print(6 * 7)'
 leon send-key -b "$py" enter
+leon wait -b "$py" --text 42 --for 10s
 leon capture -b "$py" --trim | tail -3
 
 # clean up what I created, and only that
@@ -87,8 +92,10 @@ The rules the guide gives agents:
 - Close what you created when you're done; never close the user's blocks or your own `LEON_BLOCK`.
 - Don't read or type into the user's terminals unless asked: screens hold secrets, and keys you
   send run in their shell.
-- For a program that keeps running (a dev server, a REPL), don't `leon wait`; poll `leon capture`
-  for the text you expect, with your own deadline.
+- For a program that keeps running (a dev server, a REPL), don't wait for it to exit: wait for the
+  text you expect, `leon wait -b ID --text TEXT --for 30s`.
+- `leon run --wait -- CMD` from an agent prints the program's text and exits with its status, in
+  one call.
 - Use `--json` for output you parse, and `leon api list` / `leon api describe` for anything the
   commands don't cover.
 
@@ -100,7 +107,8 @@ don't survive, and a saved command is never run again. What does come back is a 
 registered for its own block with `set_resume`. The hook does that for you: `claude --resume <id>`
 for Claude Code, `codex resume <id>` for Codex, from the session id the agent gives its hook. It
 records only for an agent in the foreground of its terminal, so a nested `claude -p` run by
-another agent's tool doesn't replace the interactive session's command.
+another agent's tool doesn't replace the interactive session's command, and never for Claude
+Code's print mode (`-p`, `--print`): a one-shot run has nothing to resume.
 
 Any other program can register its own:
 

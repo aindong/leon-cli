@@ -7,6 +7,7 @@ mod host;
 mod keys;
 mod overlays;
 mod picker;
+mod typing;
 mod view;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -36,6 +37,8 @@ enum Msg {
     Signal(i32),
     /// The host terminal went away.
     InputGone,
+    /// A key write or its probe came back over the link: whether it went through.
+    Typed(bool),
 }
 
 enum Mode {
@@ -159,6 +162,8 @@ struct Tui {
     note: Arc<Mutex<Option<String>>>,
     /// The host's name with `-H`: the link to it may drop, and the bar says so while it's retried.
     host: Option<String>,
+    /// Keys on their way over the link (`typing`).
+    typing: typing::Typing,
     tx: Sender<Msg>,
 }
 
@@ -178,6 +183,7 @@ impl Tui {
             asked: Default::default(),
             note: Arc::default(),
             host: None,
+            typing: Default::default(),
             tx,
         };
         if let Some(p) = start {
@@ -224,6 +230,12 @@ impl Tui {
             }
             Msg::Signal(s) => Flow::Done(Err(Fail::Exit(128 + s))),
             Msg::InputGone => Flow::Done(Err(Fail::Other("lost the terminal".into()))),
+            Msg::Typed(ok) => {
+                let next = self.typing.answered(ok, Instant::now());
+                self.send_typed(next);
+                *dirty = true;
+                Flow::Go
+            }
             Msg::Input(Event::Paste(text)) => {
                 self.paste(&text);
                 *dirty = true;
