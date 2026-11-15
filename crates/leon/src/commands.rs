@@ -39,6 +39,9 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
     }
     // Validate before connecting/autostarting: a bad local path is a usage error.
     let new_cwd = match cli.cmd() {
+        Cmd::New { cwd, .. } | Cmd::Session(SessionCmd::New { cwd, .. }) if cli.host.is_some() => {
+            remote_cwd(cwd.as_deref())?
+        }
         Cmd::New { cwd, .. } | Cmd::Session(SessionCmd::New { cwd, .. }) => {
             cwd.as_deref().map(new_directory).transpose()?
         }
@@ -425,6 +428,26 @@ pub(crate) fn print_json(v: &Value) {
 pub(crate) fn json_out(cli: &Cli, v: &Value) {
     if cli.json {
         print_json(v);
+    }
+}
+
+/// A new block's directory: `--cwd` against this one, else this one. With `-H` this machine's
+/// directories mean nothing there: `--cwd` must be absolute, and without it the host's server
+/// starts the block in its home.
+pub(crate) fn block_cwd(cli: &Cli, cwd: Option<&std::path::Path>) -> Result<Option<std::path::PathBuf>, Fail> {
+    if cli.host.is_some() {
+        return remote_cwd(cwd);
+    }
+    let here = std::env::current_dir().map_err(|e| Fail::Other(format!("no current directory: {e}")))?;
+    Ok(Some(here.join(cwd.unwrap_or(".".as_ref()))))
+}
+
+fn remote_cwd(cwd: Option<&std::path::Path>) -> Result<Option<std::path::PathBuf>, Fail> {
+    match cwd {
+        Some(c) if c.is_relative() => {
+            Err(Fail::Usage(format!("--cwd {}: with -H, give an absolute path on that machine", c.display())))
+        }
+        c => Ok(c.map(std::path::PathBuf::from)),
     }
 }
 

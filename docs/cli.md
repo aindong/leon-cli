@@ -106,7 +106,8 @@ Create a session and print its ID. Same as `leon session new`.
 
 - `-c, --cwd DIR`: start the first terminal in this existing directory. Relative paths resolve
   against the caller's working directory. A missing path or a file exits 2 (usage error).
-  Omitted uses the server's home directory.
+  Omitted uses the server's home directory. With `-H` the path is the host's: it must be
+  absolute, and the host checks it.
 
 ### `leon ls`
 
@@ -179,7 +180,8 @@ PATH, even when the server was started by Leon.app from Finder.
 - `--label LABEL`: name the block, so `-b LABEL` finds it.
 - `--keep-open`: keep the block after the program exits, so you can still read its output.
 - `--wait`: wait for the program and exit with its status.
-- `-c, --cwd DIR`: working directory (default: the current directory).
+- `-c, --cwd DIR`: working directory (default: the current directory; with `-H`, the host's
+  home, and `DIR` must be an absolute path there).
 
 ```sh
 leon run --label tests --keep-open -- cargo test
@@ -459,6 +461,9 @@ leon -H ssh://me@devbox ls
 leon hosts add devbox ssh://me@devbox
 leon -H devbox attach
 ```
+
+This machine's working directory means nothing on the host: with `-H`, `run`, `split` and `new`
+start in the host's home unless `--cwd` gives an absolute path there (a relative one exits 2).
 
 `leon server run|start|proxy`, `leon app`, `leon config check`, `leon skill` and `leon hosts` are
 about this machine and refuse `-H`; `leon server status` and `leon server stop` work over it.

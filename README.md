@@ -139,7 +139,7 @@ running after you disconnect.
 
 ```text
 leon hosts add devbox ssh://me@devbox.example.com
-leon -H devbox run -- make test     # runs on the devbox
+leon -H devbox run -c /home/me/app -- make test   # runs on the devbox, in its /home/me/app
 leon -H devbox attach               # its sessions, in this terminal
 leon hosts check
 ```

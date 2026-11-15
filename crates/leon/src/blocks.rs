@@ -35,8 +35,7 @@ pub enum NotifyState {
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
     match cli.cmd() {
         Cmd::Run { label, keep_open, wait, cwd, command } => {
-            let here = std::env::current_dir().map_err(|e| Fail::Other(format!("no current directory: {e}")))?;
-            let cwd = here.join(cwd.as_deref().unwrap_or(".".as_ref()));
+            let cwd = crate::commands::block_cwd(cli, cwd.as_deref())?;
             let options = json!({ "command": command, "cwd": cwd, "exit": { "on_completion": !keep_open } });
             let layout = json!({ "block": { "label": label, "options": options } });
             let r = if no_session_named(c, cli)? {

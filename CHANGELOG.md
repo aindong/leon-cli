@@ -35,6 +35,10 @@ fields it doesn't know. The full policy is in
 - Programs started by `leon run`, `leon split`, `leon float --new` and Lua are found on the login
   shell's PATH. A server started by Leon.app from Finder had launchd's `/usr/bin:/bin:/usr/sbin:/sbin`,
   so `leon run -- cargo test` failed; one started over ssh had sshd's.
+- With `-H`, `leon run`, `leon split` and `leon new` no longer send this machine's working
+  directory to the host, where it doesn't exist (`leon -H devbox run -- make test` failed with "no
+  directory"). They start in the host's home, or in `--cwd`, which must then be an absolute path on
+  the host (a relative one exits 2) and is checked there, not on this disk.
 
 ### Joined panes, their events, long socket paths (API `1.5.0`)
 
