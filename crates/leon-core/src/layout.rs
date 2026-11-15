@@ -3,7 +3,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::new_id;
+use crate::{new_id, ApiError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -58,6 +58,10 @@ struct Rect {
 
 const EPS: f64 = 1e-9;
 
+/// The most splits a block may sit under. A deeper tree nests past the 128 levels serde_json (and
+/// mlua) read, so a saved state wouldn't load; a pane 32 halvings deep is too small to use anyway.
+pub const MAX_DEPTH: usize = 32;
+
 impl Node {
     pub fn block(id: &str) -> Node {
         Node::Block { block_id: id.into() }
@@ -76,6 +80,30 @@ impl Node {
         match self {
             Node::Block { block_id } => vec![block_id],
             Node::Split { before, after, .. } => [before.leaves(), after.leaves()].concat(),
+        }
+    }
+
+    /// How many splits its deepest block sits under (0 for a lone block).
+    pub fn depth(&self) -> usize {
+        match self {
+            Node::Block { .. } => 0,
+            Node::Split { before, after, .. } => 1 + before.depth().max(after.depth()),
+        }
+    }
+
+    /// Err if a block put beside `anchor` would sit under more than MAX_DEPTH splits; check before
+    /// changing anything. `leaving` is a block of this tree that moves out first.
+    pub fn check_insert(&self, anchor: &str, leaving: Option<&str>) -> Result<(), ApiError> {
+        let mut t = match leaving {
+            Some(id) => self.clone().without(id).unwrap_or_else(|| self.clone()),
+            None => self.clone(),
+        };
+        t.insert(anchor, "", Direction::Horizontal, Side::After, 0.5);
+        match t.depth() > MAX_DEPTH {
+            true => {
+                Err(ApiError::bad_request(format!("too many nested splits: a pane sits under at most {MAX_DEPTH}")))
+            }
+            false => Ok(()),
         }
     }
 

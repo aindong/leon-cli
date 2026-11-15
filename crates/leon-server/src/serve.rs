@@ -75,6 +75,8 @@ pub struct Listener {
     ours: (u64, u64),
     /// Where to save on stop, and the lock that keeps the state dir ours (`Listener::persist`).
     saving: Option<(PathBuf, std::fs::File)>,
+    /// `server.lock`, held while the server lives (`bind`); none if a server that lost its path holds it.
+    alive: Option<std::fs::File>,
 }
 
 impl Listener {
@@ -94,15 +96,31 @@ pub async fn serve(ctx: Arc<Ctx>, opts: Options) -> io::Result<()> {
 
 /// Bind the socket in its private runtime dir, refusing if a live server already owns it.
 pub async fn listen(socket: &Path) -> io::Result<Listener> {
-    let (listener, ours) = bind(socket).await?;
-    Ok(Listener { listener, ours, saving: None })
+    raise_fd_limit();
+    let (listener, ours, alive) = bind(socket).await?;
+    Ok(Listener { listener, ours, saving: None, alive })
+}
+
+/// Each terminal holds three descriptors and each client one, and launchd starts the app (so its
+/// embedded server too) with a soft limit of 256: raise it to the hard limit, at most 10240
+/// (macOS's OPEN_MAX, which its setrlimit won't go past; programs inherit it).
+fn raise_fd_limit() {
+    const MOST: libc::rlim_t = 10240;
+    let mut r = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+    // SAFETY: getrlimit and setrlimit on our own process, with a valid struct.
+    unsafe {
+        if libc::getrlimit(libc::RLIMIT_NOFILE, &mut r) == 0 && r.rlim_cur < r.rlim_max.min(MOST) {
+            r.rlim_cur = r.rlim_max.min(MOST);
+            libc::setrlimit(libc::RLIMIT_NOFILE, &r);
+        }
+    }
 }
 
 /// Serve `ctx` on a bound socket until stopped (`server.stop`, the embedding app quitting,
 /// SIGTERM, SIGINT, SIGHUP, or idle when autostarted). With `Listener::persist`, the sessions are
 /// saved before every program ends.
 pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Result<()> {
-    let Listener { listener, ours, saving } = bound;
+    let Listener { listener, ours, saving, alive } = bound;
     let (state_file, state_lock) = saving.unzip();
     let mut term = signal(SignalKind::terminate())?;
     let mut int = signal(SignalKind::interrupt())?;
@@ -164,6 +182,7 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
     if std::fs::symlink_metadata(&opts.socket).is_ok_and(|m| (m.dev(), m.ino()) == ours) {
         let _ = std::fs::remove_file(&opts.socket);
     }
+    drop(alive);
     Ok(())
 }
 
@@ -172,21 +191,41 @@ fn same_user(stream: &UnixStream) -> bool {
     stream.peer_cred().is_ok_and(|c| c.uid() == unsafe { libc::geteuid() })
 }
 
-/// Bind in a private runtime dir. Returns the listener and the socket's (dev, inode). Holds an
-/// exclusive lock beside the socket so two servers starting at once can't both decide a socket
-/// is stale and unlink each other's.
-async fn bind(socket: &Path) -> io::Result<(UnixListener, (u64, u64))> {
+/// Bind in a private runtime dir. Returns the listener, the socket's (dev, inode) and the lock
+/// beside the socket, which the server holds for its life: a held lock means a live server, so no
+/// one unlinks its socket. Asking the socket can't tell: a busy server's full backlog refuses
+/// connects on macOS, just as a stale socket does.
+async fn bind(socket: &Path) -> io::Result<(UnixListener, (u64, u64), Option<std::fs::File>)> {
     let dir = socket.parent().unwrap_or(Path::new("."));
     leon_core::paths::ensure_private_dir(dir)?;
-    let _lock = lock(&dir.join("server.lock"))?;
-    if std::fs::symlink_metadata(socket).is_ok() {
-        match UnixStream::connect(socket).await {
-            Ok(_) => {
+    // A server holds server.lock for its life; one holding it now is live, binding or stopping. Wait for the lock or
+    // for its socket to answer, so the client that started this one finds a server either way.
+    let end = Instant::now() + Duration::from_secs(2);
+    let alive = loop {
+        match lock(&dir.join("server.lock")) {
+            Ok(f) => break Some(f),
+            Err(e) if e.raw_os_error() == Some(libc::EWOULDBLOCK) => {}
+            Err(e) => return Err(e),
+        }
+        if UnixStream::connect(socket).await.is_ok() {
+            return Err(in_use(socket));
+        }
+        if Instant::now() >= end {
+            // Never answered: busy, so leave its socket be; or it lost its path, so take the path.
+            if std::fs::symlink_metadata(socket).is_ok() {
                 return Err(io::Error::new(
                     io::ErrorKind::AddrInUse,
-                    format!("a leon server already listens on {}", socket.display()),
-                ))
+                    format!("{} is held by a leon server that isn't answering", socket.display()),
+                ));
             }
+            break None;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
+    // Still ask the socket: a server from before the lock was held for life doesn't hold it.
+    if std::fs::symlink_metadata(socket).is_ok() {
+        match UnixStream::connect(socket).await {
+            Ok(_) => return Err(in_use(socket)),
             // Only a refused connection means stale; anything else may be a live server we can't reach.
             Err(e) if e.kind() == io::ErrorKind::ConnectionRefused => std::fs::remove_file(socket)?,
             Err(e) => return Err(io::Error::new(e.kind(), format!("{} is in use: {e}", socket.display()))),
@@ -196,10 +235,14 @@ async fn bind(socket: &Path) -> io::Result<(UnixListener, (u64, u64))> {
     let listener = UnixListener::bind(socket)?;
     std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600))?;
     let m = std::fs::symlink_metadata(socket)?;
-    Ok((listener, (m.dev(), m.ino())))
+    Ok((listener, (m.dev(), m.ino()), alive))
 }
 
-/// An exclusive flock on `path`, released when the returned file drops.
+fn in_use(socket: &Path) -> io::Error {
+    io::Error::new(io::ErrorKind::AddrInUse, format!("a leon server already listens on {}", socket.display()))
+}
+
+/// An exclusive flock on `path`, or EWOULDBLOCK if another holds it; released when the file drops.
 fn lock(path: &Path) -> io::Result<std::fs::File> {
     use std::os::unix::fs::OpenOptionsExt;
     use std::os::unix::io::AsRawFd;
@@ -211,7 +254,7 @@ fn lock(path: &Path) -> io::Result<std::fs::File> {
         .custom_flags(libc::O_NOFOLLOW)
         .open(path)?;
     // SAFETY: flock on a file descriptor we own.
-    if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX) } != 0 {
+    if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(f)

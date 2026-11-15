@@ -15,7 +15,11 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   a restart would be a surprise and would make the file a place that runs code. The dir must be private (0700, ours) and not
   flocked by another server, or nothing is saved (`server status` shows `state_file: null`); the file is 0600, written via a temp file and
   a rename. A file that is corrupt, from a newer version, or inconsistent is moved to
-  `sessions.json.bad-<secs>-<n>` with a warning in the log, never replaced.
+  `sessions.json.bad-<secs>-<n>` with a warning in the log, never replaced. So the model never
+  makes a state it can't load: at most 1024 blocks (`leon_core::MAX_BLOCKS`) and 32 nested splits
+  in a window (`layout::MAX_DEPTH`), refused with 400 when a block or move would pass them. Past
+  about 60 splits the file nests deeper than the 128 levels serde_json reads, and so would
+  `session.view` replies.
   The app takes no part: the server it starts restores at start, before it accepts the app's
   connection, so the app's "open a session when there is none" sees the restored ones. Tests and
   benches use `embedded::start_at`, an in-process server that keeps nothing.
@@ -54,21 +58,37 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   up to 16 KiB); the parser thread feeds what has queued, up to 64 KiB, to the OSC 7501 tracker and
   the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread
   stalled the program while it parsed (docs/performance.md).
+- **One server per socket.** A server holds `server.lock` beside its socket (an flock) for its
+  whole life, and a starting one takes it with `LOCK_NB`. Finding it held, it waits up to 2 s for
+  the lock or for the socket to answer, then exits; it never unlinks a socket while the lock is
+  held, since a busy server's full backlog refuses connects on macOS just as a stale socket does.
+  A held lock with no socket at all (the path was removed) lets it bind anyway, unlocked. Each
+  server raises its soft open-file limit to the hard one, at most 10240: launchd starts the app,
+  and so the server it spawns, with 256, and each terminal holds three descriptors.
+- **Version.** `crates/leon/build.rs` sets `LEON_VERSION`: the workspace version and the commit,
+  `0.1.0 (1a2b3c4d5e6f)` (`git rev-parse --short=12`, or `LEON_GIT_HASH` when the build has no
+  `.git`, as in Docker from a worktree). `leon --version` prints it; `server.version` keeps the bare
+  version.
 - **Packaging.** `scripts/bundle.sh` wraps the one `leon` binary in `Leon.app` (bundle id
-  `dev.leon.app`, version from `leon --version`, the brand icon `brand/icon/Leon.icns`, ad-hoc
-  signed); opened from Finder it runs with no arguments, which opens the app. `scripts/install.sh`
+  `dev.leon.app`, the bare version from `leon --version`, the brand icon `brand/icon/Leon.icns`,
+  `LICENSE` and `THIRD-PARTY-NOTICES.txt` in `Contents/Resources`, ad-hoc signed); opened from Finder it runs with no arguments, which opens the app. `scripts/install.sh`
   copies the app to `~/Applications` and links `~/.local/bin/leon` to the binary inside it. Both
   replace only what they made: an app with our bundle id, or a link whose text is our binary's path.
 - **Linux packages.** `scripts/package-linux.sh [--arch arm64|amd64]` builds a release binary
   (symbols stripped) in the same pinned image and writes, to `target/linux/<arch>/` (emptied
   first), the bare `leon` (which `m16a_docker_sshd` runs behind a real sshd),
-  `leon-<version>-<uname -m>-linux.tar.gz` (`leon`, `README.md`, `LICENSE`, `docs/`) and
-  `leon_<version>_<arch>.deb` (hand-built with `dpkg-deb`: `/usr/bin/leon`, docs in
-  `/usr/share/doc/leon`, `Depends: libc6 (>= …)` from the newest glibc symbol the binary uses, a
+  `leon-<version>-<uname -m>-linux.tar.gz` (`leon`, `README.md`, `LICENSE`,
+  `THIRD-PARTY-NOTICES.txt`, `docs/`) and `leon_<version>_<arch>.deb` (hand-built with `dpkg-deb`:
+  `/usr/bin/leon`, docs and the notices in `/usr/share/doc/leon`, `Depends: libc6 (>= …)` from the newest glibc symbol the binary uses, a
   fixed placeholder maintainer). It then installs the `.deb` in a clean `debian:bookworm-slim` and
   unpacks the tarball in `ubuntu:24.04` (both pinned by digest), and fails unless each `leon
   --version` prints the version. Rust links glibc dynamically: the binary needs glibc 2.34 or newer
   (measured on arm64 and amd64; no musl build yet).
+- **Notices and releases.** `scripts/notices.sh` lists every crate in the binary (`cargo tree`,
+  normal and build dependencies, since lua-src compiles Lua into it) with its license, then each
+  distinct license file from the cargo registry once; it is generated per package, never committed.
+  `scripts/release.sh` clones one commit into a temp dir, builds `Leon-<version>-macos-<arch>.zip`
+  and both Linux arches' packages from it, and writes `SHA256SUMS`; it never tags, pushes or uploads.
 - **`LEON_BIN_DIR`.** Every terminal gets the server binary's directory as `LEON_BIN_DIR` and at
   the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
   `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an
