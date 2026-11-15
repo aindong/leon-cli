@@ -181,16 +181,12 @@ pub fn load_theme(themes: &Path, name: &str) -> Result<Theme, String> {
     }
     check_name(name)?;
     let path = themes.join(format!("{name}.theme"));
-    let mut bytes = vec![];
-    let read = std::fs::File::open(&path).and_then(|f| {
-        use std::io::Read;
-        f.take(theme::import::MAX_BYTES as u64 + 1).read_to_end(&mut bytes)
-    });
+    let read = theme::import::read_file(&path);
     match read {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             Err(format!("no theme {name:?}; `leon theme list` shows them, `leon theme import` adds one"))
         }
         Err(e) => Err(format!("can't read {}: {e}", path.display())),
-        Ok(_) => theme::import::parse(&bytes).map_err(|e| format!("{}: {e}", path.display())),
+        Ok(bytes) => theme::import::parse(&bytes).map_err(|e| format!("{}: {e}", path.display())),
     }
 }

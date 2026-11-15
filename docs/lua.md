@@ -134,8 +134,9 @@ any`, and a `?` suffix for optional ones.
 ## Settings
 
 `leon.set(name, value)` sets one of leon's settings. init.lua is the only place they live:
-`leon config get KEY` reads them, `leon config set KEY VALUE` edits the `leon.set` call in place
-(docs/cli.md), and the app's settings follow the same file. A bad value is a skipped call with a
+`leon config get KEY` reads them, and `leon config set KEY VALUE` edits the `leon.set` call in place
+(docs/cli.md). The app applies `copy_on_select` today; `theme`, `font.*` and `notifications.*`
+are read and reported by the server, and the app starts following them in the next release (M22b). A bad value is a skipped call with a
 `file:line` message, and the setting keeps its default.
 
 | Setting | Takes | Default |
@@ -155,6 +156,8 @@ leon.set("theme", { dark = "leon-dark", light = "leon-light" })
 leon.set("font.family", "Menlo")
 leon.set("font.size", 14)
 leon.set("notifications.done", false)
+leon.set("notifications.blocked", true)
+leon.set("notifications.error", true)
 ```
 
 `resume` is what a block restored after a server restart does with the resume command its program

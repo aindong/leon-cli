@@ -25,6 +25,18 @@ impl Given {
     }
 }
 
+/// A theme file's bytes, at most [`MAX_BYTES`] + 1 of them (so [`parse`] can refuse a bigger one),
+/// and only from a regular file: a FIFO named `x.theme` would block the server's config load.
+pub fn read_file(path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    if !std::fs::metadata(path)?.is_file() {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "not a regular file"));
+    }
+    let mut bytes = vec![];
+    std::fs::File::open(path)?.take(MAX_BYTES as u64 + 1).read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
 /// Read a theme file of either kind. Errors say what is wrong and, for text files, on which line.
 pub fn parse(bytes: &[u8]) -> Result<Theme, String> {
     if bytes.len() > MAX_BYTES {
@@ -55,12 +67,15 @@ pub fn to_text(t: &Theme) -> String {
     out
 }
 
-/// `s` for an error message: a junk line can be a megabyte long.
+/// `s` for an error message: a junk line can be a megabyte long, and a control character (an OSC
+/// 52 clipboard write) must not reach the terminal raw.
 fn clip(s: &str) -> String {
-    match s.char_indices().nth(40) {
-        Some((at, _)) => format!("{}…", &s[..at]),
-        None => s.to_string(),
+    let mut out: String =
+        s.chars().take(40).map(|c| if c.is_control() { c.escape_default().collect() } else { c.to_string() }).collect();
+    if s.chars().nth(40).is_some() {
+        out.push('…');
     }
+    out
 }
 
 /// `#rrggbb` or `rrggbb`.
@@ -172,9 +187,11 @@ fn component_dict(d: roxmltree::Node) -> Result<u32, String> {
         let at = els.iter().position(|n| n.has_tag_name("key") && n.text() == Some(want));
         let v = at.and_then(|i| els.get(i + 1)).ok_or_else(|| format!("no {want}"))?;
         let x: f64 = v.text().unwrap_or_default().trim().parse().map_err(|_| format!("{want} is not a number"))?;
-        if !(0.0..=1.0).contains(&x) {
+        // a wide-gamut export can land a hair outside 0..1; further out is not a colour
+        if !(-0.001..=1.001).contains(&x) {
             return Err(format!("{want} {x} is not from 0 to 1"));
         }
+        let x = x.clamp(0., 1.);
         // shortcut: every colour space is read as sRGB; P3 colours come out a little duller.
         rgb |= ((x * 255.).round() as u32) << shift;
     }

@@ -435,7 +435,8 @@ A theme is the terminal's 16 colours, background, foreground, cursor and selecti
 colours around the panes and the status colours. leon has two built in, `leon-dark` and
 `leon-light`; imported ones live as files in `themes/` beside init.lua (by default
 `~/.config/leon/themes/NAME.theme`), in Ghostty's `key = value` syntax with leon's own colours
-added. `leon config set theme NAME` picks one.
+added. `leon config set theme NAME` picks one; the app starts drawing with it in the next
+release (M22b), and `server.settings` reports it now.
 
 ### `leon theme`
 

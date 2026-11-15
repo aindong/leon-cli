@@ -126,7 +126,7 @@ async fn reload(ctx: &Arc<Ctx>, cur: &mut Loaded) -> Result<Reloaded, ApiError> 
     let changed = cfg.settings != cur.cfg.settings;
     *cur = Loaded { path: Some(path.clone()), generation: cur.generation + 1, cfg, jobs };
     if changed {
-        let view = serde_json::to_value(settings(cur)).expect("json");
+        let view = serde_json::to_value(crate::settings::view(&cur.cfg)).expect("json");
         ctx.state().emit_global("settings_changed", view);
     }
     let km = keymap(cur);
@@ -264,54 +264,6 @@ pub struct Keymap {
 pub struct ClientSettings {
     /// Copy a selection to the clipboard as it is made (default false).
     pub copy_on_select: bool,
-}
-
-#[derive(Serialize, JsonSchema)]
-pub struct SettingsView {
-    /// The effective settings: init.lua's `leon.set` calls over the defaults.
-    pub settings: Effective,
-    /// Where each setting was last set, as `file:line`, by key (`font.size`); a setting at its
-    /// default isn't listed.
-    pub sources: std::collections::BTreeMap<String, String>,
-}
-
-/// The shape of `leon_lua::Settings::to_json`, which builds it.
-#[derive(Serialize, Deserialize, JsonSchema)]
-pub struct Effective {
-    pub theme: ThemeChoice,
-    pub font: Font,
-    pub notifications: Notifications,
-    /// The app copies a selection to the clipboard as it is made.
-    pub copy_on_select: bool,
-    /// What a restored block does with its program's resume command: `ask`, `always` or `never`.
-    pub resume: String,
-}
-
-/// A theme name for each OS appearance (the same one for both unless init.lua gives two).
-#[derive(Serialize, Deserialize, JsonSchema)]
-pub struct ThemeChoice {
-    pub dark: String,
-    pub light: String,
-}
-
-#[derive(Serialize, Deserialize, JsonSchema)]
-pub struct Font {
-    pub family: String,
-    /// Points, from 8 to 32.
-    pub size: f64,
-}
-
-/// Which program states may post a system notification.
-#[derive(Serialize, Deserialize, JsonSchema)]
-pub struct Notifications {
-    pub done: bool,
-    pub blocked: bool,
-    pub error: bool,
-}
-
-fn settings(l: &Loaded) -> SettingsView {
-    let settings = serde_json::from_value(l.cfg.settings.to_json()).expect("Settings::to_json has Effective's shape");
-    SettingsView { settings, sources: l.cfg.setting_sources.clone() }
 }
 
 #[derive(Serialize, JsonSchema, PartialEq)]
@@ -547,13 +499,15 @@ pub(crate) fn add(r: &mut Registry) {
          `settings_changed` with the same object to `--all` subscribers.",
         |ctx, _: NoParams| {
             let ctx = ctx.clone();
-            Ok(Box::pin(async move { Ok(settings(&*ctx.lua.read().await)) }) as Later<SettingsView>)
+            Ok(Box::pin(async move { Ok(crate::settings::view(&ctx.lua.read().await.cfg)) })
+                as Later<crate::settings::SettingsView>)
         },
     );
     r.add_deferred(
         "server.config_reload",
         "Re-read init.lua. A failed load keeps the last good config; a good one bumps the keymap \
-         generation and emits `keymap_changed`. Local socket only.",
+         generation and emits `keymap_changed`, and `settings_changed` if a setting changed. \
+         Local socket only.",
         |ctx, _: NoParams| {
             let ctx = ctx.clone();
             Ok(Box::pin(async move { reload(&ctx, &mut *ctx.lua.write().await).await }) as Later<Reloaded>)

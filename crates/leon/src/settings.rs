@@ -2,7 +2,6 @@
 //! built-in ones and the files in `themes/` beside init.lua). Apart from `config reload`, these
 //! work on files here and need no server; `config set` reloads a running one so it follows.
 
-use std::io::Read;
 use std::path::PathBuf;
 
 use clap::Subcommand;
@@ -85,10 +84,7 @@ pub fn theme(cli: &Cli, cmd: &ThemeCmd) -> Result<(), Fail> {
         }
         ThemeCmd::Import { file, name } => {
             let shown = file.display();
-            let mut bytes = vec![];
-            std::fs::File::open(file)
-                .and_then(|f| f.take(import::MAX_BYTES as u64 + 1).read_to_end(&mut bytes))
-                .map_err(|e| Fail::Other(format!("can't read {shown}: {e}")))?;
+            let bytes = import::read_file(file).map_err(|e| Fail::Other(format!("can't read {shown}: {e}")))?;
             let t = import::parse(&bytes).map_err(|e| Fail::Other(format!("{shown}: {e}")))?;
             let name = match name {
                 Some(n) => n.clone(),
@@ -175,7 +171,6 @@ pub fn config(cli: &Cli, cmd: &ConfigCmd) -> Result<(), Fail> {
         }
         ConfigCmd::Set { key, value } => {
             let v = parse_value(key, value);
-            Settings::default().set(key, &v, &settings::themes_dir(&path)).map_err(Fail::Other)?;
             let at = leon_lua::rewrite::write_setting(&path, key, &v).map_err(Fail::Other)?;
             println!("{key} = {} ({at})", shown(&v));
             // a running server follows; none is started for it
@@ -212,10 +207,7 @@ fn parse_value(key: &str, text: &str) -> Value {
 fn shown(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
-        Value::Number(n) => match n.as_f64() {
-            Some(f) if f.fract() == 0.0 => format!("{f:.0}"),
-            _ => n.to_string(),
-        },
+        Value::Number(_) => leon_lua::rewrite::literal(v),
         Value::Object(o) if o.get("dark").is_some() && o.get("dark") == o.get("light") => shown(&o["dark"]),
         Value::Object(o) => o.iter().map(|(k, v)| format!("{k}={}", shown(v))).collect::<Vec<_>>().join(","),
         v => v.to_string(),

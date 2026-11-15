@@ -602,7 +602,7 @@ same facts for the server you run.
 
 ### `server.config_reload`
 
-*stable*. Re-read init.lua. A failed load keeps the last good config; a good one bumps the keymap generation and emits `keymap_changed`. Local socket only.
+*stable*. Re-read init.lua. A failed load keeps the last good config; a good one bumps the keymap generation and emits `keymap_changed`, and `settings_changed` if a setting changed. Local socket only.
 
 **Input:** none
 
