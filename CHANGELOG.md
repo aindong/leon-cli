@@ -39,6 +39,9 @@ fields it doesn't know. The full policy is in
   directory to the host, where it doesn't exist (`leon -H devbox run -- make test` failed with "no
   directory"). They start in the host's home, or in `--cwd`, which must then be an absolute path on
   the host (a relative one exits 2) and is checked there, not on this disk.
+- Sessions are saved while the server runs (a second after a change, the screens' text once a
+  minute), not only when it stops. After a crash the next start restored the save from the last
+  clean stop: sessions closed since came back, and new ones were gone.
 - A program that isn't on PATH fails with `can't start the program: NAME isn't on PATH` instead
   of a message listing every PATH entry.
 

@@ -6,7 +6,12 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
 
 - **Persistence.** The server saves its sessions to `$LEON_STATE_DIR/sessions.json` (default
   `~/.local/state/leon`) on every exit through the socket loop (`server stop`, SIGTERM, SIGINT,
-  SIGHUP, idle exit) and restores them after binding (`--restore`, default true; `server stop --discard`
+  SIGHUP, idle exit), and while it runs: the loop's 200 ms tick saves a second after the model
+  changes (a session's revision, or the set of sessions) and checks the screens' text once a
+  minute, writing only when the sessions differ from the last write (the snapshot is taken under
+  the state lock, serialized and written outside it). So a crash (SIGKILL, a panic, power loss)
+  loses seconds, and never brings back the save from the stop before it. The tick is part of the
+  loop, so the final save, or `--discard`'s delete, is always the last write. It restores them after binding (`--restore`, default true; `server stop --discard`
   skips the save and deletes the file). Saved: sessions, windows, layout trees (split IDs and
   ratios), labels, focus, zoom, the active tab, revisions, and per block its label, keep-open, cwd,
   command, scrollback and resume command. IDs come back unchanged. Programs don't survive: a

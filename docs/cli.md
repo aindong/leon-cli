@@ -415,7 +415,8 @@ Run, start, stop or check the server.
 ### `leon server run`
 
 Run the server in the foreground. Sessions are saved in `$LEON_STATE_DIR` (default
-`~/.local/state/leon`) when it stops, and restored when it starts. A restored block runs a fresh
+`~/.local/state/leon`) while it runs and when it stops, and restored when it starts (after a crash,
+as they were a few seconds before it). A restored block runs a fresh
 shell under the text it showed before, and offers its resume command if a program registered one;
 nothing else that ran is run again.
 
