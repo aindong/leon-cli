@@ -28,6 +28,16 @@ impl Terminal {
     pub fn title(&self) -> Option<String> {
         lock(&self.reported).title.clone()
     }
+
+    /// Start with a saved title (from before a restart) until the program sets one; one it set
+    /// already wins. Cleaned again, since it goes on screen.
+    pub fn restore_title(&self, title: &str) {
+        let title = clean(title);
+        let mut r = lock(&self.reported);
+        if r.title.is_none() && !title.is_empty() {
+            r.title = Some(title);
+        }
+    }
 }
 
 impl Reading {

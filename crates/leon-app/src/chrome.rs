@@ -146,3 +146,13 @@ fn overlap(a: &Frame, b: &Frame) -> f32 {
     let h = (a.y + a.h).min(b.y + b.h) - a.y.max(b.y);
     w.max(0.) * h.max(0.)
 }
+
+/// A directory too wide for its room, cut in the middle: its start (the root and the first
+/// component, `~/src`) and its last two (`api/routes`) are what tell panes apart.
+pub fn elide_path(path: &str, mut fits: impl FnMut(&str) -> bool) -> String {
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.len() <= 4 || fits(path) {
+        return path.to_string();
+    }
+    format!("{}/…/{}", parts[..2].join("/"), parts[parts.len() - 2..].join("/"))
+}

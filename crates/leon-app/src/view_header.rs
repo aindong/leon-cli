@@ -3,13 +3,28 @@
 
 use super::*;
 
+/// The widest a header's title gets, and what the header's other parts take from a pane's width
+/// (the padding, the icon, a status mark and the hidden controls, which keep their room).
+const TITLE_MAX: f32 = 320.;
+const HEADER_PARTS: f32 = 170.;
+
 impl Workspace {
-    pub(super) fn render_header(&self, id: &str, focused: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    /// `width`: the pane's, which the title shares with the header's other parts.
+    pub(super) fn render_header(
+        &self,
+        id: &str,
+        focused: bool,
+        width: f32,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let t = &self.theme;
         let shown = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
         let caption = self.header_caption(id);
         let frame = self.pulse();
-        let title = self.pane_title(id).unwrap_or_default();
+        // shortcut: the host badge's width from its length, not measured; fine for short labels
+        let badge = self.pane_host(id).map_or(0., |h| h.chars().count() as f32 * 7. + 16.);
+        let (title, tip) = self.header_title(id, (width - HEADER_PARTS - badge).min(TITLE_MAX), cx);
+        let theme = self.theme;
         let group = SharedString::from(format!("pane-{id}"));
         let overlay = self.is_overlay(id);
         let control = |what: &'static str, icon: Icon, action: &'static str, cx: &mut Context<Self>| {
@@ -63,8 +78,14 @@ impl Workspace {
             .child(div().flex_none().text_color(rgb(t.muted)).child(Icon::Terminal.at(ROW_ICON, t.muted)))
             .child(
                 div()
+                    .id(SharedString::from(format!("header-title-{id}")))
+                    .debug_selector(|| sel(format!("header-title-{id}")))
+                    .when_some(tip, |d, tip| {
+                        let tip = SharedString::from(tip);
+                        d.tooltip(move |_, cx| cx.new(|_| super::bars::Tip(tip.clone(), theme)).into())
+                    })
                     .flex_shrink()
-                    .max_w(px(320.))
+                    .max_w(px(TITLE_MAX))
                     .overflow_hidden()
                     .min_w(px(0.))
                     .line_clamp(1)
@@ -168,6 +189,59 @@ impl Workspace {
             // a little above the middle, where the eye expects the centre to be
             .pb(px(48.))
             .child(content)
+    }
+}
+
+impl Workspace {
+    /// This Mac's server stopped from outside (`leon server stop`): say so, and offer to start it
+    /// again (its saved sessions come back) or to quit.
+    pub(super) fn render_stopped(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = &self.theme;
+        let button = |name: &'static str, label: &'static str, primary: bool| {
+            div()
+                .id(name)
+                .debug_selector(move || sel(name.into()))
+                .px(px(16.))
+                .py(px(7.))
+                .rounded(px(6.))
+                .cursor_pointer()
+                .bg(rgb(if primary { t.accent } else { t.hover }))
+                .text_color(rgb(if primary { t.chrome } else { t.title }))
+                .child(label)
+        };
+        div()
+            .debug_selector(|| sel("server-stopped".into()))
+            .flex_1()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .pb(px(48.))
+            .child(mark())
+            .child(
+                div().mt(px(20.)).text_size(px(UI_TEXT + 9.)).text_color(rgb(t.title)).child("The leon server stopped"),
+            )
+            .child(
+                div()
+                    .mt(px(6.))
+                    .text_size(px(UI_TEXT + 1.))
+                    .text_color(rgb(t.muted))
+                    .child("Start it again to bring back the sessions it saved, or quit."),
+            )
+            .child(
+                div()
+                    .mt(px(28.))
+                    .flex()
+                    .gap(px(10.))
+                    .child(
+                        button("server-stopped-start", "Start It Again", true)
+                            .on_mouse_down(MouseButton::Left, cx.listener(|ws, _, _, cx| ws.start_again(cx))),
+                    )
+                    .child(
+                        button("server-stopped-quit", "Quit", false)
+                            .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| cx.quit())),
+                    ),
+            )
     }
 }
 
