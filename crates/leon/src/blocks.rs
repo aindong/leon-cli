@@ -1,6 +1,6 @@
 //! Terminal commands: run, send, send-key, capture, wait, and `block ls|inspect|close`.
 
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::time::Duration;
 
 use leon_core::terminal::NAMESPACE as TERMINAL;
@@ -56,11 +56,13 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
                 let status = wait_for(c, &block_id, None);
                 if print {
                     // a block closed meanwhile (by hand, or its session) has no text left: say nothing
-                    if let Ok(r) = method(c, &sid, &block_id, "format", json!({ "format": "text", "trim": true })) {
-                        println!("{}", r["text"].as_str().unwrap_or_default());
-                    }
+                    let text = method(c, &sid, &block_id, "format", json!({ "format": "text", "trim": true }));
                     if !keep_open {
                         let _ = c.call("block.close", json!({ "session_id": sid, "block_id": block_id }));
+                    }
+                    if let Ok(r) = text {
+                        // a reader gone (`| head`) must not cost the status: no println! panic
+                        let _ = writeln!(std::io::stdout(), "{}", r["text"].as_str().unwrap_or_default());
                     }
                 }
                 return status;

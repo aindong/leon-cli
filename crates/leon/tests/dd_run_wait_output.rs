@@ -52,3 +52,21 @@ fn on_a_terminal_it_prints_only_with_output() {
     assert!(!s.contains("tty-42"), "a terminal gets no copy by default:\n{s}");
     assert!(s.contains("forced-42"), "--output prints it on a terminal too:\n{s}");
 }
+
+#[test]
+fn a_reader_that_stops_early_still_gets_the_status_and_the_block_closes() {
+    // `leon run --wait -- … | head -1`: the pipe is closed before the text is written
+    use std::io::BufRead;
+    let env = Env::new();
+    env.ok(&["new", "w"]);
+    let mut child = env
+        .cmd()
+        .args(["-s", "w", "run", "--wait", "--", "sh", "-c", "sleep 0.5; seq 1 3000; exit 7"])
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut id = String::new();
+    std::io::BufReader::new(child.stdout.take().unwrap()).read_line(&mut id).unwrap(); // then dropped
+    assert_eq!(child.wait().unwrap().code(), Some(7), "the program's status, not a panic");
+    assert!(!blocks(&env).contains(id.trim()), "the block closed: {}", blocks(&env));
+}
