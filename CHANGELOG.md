@@ -76,6 +76,8 @@ The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
   splits, and a server holds at most 1024 blocks; past either, `session.new_split`,
   `session.move_block` and the like answer 400. Schemas are unchanged.
 
+- The app's 14 findings, a host freezing the window first: [docs/audit-0.1.0-app.md](docs/audit-0.1.0-app.md).
+
 ### Added
 
 - `leon --version` names the commit: `leon 0.1.0 (1a2b3c4d5e6f)`.

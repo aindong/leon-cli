@@ -142,10 +142,16 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   the screens (a watch set is per connection). A half-dead link (lost Wi-Fi, a stopped proxy)
   closes nothing, so a watchdog pings an event connection that has been quiet for 5 s and shuts it
   down when 5 s more bring no line: about 15 s to notice, not ssh's 45. Over a link the client's
-  calls that nobody waits for (keys, resizes, the focus event, pastes) and layout changes (`act_later`:
-  the call, the refetch, then a callback) run in order on one queue thread over the call
-  connection, so a slow or stalled link never holds the thread that asked; while the link is down
-  they fail at once. Keys typed while the link is down are lost; while attached, stderr is
+  calls that nobody waits for (keys, resizes, mouse and wheel reports, the focus event, pastes) and
+  layout changes (`act_later`: the call, the refetch, then a callback) run in order on one queue
+  thread over the call connection, so a slow, stalled or hostile link never holds the thread that
+  asked; while the link is down they fail at once. The app's calls whose reply it uses (history
+  rows, selections, find, `link_at`) go through that queue too, one of each kind out at a time, and
+  the next poll applies the reply (a copy-mode motion into rows not fetched yet sees them on its
+  next try). Every call has one deadline for its write and its reply (5 s; a Lua call 35 s), which
+  lines that aren't the reply don't extend. A copy from a host's pane is the text of the cells the
+  app drew, never the host's `selection` text, and a host's link opens without asking only when its
+  uri is the text drawn there. Keys typed while the link is down are lost; while attached, stderr is
   /dev/null, so ssh's errors during a reconnect aren't shown.
 - **The app's hosts.** `leon_app::hosts` holds the machines the window shows: This Mac (the
   socket the app started with), then each host from the hosts list, read at start and after Add
