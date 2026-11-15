@@ -33,7 +33,7 @@ of [the architecture](../architecture.md).
   at most 120 chars. Notices go through `UNUserNotificationCenter` (`objc2`, already in GPUI's tree),
   which applies Do Not Disturb and Focus itself; only a bundled app has the main-bundle identifier it
   needs, so a bare `leon app` binary logs once and posts nothing. The center's delegate queues a
-  clicked notice's host label, session and block and wakes the poll, which goes there (the folded
+  clicked notice's host label, session and block and wakes every window's poll; the window that knows the pane goes there (the folded
   notice opens Activity).
 - **`leon notify`.** `dev.leon.terminal.report_status {state, title, msg}` (experimental) builds an
   OSC 7501 report (title and msg base64) and runs it through the same parser and store as PTY

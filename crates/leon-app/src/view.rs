@@ -293,7 +293,7 @@ impl Workspace {
             Arc::new(move || drop(wake.lock().unwrap_or_else(|e| e.into_inner()).try_send(())));
         let woke = wake.clone();
         app.on_change(move || woke());
-        crate::notify::on_click(wake.clone());
+        crate::notify::on_click(&wake);
         let mut term = scroll::TermUi::default();
         term.wake = Some(wake.clone());
         let hosts = Hosts::new(app.clone(), hosts, wake);
