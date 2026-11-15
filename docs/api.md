@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.4.0**. Every method is marked:
+API version **1.5.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -351,7 +351,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.4.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.5.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -2357,7 +2357,7 @@ same facts for the server you run.
 
 ### `session.move_block`
 
-*stable*. Put a block beside another in the session; one of another session joins it.
+*stable*. Put a block beside another in the session; one of another session joins it (`block_closed` there, `block_created` here).
 
 **Input:** 
 

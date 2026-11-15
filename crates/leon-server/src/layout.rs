@@ -161,7 +161,7 @@ pub fn add(r: &mut Registry) {
     );
     r.add(
         "session.move_block",
-        "Put a block beside another in the session; one of another session joins it.",
+        "Put a block beside another in the session; one of another session joins it (`block_closed` there, `block_created` here).",
         |ctx, p: MoveBlock| {
             let (direction, side) = (p.direction.unwrap_or(Direction::Horizontal), p.side.unwrap_or(Side::After));
             let ratio = ratio(p.ratio)?;

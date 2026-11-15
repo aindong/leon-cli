@@ -37,7 +37,7 @@ fn command(agent: Agent, input: &Value) -> Option<Vec<String>> {
 
 pub fn record(agent: Agent) {
     let var = |n| std::env::var(n).ok().filter(|v| !v.is_empty());
-    let (Some(session), Some(block)) = (var("LEON_SESSION"), var("LEON_BLOCK")) else { return };
+    let Some(block) = var("LEON_BLOCK") else { return };
     let Some(command) = stdin_json().and_then(|v| command(agent, &v)) else { return };
     if !interactive() {
         return;
@@ -47,6 +47,7 @@ pub fn record(agent: Agent) {
     if c.set_timeout(Some(SERVER_WAIT)).is_err() {
         return;
     }
+    let Some(session) = crate::commands::own_session(&mut c) else { return };
     let args = json!({ "command": command });
     let params =
         json!({ "session_id": session, "block_id": block, "method": "dev.leon.terminal.set_resume", "args": args });

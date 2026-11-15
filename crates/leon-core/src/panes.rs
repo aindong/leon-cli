@@ -81,6 +81,9 @@ impl State {
         assert!(tree.insert(anchor_id, block_id, direction, side, ratio), "the anchor is in it");
         t.windows[tw].zoomed = None;
         t.blocks.push(block);
+        // each session's subscribers see it as a kill there and a create here
+        self.emit(from, "block_closed", json!({ "block_id": block_id }));
+        self.emit(to, "block_created", json!({ "block_id": block_id }));
         self.touch(from);
         self.touch(to);
         if let Some(w) = emptied {

@@ -12,11 +12,13 @@ panes) in a split layout. Every object has a stable ID such as `block:91c0…`.
   case), a 1-based position (windows count in tab order), or the last 4 or more characters of an
   ID. If a target matches more than one thing, leon lists the matches and exits 3.
 - **Defaults.** Inside a leon terminal, `LEON_SESSION` and `LEON_BLOCK` name your own session and
-  block, so commands act "here" without flags. Outside leon, pass `-s`/`-b`; a session's commands
+  block, so commands act "here" without flags. Your session is the one holding `LEON_BLOCK` now
+  (a pane can join another session), else `LEON_SESSION`. Outside leon, pass `-s`/`-b`; a session's commands
   then act on its active window's focused block.
 - **The server.** Any command that needs the server starts a personal one if none runs
   (`--autostart=false` or `LEON_AUTOSTART=0` turns that off). The socket lives in
-  `$LEON_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/leon`, else `~/.local/state/leon/run`.
+  `$LEON_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/leon`, else `~/.local/state/leon/run`; its path
+  must fit a Unix socket (under 104 bytes on macOS, 108 on Linux), or leon says so and stops.
 - **Another machine.** `-H HOST` sends any client command to the leon server on another machine,
   through your own `ssh` (see [Hosts](#hosts)).
 

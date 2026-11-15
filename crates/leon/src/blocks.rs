@@ -7,7 +7,7 @@ use leon_core::ApiError;
 use serde_json::{json, Value};
 
 use crate::client::{Client, Fail};
-use crate::commands::{json_out, label, pick_session, print_json, read_args, resolve};
+use crate::commands::{json_out, label, own_session, pick_session, print_json, read_args, resolve};
 use crate::{BlockCmd, Cli, Cmd};
 use clap::{Args, ValueEnum};
 
@@ -169,7 +169,7 @@ fn method(c: &mut Client, sid: &str, bid: &str, name: &str, args: Value) -> Resu
 
 /// True when nothing names a session and there is none, so `run` should create one.
 fn no_session_named(c: &mut Client, cli: &Cli) -> Result<bool, Fail> {
-    if cli.session.is_some() || std::env::var("LEON_SESSION").is_ok_and(|s| !s.is_empty()) {
+    if cli.session.is_some() || env("LEON_SESSION").is_some() || env("LEON_BLOCK").is_some() {
         return Ok(false);
     }
     Ok(c.call("session.list", json!({}))?["sessions"].as_array().is_some_and(Vec::is_empty))
@@ -188,12 +188,12 @@ pub(crate) fn block_query(cli: &Cli, explicit: Option<&str>) -> Option<String> {
         .or_else(|| cli.session.is_none().then(|| env("LEON_BLOCK")).flatten())
 }
 
-/// The block a command acts on, as (session id, block id). A query is looked up in `-s`, else
-/// `$LEON_SESSION`, else every session (full IDs always search every session unless `-s` is given);
+/// The block a command acts on, as (session id, block id). A query is looked up in `-s`, else your
+/// own session (`own_session`), else every session (full IDs always search every session unless `-s` is given);
 /// with no query it is the active window's focused block in the picked session.
 pub(crate) fn pick_block(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<(String, String), Fail> {
     if let Some(q) = block_query(cli, explicit) {
-        let session = cli.session.clone().or_else(|| if q.starts_with("block:") { None } else { env("LEON_SESSION") });
+        let session = cli.session.clone().or_else(|| if q.starts_with("block:") { None } else { own_session(c) });
         let scope = match session {
             Some(s) => Some(resolve(c, "session", &s, None)?),
             None => None,
