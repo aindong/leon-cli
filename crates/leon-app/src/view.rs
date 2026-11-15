@@ -47,6 +47,7 @@ actions!(
         PreviousTab,
         Paste,
         ToggleSidebar,
+        About,
         Quit,
         QuitAndEndAll,
         SplitRight,
@@ -514,7 +515,7 @@ mod stats;
 #[path = "view_switch.rs"]
 mod switch;
 use bars::status_mark;
-pub use menus::menus;
+pub use menus::{about_text, menus, set_version};
 use paint::*;
 use panes_view::*;
 use stats::Stats;

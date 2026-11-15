@@ -240,6 +240,11 @@ impl Workspace {
         self.app.send("block.event", event);
     }
 
+    /// The version, as `leon --version` prints it.
+    pub(super) fn about(&mut self, _: &About, window: &mut Window, cx: &mut Context<Self>) {
+        drop(window.prompt(PromptLevel::Info, &about_text(), None, &[PromptButton::Ok("OK".into())], cx));
+    }
+
     /// Ask once, naming how many sessions end; on yes, stop the server (it saves, then every
     /// program ends) and quit. The app quits anyway when the server goes.
     pub(super) fn quit_and_end_all(&mut self, _: &QuitAndEndAll, window: &mut Window, cx: &mut Context<Self>) {

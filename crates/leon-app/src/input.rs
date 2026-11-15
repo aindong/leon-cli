@@ -25,6 +25,3 @@ pub fn key_bytes(ks: &Keystroke, app_cursor: bool) -> Option<Vec<u8>> {
     name.push_str(&ks.key);
     leon_core::keys::encode(&name, app_cursor).ok()
 }
-
-/// Pastes are wrapped by the server now (`block.event` paste), which knows the program's mode.
-pub use leon_core::keys::paste_bytes;

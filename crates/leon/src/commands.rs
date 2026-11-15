@@ -231,7 +231,7 @@ fn start_server(socket: &std::path::Path, restore: bool, may_start: bool) -> Res
 fn app(cli: &Cli, socket: &std::path::Path) -> Result<(), Fail> {
     // the app is a client: the server comes first, as `leon server start` makes it
     start_server(socket, true, cli.autostart).inspect_err(|e| leon_app::alert(&message(e)))?;
-    leon_app::run(socket).map_err(Fail::Other)
+    leon_app::run(socket, env!("LEON_VERSION")).map_err(Fail::Other)
 }
 
 /// A headless build (Linux, or `--no-default-features`): `leon` alone is `leon attach` in a

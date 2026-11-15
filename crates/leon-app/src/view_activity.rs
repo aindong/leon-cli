@@ -30,7 +30,16 @@ impl Workspace {
     /// The poll's share: go where a clicked notification points, look at every machine's status,
     /// post what is news, and keep the Dock badge on the blocked count.
     pub(super) fn poll_attention(&mut self, cx: &mut Context<Self>) {
-        for c in notify::take_clicks() {
+        // a click is this window's when one of its machines has the pane or session (a storm's
+        // notice names no pane: any window shows Activity)
+        let hosts = &self.hosts;
+        let knows = |c: &notify::Click| {
+            let remote = hosts.index_of(&c.host_label).and_then(|i| hosts.machines()[i].remote().cloned());
+            let m =
+                remote.map(|r| r.model().block(&c.block_id).is_some() || r.model().session(&c.session_id).is_some());
+            c.block_id.is_empty() || m == Some(true)
+        };
+        for c in notify::take_clicks(knows) {
             match self.hosts.index_of(&c.host_label).filter(|_| !c.block_id.is_empty()) {
                 Some(host) => self.go_to(host, &c.session_id, None, Some(&c.block_id), cx),
                 None => self.activity = true, // the notice for a storm: show what needs you

@@ -1,6 +1,6 @@
 //! Review proof: an 8-bit CSI (U+009B) in pasted text can't end bracketed paste early.
 
-use leon_app::input::paste_bytes;
+use leon_core::keys::paste_bytes;
 
 #[test]
 fn bracketed_paste_drops_c1_controls() {
