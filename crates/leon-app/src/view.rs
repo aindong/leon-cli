@@ -322,7 +322,7 @@ impl Workspace {
                 ws.stats.borrow_mut().report();
                 ws.refresh_keymap(cx);
                 let now = ws.signature();
-                if now != ws.seen || ws.sliding() || replied {
+                if now != ws.seen || ws.sliding() || ws.fading() || replied {
                     ws.seen = now;
                     cx.notify();
                 }

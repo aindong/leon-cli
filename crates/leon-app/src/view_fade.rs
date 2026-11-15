@@ -36,7 +36,8 @@ impl Workspace {
 
     /// Head each pane in `shown` for its fade: the setting's strength for all but the focused one
     /// and those that need the user (blocked, an error, a finish not seen yet), whose whole pane
-    /// stays in view (docs/architecture/attention.md).
+    /// stays in view (docs/architecture/attention.md). A pane whose fade changed gets there over
+    /// a drawer's slide time, or at once with Reduce Motion.
     pub(super) fn note_fades(&mut self, shown: &Panes) {
         let focused = self.target().map(|(_, id, _)| id);
         let targets = {
@@ -50,7 +51,7 @@ impl Workspace {
         };
         let now = self.fade.clock.unwrap_or_else(Instant::now);
         let mut fades = std::mem::take(&mut self.fade.fades);
-        fades.aim(targets, now, &|| true);
+        fades.aim(targets, now, &|| self.reduce_motion());
         self.fade.fades = fades;
     }
 }

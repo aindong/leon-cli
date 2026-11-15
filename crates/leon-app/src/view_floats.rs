@@ -39,7 +39,7 @@ impl Workspace {
         !self.floats.slides.is_empty()
     }
 
-    fn reduce_motion(&self) -> bool {
+    pub(super) fn reduce_motion(&self) -> bool {
         self.floats.reduce_motion.unwrap_or_else(system_reduce_motion)
     }
 
