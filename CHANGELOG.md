@@ -13,7 +13,7 @@ the server, the CLI and `leon attach`).
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.5.0`.
+one is `1.6.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -27,6 +27,22 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+### Fading the panes without the focus
+
+#### Added
+
+- Leon.app fades every pane but the focused one toward the window's background (its text, its
+  background and its header), so the eye rests on the focused pane. When the focus moves, the
+  pane losing it fades out and the pane gaining it fades in over 120 ms; with Reduce Motion the
+  change is immediate. A pane alone in its tab is not faded.
+- The fade never hides what you are waiting for: a pane's status indicator keeps its colour, and
+  a pane that needs you (blocked, an error, a finish you haven't looked at) is not faded at all.
+- `leon.set("fade_inactive_panes", N)` sets how strong the fade is, from 0 to 0.8 (the default
+  is 0.35, where body text keeps a contrast of 4.5:1 on leon-dark and leon-light); 0 turns it
+  off. `leon config get` and `leon config set` take it, and a value out of range is refused.
+- `server.settings` reports `fade_inactive_panes`. A new result field on a stable method raises
+  `api_version` from `1.5.0` to `1.6.0`.
 
 ### Releases
 

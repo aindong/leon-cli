@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use leon_lua::settings::{load_theme, Settings};
+use leon_lua::settings::{load_theme, Settings, FADE_MAX};
 use serde_json::Value;
 
 use crate::theme::{Theme, DARK, LIGHT};
@@ -42,7 +42,8 @@ impl Look {
             light: theme("light", &d.theme.light, LIGHT),
             font_family: settings["font"]["family"].as_str().unwrap_or(&d.font_family).to_string(),
             font_size: settings["font"]["size"].as_f64().unwrap_or(d.font_size) as f32,
-            fade: leon_lua::settings::FADE as f32,
+            // clamped: the reply is another process's, and a fade past the range can't be read
+            fade: settings["fade_inactive_panes"].as_f64().unwrap_or(d.fade_inactive_panes).clamp(0., FADE_MAX) as f32,
         }
     }
 

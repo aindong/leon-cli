@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 10] = [
+pub const KEYS: [&str; 11] = [
     "theme",
     "font.family",
     "font.size",
@@ -21,11 +21,14 @@ pub const KEYS: [&str; 10] = [
     "repeat_time",
     "hint_patterns",
     "resume",
+    "fade_inactive_panes",
 ];
 
 /// How far the app fades the panes without the focus toward the window's background, unless the
 /// config says: the strongest fade that keeps body text at 4.5:1 on both built-in themes.
 pub const FADE: f64 = 0.35;
+/// The strongest fade a config can ask for: past it a faded pane can't be read.
+pub const FADE_MAX: f64 = 0.8;
 
 /// The app's own font size range (it clamps ⌘+ and ⌘- to it too).
 pub const FONT_SIZES: (f64, f64) = (8., 32.);
@@ -63,13 +66,17 @@ pub struct Settings {
     pub hint_patterns: Vec<String>,
     /// What a restored block does with its program's resume command.
     pub resume: Resume,
+    /// How far the app fades the panes without the focus toward the window's background, 0 to
+    /// `FADE_MAX`; 0 turns the fade off.
+    pub fade_inactive_panes: f64,
 }
 
 /// tmux's `repeat-time` default, in milliseconds, for a config that doesn't set `repeat_time`.
 pub const REPEAT_TIME: u64 = 500;
 
 impl Default for Settings {
-    /// Today's app: the dark theme whatever the OS, Menlo 13, every notification, 500 ms repeat.
+    /// Today's app: the dark theme whatever the OS, Menlo 13, every notification, 500 ms repeat,
+    /// unfocused panes faded by `FADE`.
     fn default() -> Self {
         let dark = "leon-dark".to_string();
         Settings {
@@ -81,6 +88,7 @@ impl Default for Settings {
             repeat_time: REPEAT_TIME,
             hint_patterns: vec![],
             resume: Resume::Ask,
+            fade_inactive_panes: FADE,
         }
     }
 }
@@ -97,6 +105,7 @@ impl Settings {
             "repeat_time": self.repeat_time,
             "hint_patterns": self.hint_patterns,
             "resume": self.resume.as_str(),
+            "fade_inactive_panes": self.fade_inactive_panes,
         })
     }
 
@@ -157,6 +166,10 @@ impl Settings {
                 let r = Resume::ALL.into_iter().find(|r| v.as_str() == Some(r.as_str()));
                 self.resume = r.ok_or("resume must be \"ask\", \"always\" or \"never\"")?;
             }
+            "fade_inactive_panes" => match v.as_f64() {
+                Some(a) if (0. ..=FADE_MAX).contains(&a) => self.fade_inactive_panes = a,
+                _ => return Err(format!("fade_inactive_panes must be a number from 0 (off) to {FADE_MAX}")),
+            },
             _ if key.starts_with("notifications.") => {
                 return Err(format!("unknown setting {key:?}; the notification kinds are done, blocked and error"))
             }
