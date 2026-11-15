@@ -226,7 +226,7 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘⇧↩ | Zoom the pane (again to undo) |
 | ⌘W | Close the pane |
 | ⌘⌥F, ⌘⌥⇧F | Float the pane above the others, put it back in the tiles (drag its header to move it, an edge to resize it) |
-| ⌘J | Show or hide the scratch drawer: a shell at the bottom that keeps running while hidden |
+| ⌘J | Show or hide the scratch drawer: a shell at the bottom, opened in the focused pane's directory, that keeps running while hidden |
 | ⌘⌃←, ⌘⌃→, ⌘⌃↓ | Dock the pane as a drawer on the left, right or bottom (drag its edge to resize it) |
 | ⌘⇧], ⌘⇧[ | Next, previous tab |
 | ⌘1 … ⌘9 | Go to tab 1–9 |

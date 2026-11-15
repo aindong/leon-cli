@@ -510,8 +510,8 @@ raised. `--unfloat` returns a float or drawer to the tiles; its terminal keeps r
 
 Show/hide a float or drawer by its exact, case-insensitive label within `-s/--session`.
 Labels must be unique there. Hidden terminals keep running.
-`--create` opens a scratch login shell docked to the bottom on first use; subsequent
-calls toggle it. A bottom panel already occupying that side makes creation fail.
+`--create` opens a scratch login shell docked to the bottom on first use, in the directory of
+the active window's focused block (the session's current directory); subsequent calls toggle it. A bottom panel already occupying that side makes creation fail.
 
 ### `leon dock left|right|bottom`
 
