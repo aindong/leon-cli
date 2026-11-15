@@ -13,8 +13,14 @@ fn the_docs_cover_hosts_in_the_app() {
         assert!(devbox.contains(want), "README's devbox section covers {want:?}");
     }
     let arch =
-        ["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/state-and-hosts.md"]
-            .map(doc)
+        // the hosts decisions moved to docs/architecture/hosts.md (file-size limit)
+        [
+            "docs/architecture.md",
+            "docs/architecture/protocol-and-clients.md",
+            "docs/architecture/state-and-hosts.md",
+            "docs/architecture/hosts.md",
+        ]
+        .map(doc)
             .concat();
     for want in ["leon_app::hosts", "needs login", "stale", "session.resume", "This Mac"] {
         assert!(arch.contains(want), "docs/architecture.md covers {want:?}");

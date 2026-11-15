@@ -130,6 +130,7 @@ pub(crate) fn spawn(
             env.extend([("LEON_BIN_DIR".to_string(), dir.to_string()), ("PATH".to_string(), path)]);
         }
     }
+    let program = command.first().cloned();
     let spec = Spec { command, cwd, env };
     let weak = Arc::downgrade(ctx);
     let block_id = block_id.to_string();
@@ -141,7 +142,13 @@ pub(crate) fn spawn(
             ctx.exited.send_modify(|n| *n += 1);
         }
     })
-    .map_err(|e| ApiError::bad_request(format!("can't start the program: {e}")))
+    .map_err(|e| match program {
+        // portable-pty's message lists every PATH entry it tried, kilobytes of them
+        Some(p) if e.to_string().contains("No viable candidates found in PATH") => {
+            ApiError::bad_request(format!("can't start the program: {p} isn't on PATH (or isn't executable)"))
+        }
+        _ => ApiError::bad_request(format!("can't start the program: {e}")),
+    })
 }
 
 #[derive(Serialize, JsonSchema)]

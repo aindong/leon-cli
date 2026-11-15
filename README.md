@@ -154,14 +154,14 @@ running after you disconnect.
 
 ```text
 leon hosts add devbox ssh://me@devbox.example.com
-leon -H devbox run -- make test     # runs on the devbox
+leon -H devbox run -c /home/me/app -- make test   # runs on the devbox, in its /home/me/app
 leon -H devbox attach               # its sessions, in this terminal
 leon hosts check
 ```
 
 A dropped Wi-Fi link is retried for a minute: `leon events` and the app resume without losing or
-repeating an event, and `leon attach` reconnects and redraws (keys typed while the link is down are
-lost). Use ssh keys or an agent: each connection is its own ssh session.
+repeating an event, and `leon attach` says it is reconnecting, then reconnects and redraws (keys typed while the link
+is down are lost). Use ssh keys or an agent: each connection is its own ssh session.
 
 The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
 and tabs and a dot for its connection. A remote pane works like a local one, with the host's name in

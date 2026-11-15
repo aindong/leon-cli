@@ -20,8 +20,14 @@ fn remote_use_is_documented() {
         assert!(cli.contains(s), "docs/cli.md: {s}");
     }
     let arch =
-        ["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/state-and-hosts.md"]
-            .map(doc)
+        // the hosts decisions moved to docs/architecture/hosts.md (file-size limit)
+        [
+            "docs/architecture.md",
+            "docs/architecture/protocol-and-clients.md",
+            "docs/architecture/state-and-hosts.md",
+            "docs/architecture/hosts.md",
+        ]
+        .map(doc)
             .concat();
     for s in ["leon server proxy", "session.resume", "LEON_SSH", "reconnect", "hosts.json"] {
         assert!(arch.contains(s), "docs/architecture.md: {s}");

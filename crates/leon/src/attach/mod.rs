@@ -75,6 +75,7 @@ pub fn run(target: Option<&str>, prefix: Option<&str>, autostart: bool, server: 
     })?;
     let (tx, rx) = mpsc::channel();
     let mut tui = Tui::new(remote, prefix, start, tx.clone());
+    tui.host = server.link.as_ref().map(|(name, _)| name.clone());
     let mut screen = match host::Host::enter() {
         Ok(h) => h,
         Err(e) => {
@@ -125,6 +126,17 @@ fn resolve_target(c: &mut Client, t: &str) -> Result<Pick, Fail> {
     }
 }
 
+/// Why attach ended when the server stopped answering. Over a link that is usually the link, given
+/// up after the host's hold: the server there and its programs may well be fine.
+fn gone(host: Option<&str>) -> String {
+    match host {
+        Some(h) => format!(
+            "lost the link to {h}; run leon -H {h} attach to come back (its programs keep running unless its server stopped)"
+        ),
+        None => "the leon server went away".into(),
+    }
+}
+
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -145,6 +157,8 @@ struct Tui {
     asked: std::collections::HashMap<String, (u16, u16)>,
     /// A failed action's message, for the status bar; set from other threads too.
     note: Arc<Mutex<Option<String>>>,
+    /// The host's name with `-H`: the link to it may drop, and the bar says so while it's retried.
+    host: Option<String>,
     tx: Sender<Msg>,
 }
 
@@ -163,6 +177,7 @@ impl Tui {
             repeat: Default::default(),
             asked: Default::default(),
             note: Arc::default(),
+            host: None,
             tx,
         };
         if let Some(p) = start {
@@ -202,7 +217,7 @@ impl Tui {
 
     fn handle(&mut self, m: Msg, dirty: &mut bool) -> Flow {
         match m {
-            Msg::Wake if !self.remote.alive() => Flow::Done(Err(Fail::Other("the leon server went away".into()))),
+            Msg::Wake if !self.remote.alive() => Flow::Done(Err(Fail::Other(gone(self.host.as_deref())))),
             Msg::Wake | Msg::Input(Event::Resize(..)) => {
                 *dirty = true;
                 Flow::Go
@@ -288,5 +303,16 @@ impl Tui {
                 let _ = tx.send(Msg::Wake);
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod gone_tests {
+    #[test]
+    fn over_a_link_the_link_is_named_not_the_server() {
+        let m = super::gone(Some("devbox"));
+        assert!(m.contains("lost the link to devbox") && m.contains("leon -H devbox attach"), "{m}");
+        assert!(!m.contains("went away"), "{m}");
+        assert_eq!(super::gone(None), "the leon server went away");
     }
 }

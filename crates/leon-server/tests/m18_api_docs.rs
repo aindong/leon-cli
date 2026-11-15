@@ -395,7 +395,9 @@ fn a_deprecated_method_shows_its_replacement() {
 
 #[test]
 fn changelog_names_every_landed_milestone_and_the_api_version() {
-    let log = std::fs::read_to_string(repo().join("CHANGELOG.md")).expect("CHANGELOG.md exists");
+    let log = std::fs::read_to_string(repo().join("CHANGELOG.md")).expect("CHANGELOG.md exists")
+        // the milestones' sections moved here (file-size limit), headings and all
+        + &std::fs::read_to_string(repo().join("docs/changelog-milestones.md")).expect("the milestones");
     assert!(
         log.contains("Keep a Changelog") && log.contains("Semantic Versioning"),
         "the header names its conventions"

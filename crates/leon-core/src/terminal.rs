@@ -27,7 +27,7 @@ mod cwd;
 use cwd::{process_cwd, pwd_path, pwd_url};
 #[path = "terminal_process.rs"]
 mod process;
-use process::{reap, wait_exit};
+use process::{reap, wait_exit, Registered};
 #[path = "terminal_reading.rs"]
 mod reading;
 #[path = "terminal_status.rs"]
@@ -177,7 +177,7 @@ pub struct Terminal {
     output: Arc<AtomicU64>,
     notify: Notify,
     /// The command a program registered to resume itself after a restart (`set_resume`).
-    resume: Mutex<Option<Vec<String>>>,
+    resume: Mutex<Registered>,
     /// Lines ever pushed into the scrollback (`View::scrolled`); written under the term's lock.
     scrolled: Arc<AtomicUsize>,
     /// The program set X10 mouse mode (`?9`), which alacritty doesn't track.
@@ -317,7 +317,7 @@ impl Terminal {
             reported,
             output,
             notify: to_self,
-            resume: Mutex::new(None),
+            resume: Mutex::default(),
             scrolled,
             x10,
         })

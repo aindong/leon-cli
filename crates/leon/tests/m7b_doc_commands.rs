@@ -11,11 +11,12 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// (file, the fewest `leon` calls its sh blocks must make)
-const DOCS: [(&str, usize); 6] = [
+const DOCS: [(&str, usize); 7] = [
     ("README.md", 8),
     ("docs/agents.md", 5),
     ("docs/lua.md", 2),
     ("docs/cli.md", 5),
+    ("docs/cli/layout.md", 5),
     ("docs/cli/settings.md", 5),
     ("docs/integrators.md", 3),
 ];

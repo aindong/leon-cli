@@ -128,7 +128,9 @@ pub fn remote_command(autostart: bool) -> String {
 impl Endpoint {
     /// ssh's arguments. leon adds `-T` (no tty: the pipe carries NDJSON), no forwarding of any kind
     /// (the link needs none: no agent on the host, no port bound by a config's LocalForward), and
-    /// keepalives, so a dead network is noticed in about 45 s; the rest comes from ~/.ssh/config.
+    /// keepalives, so a dead network is noticed in about 45 s, and a connect timeout, so a command
+    /// started during an outage fails in 15 s instead of waiting it out (a stalled banner counts);
+    /// the rest comes from ~/.ssh/config.
     pub fn ssh_args(&self, autostart: bool) -> Vec<String> {
         let mut args: Vec<String> = [
             "-T",
@@ -140,6 +142,8 @@ impl Endpoint {
             "ServerAliveInterval=15",
             "-o",
             "ServerAliveCountMax=3",
+            "-o",
+            "ConnectTimeout=15",
         ]
         .map(String::from)
         .to_vec();

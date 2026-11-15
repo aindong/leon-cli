@@ -127,6 +127,7 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
     let mut hup = signal(SignalKind::hangup())?; // `server run`'s terminal closed
     let shared = Arc::new(Shared { ctx, open: AtomicUsize::new(0), last_activity: Mutex::new(Instant::now()) });
     let mut tick = tokio::time::interval(Duration::from_millis(200));
+    let mut autosave = persist::Autosave::default();
     loop {
         tokio::select! {
             accepted = listener.accept() => {
@@ -159,6 +160,9 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
                     && shared.last_activity.lock().unwrap_or_else(|e| e.into_inner()).elapsed() >= opts.idle_exit;
                 if idle { break; }
                 shared.ctx.sweep_parked();
+                if let Some(file) = &state_file {
+                    autosave.tick(&shared.ctx, file);
+                }
             }
         }
     }

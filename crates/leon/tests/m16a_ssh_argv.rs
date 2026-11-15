@@ -17,6 +17,9 @@ fn expect(port: Option<&str>, dest: &str) -> Vec<String> {
         "ServerAliveInterval=15",
         "-o",
         "ServerAliveCountMax=3",
+        "-o",
+        // daily-driver F11: an unanswered connect or banner fails instead of hanging the command
+        "ConnectTimeout=15",
     ]
     .iter()
     .map(|s| s.to_string())

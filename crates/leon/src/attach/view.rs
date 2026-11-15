@@ -3,6 +3,7 @@
 
 use leon_app::keymap::{Bound, Pressed};
 use leon_app::panes;
+use leon_app::remote::LinkState;
 use leon_lua::keys::Chord;
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::{Position, Rect};
@@ -24,6 +25,14 @@ struct Target {
 }
 
 impl Tui {
+    /// While the link to the host is retried: which try, for the bar.
+    fn reconnecting(&self) -> Option<String> {
+        match (&self.host, self.remote.link_state()) {
+            (Some(h), LinkState::Reconnecting { attempt, .. }) => Some(format!("reconnecting to {h} (try {attempt})…")),
+            _ => None,
+        }
+    }
+
     fn session_id(&self) -> Option<&str> {
         match &self.mode {
             Mode::Attached(sid) => Some(sid),
@@ -247,7 +256,7 @@ impl Tui {
         let p = json!({ "session_id": t.sid, "block_id": t.block, "method": "dev.leon.terminal.pwd" });
         let pwd =
             self.remote.call("block.method", p).ok().and_then(|r| r["path"].as_str().map(std::path::PathBuf::from));
-        match pwd.filter(|d| d.is_dir()).as_deref().and_then(|d| d.to_str()) {
+        match split_cwd(pwd, self.host.is_some()) {
             Some(d) => json!({ "block": { "options": { "cwd": d } } }),
             None => json!({ "block": {} }),
         }
@@ -271,8 +280,14 @@ impl Tui {
                 (picker::rows(&m.sessions), m.screens.clone())
             };
             self.remote.watch(p.selected_row(&rows).and_then(|r| r.block.clone()).into_iter().collect());
+            let note = self.reconnecting();
             term.draw(|f| match f.area() == area {
-                true => p.draw(f.buffer_mut(), area, &rows, &screens, colors),
+                true => {
+                    p.draw(f.buffer_mut(), area, &rows, &screens, colors);
+                    if let Some(n) = &note {
+                        draw::corner_note(f.buffer_mut(), Rect { height: 1, ..area }, n, colors);
+                    }
+                }
                 false => drawn = false,
             })?;
             return Ok(drawn);
@@ -330,7 +345,8 @@ impl Tui {
         }
         let focus = w.and_then(super::overlays::focused).map(str::to_string);
         let tabs = s.windows.iter().enumerate().map(|(i, w)| (picker::tab_name(&s, w), i == s.active)).collect();
-        let note = super::lock(&self.note).clone();
+        // while the link is down actions fail at once: their notes mustn't hide why
+        let note = self.reconnecting().or_else(|| super::lock(&self.note).clone());
         let index = self.remote.model().sessions.iter().position(|x| x.id == s.id).unwrap_or(0);
         let name = picker::session_name(&s, index);
         let bar = Bar {
@@ -393,3 +409,13 @@ impl Tui {
         Ok(drawn)
     }
 }
+
+/// The directory a split starts in: the pane's, when it is still there. Over `-H` it is a path on
+/// the host, which this disk can't vouch for: the host's server checks it.
+fn split_cwd(pwd: Option<std::path::PathBuf>, remote: bool) -> Option<String> {
+    pwd.filter(|d| remote || d.is_dir()).and_then(|d| d.to_str().map(String::from))
+}
+
+#[cfg(test)]
+#[path = "view_tests.rs"]
+mod tests;

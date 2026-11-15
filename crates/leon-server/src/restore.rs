@@ -116,13 +116,16 @@ pub fn offer(t: &Arc<Terminal>, command: &[String], policy: Resume) {
     }
     let shell = t.command.first().and_then(|c| c.rsplit('/').next()).unwrap_or("").trim_start_matches('-');
     let pasting = PASTING_SHELLS.contains(&shell);
+    let generation = t.resume_generation();
     let weak: Weak<Terminal> = Arc::downgrade(t);
     std::thread::spawn(move || {
         let end = Instant::now() + PROMPT_WAIT;
         while Instant::now() < end {
             let Some(t) = weak.upgrade() else { return };
             if t.reads_a_line() && (!pasting || t.bracketed_paste()) {
-                let _ = t.write(keys.as_bytes());
+                if t.write(keys.as_bytes()).is_ok() {
+                    t.mark_resume_offered(generation); // offered once; a program that resumes registers again
+                }
                 return;
             }
             drop(t);
