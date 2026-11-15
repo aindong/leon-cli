@@ -52,7 +52,7 @@ impl Workspace {
     /// Whether block `id` is a float or a drawer.
     pub(super) fn is_overlay(&self, id: &str) -> bool {
         let m = self.app.model();
-        m.block(id).is_some_and(|(s, b)| s.overlay(&b.window_id).contains(id))
+        m.block(id).is_some_and(|(s, b)| s.overlays.get(&b.window_id).is_some_and(|o| o.contains(id)))
     }
 
     /// Start a slide for each drawer of the active window that was shown or hidden since the last
@@ -63,12 +63,20 @@ impl Workspace {
         let Some(w) = self.active_window() else { return };
         let now: HashMap<String, bool> =
             self.overlays_of(&w).docked.iter().map(|d| (d.block_id.clone(), d.hidden)).collect();
-        let reduce = self.reduce_motion();
         if let Some(before) = self.floats.seen.get(&w.id) {
-            for (id, hidden) in &now {
-                let was = before.get(id).copied().unwrap_or(true);
-                if was != *hidden && !reduce {
-                    self.floats.slides.insert(id.clone(), (Instant::now(), !hidden));
+            let changed: Vec<(String, bool)> = now
+                .iter()
+                .filter(|(id, hidden)| before.get(*id).copied().unwrap_or(true) != **hidden)
+                .map(|(id, hidden)| (id.clone(), !hidden))
+                .collect();
+            // the system is asked only when something would slide
+            if !changed.is_empty() && !self.reduce_motion() {
+                for (id, coming) in changed {
+                    // turned back mid-slide: carry on from the part shown now
+                    let shown = self.slide_of(&id).unwrap_or(if coming { 0. } else { 1. });
+                    let done = if coming { shown } else { 1. - shown };
+                    let start = Instant::now().checked_sub(floats::slide_at(done)).unwrap_or_else(Instant::now);
+                    self.floats.slides.insert(id, (start, coming));
                 }
             }
         }
@@ -107,7 +115,8 @@ impl Workspace {
     ) -> Div {
         let t = &DARK;
         for d in placed.docks.iter().filter(|d| terms.contains(&d.block_id)) {
-            out = out.child(self.pane_tile("dock", &d.block_id, d.rect, None, tiling, cx).occlude());
+            let tile = self.pane_tile("dock", &d.block_id, d.rect, None, tiling, cx);
+            out = out.child(if d.leaving { tile } else { tile.occlude() });
             let Some(h) = d.handle else { continue };
             let grab = Grab::Dock { side: d.side, size: d.size, area };
             let across = d.side != DockSide::Bottom;
@@ -160,6 +169,17 @@ impl Workspace {
 
     /// A float or drawer follows the pointer: the placement the drag makes, sent when it changed.
     pub(super) fn drag_overlay(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
+        let Some(Drag::Overlay { block, grab, .. }) = &self.drag else { return };
+        // placed elsewhere meanwhile (the CLI, a key): the drag would undo that, so it ends
+        let o = self.app.model().block(block).and_then(|(s, b)| s.overlays.get(&b.window_id).cloned());
+        let still = o.is_some_and(|o| match grab {
+            Grab::Dock { side, .. } => o.docked.iter().any(|d| d.block_id == *block && d.side == *side && !d.hidden),
+            _ => o.floating.iter().any(|f| f.block_id == *block && !f.hidden),
+        });
+        if !still {
+            self.drag = None;
+            return;
+        }
         let Some(Drag::Overlay { block, grab, from, last }) = self.drag.as_mut() else { return };
         let moved = at - *from;
         let p = grab.moved(f32::from(moved.x), f32::from(moved.y));
@@ -216,18 +236,27 @@ impl Workspace {
         }
     }
 
-    fn is_float(&self, id: &str) -> bool {
+    /// Whether block `id` is a hidden float or drawer (still drawn while it slides out).
+    pub(super) fn hidden_overlay(&self, id: &str) -> bool {
         let m = self.app.model();
-        m.block(id).is_some_and(|(s, b)| s.overlay(&b.window_id).floating.iter().any(|f| f.block_id == id))
+        m.block(id).is_some_and(|(s, b)| s.overlays.get(&b.window_id).is_some_and(|o| o.hidden(id)))
     }
 
-    /// Every block of window `w` with the tile it has or would have in a pane area of `area`: the
-    /// tiles (the zoomed one filling their part), and every float and drawer, hidden ones too, so
-    /// a font change sizes them all before they are shown.
+    fn is_float(&self, id: &str) -> bool {
+        let m = self.app.model();
+        let o = m.block(id).and_then(|(s, b)| s.overlays.get(&b.window_id));
+        o.is_some_and(|o| o.floating.iter().any(|f| f.block_id == id))
+    }
+
+    /// Every block of window `w` with its terminal's area, as it is or would be in a pane area of
+    /// `area`: the tiles (the zoomed one filling their part; a header when `headers`), and every
+    /// float and drawer, hidden ones too, so a font change sizes them all before they are shown.
+    /// A float or drawer always has its header, and a float its border.
     pub(super) fn window_rects(
         s: &crate::remote::Session,
         w: &leon_core::Window,
         area: (f32, f32),
+        headers: bool,
     ) -> Vec<(String, Rect)> {
         let o = s.overlay(&w.id);
         let placed = floats::place(&o, area, &|_| None);
@@ -238,15 +267,19 @@ impl Workspace {
             let zoomed = w.zoomed.as_deref().map(|z| panes::tiles(tree, Some(z), size).panes);
             for p in panes::tiles(tree, None, size).panes {
                 let r = zoomed.iter().flatten().find(|z| z.block_id == p.block_id).map_or(p.rect, |z| z.rect);
-                out.push((p.block_id, Rect { x: r.x + tx, y: r.y + ty, ..r }));
+                out.push((p.block_id, panes::text_rect(Rect { x: r.x + tx, y: r.y + ty, ..r }, headers)));
             }
         }
         let mut all = o;
         all.floating.iter_mut().for_each(|f| f.hidden = false);
         all.docked.iter_mut().for_each(|d| d.hidden = false);
         let shown = floats::place(&all, area, &|_| None);
-        out.extend(shown.docks.into_iter().map(|d| (d.block_id, d.rect)));
-        out.extend(shown.floats.into_iter().map(|f| (f.block_id, f.rect)));
+        out.extend(shown.docks.into_iter().map(|d| (d.block_id, panes::text_rect(d.rect, true))));
+        for f in shown.floats {
+            let r = f.rect;
+            let inside = Rect { x: r.x + 1., y: r.y + 1., w: (r.w - 2.).max(0.), h: (r.h - 2.).max(0.) };
+            out.push((f.block_id, panes::text_rect(inside, true)));
+        }
         out
     }
 }

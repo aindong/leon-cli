@@ -140,10 +140,16 @@ impl Workspace {
             && rows.iter().any(|r| working(&r.status) || r.windows.iter().any(|w| working(&w.status)));
         let selected = rows.iter().filter(|r| Some(&r.id) == self.session_id.as_ref());
         let tabs = places.top_tabs && selected.flat_map(|r| &r.windows).any(|w| working(&w.status));
-        let headers = self.settings.pane_headers && {
+        let headers = {
             let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
             let m = self.app.model();
-            shown.iter().any(|id| m.block(id).is_some_and(|(_, b)| working(&status::indicator_of(&b.newest_first()))))
+            // a float's or drawer's header shows even with headers off
+            let header = |s: &crate::remote::Session, b: &crate::remote::Block| {
+                self.settings.pane_headers || s.overlays.get(&b.window_id).is_some_and(|o| o.contains(&b.id))
+            };
+            shown.iter().any(|id| {
+                m.block(id).is_some_and(|(s, b)| header(s, b) && working(&status::indicator_of(&b.newest_first())))
+            })
         };
         (sidebar || tabs || headers).then(|| self.pulse())
     }

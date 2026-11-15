@@ -109,15 +109,28 @@ fn shown(mut r: Record) -> Record {
     r
 }
 
+/// The most floats a window may have.
+pub const MAX_FLOATS: usize = 64;
+
 /// A window's floats and drawers from its `session.view` entry. Only the fields this client knows
 /// are read (a newer server may add some, and the types refuse unknown ones), and a window whose
 /// placements a server should never send (bounds outside the window, a size past 1) gets none.
 pub fn decode_overlays(window: &Value) -> Overlays {
+    let list = |key: &str| window[key].as_array().map_or(&[][..], Vec::as_slice);
+    // each frame does work per float per float: a list past what a person could use is refused
+    if list("floating").len() > MAX_FLOATS {
+        return Overlays::default();
+    }
+    // the known fields, the id read as block ids are (nothing hidden)
     let pick = |v: &Value, keys: &[&str]| -> Value {
-        keys.iter().map(|k| (k.to_string(), v[*k].clone())).filter(|(_, v)| !v.is_null()).collect()
+        let mut out: Value =
+            keys.iter().map(|k| (k.to_string(), v[*k].clone())).filter(|(_, v)| !v.is_null()).collect();
+        if let Some(id) = v["block_id"].as_str() {
+            out["block_id"] = json!(strip_hidden(id));
+        }
+        out
     };
-    let entries = |key: &str| window[key].as_array().cloned().unwrap_or_default();
-    let floating: Vec<Value> = entries("floating")
+    let floating: Vec<Value> = list("floating")
         .iter()
         .map(|f| {
             let mut f = pick(f, &["block_id", "bounds", "hidden"]);
@@ -125,10 +138,11 @@ pub fn decode_overlays(window: &Value) -> Overlays {
             f
         })
         .collect();
-    let docked: Vec<Value> =
-        entries("docked").iter().map(|d| pick(d, &["block_id", "side", "size", "hidden"])).collect();
+    let docked: Vec<Value> = list("docked").iter().map(|d| pick(d, &["block_id", "side", "size", "hidden"])).collect();
     serde_json::from_value::<Overlays>(json!({ "floating": floating, "docked": docked }))
         .ok()
         .filter(|o| o.check().is_ok())
+        // each block is placed once
+        .filter(|o| o.ids().collect::<std::collections::HashSet<_>>().len() == o.ids().count())
         .unwrap_or_default()
 }

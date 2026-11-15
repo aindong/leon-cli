@@ -14,9 +14,12 @@ use crate::panes::{Rect, INSET};
 pub struct Dock {
     pub block_id: String,
     pub side: DockSide,
+    /// The share of the area it has, which a full side can make less than its `size`.
     pub size: f64,
     pub rect: Rect,
     pub handle: Option<Rect>,
+    /// Hidden, and drawn only while it slides out: clicks go to what is under it.
+    pub leaving: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,7 +100,11 @@ pub fn place(o: &Overlays, size: (f32, f32), sliding: &dyn Fn(&str) -> Option<f3
             }
         }
         let handle = (shown.is_none()).then_some(handle);
-        docks.push(Dock { block_id: d.block_id.clone(), side: d.side, size: d.size, rect: r, handle });
+        let size = match d.side {
+            DockSide::Bottom => region.h / size.1.max(1.),
+            _ => region.w / size.0.max(1.),
+        } as f64;
+        docks.push(Dock { block_id: d.block_id.clone(), side: d.side, size, rect: r, handle, leaving: d.hidden });
     }
     let floats = o
         .floating
@@ -172,7 +179,8 @@ impl Grab {
                     DockSide::Right => -dx as f64 / area.0 as f64,
                     DockSide::Bottom => -dy as f64 / area.1 as f64,
                 };
-                Placement::Dock((size + by).clamp(0.05, 0.95))
+                // a size set elsewhere (0.02 from the CLI) stays until the drag moves it
+                Placement::Dock((size + by).clamp(size.min(0.05), size.max(0.95)))
             }
         }
     }
@@ -200,6 +208,12 @@ fn inside(mut b: Bounds) -> Bounds {
 
 /// How long a drawer slides in or out.
 pub const SLIDE: Duration = Duration::from_millis(120);
+
+/// How far into a slide its eased part done is `done` (0–1): what `slide` inverts, so a slide
+/// turned back halfway carries on from where it was.
+pub fn slide_at(done: f32) -> Duration {
+    SLIDE.mul_f32(1. - (1. - done.clamp(0., 1.)).cbrt())
+}
 
 /// A slide `elapsed` into it: the part done, eased out (fast, then settling); None once it is
 /// over, or at once with Reduce Motion.

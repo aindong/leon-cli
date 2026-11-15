@@ -224,7 +224,7 @@ here -s auth toggle notes >/dev/null
 here -s auth toggle scratch --create >/dev/null
 sleep 1.5
 shot app-drawer
-scratch=$(here -s auth block ls --json | python3 -c 'import json,sys; print([b["block_id"] for b in json.load(sys.stdin) if b.get("label") == "scratch"][0])')
+scratch=$(here -s auth block ls --json | python3 -I -c 'import json,sys; print([b["block_id"] for b in json.load(sys.stdin) if b.get("label") == "scratch"][0])')
 here -s auth block close "$notes" >/dev/null
 here -s auth block close "$scratch" >/dev/null
 close_app

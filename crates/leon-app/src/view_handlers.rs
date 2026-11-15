@@ -82,6 +82,9 @@ impl Workspace {
     }
 
     pub(super) fn focus_block(&mut self, id: &str, cx: &mut Context<Self>) {
+        if self.hidden_overlay(id) {
+            return; // a drawer sliding out: focusing it would show it again
+        }
         self.call("session.focus_block", json!({ "block_id": id }), cx);
     }
 
@@ -283,7 +286,7 @@ impl Workspace {
         self.font_size = pt.clamp(FONT_SIZES.0, FONT_SIZES.1);
         let (cell_w, line_h) = cell_size(window, self.font_size);
         let area = self.pane_area(window);
-        // (remote, session, block, its pane's text area) for every pane of every window on every
+        // (remote, session, block, its terminal's area) for every pane of every window on every
         // machine, then resize off the lock
         let mut fits: Vec<(Rc<Remote>, String, String, panes::Rect)> = Vec::new();
         for (_, remote) in self.hosts.remotes() {
@@ -292,7 +295,7 @@ impl Workspace {
             for s in &m.sessions {
                 for w in &s.windows {
                     // panes a zoom hides keep their split size; hidden floats and drawers theirs
-                    for (id, rect) in Self::window_rects(s, w, area) {
+                    for (id, rect) in Self::window_rects(s, w, area, self.settings.pane_headers) {
                         if s.blocks.iter().any(|b| b.id == id) {
                             out.push((remote.clone(), s.id.clone(), id, rect));
                         }
@@ -301,7 +304,6 @@ impl Workspace {
             }
         }
         for (remote, sid, id, r) in fits {
-            let r = panes::text_rect(r, self.settings.pane_headers);
             let (rows, cols) = cells_in(px(r.w), px(r.h), cell_w, line_h);
             remote.fit(&sid, &id, rows, cols);
         }
