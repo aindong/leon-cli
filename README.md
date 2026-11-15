@@ -210,6 +210,9 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘⌥←, ⌘⌥→, ⌘⌥↑, ⌘⌥↓ | Focus the pane that way |
 | ⌘⇧↩ | Zoom the pane (again to undo) |
 | ⌘W | Close the pane |
+| ⌘⌥F, ⌘⌥⇧F | Float the pane above the others, put it back in the tiles (drag its header to move it, an edge to resize it) |
+| ⌘J | Show or hide the scratch drawer: a shell at the bottom that keeps running while hidden |
+| ⌘⌃←, ⌘⌃→, ⌘⌃↓ | Dock the pane as a drawer on the left, right or bottom (drag its edge to resize it) |
 | ⌘⇧], ⌘⇧[ | Next, previous tab |
 | ⌘1 … ⌘9 | Go to tab 1–9 |
 | ⌘C, ⌘V | Copy the selection, paste |
@@ -224,7 +227,7 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘⇧S | Tabs in the sidebar or in the titlebar (saved for the next launch) |
 | ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
 | ⌘, | Settings: the theme for dark and for light mode, font, notifications, copy on select; each change is written to init.lua |
-| ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same session) |
+| ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
 | ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
 | ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |

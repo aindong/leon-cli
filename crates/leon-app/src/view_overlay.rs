@@ -62,6 +62,9 @@ impl Workspace {
             );
         }
         let ask = self.ask_rows();
+        if let Some(note) = self.switcher_note() {
+            list = list.child(div().px(px(16.)).py(px(6.)).text_color(rgb(t.muted)).child(note));
+        }
         if let Some((_, row)) = &ask {
             list = list.child(div().px(px(16.)).py(px(6.)).text_color(rgb(t.muted)).child(row.clone()));
         } else if matches.is_empty() {

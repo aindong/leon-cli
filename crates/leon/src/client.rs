@@ -111,6 +111,7 @@ impl Client {
 /// then wait for its socket. Logs go to `server.log` beside the socket.
 pub fn spawn_server(socket: &Path, autostarted: bool, restore: bool) -> Result<(), Fail> {
     let log_path = socket.with_file_name("server.log");
+    leon_core::paths::check_socket_path(socket).map_err(|e| Fail::Unreachable(e.to_string()))?;
     if let Some(dir) = socket.parent() {
         leon_core::paths::ensure_private_dir(dir).map_err(|e| Fail::Unreachable(e.to_string()))?;
     }

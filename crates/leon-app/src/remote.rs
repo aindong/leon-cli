@@ -16,6 +16,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
+use leon_core::overlays::Overlays;
 use leon_core::program_status::Record;
 use leon_core::screen::{self, Frame, Update};
 use leon_core::{ApiError, Window};
@@ -28,7 +29,10 @@ mod events;
 mod fetch_model;
 #[path = "remote_link.rs"]
 mod link;
+#[path = "remote_palette.rs"]
+mod palette;
 use events::{attach, read_events};
+pub use fetch_model::decode_overlays;
 use fetch_model::{fetch, read_line};
 use link::Job;
 pub use link::LinkState;
@@ -47,12 +51,54 @@ pub struct Session {
     pub active: usize,
     pub windows: Vec<Window>,
     pub blocks: Vec<Block>,
+    /// Each window's floats and drawers, by window id (`session.view`'s `floating` and `docked`).
+    pub overlays: HashMap<String, Overlays>,
+    /// Each window's tile focused last, by window id, kept across refetches: the server keeps only
+    /// the focus, which a float or drawer can have.
+    pub tiled_focus: HashMap<String, String>,
+}
+
+impl Session {
+    /// Window `id`'s floats (back to front) and drawers; none for a window without any.
+    pub fn overlay(&self, id: &str) -> Overlays {
+        self.overlays.get(id).cloned().unwrap_or_default()
+    }
+
+    /// The tile that names window `w`: the zoomed or focused one, else the tile focused last (the
+    /// focus is a float's or drawer's), else its first; the focused overlay only when there is no tile.
+    pub fn named_tile<'a>(&'a self, w: &'a Window) -> Option<&'a str> {
+        let leaves = w.layout.as_ref().map(|t| t.leaves()).unwrap_or_default();
+        let tile = |id: &&str| leaves.contains(id);
+        w.zoomed
+            .as_deref()
+            .or(w.focus.as_deref())
+            .filter(tile)
+            .or_else(|| self.tiled_focus.get(&w.id).map(String::as_str).filter(tile))
+            .or_else(|| leaves.first().copied())
+            .or(w.focus.as_deref())
+    }
+
+    /// Remember each window's tile focused last, from this fetch's focus or the one before it.
+    fn remember_tiles(&mut self, before: Option<&Session>) {
+        self.tiled_focus = self
+            .windows
+            .iter()
+            .filter_map(|w| {
+                let leaves = w.layout.as_ref().map(|t| t.leaves()).unwrap_or_default();
+                let tile = |id: &&str| leaves.contains(id);
+                let last = || before?.tiled_focus.get(&w.id).map(String::as_str).filter(tile);
+                w.focus.as_deref().filter(tile).or_else(last).map(|id| (w.id.clone(), id.to_string()))
+            })
+            .collect();
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Block {
     pub id: String,
     pub window_id: String,
+    /// The label it was given (`leon toggle` finds a drawer by it).
+    pub label: Option<String>,
     pub command: Vec<String>,
     /// The title the program set, and where it is (`session.list_blocks`).
     pub title: Option<String>,
@@ -188,9 +234,14 @@ impl Shared {
     /// Fetch the whole model and replace it; screens of blocks that are gone are dropped.
     fn refresh(&self) -> Result<(), ApiError> {
         let mut c = lock(&self.fetch);
-        let sessions = fetch(&mut c)?;
+        let mut sessions = fetch(&mut c)?;
+        let mut m = lock(&self.model);
+        for s in &mut sessions {
+            s.remember_tiles(m.sessions.iter().find(|o| o.id == s.id));
+        }
         // screens go with the watch set (`Remote::watch`), not here: a refetch can skip a session
-        lock(&self.model).sessions = sessions;
+        m.sessions = sessions;
+        drop(m);
         drop(c);
         self.bump();
         Ok(())
@@ -206,21 +257,6 @@ impl Shared {
     fn saw(&self, seq: u64) {
         if self.seq.swap(seq, Ordering::SeqCst) + 1 != seq {
             self.gaps.fetch_add(1, Ordering::SeqCst);
-        }
-    }
-
-    /// The palette to send, unless the server refused one.
-    fn palette(&self) -> Option<Value> {
-        lock(&self.palette).clone().filter(|_| !self.palette_refused.load(Ordering::SeqCst))
-    }
-
-    /// The server didn't take a palette: stop sending it, and watch again without (held as
-    /// `Remote::watch` holds it).
-    pub(super) fn refuse_palette(&self) {
-        if !self.palette_refused.swap(true, Ordering::SeqCst) {
-            eprintln!("leon: this server is older than leon's themes; its panes keep leon-dark's colours");
-            let watched = lock(&self.watched);
-            let _ = self.send_watch(&watched);
         }
     }
 
@@ -385,44 +421,6 @@ impl Remote {
             m.screen_updates.retain(|id, _| ids.contains(id));
             drop(m);
             *watched = ids;
-        }
-    }
-
-    /// Resolve this app's screens with `theme`'s terminal colours from now on: the watched screens
-    /// come again, whole, in them. Nothing is sent when they didn't change.
-    pub fn set_palette(&self, theme: &leon_core::theme::Theme) {
-        let p = json!({ "fg": theme.fg, "bg": theme.bg, "cursor": theme.cursor, "ansi": theme.ansi });
-        let watched = lock(&self.shared.watched);
-        if lock(&self.shared.palette).replace(p.clone()) == Some(p)
-            || self.shared.palette_refused.load(Ordering::SeqCst)
-        {
-            return;
-        }
-        if let Err(e) = self.shared.send_watch(&watched) {
-            eprintln!("leon: can't watch the panes: {e}");
-        }
-    }
-
-    /// `block.method` `dev.leon.terminal.lines` in this app's palette (without one on a server
-    /// that refuses it).
-    pub fn lines(&self, session_id: &str, block_id: &str, from: usize, count: usize) -> Result<Value, ApiError> {
-        let call = |palette: Option<Value>| {
-            let mut args = json!({ "from": from, "count": count });
-            if let Some(p) = palette {
-                args["palette"] = p;
-            }
-            let p = json!({ "session_id": session_id, "block_id": block_id, "method": "dev.leon.terminal.lines", "args": args });
-            self.call("block.method", p)
-        };
-        match self.shared.palette() {
-            Some(p) => match call(Some(p)) {
-                Err(e) if e.message.contains("unknown field `palette`") => {
-                    self.shared.refuse_palette();
-                    call(None)
-                }
-                r => r,
-            },
-            None => call(None),
         }
     }
 

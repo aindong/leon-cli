@@ -1,5 +1,5 @@
-//! Overlay geometry and painting, from the window fields in session.view. The app's shared
-//! client does not decode these until M20b; attach caches the wire view by session revision.
+//! Overlay geometry and painting, from the shared client's copy of each window's floats and
+//! drawers (`remote::Session::overlays`).
 use super::draw::{self, Colors};
 use leon_core::overlays::{DockSide, Overlays};
 use ratatui::widgets::{Block, Borders, Clear, Widget};
@@ -59,7 +59,4 @@ pub fn paint(buf: &mut Buffer, p: &Pane, focused: bool, colors: Colors) {
 }
 
 /// A focused overlay remains above a zoomed tile; otherwise preserve tile zoom's input policy.
-pub fn focused(w: &leon_core::Window) -> Option<&str> {
-    let overlay = w.focus.as_deref().filter(|id| !w.layout.as_ref().is_some_and(|t| t.contains(id)));
-    overlay.or(w.zoomed.as_deref()).or(w.focus.as_deref())
-}
+pub use leon_app::floats::target as focused;

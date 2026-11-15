@@ -33,6 +33,8 @@ pub fn model(sessions: Vec<(&str, Vec<Tab>)>) -> Model {
             active: 0,
             windows: Vec::new(),
             blocks: Vec::new(),
+            overlays: Default::default(),
+            tiled_focus: Default::default(),
         };
         for (i, Tab(tab, title, status)) in tabs.into_iter().enumerate() {
             let (wid, bid) = (format!("window:{label}/{i}"), format!("block:{label}/{i}"));
@@ -46,6 +48,7 @@ pub fn model(sessions: Vec<(&str, Vec<Tab>)>) -> Model {
             s.blocks.push(Block {
                 id: bid,
                 window_id: wid,
+                label: None,
                 command: vec!["/bin/zsh".into()],
                 title: Some(title.into()),
                 cwd: None,

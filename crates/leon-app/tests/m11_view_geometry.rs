@@ -42,9 +42,11 @@ fn a_scrolled_view_takes_history_rows_then_screen_rows() {
 
 #[test]
 fn the_top_stays_inside_the_scrollback() {
-    assert_eq!(clamp(&live(), Some(10)), Some(50), "the oldest kept line");
-    assert_eq!(clamp(&live(), Some(100)), None, "the bottom follows the output");
-    assert_eq!(clamp(&live(), Some(500)), None);
+    assert_eq!(clamp(&live(), Some(10), false), Some(50), "the oldest kept line");
+    assert_eq!(clamp(&live(), Some(100), false), None, "the bottom follows the output");
+    assert_eq!(clamp(&live(), Some(500), false), None);
+    assert_eq!(clamp(&live(), None, true), Some(100), "a pinned view (copy mode) holds the bottom");
+    assert_eq!(clamp(&live(), Some(500), true), Some(100));
 }
 
 #[test]

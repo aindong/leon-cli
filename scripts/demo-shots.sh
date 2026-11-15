@@ -124,6 +124,13 @@ pod api-7f9c-1 ready
 pod api-7f9c-2 CrashLoopBackOff
 rollout failed: 2 of 4 pods crashed
 EOF
+txt notes <<'EOF'
+## 0.4.0
+
+- Sessions survive a server restart
+- The login test no longer sleeps
+- Rate limits on the public API
+EOF
 txt build <<'EOF'
 $ make release
 [ 40%] Building CXX object src/CMakeFiles/core.dir/engine.cpp.o
@@ -209,6 +216,17 @@ keys 'key code 53'
 keys 'keystroke "s" using {command down, shift down}'
 shot app-top
 keys 'keystroke "s" using {command down, shift down}'
+# a float over the split, then the scratch drawer open below the tiles; both closed again after
+notes=$(here -s auth float --new --label notes --rect 0.44,0.08,0.52,0.5 -- show "Release notes" "$d/notes.txt")
+sleep 1
+shot app-float
+here -s auth toggle notes >/dev/null
+here -s auth toggle scratch --create >/dev/null
+sleep 1.5
+shot app-drawer
+scratch=$(here -s auth block ls --json | python3 -I -c 'import json,sys; print([b["block_id"] for b in json.load(sys.stdin) if b.get("label") == "scratch"][0])')
+here -s auth block close "$notes" >/dev/null
+here -s auth block close "$scratch" >/dev/null
 close_app
 
 # a devbox with an agent waiting for permission and a failed deploy

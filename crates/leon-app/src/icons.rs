@@ -37,6 +37,7 @@ icons! {
     SplitRight => "split-right",
     SplitDown => "split-down",
     Zoom => "zoom",
+    Unfloat => "unfloat",
     Close => "close",
     Terminal => "terminal",
     Search => "search",

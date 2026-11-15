@@ -15,7 +15,10 @@ architecture](../architecture.md).
   is a cursor in absolute lines over the view and its cached scrollback (`leon_app::copy_mode`,
   GPUI-free): vi motions, `v`/`V` set the pane's selection (the server's, which takes both end
   cells, so `v` alone selects the one under the cursor), `/` and `?` run
-  `dev.leon.terminal.find` and step from the cursor, `y` copies. Its badge or prompt is written
+  `dev.leon.terminal.find` and step from the cursor (when find stops short, at 10000 matches or
+  300 ms, the badge says `N+ matches`, as the find bar's count says `n of N+`), `y` copies. While
+  it is on the view holds still, at the bottom too (tmux): rows that scroll into the history stay
+  put, and only the program's rows still on screen redraw. Its badge or prompt is written
   over the pane's top-right cells (`stamp`) and the program's cursor is hidden; keys never reach
   the program, ⌘ chords still go to the keymap. `leon attach` has no copy mode: it draws only the
   live screen, with no scrollback view, cursor overlay or selection of its own. **Hints**
@@ -25,4 +28,5 @@ architecture](../architecture.md).
   so a screen yields at most a hint per cell). Labels are prefix-free (tmux-fingers' alphabet),
   shortest near the bottom, one per distinct text, at most 676; a label copies, and in upper case
   is pasted into the pane. A new size or screen labels the view again; copy mode ends when its
-  lines are gone (an alt-screen switch, a full scrollback) and stays through a resize.
+  lines are gone (an alt-screen switch, a full scrollback) and stays through a resize, its cursor
+  moved onto the last line when a shorter screen dropped the blank rows it was on.

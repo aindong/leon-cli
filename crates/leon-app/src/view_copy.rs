@@ -69,29 +69,33 @@ impl Workspace {
     }
 
     /// Whether copy mode's lines on pane `id` are gone: an alt-screen switch moves `scrolled` past
-    /// every line kept, and a full scrollback drops its oldest.
+    /// every line kept, and a full scrollback drops its oldest. (Lines past the screen's last
+    /// are blank rows a shorter screen dropped: `check_copy` moves onto the last line.)
     fn copy_lost(&self, c: &CopyMode) -> bool {
-        let live = self.live(&c.block);
-        let (oldest, _) = scrollback::bounds(&live);
-        let last = live.view.scrolled + live.lines.saturating_sub(1);
-        let gone = |p: Pos| p.line < oldest || p.line > last;
-        gone(c.cursor) || c.selection.is_some_and(|(_, a)| gone(a))
+        let (oldest, _) = scrollback::bounds(&self.live(&c.block));
+        c.cursor.line < oldest || c.selection.is_some_and(|(_, a)| a.line < oldest)
     }
 
     /// Copy mode on pane `id` ends when its lines are gone; a new size keeps them, so it stays,
-    /// in the new width.
+    /// in the new width and on the new screen's lines.
     pub(super) fn check_copy(&mut self, id: &str) {
         let Some(c) = self.term.copy.as_ref().filter(|c| c.block == id) else { return };
         if self.copy_lost(c) {
             return self.exit_copy(id);
         }
-        let cols = self.live(id).cols;
+        let live = self.live(id);
+        let last = live.view.scrolled + live.lines.saturating_sub(1);
         if let Some(c) = self.term.copy.as_mut() {
-            c.cursor.col = c.cursor.col.min(cols.saturating_sub(1));
+            c.cursor.col = c.cursor.col.min(live.cols.saturating_sub(1));
+            c.cursor.line = c.cursor.line.min(last);
+            if let Some((_, a)) = c.selection.as_mut() {
+                a.line = a.line.min(last);
+            }
         }
     }
 
-    /// Copy mode starts at the terminal's cursor, or at the view's bottom row when scrolled back.
+    /// Copy mode starts at the terminal's cursor, or at the view's bottom row when scrolled back;
+    /// while it is on, the view doesn't follow the output (`sync_pane` pins it).
     fn enter_copy(&mut self, id: String) {
         let live = self.live(&id);
         let c = self.composed(&id);
@@ -102,7 +106,8 @@ impl Workspace {
         if let Some(pv) = self.term.panes.get_mut(&id) {
             pv.selection = None;
         }
-        self.term.copy = Some(CopyMode::new(id, cursor));
+        self.term.copy = Some(CopyMode::new(id.clone(), cursor));
+        self.sync_pane(&id); // the view holds still from here, as tmux's does
     }
 
     fn copy_key(&mut self, ks: &gpui::Keystroke, chord: Option<&Chord>, cx: &mut Context<Self>) {
@@ -212,6 +217,9 @@ impl Workspace {
         let args = json!({ "query": query, "regex": false, "case_sensitive": false });
         let Ok(found) = self.term_call(id, "find", args) else { return };
         let matches: Vec<Range> = serde_json::from_value(found["matches"].clone()).unwrap_or_default();
+        if let Some(cm) = self.term.copy.as_mut() {
+            cm.truncated = (found["truncated"] == true).then_some(matches.len());
+        }
         if let Some(to) = copy_mode::pick(&matches, at, forward != reverse) {
             self.copy_to(id, to);
         }
@@ -274,6 +282,11 @@ impl Workspace {
                 (None, Some((Kind::Line, _))) => "COPY LINE".into(),
                 (None, Some(_)) => "COPY VISUAL".into(),
                 (None, None) => "COPY".into(),
+            };
+            // find stopped short: the matches past these aren't stepped to
+            let badge = match cm.truncated.filter(|_| cm.prompt.is_none()) {
+                Some(n) => format!("{badge} · {n}+ matches"),
+                None => badge,
             };
             let col = c.frame.cols.saturating_sub(badge.chars().count());
             stamp(&mut c.frame, 0, col, &badge, t.bg, t.accent);

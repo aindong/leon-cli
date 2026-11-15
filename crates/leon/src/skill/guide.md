@@ -16,12 +16,15 @@ Inside a leon terminal two variables say where you are:
 - `LEON_SESSION`: your session's ID, e.g. `session:3f2a…`.
 - `LEON_BLOCK`: your own terminal's ID, e.g. `block:91c0…`.
 
-Commands act on your own session by default. With neither variable set you are not inside leon:
-run `leon ls` and ask the user which session to use.
+Commands act on your own session by default: the one that holds `LEON_BLOCK` now, else
+`LEON_SESSION`. Your pane can be moved into another session (⌘↩ in the app's switcher) while
+`LEON_SESSION` keeps naming the one it started in, so trust `LEON_BLOCK`; `leon ls` shows where
+you are. With neither variable set you are not inside leon: run `leon ls` and ask the user which
+session to use.
 
 Targets: `-s SESSION`, `-b BLOCK`. A target is a full ID, a label (any case), a 1-based position,
 or the last 4+ characters of an ID. A name the user gives always wins over your defaults. "Here",
-"beside you" and "in this session" mean your own `LEON_SESSION`. If a target is ambiguous, leon lists
+"beside you" and "in this session" mean your own session. If a target is ambiguous, leon lists
 the matches and exits `3`; ask the user rather than guess.
 
 **Careful:** `send`, `send-key` and `capture` with no `-b` act on `LEON_BLOCK`, which is you (or,

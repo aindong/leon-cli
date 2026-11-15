@@ -137,6 +137,13 @@ impl Workspace {
                 self.focus_toward(&name["pane.focus.".len()..], cx)
             }
             "pane.zoom" => self.toggle_zoom(&ToggleZoom, window, cx),
+            "pane.float"
+            | "pane.new_floating"
+            | "pane.unfloat"
+            | "pane.scratch.toggle"
+            | "pane.dock.left"
+            | "pane.dock.right"
+            | "pane.dock.bottom" => self.overlay_action(name, cx),
             "pane.close" => self.close_pane(&ClosePane, window, cx),
             "pane.paste" => self.paste(&Paste, window, cx),
             "client.sidebar.toggle" => self.toggle_sidebar(&ToggleSidebar, window, cx),
@@ -153,7 +160,7 @@ impl Workspace {
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
-                    None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: false }),
+                    None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: false, note: None }),
                 };
                 cx.notify();
             }
@@ -275,7 +282,7 @@ impl Workspace {
         };
         let toggle = want_switch.is_some_and(|w| self.palette.as_ref().is_some_and(|p| p.switch == w));
         if let (Some(w), false, Some(p)) = (want_switch, toggle, self.palette.as_mut()) {
-            (p.switch, p.query, p.selected, p.ask) = (w, String::new(), 0, None);
+            (p.switch, p.query, p.selected, p.ask, p.note) = (w, String::new(), 0, None, None);
             cx.notify();
             return;
         }
@@ -287,7 +294,9 @@ impl Workspace {
             self.ask_enter(cx);
         } else if named("enter") || (ks.key == "enter" && m.platform && p.switch) {
             let pick = matches.into_iter().nth(p.selected);
-            self.palette = None;
+            if !(m.platform && p.switch) || pick.is_none() {
+                self.palette = None; // ⌘↩ in the switcher: session.switch closes it, or notes why not
+            }
             if let Some(mut item) = pick {
                 if m.platform {
                     item.args.get_or_insert_with(|| json!({}))["split"] = json!(true);
@@ -301,12 +310,13 @@ impl Workspace {
             p.selected = p.selected.saturating_sub(1);
         } else if named("backspace") {
             p.query.pop();
-            p.selected = 0;
+            (p.selected, p.note) = (0, None);
         } else if let Some(typed) = ks.key_char.as_deref().filter(|_| !m.platform && !m.control) {
             p.query.extend(typed.chars().filter(|c| !c.is_control()));
-            p.selected = 0;
+            (p.selected, p.note) = (0, None);
         } else if ks.key == "space" {
             p.query.push(' ');
+            p.note = None;
         }
         cx.notify();
     }

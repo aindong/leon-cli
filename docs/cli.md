@@ -12,11 +12,13 @@ panes) in a split layout. Every object has a stable ID such as `block:91c0…`.
   case), a 1-based position (windows count in tab order), or the last 4 or more characters of an
   ID. If a target matches more than one thing, leon lists the matches and exits 3.
 - **Defaults.** Inside a leon terminal, `LEON_SESSION` and `LEON_BLOCK` name your own session and
-  block, so commands act "here" without flags. Outside leon, pass `-s`/`-b`; a session's commands
+  block, so commands act "here" without flags. Your session is the one holding `LEON_BLOCK` now
+  (a pane can join another session), else `LEON_SESSION`. Outside leon, pass `-s`/`-b`; a session's commands
   then act on its active window's focused block.
 - **The server.** Any command that needs the server starts a personal one if none runs
   (`--autostart=false` or `LEON_AUTOSTART=0` turns that off). The socket lives in
-  `$LEON_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/leon`, else `~/.local/state/leon/run`.
+  `$LEON_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/leon`, else `~/.local/state/leon/run`; its path
+  must fit a Unix socket (under 104 bytes on macOS, 108 on Linux), or leon says so and stops.
 - **Another machine.** `-H HOST` sends any client command to the leon server on another machine,
   through your own `ssh` (see [Hosts](#hosts)).
 
@@ -529,15 +531,14 @@ leon skill status
 Float the block selected by `-b/--block` (default the focused block). `--new` opens a
 new terminal in the active window of `-s/--session`, running CMD or a login shell.
 `--label L` assigns a label; `--rect x,y,w,h` sets fractions of the whole window
-(default `0.1,0.1,0.8,0.8`). Rectangles must have positive width/height and fit inside
-the window. A float is shown, focused and raised above earlier floats. `--unfloat`
-returns a float or drawer to the tiled tree beside its root; its terminal keeps running.
+(default `0.1,0.1,0.8,0.8`), which must fit inside it. A float is shown, focused and
+raised. `--unfloat` returns a float or drawer to the tiles; its terminal keeps running.
 `--new` prints the new block ID; `--json` prints the API result.
 
 ### `leon toggle LABEL`
 
 Show/hide a float or drawer by its exact, case-insensitive label within `-s/--session`.
-Labels must be unique there. Hidden terminals continue running and producing output.
+Labels must be unique there. Hidden terminals keep running.
 `--create` opens a scratch login shell docked to the bottom on first use; subsequent
 calls toggle it. A bottom panel already occupying that side makes creation fail.
 
@@ -545,6 +546,5 @@ calls toggle it. A bottom panel already occupying that side makes creation fail.
 
 Pin `-b/--block` (default the focused block) to a side of its window. `--size F` is
 a fraction strictly between 0 and 1 (default 0.3). Each side holds at most one panel,
-including hidden panels; an occupied side fails without changes. `leon attach`
-reserves room for visible panels and draws visible floats above the tiled panes,
-with a border. The GPUI app's overlay drawing and animation arrive in M20b.
+including hidden panels; an occupied side fails without changes. `leon attach` and
+the app reserve room for visible panels and draw visible floats above the tiles.

@@ -47,6 +47,26 @@ pub fn socket_path() -> PathBuf {
     runtime_dir().join("server.sock")
 }
 
+/// Refuse a socket path too long to bind: `sun_path` holds 104 bytes on macOS, 108 on Linux, the
+/// closing NUL included. A private HOME or runtime dir under a long TMPDIR is the usual cause.
+pub fn check_socket_path(socket: &Path) -> std::io::Result<()> {
+    // SAFETY: sockaddr_un is plain old data; zeroed is a valid value.
+    let limit = unsafe { std::mem::zeroed::<libc::sockaddr_un>() }.sun_path.len();
+    let len = socket.as_os_str().len();
+    if len < limit {
+        return Ok(());
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        format!(
+            "the socket path {} is {len} bytes, and this system's limit is {limit} (NUL included); \
+             set LEON_RUNTIME_DIR to a shorter directory (or use a shorter TMPDIR if your HOME or \
+             runtime dir lives under it)",
+            socket.display()
+        ),
+    ))
+}
+
 /// Make sure `dir` is a private directory of ours: create it (0700) if it's missing, and refuse
 /// one that is a symlink, owned by someone else, or open to group/others. Nothing is ever
 /// chmod'ed. Like tmux, a socket in a directory others can write to could be hijacked.

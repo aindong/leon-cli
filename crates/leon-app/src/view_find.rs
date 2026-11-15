@@ -16,6 +16,8 @@ pub(super) struct Find {
     pub(super) regex: bool,
     /// Oldest first, by absolute line: they stay put as output arrives.
     pub(super) matches: Vec<Range>,
+    /// The server found more than it returned (`truncated`).
+    pub(super) truncated: bool,
     pub(super) current: Option<usize>,
     pub(super) error: Option<String>,
     /// The screen update count the matches were found at, and when.
@@ -36,6 +38,7 @@ impl Workspace {
                         case,
                         regex,
                         matches: Vec::new(),
+                        truncated: false,
                         current: None,
                         error: None,
                         seen: None,
@@ -97,9 +100,10 @@ impl Workspace {
         match got {
             Ok(v) => {
                 f.matches = serde_json::from_value(v["matches"].clone()).unwrap_or_default();
+                f.truncated = v["truncated"] == true;
                 f.error = None;
             }
-            Err(e) => (f.matches, f.error) = (Vec::new(), Some(e.message)),
+            Err(e) => (f.matches, f.truncated, f.error) = (Vec::new(), false, Some(e.message)),
         }
         let kept = was.and_then(|w| f.matches.iter().position(|m| *m == w));
         f.current = kept.or(f.matches.len().checked_sub(1));
@@ -147,6 +151,18 @@ impl Workspace {
         Some((f.current.map_or(0, |i| i + 1), f.matches.len()))
     }
 
+    /// The find bar's count: "n of N", with a + when the server stopped short.
+    pub fn find_count(&self) -> Option<String> {
+        let f = self.term.find.as_ref()?;
+        Some(match (&f.error, f.matches.len()) {
+            (Some(_), _) => "bad pattern".to_string(),
+            (None, 0) if f.query.is_empty() => String::new(),
+            (None, 0) => "no matches".to_string(),
+            (None, n) if f.truncated => format!("{} of {n}+", f.current.map_or(0, |i| i + 1)),
+            (None, n) => format!("{} of {n}", f.current.map_or(0, |i| i + 1)),
+        })
+    }
+
     /// How many matches pane `id` draws highlighted now.
     pub fn highlighted_matches(&self, id: &str) -> usize {
         let Some(f) = self.term.find.as_ref().filter(|f| f.block == id) else { return 0 };
@@ -159,12 +175,7 @@ impl Workspace {
     pub(super) fn render_find_bar(&self, id: &str, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let f = self.term.find.as_ref().filter(|f| f.block == id)?;
         let (t, theme) = (&self.theme, self.theme);
-        let count = match (&f.error, f.matches.len()) {
-            (Some(_), _) => "bad pattern".to_string(),
-            (None, 0) if f.query.is_empty() => String::new(),
-            (None, 0) => "no matches".to_string(),
-            (None, n) => format!("{} of {n}", f.current.map_or(0, |i| i + 1)),
-        };
+        let count = self.find_count().unwrap_or_default();
         let toggle = |name: &'static str, label: &'static str, on: bool, key: &'static str, cx: &mut Context<Self>| {
             div()
                 .id(SharedString::from(format!("find-{name}-{id}")))

@@ -42,14 +42,15 @@ in_image() {
         set -e
         uid=$HOST_UID
         [ "$uid" != 0 ] || uid=1000
-        useradd -m -o -u "$uid" leon
+        # not "leon": m13_privacy would take the project name in the README for the login
+        useradd -m -o -u "$uid" builder
         rustup -q component add clippy
         if [ -n "$PACKAGES" ]; then
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $PACKAGES >/dev/null
         fi
-        chown leon /usr/local/cargo/registry /target
-        chown -R leon /usr/local/cargo/registry /target 2>/dev/null || true
-        if [ -d /out ]; then chown leon /out; fi
-        exec runuser -u leon -- env HOME=/home/leon USER=leon "$@"' bash "$@"
+        chown builder /usr/local/cargo/registry /target
+        chown -R builder /usr/local/cargo/registry /target 2>/dev/null || true
+        if [ -d /out ]; then chown builder /out; fi
+        exec runuser -u builder -- env HOME=/home/builder USER=builder "$@"' bash "$@"
 }

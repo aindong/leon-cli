@@ -26,6 +26,7 @@ use leon_lua::keys::Chord;
 use serde_json::{json, Value};
 
 use crate::chrome::{self, Places, Settings, SidebarList};
+use crate::floats;
 use crate::hosts::{HostState, Hosts};
 use crate::icons::{Icon, ROW_ICON, TOOLBAR_ICON, TOOLBAR_TARGET};
 use crate::keymap::{self, Bound, Keymap, Pressed};
@@ -81,64 +82,8 @@ const MAX_PASTE: usize = 400 << 10;
 /// How often the app asks the server for its keymap (a reload elsewhere shows up this late).
 const KEYMAP_POLL: Duration = Duration::from_secs(1);
 
-/// The block input goes to: the one on screen when a block is zoomed, else the focused one. The
-/// model keeps zoom and focus apart (a CLI can zoom any block), so this is what the user sees.
-fn target(w: &leon_core::Window) -> Option<&str> {
-    w.zoomed.as_deref().or(w.focus.as_deref())
-}
-
-/// GPUI key bindings: only Quit. Every other shortcut goes through `key_down` and the keymap
-/// (`keymap::DEFAULTS` under the config's bindings), since GPUI matches its own bindings before
-/// any key listener and a config could never override them.
-pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
-}
-
-/// Keys, menus and quitting. Quitting (⌘Q, the menu, the Dock, logout, closing the window) only
-/// closes the app's connections: the server and every program keep running.
-pub fn install(cx: &mut App) {
-    init(cx);
-    cx.set_menus(menus());
-    cx.on_action(|_: &Quit, cx| cx.quit());
-    // closing the Settings window leaves the app running; closing the workspace's quits it
-    cx.on_window_closed(|cx| {
-        if !cx.windows().iter().any(|w| w.downcast::<Workspace>().is_some()) {
-            cx.quit()
-        }
-    })
-    .detach();
-}
-
-/// Open the app window on `server` and run until it quits.
-pub fn run(server: Remote) {
-    let server = Rc::new(server);
-    Application::new().with_assets(crate::icons::Icons).run(move |cx: &mut App| {
-        install(cx);
-        // the last frame, on its display, when it still fits there; else most of the primary one.
-        // A window's bounds are relative to its display, so the frame is too.
-        let saved = settings_path().map(|p| Settings::load(&p)).unwrap_or_default();
-        let on = saved.display.and_then(|id| cx.displays().into_iter().find(|d| u32::from(d.id()) == id));
-        let display = on.clone().or_else(|| cx.primary_display());
-        let screen = display.as_ref().map(|d| chrome::Frame { x: 0., y: 0., ..frame(d.bounds()) });
-        let f = chrome::window_frame(on.and(saved.window), screen.as_slice());
-        let bounds = Bounds::new(point(px(f.x), px(f.y)), size(px(f.w), px(f.h)));
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: Some(TitlebarOptions {
-                title: Some("leon".into()),
-                appears_transparent: true,
-                traffic_light_position: Some(point(px(14.), px(13.))),
-            }),
-            window_min_size: Some(size(px(chrome::MIN_WINDOW.0), px(chrome::MIN_WINDOW.1))),
-            display_id: display.map(|d| d.id()),
-            ..WindowOptions::default()
-        };
-        let app = server.clone();
-        cx.open_window(options, move |window, cx| cx.new(|cx| Workspace::for_app(app, window, cx)))
-            .expect("open the leon window");
-        cx.activate(true);
-    });
-}
+/// The block input goes to.
+use crate::floats::target;
 
 /// What one render needs from the model, copied out under the state lock.
 struct SessionRow {
@@ -165,6 +110,8 @@ struct Palette {
     ask: Option<(hosts_view::Ask, Option<String>)>,
     /// The session switcher (⌘K): places to go instead of actions.
     switch: bool,
+    /// Why the last ⌘↩ couldn't split (a row of another machine).
+    note: Option<String>,
 }
 
 /// The last `client.keymap` reply, handed over from the runtime thread that fetched it.
@@ -186,6 +133,8 @@ enum Drag {
     Divider { divider: Divider, from: Pixels, last: Option<f64> },
     /// The sidebar's edge: where the drag started and the width then.
     Sidebar { from: Pixels, width: f32 },
+    /// A float's header or edge, or a drawer's divider (view_floats.rs).
+    Overlay { block: String, grab: floats::Grab, from: gpui::Point<Pixels>, last: Option<floats::Placement> },
 }
 
 thread_local! {
@@ -279,6 +228,7 @@ pub struct Workspace {
     seen_focus: Option<(String, bool)>,
     /// Scrollback, selection, find and links per pane.
     term: scroll::TermUi,
+    floats: floats_view::FloatUi,
     _poll: Task<()>,
     _activation: Subscription,
     _bounds: Subscription,
@@ -347,7 +297,7 @@ impl Workspace {
                 ws.stats.borrow_mut().report();
                 ws.refresh_keymap(cx);
                 let now = ws.signature();
-                if now != ws.seen {
+                if now != ws.seen || ws.sliding() {
                     ws.seen = now;
                     cx.notify();
                 }
@@ -416,6 +366,7 @@ impl Workspace {
             epoch: Instant::now(),
             seen_focus: None,
             term: scroll::TermUi::default(),
+            floats: Default::default(),
             _poll: poll,
             _activation: activation,
             _bounds: bounds,
@@ -475,19 +426,6 @@ impl Workspace {
         Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
     }
 
-    /// The active window's layout and the blocks it shows, in leaf order.
-    fn shown(&self) -> Option<(leon_core::Window, Panes)> {
-        let m = self.app.model();
-        let s = m.session(self.session_id.as_deref()?)?;
-        let w = s.windows.get(s.active)?;
-        let ids: Vec<&str> = match &w.zoomed {
-            Some(z) => vec![z.as_str()],
-            None => w.layout.as_ref()?.leaves(),
-        };
-        let ids = ids.into_iter().filter(|id| s.blocks.iter().any(|b| b.id == *id)).map(String::from).collect();
-        Some((w.clone(), ids))
-    }
-
     /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
     /// killed from the CLI, or its host went away) hands over to the session now in its place.
     fn settle(&mut self, rows: &[SessionRow]) {
@@ -520,6 +458,8 @@ mod bars;
 mod copy;
 #[path = "view_find.rs"]
 mod find;
+#[path = "view_floats.rs"]
+mod floats_view;
 #[path = "view_handlers.rs"]
 mod handlers;
 #[path = "view_header.rs"]
@@ -530,7 +470,10 @@ mod hosts_view;
 mod keys;
 #[path = "view_look.rs"]
 mod look_view;
+#[path = "view_start.rs"]
+mod start;
 pub use look_view::is_dark;
+pub use start::{init, install, run};
 #[path = "view_menus.rs"]
 mod menus;
 #[path = "view_model.rs"]

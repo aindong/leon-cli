@@ -13,7 +13,7 @@ section is a milestone from [docs/roadmap.md](docs/roadmap.md) and
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.3.0`.
+one is `1.5.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -42,12 +42,51 @@ fields it doesn't know. The full policy is in
   `file:line`.
 - `block.watch` and `dev.leon.terminal.lines` take an optional `palette` (`fg`, `bg`, `cursor`,
   `ansi`) that the connection's screens and lines are resolved with; without it they are
-  leon-dark's, as before. Both methods are Experimental, so `api_version` stays `1.3.0`.
+  leon-dark's, as before. Both methods are Experimental, so `api_version` is unchanged.
 
 #### Changed
 
 - leon-light: the selected row is a step deeper than a hovered one, and the accent, secondary and
   status colours are a little darker, so all of them read at 4.5:1 on every surface.
+
+### Joined panes, their events, long socket paths (API `1.5.0`)
+
+#### Fixed
+
+- A command run in a pane that joined another session acts on the session that holds its
+  `LEON_BLOCK` now, not the `LEON_SESSION` it started with: `leon run`, `leon split`, a short
+  `-b` name, `leon events`, scripts, and the agent hook's resume registration. `LEON_SESSION` is
+  the fallback when `LEON_BLOCK` isn't set or is gone.
+- A pane joining another session (`session.move_block`) sends `block_closed` to the session it
+  leaves and `block_created` to the one it joins, so each session's subscribers (`leon events -s`,
+  attach) hear it, as for a kill and a create. This raises `api_version` from `1.4.0` to `1.5.0`.
+- A socket path too long for this system (104 bytes on macOS, 108 on Linux, the NUL included)
+  fails at once: `leon server start` and a command that would start a server name the path, its
+  length and the limit, and say to set a shorter `LEON_RUNTIME_DIR`. It used to say only "the
+  server didn't come up".
+
+### Loose ends after M12–M21 (API `1.4.0`)
+
+#### Changed
+
+- `session.move_block` takes a block from any session: one from another session joins the
+  anchor's session, beside the anchor (tmux's `join-pane`); a session it empties closes. The
+  moved program keeps the `LEON_SESSION` it started with. A window a pane joins from another
+  window or session unzooms, so the pane shows. This raises `api_version` from `1.3.0`
+  to `1.4.0`.
+- ⌘↩ in the session switcher puts a pane of another session on this machine in a split beside
+  the focused one; on a row of another machine it says why it can't, and ↩ still goes there.
+  With a floating or docked pane focused, the pane joins beside a tiled one. A notice clicked after
+  its pane joined another session goes to the pane where it is now.
+
+#### Fixed
+
+- The find bar's count ends in `+` (`n of N+`) and copy mode's badge says `N+ matches` when find
+  stopped short of every match (10000, or 300 ms).
+- Copy mode holds the view still while output arrives, also with its cursor on the bottom row
+  (tmux); it no longer ends when a resize shortens the screen under its cursor.
+- `scripts/linux-test.sh` runs as a user named `builder`, so the privacy test no longer takes the
+  project's name in the README for the login.
 
 ### M22a — Themes and settings, the model half (API `1.3.0`)
 

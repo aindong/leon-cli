@@ -2,6 +2,7 @@
 //! tab` with its status, and a block when the query matches its title; the most recently used
 //! tab first, the palette's fuzzy filter over the rest.
 
+use leon_core::program_status::strip_hidden;
 use leon_core::Window;
 
 use crate::palette::{self, Item};
@@ -37,7 +38,8 @@ impl Row {
 /// argv0's file name: `/bin/zsh` → `zsh`, a login shell's `-zsh` → `zsh`.
 pub fn program_name(command: &[String]) -> String {
     let argv0 = command.first().map_or("", String::as_str);
-    argv0.rsplit('/').next().unwrap_or(argv0).trim_start_matches('-').to_string()
+    // a remote server's argv goes on screen: nothing that reorders or hides text
+    strip_hidden(argv0.rsplit('/').next().unwrap_or(argv0).trim_start_matches('-'))
 }
 
 /// A session's name: its label, else its place on its machine (`Session 2`).
@@ -45,10 +47,11 @@ pub fn session_title(s: &Session, index: usize) -> String {
     s.label.clone().unwrap_or_else(|| format!("Session {}", index + 1))
 }
 
-/// A tab's name: its label, else the title the shown block's program set, else that program.
+/// A tab's name: its label, else the title its tile's program set (never a float's or drawer's),
+/// else that program.
 pub fn tab_title(s: &Session, w: &Window) -> String {
     w.label.clone().unwrap_or_else(|| {
-        let shown = w.zoomed.as_deref().or(w.focus.as_deref()).and_then(|id| s.blocks.iter().find(|b| b.id == id));
+        let shown = s.named_tile(w).and_then(|id| s.blocks.iter().find(|b| b.id == id));
         shown.map_or("empty".into(), |b| b.title.clone().unwrap_or_else(|| program_name(&b.command)))
     })
 }
@@ -71,11 +74,20 @@ pub fn tabs(machines: &[(usize, &str, &Model)]) -> (Vec<Row>, Vec<Row>) {
                     block: None,
                     status: status::aggregate(s.blocks.iter().filter(|b| b.window_id == w.id).map(shows)),
                 };
+                let o = s.overlay(&w.id);
                 for b in s.blocks.iter().filter(|b| b.window_id == w.id) {
-                    // a block named like its tab adds nothing to the tab's row
-                    let Some(title) = b.title.as_ref().filter(|t| **t != tab.tab) else { continue };
+                    // a float or drawer always has a row (by its label first: `leon toggle`'s name),
+                    // marked when hidden; a tile named like its tab adds nothing to the tab's row
+                    let title = match o.contains(&b.id) {
+                        true => {
+                            let name = b.label.clone().or(b.title.clone()).unwrap_or_else(|| program_name(&b.command));
+                            Some(if o.hidden(&b.id) { format!("{name} · hidden") } else { name })
+                        }
+                        false => b.title.clone().filter(|t| *t != tab.tab),
+                    };
+                    let Some(title) = title else { continue };
                     let block_id = Some(b.id.clone());
-                    blocks.push(Row { block_id, block: Some(title.clone()), status: shows(b), ..tab.clone() });
+                    blocks.push(Row { block_id, block: Some(title), status: shows(b), ..tab.clone() });
                 }
                 tabs.push(tab);
             }

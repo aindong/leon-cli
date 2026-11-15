@@ -61,6 +61,9 @@ pub struct Settings {
     pub resume: Resume,
 }
 
+/// tmux's `repeat-time` default, in milliseconds, for a config that doesn't set `repeat_time`.
+pub const REPEAT_TIME: u64 = 500;
+
 impl Default for Settings {
     /// Today's app: the dark theme whatever the OS, Menlo 13, every notification, 500 ms repeat.
     fn default() -> Self {
@@ -71,7 +74,7 @@ impl Default for Settings {
             font_size: 13.,
             notifications: Notifications { done: true, blocked: true, error: true },
             copy_on_select: false,
-            repeat_time: 500, // tmux's repeat-time default
+            repeat_time: REPEAT_TIME,
             hint_patterns: vec![],
             resume: Resume::Ask,
         }

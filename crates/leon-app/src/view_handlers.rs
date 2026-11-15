@@ -17,7 +17,7 @@ impl Workspace {
     /// A layout for a shell in the target pane's working directory (or the default, `$HOME`).
     /// Over a link the model's cwd is used: no round trip on the UI thread, and the path is the
     /// host's, so it can't be checked here.
-    fn here(&self) -> Value {
+    pub(super) fn here(&self) -> Value {
         let cwd = match self.app.is_link() {
             true => self.target().and_then(|(_, id, _)| self.app.model().block(&id)?.1.cwd.clone()),
             false => {
@@ -82,6 +82,9 @@ impl Workspace {
     }
 
     pub(super) fn focus_block(&mut self, id: &str, cx: &mut Context<Self>) {
+        if self.hidden_overlay(id) {
+            return; // a drawer sliding out: focusing it would show it again
+        }
         self.call("session.focus_block", json!({ "block_id": id }), cx);
     }
 
@@ -106,6 +109,7 @@ impl Workspace {
                 cx.notify();
                 return;
             }
+            Some(Drag::Overlay { .. }) => return self.drag_overlay(ev.position, cx),
             None => return,
         };
         let (at, room) = match d.direction {
@@ -282,7 +286,7 @@ impl Workspace {
         self.font_size = pt.clamp(FONT_SIZES.0, FONT_SIZES.1);
         let (cell_w, line_h) = cell_size(window, &self.font_family, self.font_size);
         let area = self.pane_area(window);
-        // (remote, session, block, its pane's text area) for every pane of every window on every
+        // (remote, session, block, its terminal's area) for every pane of every window on every
         // machine, then resize off the lock
         let mut fits: Vec<(Rc<Remote>, String, String, panes::Rect)> = Vec::new();
         for (_, remote) in self.hosts.remotes() {
@@ -290,21 +294,16 @@ impl Workspace {
             let out = &mut fits;
             for s in &m.sessions {
                 for w in &s.windows {
-                    let Some(tree) = &w.layout else { continue };
-                    // panes a zoom hides keep their split size; the zoomed one fills the area
-                    let zoomed = w.zoomed.as_deref().map(|z| panes::tiles(tree, Some(z), area).panes);
-                    for p in panes::tiles(tree, None, area).panes {
-                        let rect =
-                            zoomed.iter().flatten().find(|z| z.block_id == p.block_id).map_or(p.rect, |z| z.rect);
-                        if s.blocks.iter().any(|b| b.id == p.block_id) {
-                            out.push((remote.clone(), s.id.clone(), p.block_id.clone(), rect));
+                    // panes a zoom hides keep their split size; hidden floats and drawers theirs
+                    for (id, rect) in Self::window_rects(s, w, area, self.settings.pane_headers) {
+                        if s.blocks.iter().any(|b| b.id == id) {
+                            out.push((remote.clone(), s.id.clone(), id, rect));
                         }
                     }
                 }
             }
         }
         for (remote, sid, id, r) in fits {
-            let r = panes::text_rect(r, self.settings.pane_headers);
             let (rows, cols) = cells_in(px(r.w), px(r.h), cell_w, line_h);
             remote.fit(&sid, &id, rows, cols);
         }
