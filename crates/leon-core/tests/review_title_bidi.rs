@@ -1,4 +1,4 @@
-//! Review proof: title and pwd events carry no bidi overrides or invisible characters (spec §5
+//! Review proof: title and pwd events carry no bidi overrides or invisible characters (docs/agents.md
 //! security rule, applied to every program-supplied text the server reports).
 
 use std::sync::{mpsc, Mutex};

@@ -17,7 +17,7 @@ use serde_json::json;
 use crate::api::{self, Bad};
 use crate::{lua_message, Config, Diagnostic, Level, LoadError};
 
-/// How deep `leon.invoke` may nest (spec §4).
+/// How deep `leon.invoke` may nest (docs/lua.md).
 pub const MAX_DEPTH: usize = 16;
 /// A config load gets this long.
 pub const LOAD_LIMIT: Duration = Duration::from_secs(5);
@@ -49,7 +49,7 @@ pub trait Host {
     }
 }
 
-/// The `ctx` an action, binding or handler gets (spec §4).
+/// The `ctx` an action, binding or handler gets (docs/lua.md).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CallCtx {
     pub session_id: Option<String>,

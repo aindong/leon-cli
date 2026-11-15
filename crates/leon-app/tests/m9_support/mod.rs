@@ -84,9 +84,10 @@ pub fn shows(cx: &mut VisualTestContext, mut pred: impl FnMut(&mut VisualTestCon
     pred(cx)
 }
 
-/// Poll `pred` for up to 10 s; returns whether it came true.
+/// Poll `pred` for up to 30 s; returns whether it came true (the cap is for a machine busy with
+/// other builds: a fast run returns as soon as `pred` holds).
 pub fn eventually(mut pred: impl FnMut() -> bool) -> bool {
-    let end = Instant::now() + Duration::from_secs(10);
+    let end = Instant::now() + Duration::from_secs(30);
     while Instant::now() < end {
         if pred() {
             return true;

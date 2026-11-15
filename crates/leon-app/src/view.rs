@@ -48,6 +48,7 @@ actions!(
         PreviousTab,
         Paste,
         ToggleSidebar,
+        About,
         Quit,
         QuitAndEndAll,
         SplitRight,
@@ -206,6 +207,15 @@ pub struct Workspace {
     dock: Option<String>,
     /// Post notifications and set the Dock badge (the real app; never tests).
     platform: bool,
+    /// The native key event being handled, as (key code, text): `input::current_key_event` in the
+    /// real app, a stand-in in tests, none otherwise.
+    native_key: fn() -> Option<(u16, String)>,
+    /// This Mac's server went away from outside (`leon server stop`): the window says so.
+    stopped: bool,
+    /// The app stops the server itself (Quit and End All Sessions): its going is a quit.
+    ending: bool,
+    /// What Start It Again would run, in a test workspace (which never spawns it).
+    relaunched: Option<Vec<String>>,
     /// The window is the key window: the user is looking at leon.
     window_active: bool,
     font_size: f32,
@@ -252,6 +262,7 @@ impl Workspace {
         });
         let mut ws = Self::with_hosts(app, settings_path(), hosts, window, cx);
         ws.platform = true;
+        ws.native_key = crate::input::current_key_event;
         crate::notify::prepare();
         ws
     }
@@ -283,21 +294,33 @@ impl Workspace {
         let woke = wake.clone();
         app.on_change(move || woke());
         crate::notify::on_click(wake.clone());
+        let mut term = scroll::TermUi::default();
+        term.wake = Some(wake.clone());
         let hosts = Hosts::new(app.clone(), hosts, wake);
         let poll = cx.spawn(async move |this, cx| loop {
             let timer = cx.background_executor().timer(POLL);
             futures::future::select(timer, woken.next()).await;
             let alive = this.update(cx, |ws, cx| {
                 if !ws.hosts.local().alive() {
-                    cx.quit(); // the server stopped (`leon server stop`, or the menu's end-all)
+                    // the menu's end-all quits; a stop from outside is said, not a vanishing window
+                    if ws.ending {
+                        cx.quit();
+                    } else if !ws.stopped {
+                        ws.stopped = true;
+                        cx.notify();
+                    }
                     return;
                 }
                 ws.poll_hosts();
+                let replied = ws.poll_terms();
+                if let Some(text) = ws.term.clip.take() {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                }
                 ws.poll_attention(cx);
                 ws.stats.borrow_mut().report();
                 ws.refresh_keymap(cx);
                 let now = ws.signature();
-                if now != ws.seen || ws.sliding() {
+                if now != ws.seen || ws.sliding() || replied {
                     ws.seen = now;
                     cx.notify();
                 }
@@ -354,6 +377,10 @@ impl Workspace {
             notifier: Default::default(),
             dock: None,
             platform: false,
+            native_key: || None,
+            stopped: false,
+            ending: false,
+            relaunched: None,
             window_active: window.is_window_active(),
             font_size: look.font_size,
             theme: look.theme(dark),
@@ -365,7 +392,7 @@ impl Workspace {
             settings_window: None,
             epoch: Instant::now(),
             seen_focus: None,
-            term: scroll::TermUi::default(),
+            term,
             floats: Default::default(),
             _poll: poll,
             _activation: activation,
@@ -374,39 +401,6 @@ impl Workspace {
             _release: release,
             _appearance: appearance,
         }
-    }
-
-    /// The selected session, if any.
-    pub fn session_id(&self) -> Option<String> {
-        self.session_id.clone()
-    }
-
-    pub fn sidebar_visible(&self) -> bool {
-        self.sidebar
-    }
-
-    /// The block input goes to (`target`) in the selected session's active window.
-    pub fn target_block(&self) -> Option<String> {
-        self.target().map(|(_, id, _)| id)
-    }
-
-    /// The selected session's active window, as the app last heard it from the server.
-    pub fn active_window(&self) -> Option<leon_core::Window> {
-        let m = self.app.model();
-        let s = m.session(self.session_id.as_deref()?)?;
-        s.windows.get(s.active).cloned()
-    }
-
-    /// The selected session's windows in tab order, and which is active.
-    pub fn windows(&self) -> Option<(Vec<leon_core::Window>, usize)> {
-        let m = self.app.model();
-        let s = m.session(self.session_id.as_deref()?)?;
-        Some((s.windows.clone(), s.active))
-    }
-
-    /// The text of a block's screen as the app last received it (None before any screen came).
-    pub fn screen_text(&self, block_id: &str) -> Option<String> {
-        self.app.model().screens.get(block_id).map(|f| f.text())
     }
 
     /// The target block and its screen (an empty one until the first arrives: keys typed by then
@@ -454,6 +448,8 @@ impl Workspace {
 mod activity;
 #[path = "view_bars.rs"]
 mod bars;
+#[path = "view_calls.rs"]
+mod calls;
 #[path = "view_copy.rs"]
 mod copy;
 #[path = "view_find.rs"]
@@ -472,6 +468,8 @@ mod keys;
 mod look_view;
 #[path = "view_start.rs"]
 mod start;
+#[path = "view_state.rs"]
+mod state;
 pub(crate) use bars::Tip;
 pub use look_view::is_dark;
 pub use start::{init, install, quits, run};
@@ -496,7 +494,7 @@ mod stats;
 #[path = "view_switch.rs"]
 mod switch;
 use bars::status_mark;
-pub use menus::menus;
+pub use menus::{about_text, menus, set_version};
 use paint::*;
 use panes_view::*;
 use stats::Stats;

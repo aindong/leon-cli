@@ -13,7 +13,7 @@ use serde_json::json;
 use crate::lua_message;
 use crate::runtime::{ctx_table, flags, new_state, rt, secs, to_lua, CallCtx, Host};
 
-/// Live timers a script may hold (spec §4).
+/// Live timers a script may hold (docs/lua.md).
 pub const MAX_TIMERS: usize = 1024;
 
 pub struct ScriptOptions {

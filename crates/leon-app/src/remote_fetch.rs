@@ -1,9 +1,11 @@
 //! Reading from a server: one line at a time, and the whole model (what `Shared::refresh`
 //! replaces the copy with).
 
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader};
 use std::os::unix::net::UnixStream;
+use std::time::Instant;
 
+use leon_core::layout::Node;
 use leon_core::overlays::Overlays;
 use leon_core::program_status::{strip_hidden, Record};
 use leon_core::{ApiError, Window};
@@ -17,14 +19,35 @@ use super::{Block, Conn, Session};
 /// per call the app makes); parse replies into their types if remote hosts get untrusted users.
 pub(super) const MAX_LINE: u64 = 16 << 20;
 
-/// One line, at most `MAX_LINE` bytes; 0 at the end of the stream.
-pub(super) fn read_line(r: &mut BufReader<UnixStream>, out: &mut String) -> io::Result<usize> {
+/// One line, at most `MAX_LINE` bytes; 0 at the end of the stream. With an `end`, each read gets
+/// only what is left until then, so a line trickling in can't outlast it. Bytes that aren't UTF-8
+/// are replaced: the line then parses or is skipped like any other bad line.
+pub(super) fn read_line(r: &mut BufReader<UnixStream>, out: &mut String, end: Option<Instant>) -> io::Result<usize> {
     let mut bytes = Vec::new();
-    let n = r.by_ref().take(MAX_LINE + 1).read_until(b'\n', &mut bytes)?;
-    if n as u64 > MAX_LINE {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "a line from the server is too long"));
+    loop {
+        if r.buffer().is_empty() && end.is_some() {
+            r.get_ref().set_read_timeout(super::left(end)?)?;
+        }
+        let got = match r.fill_buf() {
+            Ok(b) => b,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        };
+        let (n, done) = match got.iter().position(|&b| b == b'\n') {
+            Some(i) => (i + 1, true),
+            None => (got.len(), got.is_empty()),
+        };
+        if (bytes.len() + n) as u64 > MAX_LINE {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "a line from the server is too long"));
+        }
+        bytes.extend_from_slice(&got[..n]);
+        r.consume(n);
+        if done {
+            break;
+        }
     }
-    *out = String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let n = bytes.len();
+    *out = String::from_utf8(bytes).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned());
     Ok(n)
 }
 
@@ -35,7 +58,7 @@ pub(super) fn read_line(r: &mut BufReader<UnixStream>, out: &mut String) -> io::
 pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
     let list = c.call("session.list", json!({}))?;
     let mut out = Vec::new();
-    for s in list["sessions"].as_array().into_iter().flatten() {
+    for s in list["sessions"].as_array().into_iter().flatten().take(MAX_SESSIONS) {
         let sid = &s["session_id"];
         let (view, blocks) = (
             c.call("session.view", json!({ "session_id": sid })),
@@ -53,10 +76,11 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
             .as_array()
             .into_iter()
             .flatten()
+            .take(MAX_LISTED)
             .map(|w| Window {
                 id: text(&w["window_id"]).unwrap_or_default(),
                 label: text(&w["label"]),
-                layout: serde_json::from_value(w["layout"].clone()).ok(),
+                layout: serde_json::from_value(w["layout"].clone()).ok().filter(layout_ok),
                 focus: text(&w["focused_block_id"]),
                 zoomed: text(&w["zoomed_block_id"]),
             })
@@ -79,7 +103,7 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
             overlays,
             tiled_focus: Default::default(),
         };
-        for b in blocks["blocks"].as_array().into_iter().flatten() {
+        for b in blocks["blocks"].as_array().into_iter().flatten().take(MAX_LISTED) {
             let p =
                 json!({ "session_id": sid, "block_id": b["block_id"], "method": "dev.leon.terminal.program_status" });
             // a broken connection keeps the old model: empty records would read as the status clearing
@@ -103,6 +127,26 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
     Ok(out)
 }
 
+/// Whether a server's layout is one to draw: each block in it once, at most `MAX_LISTED` of them
+/// (each frame lays out every leaf, per pane shown), and every ratio in (0, 1) (others give rects
+/// that aren't finite).
+fn layout_ok(n: &Node) -> bool {
+    let leaves = n.leaves();
+    let once =
+        leaves.len() <= MAX_LISTED && leaves.iter().collect::<std::collections::HashSet<_>>().len() == leaves.len();
+    once && ratios_ok(n)
+}
+
+/// Whether every split in `n` has a ratio a server should send (`check_ratio`).
+fn ratios_ok(n: &Node) -> bool {
+    match n {
+        Node::Block { .. } => true,
+        Node::Split { ratio, before, after, .. } => {
+            leon_core::panes::check_ratio(*ratio).is_ok() && ratios_ok(before) && ratios_ok(after)
+        }
+    }
+}
+
 /// A record's words with nothing hidden (a server we don't run may not have checked them).
 fn shown(mut r: Record) -> Record {
     r.title = r.title.map(|t| strip_hidden(&t));
@@ -112,6 +156,10 @@ fn shown(mut r: Record) -> Record {
 
 /// The most floats a window may have.
 pub const MAX_FLOATS: usize = 64;
+/// The most sessions read from a server, and windows and blocks per session: the sidebar, the
+/// model's fetch and each poll do work per item, and a server may list 40,000 under the line cap.
+pub const MAX_SESSIONS: usize = 256;
+pub const MAX_LISTED: usize = 1024;
 
 /// A window's floats and drawers from its `session.view` entry. Only the fields this client knows
 /// are read (a newer server may add some, and the types refuse unknown ones), and a window whose

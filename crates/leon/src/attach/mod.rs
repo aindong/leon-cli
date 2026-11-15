@@ -300,21 +300,27 @@ impl Tui {
         *lock(&self.note) = Some(msg.into());
     }
 
-    /// Call a method that changes the model; a failure shows on the status bar.
-    fn act(&self, method: &str, params: serde_json::Value) -> Option<serde_json::Value> {
-        self.remote.act(method, params).map_err(|e| self.say(e.message)).ok()
+    /// Call a method that changes the model; a failure shows on the status bar. Over a link it
+    /// queues, so the loop goes on reading keys (the detach key too) while the link is slow.
+    fn act(&self, method: &str, params: serde_json::Value) {
+        self.remote.act_later(method, params, self.noted());
     }
 
     /// Run a method on its own connection without waiting (Lua runs up to 30 s); a failure shows
     /// on the status bar.
     fn spawn(&self, method: &str, params: serde_json::Value) {
+        self.remote.spawn(method, params, self.noted());
+    }
+
+    /// What a reply that comes on another thread does: a failure shows on the status bar.
+    fn noted(&self) -> impl FnOnce(Result<serde_json::Value, leon_core::ApiError>) + Send + 'static {
         let (note, tx) = (self.note.clone(), self.tx.clone());
-        self.remote.spawn(method, params, move |r| {
+        move |r| {
             if let Err(e) = r {
                 *lock(&note) = Some(e.message);
                 let _ = tx.send(Msg::Wake);
             }
-        });
+        }
     }
 }
 

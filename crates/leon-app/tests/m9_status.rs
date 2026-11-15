@@ -1,6 +1,6 @@
 //! M9 criterion 1: OSC 7501 records to the indicator a tab, a sidebar row and a pane corner show.
 
-use leon_app::status::{aggregate, caption, glyph, indicator, Indicator};
+use leon_app::status::{aggregate, caption_of, glyph, indicator_of, Indicator};
 use leon_core::program_status::{parse, Change, Kind, Message, Reason, Record, State, Store};
 
 fn rec(state: State) -> Record {
@@ -9,6 +9,15 @@ fn rec(state: State) -> Record {
 
 fn one(r: Record) -> Vec<(Option<String>, Record)> {
     vec![(None, r)]
+}
+
+/// A terminal's indicator and caption from its records, least recently reported first.
+fn indicator(records: &[(Option<String>, Record)]) -> Option<Indicator> {
+    indicator_of(&records.iter().rev().map(|(_, r)| r).collect::<Vec<_>>())
+}
+
+fn caption(records: &[(Option<String>, Record)]) -> Option<String> {
+    caption_of(&records.iter().rev().map(|(_, r)| r).collect::<Vec<_>>())
 }
 
 #[test]

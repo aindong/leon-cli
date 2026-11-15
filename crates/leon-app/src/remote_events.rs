@@ -80,6 +80,7 @@ pub(super) fn attach(
     let snapshot = c.call("session.attach_all", p).map_err(|e| io::Error::other(e.message))?;
     c.r.get_ref().set_read_timeout(None)?;
     let write = c.r.get_ref().try_clone()?;
+    write.set_write_timeout(Some(if resumable { WATCH_WRITE } else { CALL_TIMEOUT }))?;
     Ok((c.r, write, snapshot))
 }
 
@@ -90,7 +91,7 @@ pub(super) fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
         let mut stale = false;
         loop {
             let mut line = String::new();
-            let read = read_line(&mut r, &mut line);
+            let read = read_line(&mut r, &mut line, None);
             if matches!(read, Ok(0) | Err(_)) {
                 if shared.closing.load(Ordering::SeqCst) {
                     return;

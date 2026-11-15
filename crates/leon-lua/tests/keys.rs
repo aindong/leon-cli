@@ -1,4 +1,4 @@
-//! M5a criterion 1 (.agent/plans/2026-11-14-m5a-lua-config.md): the key syntax of spec §4.
+//! M5a criterion 1 (.agent/plans/2026-11-14-m5a-lua-config.md): the key syntax of docs/lua.md.
 
 use leon_lua::keys::parse;
 

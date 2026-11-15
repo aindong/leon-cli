@@ -80,7 +80,7 @@ fn env_dir(name: &str) -> Option<PathBuf> {
     std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from)
 }
 
-/// The agent's home dir and its target. Paths follow spec §6: `$CLAUDE_CONFIG_DIR` (~/.claude) for
+/// The agent's home dir and its target. Paths follow docs/agents.md: `$CLAUDE_CONFIG_DIR` (~/.claude) for
 /// Claude Code; `$CODEX_HOME` (~/.codex) and ~/.agents/skills for Codex.
 fn target(agent: Agent, named: bool) -> Result<(PathBuf, Target), Fail> {
     let home = || leon_core::paths::home().ok_or_else(|| Fail::Other("no home directory: set HOME".into()));

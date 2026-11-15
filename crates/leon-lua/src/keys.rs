@@ -1,4 +1,4 @@
-//! Key syntax (spec §4): `[mode/]chord[>chord…]`, a chord being `mod+…+key`.
+//! Key syntax (docs/lua.md): `[mode/]chord[>chord…]`, a chord being `mod+…+key`.
 
 use std::fmt;
 

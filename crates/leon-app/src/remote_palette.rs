@@ -41,6 +41,24 @@ impl Remote {
         }
     }
 
+    /// `dev.leon.terminal.lines`' args, in this app's palette unless the server refused one (for a
+    /// call that doesn't wait: `lines_failed` then gets its error).
+    pub fn lines_args(&self, from: usize, count: usize) -> Value {
+        let mut args = json!({ "from": from, "count": count });
+        if let Some(p) = self.shared.palette() {
+            args["palette"] = p;
+        }
+        args
+    }
+
+    /// A `lines` call made with `lines_args` failed: a server that refused the palette is sent
+    /// none from now on.
+    pub fn lines_failed(&self, e: &ApiError) {
+        if refuses_palette(&e.message) {
+            self.shared.refuse_palette();
+        }
+    }
+
     /// `block.method` `dev.leon.terminal.lines` in this app's palette (without one on a server
     /// that refuses it).
     pub fn lines(&self, session_id: &str, block_id: &str, from: usize, count: usize) -> Result<Value, ApiError> {

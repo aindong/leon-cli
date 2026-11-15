@@ -210,19 +210,26 @@ impl Tui {
                 let toward = &name["pane.focus.".len()..];
                 self.act("session.focus_direction", json!({ "session_id": sid, "direction": toward }));
             }
-            "pane.float" => drop(self.act("session.float_block", json!({ "session_id": sid, "block_id": t.block }))),
-            "pane.zoom" => drop(self.act("session.zoom_block", json!({ "session_id": sid, "block_id": t.block }))),
-            "pane.close" => drop(self.act("block.close", json!({ "session_id": sid, "block_id": t.block }))),
+            "pane.float" => self.act("session.float_block", json!({ "session_id": sid, "block_id": t.block })),
+            "pane.zoom" => self.act("session.zoom_block", json!({ "session_id": sid, "block_id": t.block })),
+            "pane.close" => self.act("block.close", json!({ "session_id": sid, "block_id": t.block })),
             other => self.say(format!("leon attach has no action {other}")),
         }
         Flow::Go
     }
 
-    /// A layout for a shell in the target pane's working directory (or the default, `$HOME`).
+    /// A layout for a shell in the target pane's working directory (or the default, `$HOME`). Over
+    /// a link the model's cwd, as the app's `here` does: no wait on the link, and the path is the
+    /// host's, so it can't be checked here.
     fn here(&self, t: &Target) -> Value {
-        let p = json!({ "session_id": t.sid, "block_id": t.block, "method": "dev.leon.terminal.pwd" });
-        let pwd =
-            self.remote.call("block.method", p).ok().and_then(|r| r["path"].as_str().map(std::path::PathBuf::from));
+        let pwd = match self.remote.is_link() {
+            true => self.remote.model().block(&t.block).and_then(|(_, b)| b.cwd.clone()).map(std::path::PathBuf::from),
+            false => {
+                let p = json!({ "session_id": t.sid, "block_id": t.block, "method": "dev.leon.terminal.pwd" });
+                let got = self.remote.call("block.method", p).ok();
+                got.and_then(|r| r["path"].as_str().map(std::path::PathBuf::from))
+            }
+        };
         match split_cwd(pwd, self.host.is_some()) {
             Some(d) => json!({ "block": { "options": { "cwd": d } } }),
             None => json!({ "block": {} }),

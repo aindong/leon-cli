@@ -67,18 +67,9 @@ pub fn aggregate(all: impl IntoIterator<Item = Option<Indicator>>) -> Option<Ind
     })
 }
 
-/// One terminal's indicator from its records (least recently reported first).
-pub fn indicator(records: &[(Option<String>, Record)]) -> Option<Indicator> {
-    indicator_of(&newest_first(records))
-}
-
 /// One terminal's indicator from its records, most recently reported first.
 pub fn indicator_of(newest_first: &[&Record]) -> Option<Indicator> {
     aggregate(newest_first.iter().map(|r| Indicator::of(r)))
-}
-
-fn newest_first(records: &[(Option<String>, Record)]) -> Vec<&Record> {
-    records.iter().rev().map(|(_, r)| r).collect()
 }
 
 /// The glyph for `i`; `frame` turns the spinner.
@@ -95,25 +86,41 @@ pub fn glyph(i: Indicator, frame: u64) -> String {
     }
 }
 
-/// The title and msg of the record behind the pane's indicator, cut short and bidi-isolated (the
-/// store already removed controls and invisible characters), or None when it has neither.
-pub fn caption(records: &[(Option<String>, Record)]) -> Option<String> {
-    caption_of(&newest_first(records))
-}
-
-/// `caption` from records most recently reported first.
+/// The title and msg of the record behind the pane's indicator (records most recently reported
+/// first), cut short and bidi-isolated (the store already removed controls and invisible
+/// characters), or None when it has neither.
 pub fn caption_of(newest_first: &[&Record]) -> Option<String> {
-    let top = indicator_of(newest_first)?;
-    let r = newest_first.iter().find(|r| Indicator::of(r).is_some_and(|i| i.rank() == top.rank()))?;
+    let r = top_record(newest_first)?;
     let text = match (&r.title, &r.msg) {
         (Some(t), Some(m)) => format!("{t}: {m}"),
         (Some(x), None) | (None, Some(x)) => x.clone(),
         (None, None) => return None,
     };
+    Some(isolated(&text))
+}
+
+/// The title of the record behind the indicator: what an agent calls its task.
+pub fn status_title(newest_first: &[&Record]) -> Option<String> {
+    top_record(newest_first)?.title.as_deref().map(|t| t.chars().take(CAPTION).collect())
+}
+
+/// The caption's msg alone, for where its title is said already.
+pub fn status_msg(newest_first: &[&Record]) -> Option<String> {
+    top_record(newest_first)?.msg.as_deref().map(isolated)
+}
+
+/// The newest record in the highest-priority state.
+fn top_record<'a>(newest_first: &[&'a Record]) -> Option<&'a Record> {
+    let top = indicator_of(newest_first)?;
+    newest_first.iter().copied().find(|r| Indicator::of(r).is_some_and(|i| i.rank() == top.rank()))
+}
+
+/// Cut short and bidi-isolated.
+fn isolated(text: &str) -> String {
     let mut cut: String = text.chars().take(CAPTION).collect();
     if cut.len() < text.len() {
         cut.pop();
         cut.push('…');
     }
-    Some(format!("\u{2068}{cut}\u{2069}"))
+    format!("\u{2068}{cut}\u{2069}")
 }

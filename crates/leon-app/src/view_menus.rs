@@ -2,6 +2,20 @@
 
 use super::*;
 
+/// The version About shows, as `leon --version` prints it (`leon app` passes in `LEON_VERSION`,
+/// which has the commit; this crate's build can't see it).
+static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Set the version About shows (once; later calls are ignored).
+pub fn set_version(v: &str) {
+    let _ = VERSION.set(v.to_string());
+}
+
+/// What About says: `leon <version>`.
+pub fn about_text() -> String {
+    format!("leon {}", VERSION.get().map_or(env!("CARGO_PKG_VERSION"), String::as_str))
+}
+
 /// The menu bar. "Quit leon" (⌘Q) detaches and leaves every program running; ending them is the
 /// separate item that asks first.
 pub fn menus() -> Vec<Menu> {
@@ -9,6 +23,8 @@ pub fn menus() -> Vec<Menu> {
         Menu {
             name: "leon".into(),
             items: vec![
+                MenuItem::action("About leon", About),
+                MenuItem::separator(),
                 MenuItem::action("Settings…", OpenSettings),
                 MenuItem::separator(),
                 MenuItem::action("Quit leon", Quit),

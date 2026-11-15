@@ -2,12 +2,13 @@
 //! per-pane view state, history rows fetched from the server in ranges, the wheel and trackpad,
 //! paging keys, and the "↓ N new lines" pill.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use gpui::{ScrollWheelEvent, TouchPhase};
 use leon_core::screen::{Lines, Row};
 use leon_core::search::{Kind, Link, Pos, Range};
 
+use super::calls::{Reply, Waiting};
 use super::*;
 use crate::scrollback::{self, Composed};
 
@@ -37,6 +38,21 @@ pub(super) struct TermUi {
     /// Copy mode and hints, on the pane they started on (`view_copy.rs`).
     pub(super) copy: Option<crate::copy_mode::CopyMode>,
     pub(super) hints: Option<super::copy::Hints>,
+    /// Replies that came over a link, waiting for the poll (`term_call_then`), and what wakes it.
+    pub(super) replies: Arc<Mutex<Vec<Reply>>>,
+    pub(super) wake: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Over a link, the kinds of call with one out, and the newest call of each kind waiting for it
+    /// (`term_call_latest`).
+    pub(super) in_flight: HashSet<String>,
+    pub(super) waiting: HashMap<String, Waiting>,
+    /// Text a copy over a link built, for the poll to put on the clipboard, and how many copies
+    /// started (a newer one drops an older one still fetching).
+    pub(super) clip: Option<String>,
+    pub(super) copies: u64,
+    /// Over a link, the cell cmd+hover last asked about (a late answer for another is dropped).
+    pub(super) hover_at: Option<(String, Pos)>,
+    /// Numbers each history fetch, so a reply only fills the pane that asked.
+    fetches: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -61,6 +77,8 @@ pub(super) struct PaneView {
     pub(super) selection: Option<Sel>,
     /// The button held down and reported to the program, if any.
     pub(super) reporting: Option<leon_core::mouse::Button>,
+    /// The history fetch out for this pane, if any: one at a time, and only its reply lands.
+    fetching: Option<u64>,
 }
 
 pub(super) struct Sel {
@@ -79,22 +97,8 @@ impl Workspace {
     }
 
     /// The session block `id` is in.
-    fn session_of(&self, id: &str) -> String {
+    pub(super) fn session_of(&self, id: &str) -> String {
         self.app.model().block(id).map(|(s, _)| s.id.clone()).unwrap_or_default()
-    }
-
-    /// Send an input event (mouse, wheel) to block `id`.
-    pub(super) fn block_event(&self, id: &str, event: Value) {
-        let p = json!({ "session_id": self.session_of(id), "block_id": id, "event": event });
-        let _ = self.app.call("block.event", p);
-    }
-
-    /// Call a terminal method on block `id`.
-    pub(super) fn term_call(&self, id: &str, method: &str, args: Value) -> Result<Value, leon_core::ApiError> {
-        let sid = self.session_of(id);
-        let p =
-            json!({ "session_id": sid, "block_id": id, "method": format!("dev.leon.terminal.{method}"), "args": args });
-        self.app.call("block.method", p)
     }
 
     /// Before a pane is drawn: a new size or screen starts its numbering over (the cache,
@@ -128,28 +132,45 @@ impl Workspace {
             }
         }
         if let Some(&first) = missing.first() {
-            self.fetch(id, first.saturating_sub(FETCH / 2).max(oldest), live.lines + FETCH);
-            // a reply trimmed to its byte cap can end before `first`: ask from there, or it never comes
-            if !self.term.panes.get(id).is_some_and(|p| p.cache.contains_key(&first)) {
-                self.fetch(id, first, live.lines + FETCH);
-            }
+            self.fetch(id, first.saturating_sub(FETCH / 2).max(oldest), live.lines + FETCH, first);
         }
     }
 
-    /// History rows `from` on of pane `id`, in this app's colours (`Remote::lines`).
+    /// History rows `from` on of pane `id`, in this app's colours (`Remote::lines`), waited for.
     pub fn lines(&self, id: &str, from: usize, count: usize) -> Option<Lines> {
         let got = self.app.lines(&self.session_of(id), id, from, count);
         got.ok().and_then(|v| serde_json::from_value::<Lines>(v).ok())
     }
 
-    fn fetch(&mut self, id: &str, from: usize, count: usize) {
-        let Some(lines) = self.lines(id, from, count) else { return };
+    /// Fetch `count` history rows of pane `id` from `from` into its cache, one fetch per pane at a
+    /// time (over a link the rows come on a later poll). A reply trimmed to its byte cap can end
+    /// before `need`: then it asks from there, or that row never comes.
+    fn fetch(&mut self, id: &str, from: usize, count: usize, need: usize) {
+        self.term.fetches += 1;
+        let ticket = self.term.fetches;
         let pv = self.term.panes.entry(id.to_string()).or_default();
-        if pv.cache.len() > MAX_CACHED {
-            pv.cache.clear();
+        if pv.fetching.is_some() {
+            return;
         }
-        let scrolled = lines.scrolled;
-        pv.cache.extend(lines.rows.into_iter().filter(|r| r.line < scrolled).map(|r| (r.line, r)));
+        pv.fetching = Some(ticket);
+        let block = id.to_string();
+        self.term_call_then(id, "lines", self.app.lines_args(from, count), move |ws, got| {
+            if let Err(e) = &got {
+                ws.app.lines_failed(e); // a server too old for the palette is asked without it next time
+            }
+            // a pane renumbered meanwhile (a resize, a history clear) dropped this fetch
+            let Some(pv) = ws.term.panes.get_mut(&block).filter(|p| p.fetching == Some(ticket)) else { return };
+            pv.fetching = None;
+            let Some(lines) = got.ok().and_then(|v| serde_json::from_value::<Lines>(v).ok()) else { return };
+            if pv.cache.len() > MAX_CACHED {
+                pv.cache.clear();
+            }
+            let scrolled = lines.scrolled;
+            pv.cache.extend(lines.rows.into_iter().filter(|r| r.line < scrolled).map(|r| (r.line, r)));
+            if from < need && !pv.cache.contains_key(&need) {
+                ws.fetch(&block, need, count, need);
+            }
+        });
     }
 
     /// History line `line` of pane `id`, if cached.
@@ -157,13 +178,14 @@ impl Workspace {
         self.term.panes.get(id)?.cache.get(&line)
     }
 
-    /// History line `line` of pane `id`, fetched with the rows around it when it isn't cached.
+    /// History line `line` of pane `id`, fetched with the rows around it when it isn't cached (over
+    /// a link the fetch only starts: the row is there next time).
     pub(super) fn history_row(&mut self, id: &str, line: usize) -> Option<Row> {
         if let Some(r) = self.cached_row(id, line) {
             return Some(r.clone());
         }
         let (oldest, _) = scrollback::bounds(&self.live(id));
-        self.fetch(id, line.saturating_sub(FETCH / 2).max(oldest), FETCH);
+        self.fetch(id, line.saturating_sub(FETCH / 2).max(oldest), FETCH, line);
         self.cached_row(id, line).cloned()
     }
 
@@ -293,6 +315,11 @@ impl Workspace {
     pub fn view_text(&self, id: &str) -> Option<String> {
         let shown = self.app.model().screens.contains_key(id);
         shown.then(|| self.composed(id).frame.text())
+    }
+
+    /// How many history rows pane `id` holds; None when the workspace keeps nothing for it.
+    pub fn cached_rows(&self, id: &str) -> Option<usize> {
+        self.term.panes.get(id).map(|p| p.cache.len())
     }
 
     /// The absolute line on pane `id`'s top row while scrolled back; None when following output.

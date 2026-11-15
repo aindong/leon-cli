@@ -1,4 +1,4 @@
-//! Lua (spec §4): `init.lua` loaded into a plain [`Config`] ([`load`]), or kept alive as a
+//! Lua (docs/lua.md): `init.lua` loaded into a plain [`Config`] ([`load`]), or kept alive as a
 //! [`Runtime`] that runs its actions and function bindings; and `leon do` scripts ([`run_script`]).
 //! Both reach the server through a [`Host`].
 

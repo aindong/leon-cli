@@ -131,9 +131,9 @@ impl Workspace {
         let header = headers.then(|| match grab {
             Some(g) => div()
                 .on_mouse_down(MouseButton::Left, self.grab_listener(&id, g, cx))
-                .child(self.render_header(&id, focused, cx))
+                .child(self.render_header(&id, focused, rect.w, cx))
                 .into_any_element(),
-            None => self.render_header(&id, focused, cx).into_any_element(),
+            None => self.render_header(&id, focused, rect.w, cx).into_any_element(),
         });
         let name = format!("{kind}-{id}");
         div()
@@ -160,7 +160,7 @@ impl Workspace {
                         .left_0()
                         .right_0()
                         .bg(rgb(t.bg))
-                        .child(self.render_header(&id, focused, cx)),
+                        .child(self.render_header(&id, focused, rect.w, cx)),
                 )
             })
             .child(self.terminal_area(&id, on_link, cx).child(canvas))
@@ -226,7 +226,7 @@ impl Workspace {
     }
 
     /// The user arriving at a pane (another pane, tab or session selected, or the window made active)
-    /// has seen its done and error: clear them (spec §5 lifetime). Not while they stay on it, so a
+    /// has seen its done and error: clear them (docs/agents.md, "Lifetime"). Not while they stay on it, so a
     /// finish in the pane they are looking at still shows until they come back.
     fn note_focus(&mut self, window: &Window) {
         let now = self.target().map(|(_, id, _)| (id, window.is_window_active()));
@@ -271,6 +271,7 @@ impl Render for Workspace {
         self.note_recent();
         let current = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
         let body = match self.shown() {
+            _ if self.stopped => self.render_stopped(cx).into_any_element(),
             Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
             None => self.render_empty(cx).into_any_element(),
         };
@@ -280,7 +281,7 @@ impl Render for Workspace {
             .flex()
             .flex_col()
             .min_w(px(0.))
-            .when(self.titlebar_shown(), |d| d.child(self.render_titlebar(current, cx)))
+            .when(self.titlebar_shown() && !self.stopped, |d| d.child(self.render_titlebar(current, cx)))
             .child(body);
         div()
             .key_context("Workspace")
@@ -295,6 +296,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::focus_down))
             .on_action(cx.listener(Self::toggle_zoom))
             .on_action(cx.listener(Self::quit_and_end_all))
+            .on_action(cx.listener(Self::about))
             .child(self.drag_listener(cx))
             .on_action(cx.listener(Self::new_session))
             .on_action(cx.listener(Self::next_tab))
@@ -313,11 +315,12 @@ impl Render for Workspace {
             .font_family(".SystemUIFont")
             .text_size(px(UI_TEXT))
             .text_color(rgb(self.theme.text))
-            .children(places.sidebar.map(|list| self.render_sidebar(&rows, list, cx)))
+            // a stopped server's sessions are gone: nothing of them stays drawn
+            .children(places.sidebar.filter(|_| !self.stopped).map(|list| self.render_sidebar(&rows, list, cx)))
             .child(column)
             .children(self.render_stale(window))
             // last, so it paints over the panes: GPUI paints children in order
-            .children(self.render_overlay(cx))
+            .children(self.render_overlay(cx).filter(|_| !self.stopped))
     }
 }
 

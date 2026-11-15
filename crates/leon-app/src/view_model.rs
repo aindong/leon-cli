@@ -18,14 +18,20 @@ impl Workspace {
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let shows = |b: &crate::remote::Block| status::indicator_of(&b.newest_first());
+                // each block read once: per window per block would be a million a poll at the caps
+                let mut by_window = std::collections::HashMap::<&str, Option<Indicator>>::new();
+                for b in &s.blocks {
+                    let shown = status::indicator_of(&b.newest_first());
+                    let w = by_window.entry(&b.window_id).or_default();
+                    *w = status::aggregate([*w, shown]);
+                }
                 let windows: Vec<WindowRow> = s
                     .windows
                     .iter()
                     .map(|w| WindowRow {
                         id: w.id.clone(),
                         title: switcher::tab_title(s, w),
-                        status: status::aggregate(s.blocks.iter().filter(|b| b.window_id == w.id).map(shows)),
+                        status: by_window.get(w.id.as_str()).copied().flatten(),
                     })
                     .collect();
                 SessionRow {
@@ -69,17 +75,41 @@ impl Workspace {
 
     /// What a pane's header names it: the title its program set, else the program and where it is.
     pub fn pane_title(&self, block_id: &str) -> Option<String> {
+        Some(match self.pane_place(block_id)? {
+            Err(title) => title,
+            Ok((program, None)) => program,
+            Ok((program, Some(cwd))) => format!("{program} {cwd}"),
+        })
+    }
+
+    /// The header's title in `room` px, and the whole of it for a tooltip when it was cut: a
+    /// directory that doesn't fit loses its middle (`chrome::elide_path`). A title the program
+    /// set is its own; GPUI's ellipsis ends it if it must.
+    pub fn header_title(&self, block_id: &str, room: f32, cx: &App) -> (String, Option<String>) {
+        let full = self.pane_title(block_id).unwrap_or_default();
+        let Some(Ok((program, Some(cwd)))) = self.pane_place(block_id) else { return (full, None) };
+        let mut lines = cx.text_system().line_wrapper(gpui::font(".SystemUIFont"), px(SECONDARY_TEXT));
+        let mut fits = |cwd: &str| {
+            lines.wrap_line(&[gpui::LineFragment::text(&format!("{program} {cwd}"))], px(room)).next().is_none()
+        };
+        let shown = format!("{program} {}", chrome::elide_path(&cwd, &mut fits));
+        let tip = (shown != full).then_some(full);
+        (shown, tip)
+    }
+
+    /// The title the block's program set (Err), else its program and where it is, from `~`.
+    fn pane_place(&self, block_id: &str) -> Option<Result<(String, Option<String>), String>> {
         let m = self.app.model();
         let b = m.block(block_id)?.1;
         if let Some(t) = &b.title {
-            return Some(t.clone());
+            return Some(Err(t.clone()));
         }
         let home = leon_core::paths::home().map(|h| h.display().to_string());
         let cwd = b.cwd.as_deref().map(|d| match home.as_deref().and_then(|h| d.strip_prefix(h)) {
             Some(rest) if rest.is_empty() || rest.starts_with('/') => format!("~{rest}"),
             _ => d.to_string(),
         });
-        Some([Some(program_name(&b.command)), cwd].into_iter().flatten().collect::<Vec<_>>().join(" "))
+        Some(Ok((program_name(&b.command), cwd)))
     }
 
     pub fn settings(&self) -> Settings {

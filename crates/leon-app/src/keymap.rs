@@ -56,7 +56,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
 pub const APP_DEFAULTS: &[(&str, &str)] =
     &[("shift+pageup", "client.scroll.page_up"), ("shift+pagedown", "client.scroll.page_down")];
 
-/// A keystroke as a binding chord, written unshifted (spec §4), or None for a key binding syntax
+/// A keystroke as a binding chord, written unshifted (docs/lua.md), or None for a key binding syntax
 /// has no name for. shortcut: assumes a US layout for shifted symbols; physical keys (`[KeyA]`)
 /// never match since GPUI keystrokes carry no key code.
 #[cfg(all(feature = "gui", target_os = "macos"))]

@@ -26,7 +26,7 @@ use tokio::sync::{oneshot, RwLock};
 use crate::methods::NoParams;
 use crate::{Ctx, Later, Registry};
 
-/// An action (or function binding) gets this long from the moment it is asked for (spec §4).
+/// An action (or function binding) gets this long from the moment it is asked for (docs/lua.md).
 pub const ACTION_LIMIT: Duration = Duration::from_secs(30);
 
 thread_local! {
