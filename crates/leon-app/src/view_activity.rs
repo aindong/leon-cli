@@ -116,6 +116,7 @@ impl Workspace {
         // a word, where the wrapper says a third line would start
         let room = px(self.settings.sidebar_width - ACTIVITY_INSET);
         let mut wrapper = cx.text_system().line_wrapper(gpui::font(".SystemUIFont"), px(SECONDARY_TEXT));
+        let mut title_wrapper = cx.text_system().line_wrapper(gpui::font(".SystemUIFont"), px(UI_TEXT));
         for (i, r) in rows.into_iter().enumerate() {
             let what = match &r.caption {
                 Some(c) => format!("{} · {c}", attention::state_text(r.status)),
@@ -123,6 +124,8 @@ impl Workspace {
             };
             let third = wrapper.wrap_line(&[gpui::LineFragment::text(&what)], room).nth(1).map(|b| b.ix);
             let what = third.map_or(what.clone(), |end| attention::cut_words(&what, end));
+            let second = title_wrapper.wrap_line(&[gpui::LineFragment::text(&r.title)], room).next().map(|b| b.ix);
+            let title = second.map_or(r.title.clone(), |end| attention::cut_words(&r.title, end));
             // shortcut: a tab title holding " › " splits in the wrong place; display only
             let place = match r.place.rsplit_once(" › ") {
                 Some((p, tab)) if tab == r.title => p.to_string(), // the title says the tab already
@@ -154,7 +157,7 @@ impl Workspace {
                             .min_w(px(0.))
                             .flex()
                             .flex_col()
-                            .child(div().line_clamp(1).text_ellipsis().text_color(rgb(t.title)).child(r.title))
+                            .child(div().line_clamp(1).text_ellipsis().text_color(rgb(t.title)).child(title))
                             .child(div().line_clamp(2).text_ellipsis().text_size(px(SECONDARY_TEXT)).child(what))
                             .child(
                                 div()
