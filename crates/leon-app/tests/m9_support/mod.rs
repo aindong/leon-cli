@@ -77,18 +77,11 @@ pub fn focused(app: &Embedded, ws: &Entity<Workspace>, cx: &mut VisualTestContex
 /// true. The app hears of changes made outside it (a program's status) by events, a moment later.
 pub fn shows(cx: &mut VisualTestContext, mut pred: impl FnMut(&mut VisualTestContext) -> bool) -> bool {
     let end = Instant::now() + Duration::from_secs(10);
-    loop {
-        // look right after the window ran, never after the sleep: a busy machine sleeps past a
-        // 120 ms slide, and `pred` would then see a later frame than the one that came true
+    while !pred(cx) && Instant::now() < end {
         cx.run_until_parked();
-        if pred(cx) {
-            return true;
-        }
-        if Instant::now() >= end {
-            return false;
-        }
         std::thread::sleep(Duration::from_millis(20));
     }
+    pred(cx)
 }
 
 /// Poll `pred` for up to 30 s; returns whether it came true (the cap is for a machine busy with
