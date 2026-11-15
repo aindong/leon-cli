@@ -42,7 +42,8 @@ struct Toggle {
     session_id: String,
     /// Exact case-insensitive block label, unique within this session.
     label: String,
-    /// When true and no block has this label, create a login-shell drawer at the bottom of the active window.
+    /// When true and no block has this label, create a login-shell drawer at the bottom of the active
+    /// window, in the directory of its focused block (else the login shell's default).
     #[serde(default)]
     create: bool,
 }
@@ -117,7 +118,14 @@ pub fn add(r: &mut Registry) {
                 if st.session(&p.session_id)?.overlay(&wid).docked.iter().any(|d| d.side == DockSide::Bottom) {
                     return Err(ApiError::bad_request("bottom already has a dock"));
                 }
-                let spec = blocks::BlockSpec { label: Some(p.label), ..Default::default() };
+                // the session's current directory: where the focused pane's live program is, if that
+                // still exists; an exited one's cwd is only the last OSC 7 path its output named
+                let s = st.session(&p.session_id)?;
+                let focused = s.windows[s.active].focus.as_deref().and_then(|id| st.block(id).ok());
+                let live = focused.filter(|(_, b)| b.exit_code.is_none());
+                let cwd = live.and_then(|(_, b)| b.terminal.shown_cwd()).filter(|d| std::path::Path::new(d).is_dir());
+                let options = blocks::TerminalOptions { cwd, ..Default::default() };
+                let spec = blocks::BlockSpec { label: Some(p.label), options, ..Default::default() };
                 let id = blocks::open(ctx, &mut st, &p.session_id, &wid, spec, place.as_ref())?;
                 st.dock_block(&p.session_id, &id, DockSide::Bottom, 0.3)?;
             } else {

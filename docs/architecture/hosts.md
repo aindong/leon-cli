@@ -65,7 +65,15 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   for its write and its reply (5 s; a Lua call 35 s), which lines that aren't the reply don't
   extend, and a watch line waits at most 100 ms. A copy from a host's pane is the text of the cells
   the app drew over the range dragged, never the host's `selection` text, and a host's link opens
-  without asking only when its uri is the text on screen there. Keys typed while the link is down are lost; while attached, stderr is
+  without asking only when its uri is the text on screen there. `leon attach` sends keys whole or
+  not at all (`attach/typing.rs`): a write sent into a stalled link may land long after, over the old ssh connection and behind anything sent on
+  the new one, so after a second with no answer on the call connection keys wait (up to 4 KiB)
+  behind a `server.version` probe and go in one write when it answers; a failed probe or write
+  drops every key waiting, as does a key typed while the link reconnects, and the bar counts the
+  keys not sent; after a drop, keys go on dropping until the call that was out answers, and a paste
+  waits in the same line as the keys. A stall that starts within that second can still catch the one write then in
+  flight; ruling that out needs writes the server can tell apart from a replaced connection's.
+  While attached, stderr is
   /dev/null, so ssh's errors during a reconnect aren't shown. Instead `leon attach`'s status bar
   says `reconnecting to HOST (try N)…` while the client relinks (it wakes the TUI on each try), and
   when the host's hold runs out it exits naming the link, not the server, which may be fine.

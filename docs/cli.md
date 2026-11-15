@@ -98,76 +98,16 @@ padded. On exit
 (detach, the server stopping, SIGHUP, SIGTERM, SIGINT, SIGQUIT) the terminal is given back as it was; a
 watchdog process does it even after SIGKILL. Killed by a signal, it exits 128 + the signal.
 
-## Sessions
+Over `-H`, the status bar says `reconnecting to HOST (try N)…` while a dropped link is retried,
+and keys reach the pane whole or not at all. After a second with no word from the host, typed keys
+wait for a quick check of the link before they go; if it fails, or the link is reconnecting, they
+are dropped, and the bar says how many keys were not sent. Type them again once it is back. A
+paste waits in line with the keys. One limit: a stall that starts within that second, mid-word,
+can still catch the keys already on their way, and those may arrive late.
 
-### `leon new [LABEL] [--cwd DIR]`
+## Sessions and windows
 
-Create a session and print its ID. Same as `leon session new`.
-
-- `-c, --cwd DIR`: start the first terminal in this existing directory. Relative paths resolve
-  against the caller's working directory. A missing path or a file exits 2 (usage error).
-  Omitted uses the server's home directory. With `-H` the path is the host's: it must be
-  absolute, and the host checks it.
-
-### `leon ls`
-
-List sessions. Same as `leon session ls`.
-
-### `leon kill SESSION…`
-
-Destroy sessions and end every program in them. Same as `leon session kill`.
-
-### `leon session`
-
-Manage sessions.
-
-### `leon session new [LABEL] [--cwd DIR]`
-
-Create a session and print its ID.
-
-### `leon session ls`
-
-List sessions: ID, label, window count.
-
-### `leon session inspect [SESSION]`
-
-Show a session and its windows (default: `-s`, else `$LEON_SESSION`).
-
-### `leon session rename SESSION LABEL`
-
-Rename a session.
-
-### `leon session kill SESSION…`
-
-Destroy sessions.
-
-```sh
-leon new work
-leon session rename work "my project"
-leon ls --json
-```
-
-## Windows (tabs)
-
-### `leon window`
-
-Manage the windows of a session (`-s`).
-
-### `leon window new [LABEL]`
-
-Add a window running a login shell and print its ID.
-
-### `leon window ls`
-
-List windows in tab order.
-
-### `leon window rename WINDOW LABEL`
-
-Rename a window. `WINDOW` is an ID, label, 1-based tab position or ID suffix.
-
-### `leon window close WINDOW`
-
-Close a window and end its programs. Closing a session's last window destroys the session.
+`leon new`, `ls`, `kill`, `leon session` and `leon window` are in [cli/sessions.md](cli/sessions.md).
 
 ## Running programs
 
@@ -180,12 +120,18 @@ PATH, even when the server was started by Leon.app from Finder.
 - `--label LABEL`: name the block, so `-b LABEL` finds it.
 - `--keep-open`: keep the block after the program exits, so you can still read its output.
 - `--wait`: wait for the program and exit with its status.
+- `--output[=true|false]`: with `--wait`, print the program's text after the ID line once it
+  exits: what `leon capture --trim` would show, scrollback and screen. On by default when stdout
+  is not a terminal (an agent's or a script's `$(…)`), off on a terminal. To read the text, `run`
+  keeps the block open until it has been read, then closes it (unless `--keep-open`); a
+  `run --wait` killed before then leaves its block open, as `--keep-open` would.
 - `-c, --cwd DIR`: working directory (default: the current directory; with `-H`, the host's
   home, and `DIR` must be an absolute path there).
 
 ```sh
 leon run --label tests --keep-open -- cargo test
-leon run --wait -- make
+leon run --wait -- make                       # in a script: make's output, then its status
+leon run --wait --output=false -- make        # the status alone
 ```
 
 ### `leon split [FLAGS] [-- CMD…]`
@@ -227,9 +173,13 @@ Wait for a terminal's program to exit, and exit with its status (default block: 
 `$LEON_BLOCK`).
 
 - `--for DURATION`: give up after this long (`500ms`, `10s`, `2m`) and exit 1.
+- `--text TEXT`: wait until the block's screen or scrollback shows `TEXT` instead, and exit 0
+  (text already there counts). Exits 1 after `--for`, or if the block closes first. For a
+  program that keeps running: a prompt, a dev server's "ready" line.
 
 ```sh
 id=$(leon run --keep-open -- python3)
+leon wait -b "$id" --text '>>>' --for 10s    # Python's prompt: now it reads what you type
 leon send -b "$id" 'print(6 * 7)'
 leon send-key -b "$id" enter
 leon capture -b "$id" --trim
@@ -470,7 +420,10 @@ Print the guide for agents driving leon (a SKILL.md).
 
 ### `leon skill setup`
 
-Install the skill and a session-start hook for each agent found. The hook runs
+Install the skill and a session-start hook for each agent found: Claude Code or Codex when its
+config dir (`~/.claude`, `~/.codex`) exists or its program (`claude`, `codex`) is on PATH. It
+prints why it picked each agent and every file it wrote; with no agent found it installs only the
+shared `~/.agents/skills/leon/SKILL.md` and says to pass `--agent`. The hook runs
 `leon skill hook --agent claude|codex`, which tells the agent where it is and records how to
 resume its session after a restart (see [agents.md](agents.md)).
 
@@ -510,8 +463,8 @@ raised. `--unfloat` returns a float or drawer to the tiles; its terminal keeps r
 
 Show/hide a float or drawer by its exact, case-insensitive label within `-s/--session`.
 Labels must be unique there. Hidden terminals keep running.
-`--create` opens a scratch login shell docked to the bottom on first use; subsequent
-calls toggle it. A bottom panel already occupying that side makes creation fail.
+`--create` opens a scratch login shell docked to the bottom on first use, in the directory of
+the active window's focused block (the session's current directory); subsequent calls toggle it. A bottom panel already occupying that side makes creation fail.
 
 ### `leon dock left|right|bottom`
 

@@ -19,6 +19,7 @@ pub mod panes;
 pub mod remote;
 pub mod render;
 pub mod scrollback;
+#[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod settings_window;
 pub mod stamp;
 pub mod status;

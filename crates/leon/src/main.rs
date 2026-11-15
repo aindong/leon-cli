@@ -9,6 +9,7 @@ mod events;
 mod hosts;
 mod layout;
 mod login_path;
+mod resources;
 mod script;
 mod server;
 mod settings;
@@ -21,6 +22,7 @@ use clap::builder::BoolishValueParser;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use client::Fail;
+pub use resources::{ApiCmd, BlockCmd, SessionCmd, WindowCmd};
 pub use settings::{ConfigCmd, ThemeCmd};
 
 #[derive(Parser)]
@@ -112,6 +114,10 @@ pub enum Cmd {
         /// Wait for the program and exit with its status.
         #[arg(long)]
         wait: bool,
+        /// With --wait, print the program's text when it exits [default: when stdout isn't a terminal].
+        #[arg(long, requires = "wait", num_args = 0..=1, require_equals = true,
+              default_missing_value = "true", value_parser = BoolishValueParser::new())]
+        output: Option<bool>,
         /// Working directory [default: the current directory].
         #[arg(short = 'c', long = "cwd")]
         cwd: Option<PathBuf>,
@@ -146,6 +152,9 @@ pub enum Cmd {
         /// Give up after this long (e.g. 500ms, 10s, 2m) and exit 1.
         #[arg(long = "for", value_parser = blocks::parse_duration)]
         timeout: Option<std::time::Duration>,
+        /// Wait until the screen or scrollback shows TEXT instead (a prompt, a "ready" line).
+        #[arg(long, value_name = "TEXT", value_parser = clap::builder::NonEmptyStringValueParser::new())]
+        text: Option<String>,
     },
     /// Float a block, create a floating terminal, or return one to the tiled tree.
     Float {
@@ -384,29 +393,6 @@ pub struct DoArgs {
     pub words: Vec<String>,
 }
 
-#[derive(Subcommand)]
-pub enum BlockCmd {
-    /// List a session's blocks.
-    Ls,
-    /// Show a block: window, pid, command, exit status.
-    Inspect {
-        /// The block [default: -b, else $LEON_BLOCK].
-        target: Option<String>,
-    },
-    /// Close a block and end its program.
-    Close {
-        /// The block [default: -b, else $LEON_BLOCK].
-        target: Option<String>,
-    },
-    /// Call a block method (`program_status`, or a full name) with JSON args (inline, @file, or -).
-    Call {
-        /// The method: a short name like `size`, or a full `dev.leon.terminal.size`.
-        method: String,
-        /// Arguments as a JSON object, @file, or - for stdin.
-        args: Option<String>,
-    },
-}
-
 /// Where a new or moved pane goes, beside its anchor.
 #[derive(Clone, Copy, ValueEnum)]
 pub enum Edge {
@@ -449,79 +435,6 @@ pub enum ServerCmd {
     /// Connect stdin and stdout to this machine's server, starting one first (unless
     /// --autostart=false): what `leon -H` runs on the host over ssh.
     Proxy,
-}
-
-#[derive(Subcommand)]
-pub enum SessionCmd {
-    /// Create a session and print its ID.
-    New {
-        /// Name for the session.
-        label: Option<String>,
-        /// First terminal's directory; relative to the caller (default: server's home).
-        #[arg(short = 'c', long, value_name = "DIR")]
-        cwd: Option<PathBuf>,
-    },
-    /// List sessions.
-    Ls,
-    /// Show a session and its windows.
-    Inspect {
-        /// The session [default: -s, else $LEON_SESSION].
-        target: Option<String>,
-    },
-    /// Rename a session.
-    Rename {
-        /// The session to rename.
-        target: String,
-        /// Its new name.
-        label: String,
-    },
-    /// Destroy sessions.
-    Kill {
-        /// Sessions to destroy: IDs, labels, positions or ID suffixes.
-        #[arg(required = true)]
-        targets: Vec<String>,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum WindowCmd {
-    /// Add a window and print its ID.
-    New {
-        /// Name for the window.
-        label: Option<String>,
-    },
-    /// List windows in tab order.
-    Ls,
-    /// Rename a window.
-    Rename {
-        /// The window: an ID, label, 1-based tab position or ID suffix.
-        target: String,
-        /// Its new name.
-        label: String,
-    },
-    /// Close a window (closing the last one destroys the session).
-    Close {
-        /// The window: an ID, label, 1-based tab position or ID suffix.
-        target: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum ApiCmd {
-    /// List every method with its stability (stable, experimental, internal).
-    List,
-    /// Show a method's stability, description, JSON Schemas and examples.
-    Describe {
-        /// The method, e.g. `session.view`.
-        method: String,
-    },
-    /// Call a method with JSON params (inline, @file, or - for stdin); -s fills session_id.
-    Call {
-        /// The method, e.g. `session.view`.
-        method: String,
-        /// Params as a JSON object, @file, or - for stdin.
-        args: Option<String>,
-    },
 }
 
 fn main() -> ExitCode {

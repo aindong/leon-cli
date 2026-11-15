@@ -61,6 +61,8 @@ impl Env {
             .env("LEON_RUNTIME_DIR", self.rt.path())
             .env("LEON_STATE_DIR", std::path::Path::new(self.rt.path()).join("state"))
             .env("LEON_AUTOSTART", "0")
+            // no claude or codex on PATH: setup must not find this machine's
+            .env("PATH", "/usr/bin:/bin")
             .env_remove("LEON_SESSION")
             .env_remove("LEON_BLOCK")
             .env_remove("XDG_RUNTIME_DIR");

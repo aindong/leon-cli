@@ -29,6 +29,40 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### Daily-driver polish (docs/research/daily-driver-0.1.0.md)
+
+#### Added
+
+- `leon run --wait` prints the program's text after the block ID once it exits (what
+  `leon capture --trim` shows) when stdout is not a terminal, so an agent gets the output and the
+  status in one call. `--output[=true|false]` turns it on or off. The block stays open until it
+  has been read, then closes (unless `--keep-open`). (F5)
+- `leon wait --text TEXT` waits until a block's screen or scrollback shows `TEXT`: a prompt, a
+  "ready" line. It exits 1 after `--for` or if the block closes first. (F6)
+
+#### Changed
+
+- `leon skill setup` without `--agent` also sets up Claude Code or Codex when `claude` or `codex` is
+  on PATH, even before its first run, and says for each agent why it was picked. With none found
+  it says so, and to pass `--agent`. An agent home dir it creates is private (0700). (F4)
+- The README's first commands, the agent guide and docs/agents.md wait for Python's prompt before
+  typing into it, and for its answer before reading it; a test runs the README's block. (F6)
+- The scratch drawer (⌘J, `leon toggle scratch --create`, `session.toggle` with `create`) opens in
+  the directory of the active window's focused block instead of `~`, when its program is still
+  running (an exited one's directory is only what its output last said). (F14)
+
+#### Fixed
+
+- A one-shot `claude -p` (`--print`, or `-p` among other short flags, `-cp`) in a pane no longer
+  registers a resume command. (F10)
+- Keys typed into `leon -H … attach` while the link is stalled no longer arrive in part (the
+  research run left `ec` of `echo …⏎` at the remote prompt). After a quiet second, keys wait for
+  a probe of the link; if it fails they are all dropped, and so are keys typed while it
+  reconnects, and the status bar says how many were not sent. A paste waits in the same line, so
+  it can't pass keys typed before it. (F12)
+
+No schema changed, so `api_version` stays `1.5.0`.
+
 ### M22b — Themes and settings in the app
 
 #### Added
