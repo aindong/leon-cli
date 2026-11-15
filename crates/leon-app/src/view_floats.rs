@@ -113,7 +113,7 @@ impl Workspace {
         (area, origin): ((f32, f32), (f32, f32)),
         cx: &mut Context<Self>,
     ) -> Div {
-        let t = &DARK;
+        let t = &self.theme;
         for d in placed.docks.iter().filter(|d| terms.contains(&d.block_id)) {
             let tile = self.pane_tile("dock", &d.block_id, d.rect, None, tiling, cx);
             out = out.child(if d.leaving { tile } else { tile.occlude() });

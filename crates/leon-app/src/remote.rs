@@ -29,6 +29,8 @@ mod events;
 mod fetch_model;
 #[path = "remote_link.rs"]
 mod link;
+#[path = "remote_palette.rs"]
+mod palette;
 use events::{attach, read_events};
 pub use fetch_model::decode_overlays;
 use fetch_model::{fetch, read_line};
@@ -193,6 +195,10 @@ struct Shared {
     /// The event connection's write side, for `block.watch`.
     events: Mutex<UnixStream>,
     watched: Mutex<Vec<String>>,
+    /// The colours the server resolves this app's screens and lines with (`block.watch`'s
+    /// `palette`); unused once the server refused it (a leon older than M22b).
+    palette: Mutex<Option<Value>>,
+    palette_refused: AtomicBool,
     alive: AtomicBool,
     closing: AtomicBool,
     /// Over a link: whether the connections are up.
@@ -255,8 +261,11 @@ impl Shared {
     }
 
     fn send_watch(&self, ids: &[String]) -> io::Result<()> {
-        let mut line =
-            serde_json::to_vec(&json!({ "id": 0, "method": "block.watch", "params": { "block_ids": ids } }))?;
+        let mut params = json!({ "block_ids": ids });
+        if let Some(p) = self.palette() {
+            params["palette"] = p;
+        }
+        let mut line = serde_json::to_vec(&json!({ "id": 0, "method": "block.watch", "params": params }))?;
         line.push(b'\n');
         lock(&self.events).write_all(&line)
     }
@@ -306,6 +315,8 @@ impl Remote {
             wakers: Mutex::default(),
             events: Mutex::new(events),
             watched: Mutex::default(),
+            palette: Mutex::default(),
+            palette_refused: AtomicBool::new(false),
             alive: AtomicBool::new(true),
             closing: AtomicBool::new(false),
             link: Mutex::new(LinkState::Up),

@@ -30,12 +30,13 @@ use crate::floats;
 use crate::hosts::{HostState, Hosts};
 use crate::icons::{Icon, ROW_ICON, TOOLBAR_ICON, TOOLBAR_TARGET};
 use crate::keymap::{self, Bound, Keymap, Pressed};
+use crate::look::Look;
 use crate::panes::{self, Divider, GAP};
 use crate::remote::Remote;
 use crate::render::{self, Frame};
 use crate::status::{self, Indicator};
 use crate::switcher;
-use crate::theme::{Theme, DARK, SECONDARY_TEXT, UI_TEXT};
+use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
 
 actions!(
     leon,
@@ -58,14 +59,14 @@ actions!(
         ToggleZoom,
         Copy,
         SelectAll,
-        Find
+        Find,
+        OpenSettings
     ]
 );
 
-const FONT_FAMILY: &str = "Menlo";
-/// The terminal font size in points: the default, and the range cmd+= / cmd+- move in.
-const FONT_SIZE: f32 = 13.;
-const FONT_SIZES: (f32, f32) = (8., 32.);
+/// The range cmd+= / cmd+- move the terminal font size in (points); init.lua's `font.size` is
+/// the size cmd+0 returns to.
+const FONT_SIZES: (f32, f32) = (leon_lua::settings::FONT_SIZES.0 as f32, leon_lua::settings::FONT_SIZES.1 as f32);
 const LINE_HEIGHT: f32 = 1.3;
 /// The titlebar row: the traffic lights, the toolbar, and in top style the tabs.
 const TITLEBAR: f32 = 38.;
@@ -83,53 +84,6 @@ const KEYMAP_POLL: Duration = Duration::from_secs(1);
 
 /// The block input goes to.
 use crate::floats::target;
-
-/// GPUI key bindings: only Quit. Every other shortcut goes through `key_down` and the keymap
-/// (`keymap::DEFAULTS` under the config's bindings), since GPUI matches its own bindings before
-/// any key listener and a config could never override them.
-pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
-}
-
-/// Keys, menus and quitting. Quitting (⌘Q, the menu, the Dock, logout, closing the window) only
-/// closes the app's connections: the server and every program keep running.
-pub fn install(cx: &mut App) {
-    init(cx);
-    cx.set_menus(menus());
-    cx.on_action(|_: &Quit, cx| cx.quit());
-    cx.on_window_closed(|cx| cx.quit()).detach();
-}
-
-/// Open the app window on `server` and run until it quits.
-pub fn run(server: Remote) {
-    let server = Rc::new(server);
-    Application::new().with_assets(crate::icons::Icons).run(move |cx: &mut App| {
-        install(cx);
-        // the last frame, on its display, when it still fits there; else most of the primary one.
-        // A window's bounds are relative to its display, so the frame is too.
-        let saved = settings_path().map(|p| Settings::load(&p)).unwrap_or_default();
-        let on = saved.display.and_then(|id| cx.displays().into_iter().find(|d| u32::from(d.id()) == id));
-        let display = on.clone().or_else(|| cx.primary_display());
-        let screen = display.as_ref().map(|d| chrome::Frame { x: 0., y: 0., ..frame(d.bounds()) });
-        let f = chrome::window_frame(on.and(saved.window), screen.as_slice());
-        let bounds = Bounds::new(point(px(f.x), px(f.y)), size(px(f.w), px(f.h)));
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: Some(TitlebarOptions {
-                title: Some("leon".into()),
-                appears_transparent: true,
-                traffic_light_position: Some(point(px(14.), px(13.))),
-            }),
-            window_min_size: Some(size(px(chrome::MIN_WINDOW.0), px(chrome::MIN_WINDOW.1))),
-            display_id: display.map(|d| d.id()),
-            ..WindowOptions::default()
-        };
-        let app = server.clone();
-        cx.open_window(options, move |window, cx| cx.new(|cx| Workspace::for_app(app, window, cx)))
-            .expect("open the leon window");
-        cx.activate(true);
-    });
-}
 
 /// What one render needs from the model, copied out under the state lock.
 struct SessionRow {
@@ -165,6 +119,8 @@ struct Palette {
 struct KeymapInbox {
     asking: bool,
     reply: Option<Value>,
+    /// The `server.settings` reply asked for when the keymap's generation moved to the one given.
+    settings: Option<(u64, Value)>,
 }
 
 /// The blocks on screen, in leaf order.
@@ -253,6 +209,18 @@ pub struct Workspace {
     /// The window is the key window: the user is looking at leon.
     window_active: bool,
     font_size: f32,
+    /// init.lua's settings as drawn (`look.rs`); the theme for the OS appearance now (`dark`),
+    /// and the terminal font. `refit` fits every pane again at the next render (a new font).
+    look: Look,
+    dark: bool,
+    theme: Theme,
+    font_family: SharedString,
+    refit: bool,
+    /// The config the local server loaded, from its keymap: where the theme files and the
+    /// Settings window's init.lua are.
+    config_path: Option<PathBuf>,
+    /// The Settings window, while it is open.
+    settings_window: Option<gpui::WindowHandle<crate::settings_window::SettingsWindow>>,
     /// Where the spinner's clock starts.
     epoch: Instant,
     /// The pane last seen with the focus, and whether the window was active: a change is the user
@@ -266,6 +234,7 @@ pub struct Workspace {
     _bounds: Subscription,
     _quit: Subscription,
     _release: Subscription,
+    _appearance: Subscription,
 }
 
 impl Workspace {
@@ -354,6 +323,10 @@ impl Workspace {
             async {}
         });
         let release = cx.on_release(|ws, _| ws.save_settings());
+        let appearance = cx.observe_window_appearance(window, |ws, window, cx| {
+            ws.set_appearance(look_view::is_dark(window.appearance()), cx)
+        });
+        let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
         Workspace {
             app,
             hosts,
@@ -382,7 +355,14 @@ impl Workspace {
             dock: None,
             platform: false,
             window_active: window.is_window_active(),
-            font_size: FONT_SIZE,
+            font_size: look.font_size,
+            theme: look.theme(dark),
+            font_family: look.font_family.clone().into(),
+            look,
+            dark,
+            refit: false,
+            config_path: None,
+            settings_window: None,
             epoch: Instant::now(),
             seen_focus: None,
             term: scroll::TermUi::default(),
@@ -392,6 +372,7 @@ impl Workspace {
             _bounds: bounds,
             _quit: quit,
             _release: release,
+            _appearance: appearance,
         }
     }
 
@@ -487,6 +468,12 @@ mod header;
 mod hosts_view;
 #[path = "view_keys.rs"]
 mod keys;
+#[path = "view_look.rs"]
+mod look_view;
+#[path = "view_start.rs"]
+mod start;
+pub use look_view::is_dark;
+pub use start::{init, install, quits, run};
 #[path = "view_menus.rs"]
 mod menus;
 #[path = "view_model.rs"]

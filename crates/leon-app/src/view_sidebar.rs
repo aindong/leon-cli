@@ -16,7 +16,7 @@ impl Workspace {
         list: SidebarList,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let frame = self.pulse();
         let mut items = div().flex().flex_col().gap(px(1.)).px(px(8.)).pt(px(4.));
         let machines = self.hosts.machines();
@@ -45,46 +45,46 @@ impl Workspace {
             for (w, win) in row.windows.iter().enumerate() {
                 let current = selected && w == row.active;
                 let sid = row.id.clone();
-                items = items.child(
-                    div()
-                        .id(SharedString::from(format!("row-{i}-{w}")))
-                        .debug_selector(|| sel(format!("row-{i}-{w}")))
-                        .flex()
-                        .flex_none()
-                        .items_center()
-                        .gap(px(8.))
-                        .h(px(ROW))
-                        .px(px(10.))
-                        .rounded(px(6.))
-                        .cursor_pointer()
-                        .when(current, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
-                        .when(!current, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
-                        .child(
-                            div()
-                                .flex_1()
-                                .overflow_hidden()
-                                .min_w(px(0.))
-                                .line_clamp(1)
-                                .text_ellipsis()
-                                .child(win.title.clone()),
-                        )
-                        .children(
-                            win.status
-                                .map(|s| status_mark(s, frame).debug_selector(|| sel(format!("row-status-{i}-{w}")))),
-                        )
-                        .when(selected && w < 9, |d| {
-                            d.child(
+                items =
+                    items.child(
+                        div()
+                            .id(SharedString::from(format!("row-{i}-{w}")))
+                            .debug_selector(|| sel(format!("row-{i}-{w}")))
+                            .flex()
+                            .flex_none()
+                            .items_center()
+                            .gap(px(8.))
+                            .h(px(ROW))
+                            .px(px(10.))
+                            .rounded(px(6.))
+                            .cursor_pointer()
+                            .when(current, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
+                            .when(!current, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
+                            .child(
                                 div()
-                                    .text_size(px(SECONDARY_TEXT))
-                                    .text_color(rgb(t.muted))
-                                    .child(format!("⌘{}", w + 1)),
+                                    .flex_1()
+                                    .overflow_hidden()
+                                    .min_w(px(0.))
+                                    .line_clamp(1)
+                                    .text_ellipsis()
+                                    .child(win.title.clone()),
                             )
-                        })
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(move |ws, _, _, cx| ws.select(&sid, Some(w), cx)),
-                        ),
-                );
+                            .children(win.status.map(|s| {
+                                status_mark(s, frame, t).debug_selector(|| sel(format!("row-status-{i}-{w}")))
+                            }))
+                            .when(selected && w < 9, |d| {
+                                d.child(
+                                    div()
+                                        .text_size(px(SECONDARY_TEXT))
+                                        .text_color(rgb(t.muted))
+                                        .child(format!("⌘{}", w + 1)),
+                                )
+                            })
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |ws, _, _, cx| ws.select(&sid, Some(w), cx)),
+                            ),
+                    );
             }
             items = items.child(div().h(px(6.)));
         }
@@ -139,7 +139,7 @@ impl Workspace {
         frame: u64,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let (id, sid) = (row.id.clone(), row.id.clone());
         div()
             .id(SharedString::from(format!("session-{i}")))
@@ -161,7 +161,7 @@ impl Workspace {
             )
             .when(!open, |d| {
                 d.children(
-                    row.status.map(|s| status_mark(s, frame).debug_selector(|| sel(format!("session-status-{i}")))),
+                    row.status.map(|s| status_mark(s, frame, t).debug_selector(|| sel(format!("session-status-{i}")))),
                 )
             })
             .child(
@@ -206,7 +206,7 @@ impl Workspace {
         frame: u64,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let id = row.id.clone();
         div()
             .id(SharedString::from(format!("session-{i}")))
@@ -226,7 +226,7 @@ impl Workspace {
             )
             .when(!selected, |d| {
                 d.children(
-                    row.status.map(|s| status_mark(s, frame).debug_selector(|| sel(format!("session-status-{i}")))),
+                    row.status.map(|s| status_mark(s, frame, t).debug_selector(|| sel(format!("session-status-{i}")))),
                 )
             })
             .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.select(&id, None, cx)))

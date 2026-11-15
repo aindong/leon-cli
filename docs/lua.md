@@ -228,8 +228,9 @@ any`, and a `?` suffix for optional ones.
 ## Settings
 
 `leon.set(name, value)` sets a setting. init.lua is the only place settings live; `leon config
-get` and `set` ([cli/settings.md](cli/settings.md)) read and edit them in place. The app follows
-`theme` and `font.*` from M22b and the rest now. A bad value is a skipped call with a `file:line`
+get` and `set` ([cli/settings.md](cli/settings.md)) and the app's Settings window (⌘,) read and edit
+them in place. A running app follows every one of them when the config reloads (`leon config set`,
+the Settings window and `leon config reload` all reload it). A bad value is a skipped call with a `file:line`
 message, and the setting keeps its default.
 
 | Setting | Takes | Default |

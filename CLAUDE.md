@@ -25,6 +25,8 @@ interface we match and `docs/roadmap.md` the milestone order.
   (`Leon` for the bundled Leon.app).
   A locked screen draws nothing (macOS occludes the window); `scripts/idle-frames.sh` refuses then.
   Frame stats: `LEON_FRAME_STATS=1 leon app`; headless model cost: `cargo run --release -p leon-app --example frame_bench`.
+  Compare two folders of screenshots: `swift scripts/pixel-diff.swift BEFORE AFTER [name:x,y,w,h …]`
+  (fails on any changed pixel outside the named boxes, e.g. a pulsing status dot).
 - Docs screenshots show a neutral demo, never this machine: retake them with `scripts/demo-shots.sh`
   (temp HOME, neutral prompt and titles, private LEON_* dirs, a fake devbox). No image name, README
   text or picture may show the user's login or hostname; `cargo test -p leon --test m13_privacy`
