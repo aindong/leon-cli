@@ -5,6 +5,7 @@
 use leon_core::program_status::strip_hidden;
 use leon_core::Window;
 
+use crate::attention;
 use crate::palette::{self, Item};
 use crate::remote::{Model, Session};
 use crate::status::{self, Indicator};
@@ -97,8 +98,8 @@ pub fn tabs(machines: &[(usize, &str, &Model)]) -> (Vec<Row>, Vec<Row>) {
 }
 
 /// The rows to show for `query`: with none, every tab, the ones in `recent` (window ids, most
-/// recent first) first; with one, the tabs and the blocks whose title matches, best first, the
-/// more recent first on a tie.
+/// recent first) first; with one, the tabs and the blocks whose title matches, best first, and on
+/// a tie what needs the user first (blocked, error, done), then the more recent.
 pub fn rank(tabs: &[Row], blocks: &[Row], query: &str, recent: &[String]) -> Vec<Row> {
     let used = |r: &&Row| recent.iter().position(|w| *w == r.window_id).unwrap_or(usize::MAX);
     let mut rows: Vec<&Row> = tabs.iter().collect();
@@ -123,7 +124,10 @@ pub fn rank(tabs: &[Row], blocks: &[Row], query: &str, recent: &[String]) -> Vec
         shortcut: None,
         args: None,
     });
-    let items: Vec<Item> = tab_items.chain(block_items).collect();
-    let all: Vec<&Row> = rows.into_iter().chain(titled).collect();
+    let mut all: Vec<(Item, &Row)> =
+        tab_items.zip(rows.iter().copied()).chain(block_items.zip(titled.iter().copied())).collect();
+    // the filter keeps this order on equal scores; stable, so recency stays inside each state
+    all.sort_by_key(|(_, r)| r.status.map_or(3, |i| attention::priority(i).min(3)));
+    let (items, all): (Vec<Item>, Vec<&Row>) = all.into_iter().unzip();
     palette::filter(&items, query).into_iter().map(|i| all[i].clone()).collect()
 }
