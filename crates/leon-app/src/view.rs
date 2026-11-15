@@ -66,7 +66,7 @@ actions!(
 
 /// The range cmd+= / cmd+- move the terminal font size in (points); init.lua's `font.size` is
 /// the size cmd+0 returns to.
-const FONT_SIZES: (f32, f32) = (8., 32.);
+const FONT_SIZES: (f32, f32) = (leon_lua::settings::FONT_SIZES.0 as f32, leon_lua::settings::FONT_SIZES.1 as f32);
 const LINE_HEIGHT: f32 = 1.3;
 /// The titlebar row: the traffic lights, the toolbar, and in top style the tabs.
 const TITLEBAR: f32 = 38.;

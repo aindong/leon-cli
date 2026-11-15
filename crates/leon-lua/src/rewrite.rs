@@ -12,8 +12,13 @@ use serde_json::Value;
 
 use crate::{Config, Level};
 
+/// One write at a time in this process: each reads the file the last one left, and they share a
+/// temp file name.
+static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Set `key` to `value` in the config at `config` (created if missing). Returns where it is set now.
 pub fn write_setting(config: &Path, key: &str, value: &Value) -> Result<String, String> {
+    let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
     let shown = config.display().to_string();
     let exists = config.exists();
     let (src, before) = if exists {

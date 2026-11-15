@@ -3,6 +3,11 @@
 
 use super::*;
 
+/// A server's refusal of the `palette` field: one older than M22b, which denies unknown fields.
+pub(super) fn refuses_palette(message: &str) -> bool {
+    message.contains("unknown field `palette`")
+}
+
 impl Shared {
     /// The palette to send, unless the server refused one.
     pub(super) fn palette(&self) -> Option<Value> {
@@ -49,7 +54,7 @@ impl Remote {
         };
         match self.shared.palette() {
             Some(p) => match call(Some(p)) {
-                Err(e) if e.message.contains("unknown field `palette`") => {
+                Err(e) if refuses_palette(&e.message) => {
                     self.shared.refuse_palette();
                     call(None)
                 }

@@ -359,7 +359,11 @@ impl Workspace {
             self.use_keymap(&km);
             let (back, generation) = (self.inbox.clone(), self.keymap.generation);
             self.hosts.local().spawn("server.settings", json!({}), move |r| {
-                lock(&back).settings = r.ok().map(|s| (generation, s));
+                let mut inbox = lock(&back);
+                // a slow reply asked for under an older generation never replaces a newer one
+                if let (Ok(s), true) = (r, inbox.settings.as_ref().is_none_or(|(g, _)| *g <= generation)) {
+                    inbox.settings = Some((generation, s));
+                }
             });
             cx.notify();
         }
@@ -367,7 +371,9 @@ impl Workspace {
 
     fn use_keymap(&mut self, km: &Value) {
         self.keymap = Keymap::app(km);
-        self.config_path = km["path"].as_str().map(PathBuf::from).or_else(leon_lua::config_path);
+        // a relative path is the server's, from its own working directory: not one to use here
+        let path = km["path"].as_str().map(PathBuf::from).filter(|p| p.is_absolute());
+        self.config_path = path.or_else(leon_lua::config_path);
     }
 
     /// Fetch the keymap and the settings and apply them now, waiting for the server (tests, and

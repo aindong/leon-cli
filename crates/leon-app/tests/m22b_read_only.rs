@@ -42,10 +42,8 @@ fn the_window_shows_it_read_only(cx: &mut TestAppContext) {
     assert_eq!(row(cx, "copy_on_select").unwrap().read_only, None);
 
     sw.update(cx, |sw, _, cx| sw.choose("font.size", json!(16), cx)).unwrap();
-    for _ in 0..20 {
-        cx.run_until_parked();
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    assert!(!sw.read_with(cx, |sw, _| sw.saving()).unwrap(), "no write started");
+    cx.run_until_parked();
     let text = std::fs::read_to_string(s.dir.path().join("init.lua")).unwrap();
     s.app.stop();
     assert_eq!(text, SRC, "a read-only control writes nothing");

@@ -33,7 +33,9 @@ fn the_window_writes_init_lua(cx: &mut TestAppContext) {
 
     let choose = |cx: &mut VisualTestContext, key: &str, v: Value| {
         sw.update(cx, |sw, _, cx| sw.choose(key, v.clone(), cx)).unwrap();
-        assert!(shows(cx, |cx| shown(cx, sw, key) == Some(v.clone())), "{key} never showed {v}");
+        // the window shows a choice at once; it is in init.lua once the save is done
+        let saved = |cx: &mut VisualTestContext| !sw.read_with(cx, |sw, _| sw.saving()).unwrap();
+        assert!(shows(cx, |cx| saved(cx) && shown(cx, sw, key) == Some(v.clone())), "{key} never showed {v}");
     };
     choose(cx, "font.size", json!(15.0));
     let after = std::fs::read_to_string(&config).unwrap();

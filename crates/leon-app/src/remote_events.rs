@@ -127,7 +127,7 @@ pub(super) fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
                 stale = true;
             } else if let Some(e) = v.error {
                 let why = e.message.unwrap_or_default();
-                if why.contains("unknown field `palette`") {
+                if palette::refuses_palette(&why) {
                     shared.refuse_palette();
                 } else {
                     eprintln!("leon: the server refused a watch: {why}");

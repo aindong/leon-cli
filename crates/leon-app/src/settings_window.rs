@@ -4,6 +4,7 @@
 //! place settings live. A setting init.lua sets by code that can't be rewritten shows read-only,
 //! with `leon config set`'s own message.
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -63,6 +64,8 @@ struct Loaded {
     src: String,
     /// Every theme a setting can name, with its colours (None: its file doesn't load).
     themes: Vec<(String, Option<Theme>)>,
+    /// The themes this window draws in, resolved once per read.
+    look: Look,
 }
 
 pub struct SettingsWindow {
@@ -74,10 +77,12 @@ pub struct SettingsWindow {
     /// The installed families of `FONTS`.
     fonts: Vec<String>,
     dark: bool,
-    /// A change is being written.
+    /// Changes not written yet, in the order they were made; `saving` while they are written.
+    queue: VecDeque<(String, Value)>,
     saving: bool,
     focus: FocusHandle,
     _appearance: Subscription,
+    _activation: Subscription,
 }
 
 /// Read the config at `config` and the themes beside it (off the UI thread: Lua runs).
@@ -89,7 +94,9 @@ fn load(config: &Path) -> Result<Loaded, String> {
     };
     let dir = themes_dir(config);
     let themes = theme_names(&dir).into_iter().map(|n| (n.clone(), load_theme(&dir, &n).ok())).collect();
-    Ok(Loaded { settings: cfg.settings.to_json(), sources: cfg.setting_sources, src, themes })
+    let settings = cfg.settings.to_json();
+    let look = Look::resolve(&settings, &dir);
+    Ok(Loaded { settings, sources: cfg.setting_sources, src, themes, look })
 }
 
 impl SettingsWindow {
@@ -118,6 +125,12 @@ impl SettingsWindow {
             sw.dark = crate::view::is_dark(window.appearance());
             cx.notify();
         });
+        // init.lua may have been edited by hand while the window was in the background
+        let activation = cx.observe_window_activation(window, |sw, window, cx| {
+            if window.is_window_active() && !sw.saving {
+                sw.reload(cx);
+            }
+        });
         let focus = cx.focus_handle();
         window.focus(&focus);
         let mut sw = SettingsWindow {
@@ -127,9 +140,11 @@ impl SettingsWindow {
             error: None,
             fonts,
             dark: crate::view::is_dark(window.appearance()),
+            queue: VecDeque::new(),
             saving: false,
             focus,
             _appearance: appearance,
+            _activation: activation,
         };
         sw.reload(cx);
         sw
@@ -163,33 +178,60 @@ impl SettingsWindow {
         self.error.clone()
     }
 
+    /// Changes are still being written.
+    pub fn saving(&self) -> bool {
+        self.saving
+    }
+
     /// Set `key` to `value` in init.lua (what each control does), then reload the server and read
-    /// the file again. A read-only setting is left alone.
+    /// the file again. The window shows the value at once, so a second click builds on it, and
+    /// changes are written one at a time, in order. A read-only setting is left alone.
     pub fn choose(&mut self, key: &str, value: Value, cx: &mut Context<Self>) {
         if self.row(key).is_none_or(|r| r.read_only.is_some()) {
             return;
         }
-        let (config, key, server) = (self.config.clone(), key.to_string(), self.server.clone());
-        self.saving = true;
+        if let Some(l) = self.loaded.as_mut() {
+            let parts: Vec<&str> = key.split('.').collect();
+            let (last, path) = parts.split_last().expect("a key");
+            if let Some(Value::Object(o)) = path.iter().try_fold(&mut l.settings, |v, p| v.get_mut(*p)) {
+                o.insert(last.to_string(), value.clone());
+            }
+        }
+        self.queue.push_back((key.to_string(), value));
         cx.notify();
+        if !self.saving {
+            self.saving = true;
+            self.error = None;
+            self.write_queue(cx);
+        }
+    }
+
+    /// Write the queued changes, reloading the server after each, then read init.lua again.
+    fn write_queue(&mut self, cx: &mut Context<Self>) {
+        let (config, server) = (self.config.clone(), self.server.clone());
         cx.spawn(async move |this, cx| {
-            let path = config.clone();
-            let written = cx.background_executor().spawn(async move { write_setting(&path, &key, &value) }).await;
-            let mut error = written.err();
-            if error.is_none() {
-                // as `leon config set` does: the running server follows the file
-                let (tx, rx) = futures::channel::oneshot::channel();
-                server.spawn("server.config_reload", json!({}), move |r| drop(tx.send(r)));
-                if let Ok(Err(e)) = rx.await {
-                    error = Some(format!("init.lua is written, but the server didn't reload it: {}", e.message));
+            while let Some((key, value)) = this.update(cx, |sw, _| sw.queue.pop_front()).ok().flatten() {
+                let path = config.clone();
+                let written = cx.background_executor().spawn(async move { write_setting(&path, &key, &value) }).await;
+                let mut error = written.err();
+                if error.is_none() {
+                    // as `leon config set` does: the running server follows the file
+                    let (tx, rx) = futures::channel::oneshot::channel();
+                    server.spawn("server.config_reload", json!({}), move |r| drop(tx.send(r)));
+                    if let Ok(Err(e)) = rx.await {
+                        error = Some(format!("init.lua is written, but the server didn't reload it: {}", e.message));
+                    }
+                }
+                if error.is_some() {
+                    this.update(cx, |sw, _| sw.error = error).ok();
                 }
             }
             let loaded = cx.background_executor().spawn(async move { load(&config) }).await;
             this.update(cx, |sw, cx| {
                 sw.saving = false;
-                sw.error = error.or(loaded.as_ref().err().cloned());
-                if let Ok(l) = loaded {
-                    sw.loaded = Some(l);
+                match loaded {
+                    Ok(l) => sw.loaded = Some(l),
+                    Err(e) => sw.error = Some(e),
                 }
                 cx.notify();
             })
@@ -199,8 +241,7 @@ impl SettingsWindow {
 
     /// The theme this window draws in: the one init.lua names for the appearance now.
     fn theme(&self) -> Theme {
-        let settings = self.loaded.as_ref().map_or(Value::Null, |l| l.settings.clone());
-        Look::resolve(&settings, &themes_dir(&self.config)).theme(self.dark)
+        self.loaded.as_ref().map_or_else(Look::default, |l| l.look.clone()).theme(self.dark)
     }
 }
 
