@@ -361,7 +361,9 @@ leon do --for 1m ./watch.lua
 
 ### `leon actions`
 
-List the server's config actions.
+List the actions: the config's (`leon.action`, with the `file:line` that defines each), then
+the app's own actions (`client.*`, `pane.*`, `session.*`, source `app`), which its keys and
+command palette run. `--json` prints the same list.
 
 ### `leon keymap`
 
@@ -546,15 +548,14 @@ leon skill status
 Float the block selected by `-b/--block` (default the focused block). `--new` opens a
 new terminal in the active window of `-s/--session`, running CMD or a login shell.
 `--label L` assigns a label; `--rect x,y,w,h` sets fractions of the whole window
-(default `0.1,0.1,0.8,0.8`). Rectangles must have positive width/height and fit inside
-the window. A float is shown, focused and raised above earlier floats. `--unfloat`
-returns a float or drawer to the tiled tree beside its root; its terminal keeps running.
+(default `0.1,0.1,0.8,0.8`), which must fit inside it. A float is shown, focused and
+raised. `--unfloat` returns a float or drawer to the tiles; its terminal keeps running.
 `--new` prints the new block ID; `--json` prints the API result.
 
 ### `leon toggle LABEL`
 
 Show/hide a float or drawer by its exact, case-insensitive label within `-s/--session`.
-Labels must be unique there. Hidden terminals continue running and producing output.
+Labels must be unique there. Hidden terminals keep running.
 `--create` opens a scratch login shell docked to the bottom on first use; subsequent
 calls toggle it. A bottom panel already occupying that side makes creation fail.
 
@@ -562,6 +563,5 @@ calls toggle it. A bottom panel already occupying that side makes creation fail.
 
 Pin `-b/--block` (default the focused block) to a side of its window. `--size F` is
 a fraction strictly between 0 and 1 (default 0.3). Each side holds at most one panel,
-including hidden panels; an occupied side fails without changes. `leon attach`
-reserves room for visible panels and draws visible floats above the tiled panes,
-with a border. The GPUI app's overlay drawing and animation arrive in M20b.
+including hidden panels; an occupied side fails without changes. `leon attach` and
+the app reserve room for visible panels and draw visible floats above the tiles.
