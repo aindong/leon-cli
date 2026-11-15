@@ -163,3 +163,8 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   `scripts/test-peer-uid.sh` uses the Linux test image to verify the peer uid check with
   socket permissions opened deliberately, then disables the check in a disposable copy
   and requires the rejection test to fail. The real source and server policy stay intact.
+- **Saved titles.** State file version 4 adds each block's `title` (the last one its program
+  set). A restored terminal starts with it, so a tab keeps its name after a restart until its
+  program sets a new one; the title is cleaned again on load, since it goes on screen. Versions 1
+  to 3 still load without titles; an older leon refuses version 4 as "saved by a newer leon" and
+  moves the file aside.

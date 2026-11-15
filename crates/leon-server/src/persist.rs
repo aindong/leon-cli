@@ -26,8 +26,9 @@ use crate::restore::{self, Resume};
 use crate::Ctx;
 
 pub const FILE: &str = "sessions.json";
-/// Version 3 adds window overlays and nullable layouts; versions 1 and 2 still load.
-const VERSION: u64 = 3;
+/// Version 3 adds window overlays and nullable layouts, version 4 each block's `title`; versions 1
+/// to 3 still load.
+const VERSION: u64 = 4;
 /// A bigger file is taken as corrupt: the saved text (`restore::TOTAL`) at most doubles in JSON.
 const MAX_FILE: u64 = 32 << 20;
 /// A revision past this is corrupt; the model only ever adds one.
