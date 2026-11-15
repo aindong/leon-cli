@@ -63,14 +63,15 @@ known() { printf '%s\n' "$full" | n="$1" awk '$1 == ENVIRON["n"] { print; found 
 # what an earlier run wrote is made again
 rm -f "$dir"/*.minisig "$dir/SHA256SUMS" "$dir/latest.json"
 files=()
+shopt -s dotglob nullglob # hidden files count: release-verify.sh refuses a .DS_Store, so it stops here
 for path in "$dir"/*; do
-  [ -e "$path" ] || continue # an empty DIR: the glob stays as it is
   name=$(basename "$path")
   [ "$name" != BUILD-COMMIT ] || continue
   known "$name" >/dev/null \
     || { echo "release-manifest.sh: $name is not a release file of leon $version" >&2; exit 1; }
   files+=("$name")
 done
+shopt -u dotglob nullglob
 [ ${#files[@]} -gt 0 ] || { echo "release-manifest.sh: $dir has no release files" >&2; exit 1; }
 if [ -n "$complete" ]; then
   while read -r name _; do

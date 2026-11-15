@@ -112,23 +112,10 @@ fn a_notice_from_before_a_join_goes_where_the_pane_is_now(cx: &mut TestAppContex
         ws.active_window().and_then(|w| w.layout).is_some_and(|l| l.leaves().contains(&block.as_str()))
     };
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| in_view(ws))), "the app saw the join");
-    // posted while the block was still in `deploys`
-    // the click queue is one per process and this binary's other tests poll it too: post the click
-    // again until this window takes it
-    let click = || {
-        notify::clicked(notify::Click {
-            host_label: "This Mac".into(),
-            session_id: sid.clone(),
-            block_id: block.clone(),
-        })
-    };
-    assert!(shows(cx, |cx| {
-        let there = ws.read_with(cx, |ws, _| ws.target_block()) == Some(block.clone());
-        if !there {
-            click();
-        }
-        there
-    }));
+    // posted while the block was still in `deploys`; one click is enough, whichever of this
+    // binary's windows was made last (flake_click_wakes_older_window.rs)
+    notify::clicked(notify::Click { host_label: "This Mac".into(), session_id: sid, block_id: block.clone() });
+    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.target_block()) == Some(block.clone())));
     assert_eq!(ws.read_with(cx, |ws, _| ws.session_id()), Some(here));
     s.app.stop();
 }

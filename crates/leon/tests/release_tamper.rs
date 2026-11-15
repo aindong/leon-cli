@@ -125,3 +125,44 @@ fn a_release_with_a_file_missing_is_not_complete() {
     let o = verify(&dir, &key.keys_file, &["--complete"]);
     assert!(!o.status.success() && text(&o).contains(missing.as_str()), "verify names the gap: {}", text(&o));
 }
+
+/// A manifest with two entries for one platform leaves a reader guessing which to take, so the
+/// verifier refuses it even when the key signed it. (docs/releases.md tells an updater the same.)
+#[test]
+fn two_entries_for_one_platform_are_refused_even_when_signed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("files");
+    let key = signed_release(&dir, tmp.path());
+    let sec = tmp.path().join("resign.sec");
+    std::fs::write(&sec, &key.secret).unwrap();
+    let sign = |name: &str| {
+        let _ = std::fs::remove_file(dir.join(format!("{name}.minisig")));
+        let o =
+            release_kit::minisign(&["-S", "-W", "-s", sec.to_str().unwrap(), "-m", dir.join(name).to_str().unwrap()]);
+        assert!(o.status.success(), "{}", text(&o));
+    };
+    // a ninth file, signed and listed like the others, for a platform that already has its app
+    let extra = "Leon-extra-macos-arm64.zip";
+    std::fs::write(dir.join(extra), "another app for the same Macs").unwrap();
+    sign(extra);
+    let sum =
+        release_kit::sh(&dir, &format!("(sha256sum {extra} 2>/dev/null || shasum -a 256 {extra}) | cut -d' ' -f1"));
+    let sums = std::fs::read_to_string(dir.join("SHA256SUMS")).unwrap();
+    std::fs::write(dir.join("SHA256SUMS"), format!("{sums}{}  {extra}\n", sum.trim())).unwrap();
+    let mut m: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("latest.json")).unwrap()).unwrap();
+    let mut entry =
+        m["files"].as_array().unwrap().iter().find(|f| f["kind"] == "app" && f["arch"] == "arm64").unwrap().clone();
+    entry["name"] = extra.into();
+    entry["url"] = format!("https://github.com/aindong/leon-cli/releases/download/v{VERSION}/{extra}").into();
+    entry["size"] = std::fs::metadata(dir.join(extra)).unwrap().len().into();
+    entry["sha256"] = sum.trim().into();
+    entry["signature"] = std::fs::read_to_string(dir.join(format!("{extra}.minisig"))).unwrap().into();
+    m["files"].as_array_mut().unwrap().push(entry);
+    std::fs::write(dir.join("latest.json"), m.to_string()).unwrap();
+    sign("SHA256SUMS");
+    sign("latest.json");
+
+    let o = verify(&dir, &key.keys_file, &["--complete"]);
+    assert!(!o.status.success(), "two apps for macOS arm64 were accepted: {}", text(&o));
+}

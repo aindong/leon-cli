@@ -98,15 +98,16 @@ fn an_agent_with_no_terminal_records_nothing() {
 #[test]
 fn outside_leon_the_hook_is_silent_and_calls_no_server() {
     let env = Env::new();
-    let mut child = env
+    // Its stdin is a file, there from the start: outside leon the hook never reads it and is gone
+    // in a few ms, so a write into a pipe may find it gone and fail (as it did on the CI runner).
+    let input = env.dir.path().join("in.json");
+    std::fs::write(&input, start("c7583d2c-3133-4d13-b5f0-45883f1cabcb")).unwrap();
+    let o = env
         .cmd()
         .args(["skill", "hook", "--agent", "claude"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
+        .stdin(std::fs::File::open(&input).unwrap())
+        .output()
         .unwrap();
-    child.stdin.take().unwrap().write_all(start("c7583d2c-3133-4d13-b5f0-45883f1cabcb").as_bytes()).unwrap();
-    let o = child.wait_with_output().unwrap();
     assert!(o.status.success());
     assert_eq!(String::from_utf8_lossy(&o.stdout), "");
     assert!(!env.socket().exists(), "no server was started");

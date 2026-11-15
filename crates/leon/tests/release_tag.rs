@@ -62,6 +62,23 @@ fn a_tag_on_a_commit_that_is_not_on_main_is_refused() {
     git("commit -q --allow-empty -m two");
     let (ok, out) = on_main();
     assert!(!ok && out.contains("not on main") && !out.contains("1.2.3\n"), "a dev-only commit was accepted: {out}");
+    // the flag after the tag is the same check, not a way around it
+    let o = std::process::Command::new("bash")
+        .args(["scripts/release-version.sh", "v1.2.3", "--on-main"])
+        .current_dir(repo)
+        .output()
+        .unwrap();
+    assert!(
+        !o.status.success() && text(&o).contains("not on main"),
+        "--on-main after the tag was ignored: {}",
+        text(&o)
+    );
+    let o = std::process::Command::new("bash")
+        .args(["scripts/release-version.sh", "v1.2.3", "v1.2.3"])
+        .current_dir(repo)
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2), "one tag, not two: {}", text(&o));
     // without --on-main (a run started by hand) the same commit is fine
     let o = std::process::Command::new("bash").args(["scripts/release-version.sh"]).current_dir(repo).output().unwrap();
     assert!(o.status.success(), "{}", text(&o));

@@ -73,12 +73,15 @@ fn a_hand_started_run_stays_a_draft_and_only_one_job_can_write() {
 
     // a release or draft left from an earlier run stops this one before anything is signed
     let exists = step(&steps, "exists already");
-    assert!(exists.contains("gh release view \"$TAG\"") && exists.contains("exit 1"), "{exists}");
+    // asked of the API, drafts included, so an error stops the run instead of reading as "none"
+    assert!(exists.contains("gh api \"repos/$GH_REPO/releases\" --paginate") && exists.contains("exit 1"), "{exists}");
+    assert!(!exists.contains("2>&1") && !exists.contains("|| true"), "a failed lookup is not swallowed: {exists}");
     assert!(yml.find("exists already").unwrap() < yml.find("scripts/release-manifest.sh").unwrap());
     // the write token is given to the steps that call gh, not to the whole job
     let with_token: Vec<&String> = steps.iter().filter(|s| s.contains("GH_TOKEN")).collect();
     assert_eq!(with_token.len(), 3, "three steps talk to GitHub: view, create, edit");
-    assert!(with_token.iter().all(|s| s.contains("gh release ") && s.starts_with("      - ")), "{with_token:#?}");
+    let calls_gh = |s: &&String| (s.contains("gh release ") || s.contains("gh api ")) && s.starts_with("      - ");
+    assert!(with_token.iter().all(calls_gh), "{with_token:#?}");
     // the manifest holds every signature: a hand-started run must not leave it as a public artifact
     let manifest = step(&steps, "name: manifest\n");
     assert!(manifest.contains("uses: actions/upload-artifact") && manifest.contains(tag_push), "{manifest}");
