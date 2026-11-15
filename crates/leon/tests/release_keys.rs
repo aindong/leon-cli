@@ -130,3 +130,31 @@ fn an_existing_secret_is_never_replaced_and_a_second_name_rotates() {
     assert!(signs_and_verifies(kit.tmp.path(), &second, &both[1]));
     assert!(!kit.keys(&["--name", "not a secret name"]).status.success(), "a bad secret name is refused");
 }
+
+/// The keys leon pins (crates/leon/release-keys.pub): at least one, each a minisign public key on
+/// a line of its own under the comment `release-keys.sh` writes, and nothing else but comments.
+#[test]
+fn the_pinned_keys_file_holds_keys_each_under_its_secrets_name() {
+    let pinned = std::fs::read_to_string(release_kit::repo().join("crates/leon/release-keys.pub")).unwrap();
+    let lines: Vec<&str> = pinned.lines().collect();
+    let keys: Vec<usize> = (0..lines.len()).filter(|&i| !lines[i].starts_with('#') && !lines[i].is_empty()).collect();
+    assert!(!keys.is_empty(), "a release cannot be checked against no key: run scripts/release-keys.sh");
+    for i in keys {
+        let key = lines[i];
+        let base64 = key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/');
+        assert!(key.len() == 56 && key.starts_with("RW") && base64, "line {} is a minisign public key: {key}", i + 1);
+        let label = lines[i - 1];
+        assert!(
+            label.starts_with("# LEON_RELEASE_KEY") && label.contains(", added 20"),
+            "line {i} names the secret: {label}"
+        );
+        // a real key: minisign takes it, and it did not sign this
+        let probe = tempfile::tempdir().unwrap();
+        let file = probe.path().join("unsigned");
+        std::fs::write(&file, "x").unwrap();
+        std::fs::write(probe.path().join("unsigned.minisig"), "untrusted comment: none\nRUQAAAAAAAAAAA==\n").unwrap();
+        let o = minisign(&["-V", "-P", key, "-m", file.to_str().unwrap()]);
+        assert!(!o.status.success() && !text(&o).to_lowercase().contains("public key"), "{}", text(&o));
+    }
+    assert!(pinned.ends_with('\n'), "the file ends with a newline, so the next key starts its own line");
+}
