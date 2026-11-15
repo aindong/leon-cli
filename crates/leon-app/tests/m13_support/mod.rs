@@ -34,6 +34,7 @@ pub fn model(sessions: Vec<(&str, Vec<Tab>)>) -> Model {
             windows: Vec::new(),
             blocks: Vec::new(),
             overlays: Default::default(),
+            tiled_focus: Default::default(),
         };
         for (i, Tab(tab, title, status)) in tabs.into_iter().enumerate() {
             let (wid, bid) = (format!("window:{label}/{i}"), format!("block:{label}/{i}"));

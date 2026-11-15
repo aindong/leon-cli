@@ -47,10 +47,11 @@ pub fn session_title(s: &Session, index: usize) -> String {
     s.label.clone().unwrap_or_else(|| format!("Session {}", index + 1))
 }
 
-/// A tab's name: its label, else the title the shown block's program set, else that program.
+/// A tab's name: its label, else the title its tile's program set (never a float's or drawer's),
+/// else that program.
 pub fn tab_title(s: &Session, w: &Window) -> String {
     w.label.clone().unwrap_or_else(|| {
-        let shown = w.zoomed.as_deref().or(w.focus.as_deref()).and_then(|id| s.blocks.iter().find(|b| b.id == id));
+        let shown = s.named_tile(w).and_then(|id| s.blocks.iter().find(|b| b.id == id));
         shown.map_or("empty".into(), |b| b.title.clone().unwrap_or_else(|| program_name(&b.command)))
     })
 }
