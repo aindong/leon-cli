@@ -32,6 +32,9 @@ fn cmd_enter_with_a_floating_pane_focused_joins_beside_a_tiled_one(cx: &mut Test
     let (_, moved) = other_tab(&s);
     cx.run_until_parked();
     cx.simulate_keystrokes("cmd-k");
+    // the app hears of the new tab by an event, a moment after it was made
+    let listed = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.switcher_rows());
+    assert!(shows(cx, |cx| listed(cx).iter().any(|r| r.contains("deploys › rollout"))), "{:?}", listed(cx));
     cx.simulate_input("rollout");
     cx.simulate_keystrokes("cmd-enter");
     cx.run_until_parked();
@@ -49,6 +52,9 @@ fn a_pane_that_joins_a_zoomed_window_is_not_hidden(cx: &mut TestAppContext) {
     let (_, moved) = other_tab(&s);
     cx.run_until_parked();
     cx.simulate_keystrokes("cmd-k");
+    // the app hears of the new tab by an event, a moment after it was made
+    let listed = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.switcher_rows());
+    assert!(shows(cx, |cx| listed(cx).iter().any(|r| r.contains("deploys › rollout"))), "{:?}", listed(cx));
     cx.simulate_input("rollout");
     cx.simulate_keystrokes("cmd-enter");
     cx.run_until_parked();
@@ -67,6 +73,9 @@ fn the_cant_split_note_keeps_its_row_and_goes_when_the_list_changes(cx: &mut Tes
     other_tab(&s);
     cx.run_until_parked();
     cx.simulate_keystrokes("cmd-k");
+    // the app hears of the new tab by an event, a moment after it was made
+    let listed = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.switcher_rows());
+    assert!(shows(cx, |cx| listed(cx).iter().any(|r| r.contains("deploys › rollout"))), "{:?}", listed(cx));
     cx.simulate_input("rollout");
     cx.run_until_parked();
     let before = ws.read_with(cx, |ws, _| ws.switcher_rows());
@@ -102,8 +111,22 @@ fn a_notice_from_before_a_join_goes_where_the_pane_is_now(cx: &mut TestAppContex
     };
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| in_view(ws))), "the app saw the join");
     // posted while the block was still in `deploys`
-    notify::clicked(notify::Click { host_label: "This Mac".into(), session_id: sid, block_id: block.clone() });
-    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.target_block()) == Some(block.clone())));
+    // the click queue is one per process and this binary's other tests poll it too: post the click
+    // again until this window takes it
+    let click = || {
+        notify::clicked(notify::Click {
+            host_label: "This Mac".into(),
+            session_id: sid.clone(),
+            block_id: block.clone(),
+        })
+    };
+    assert!(shows(cx, |cx| {
+        let there = ws.read_with(cx, |ws, _| ws.target_block()) == Some(block.clone());
+        if !there {
+            click();
+        }
+        there
+    }));
     assert_eq!(ws.read_with(cx, |ws, _| ws.session_id()), Some(here));
     s.app.stop();
 }

@@ -60,8 +60,11 @@ A theme is the terminal's 16 colours, background, foreground, cursor and selecti
 colours around the panes and the status colours. leon has two built in, `leon-dark` and
 `leon-light`; imported ones live as files in `themes/` beside init.lua (by default
 `~/.config/leon/themes/NAME.theme`), in Ghostty's `key = value` syntax with leon's own colours
-added. `leon config set theme NAME` picks one; the app starts drawing with it in the next
-release (M22b), and `server.settings` reports it now.
+added. `leon config set theme NAME` picks one, and a running app draws with it within a second:
+the panes, the window around them and the status colours. With `dark=A,light=B` the app switches when macOS
+does. The app's Settings window (⌘,) sets the theme, font, notifications and copy on select the
+same way: each change goes through `leon config set`'s code into init.lua, and a setting init.lua
+sets by code it can't rewrite shows read-only there, with the message above.
 
 ### `leon theme`
 

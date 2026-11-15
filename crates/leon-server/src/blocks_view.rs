@@ -4,7 +4,6 @@
 use leon_core::mouse::{self, Action, Button};
 use leon_core::screen::Lines;
 use leon_core::search::{Kind, Link, Pos, Query, Selected};
-use leon_core::theme;
 
 use super::*;
 
@@ -15,6 +14,9 @@ pub struct LinesArgs {
     pub from: usize,
     /// How many lines, at most 1000.
     pub count: usize,
+    /// The colours to resolve them with, as `block.watch` takes them [default: leon-dark's].
+    #[serde(default)]
+    pub palette: Option<crate::screens::Palette>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -40,7 +42,7 @@ pub(super) fn methods() -> Vec<TermMethod> {
              them; lines no longer kept are left out, and so are the last ones past 4 MiB (ask again for \
              them). With the numbering they were read under.",
             |t, a: LinesArgs| -> Result<Lines, ApiError> {
-                let mut lines = t.lines(a.from, a.count, &theme::DARK);
+                let mut lines = t.lines(a.from, a.count, &crate::screens::Palette::theme(a.palette.as_ref()));
                 lines.rows = crate::screens::within_line(lines.rows);
                 Ok(lines)
             },

@@ -40,7 +40,7 @@ impl Workspace {
         stats: Rc<RefCell<Stats>>,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let size = self.pane_area(window);
         let view = window.viewport_size();
         let origin = (f32::from(view.width) - size.0, f32::from(view.height) - size.1);
@@ -111,7 +111,7 @@ impl Workspace {
         tiling: &Tiling,
         cx: &mut Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
-        let t = &DARK;
+        let t = &self.theme;
         let focused = tiling.target.as_deref() == Some(id);
         let id = id.to_string();
         let view = self.drawn(&id);
@@ -121,7 +121,7 @@ impl Workspace {
             (tiling.sid.clone(), id.clone()),
             (view.frame, marks),
             tiling.active && focused,
-            self.font_size,
+            (self.font_family.clone(), self.font_size, self.theme),
             (tiling.stats.clone(), self.term.painted.clone()),
         );
         let headers = self.settings.pane_headers || kind != "pane";
@@ -246,6 +246,9 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.note_focus(window);
+        if std::mem::take(&mut self.refit) {
+            self.set_font_size(self.font_size, window, cx); // a new font from init.lua
+        }
         self.note_slides();
         DRAWN.with(|d| d.borrow_mut().clear());
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
@@ -303,12 +306,13 @@ impl Render for Workspace {
             .on_action(cx.listener(|ws, _: &Copy, w, cx| ws.run_action("pane.copy", None, "menu", w, cx)))
             .on_action(cx.listener(|ws, _: &SelectAll, w, cx| ws.run_action("pane.select_all", None, "menu", w, cx)))
             .on_action(cx.listener(|ws, _: &Find, w, cx| ws.run_action("client.find.open", None, "menu", w, cx)))
+            .on_action(cx.listener(|ws, _: &OpenSettings, w, cx| ws.run_action("client.settings", None, "menu", w, cx)))
             .size_full()
             .flex()
-            .bg(rgb(DARK.chrome))
+            .bg(rgb(self.theme.chrome))
             .font_family(".SystemUIFont")
             .text_size(px(UI_TEXT))
-            .text_color(rgb(DARK.text))
+            .text_color(rgb(self.theme.text))
             .children(places.sidebar.map(|list| self.render_sidebar(&rows, list, cx)))
             .child(column)
             .children(self.render_stale(window))

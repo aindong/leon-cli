@@ -126,7 +126,12 @@ pub(super) fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
                 }
                 stale = true;
             } else if let Some(e) = v.error {
-                eprintln!("leon: the server refused a watch: {}", e.message.unwrap_or_default());
+                let why = e.message.unwrap_or_default();
+                if palette::refuses_palette(&why) {
+                    shared.refuse_palette();
+                } else {
+                    eprintln!("leon: the server refused a watch: {why}");
+                }
             }
             if !r.buffer().contains(&b'\n') {
                 break; // nothing more already read: show what came

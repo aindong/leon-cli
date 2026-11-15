@@ -30,7 +30,7 @@ impl Workspace {
         action: &'static str,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         div()
             .id(id)
             .group(id)
@@ -58,7 +58,7 @@ impl Workspace {
     /// The titlebar row over the panes: with the sidebar hidden it holds the toolbar's buttons;
     /// then the session's name, and in top style its tabs and a + for a new one.
     pub(super) fn render_titlebar(&self, row: Option<&SessionRow>, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let places = self.places();
         let frame = self.pulse();
         let hidden = places.sidebar.is_none();
@@ -118,7 +118,7 @@ impl Workspace {
         frame: u64,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let (sid, wid) = (row.id.clone(), w.id.clone());
         div()
             .id(SharedString::from(format!("tab-{i}")))
@@ -138,7 +138,7 @@ impl Workspace {
             .when(active, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
             .when(!active, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
             .child(div().flex_1().overflow_hidden().min_w(px(0.)).line_clamp(1).text_ellipsis().child(w.title.clone()))
-            .children(w.status.map(|s| status_mark(s, frame)))
+            .children(w.status.map(|s| status_mark(s, frame, t)))
             .when(i < 9, |d| {
                 d.child(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(format!("⌘{}", i + 1)))
             })
@@ -166,11 +166,11 @@ impl Workspace {
 }
 
 /// A tooltip: what a button does, and the keys that do it.
-pub(super) struct Tip(pub(super) SharedString);
+pub(super) struct Tip(pub(super) SharedString, pub(super) Theme);
 
 impl Render for Tip {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.1;
         div()
             .px(px(8.))
             .py(px(4.))
@@ -193,13 +193,14 @@ impl Workspace {
             Some(keys) => format!("{title}   {keys}").into(),
             None => title.to_string().into(),
         };
-        move |_, cx| cx.new(|_| Tip(text.clone())).into()
+        let theme = self.theme;
+        move |_, cx| cx.new(|_| Tip(text.clone(), theme)).into()
     }
 }
 
 /// A status icon in its state's colour (a tab, a sidebar row, a pane header), with the progress
 /// when the program gave one. Working pulses with `frame`.
-pub(super) fn status_mark(i: Indicator, frame: u64) -> gpui::Div {
+pub(super) fn status_mark(i: Indicator, frame: u64, t: &Theme) -> gpui::Div {
     use leon_core::program_status::Kind;
     const PULSE: [f32; 8] = [1., 0.85, 0.7, 0.55, 0.45, 0.55, 0.7, 0.85];
     let icon = match i {
@@ -222,7 +223,7 @@ pub(super) fn status_mark(i: Indicator, frame: u64) -> gpui::Div {
         .items_center()
         .gap(px(4.))
         .text_size(px(SECONDARY_TEXT))
-        .text_color(rgb(i.color(&DARK)))
-        .child(icon.at(ROW_ICON, i.color(&DARK)).opacity(pulse))
+        .text_color(rgb(i.color(t)))
+        .child(icon.at(ROW_ICON, i.color(t)).opacity(pulse))
         .children(progress)
 }
