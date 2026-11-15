@@ -4,6 +4,7 @@
 use std::io::{self, BufRead, BufReader, Read};
 use std::os::unix::net::UnixStream;
 
+use leon_core::overlays::Overlays;
 use leon_core::program_status::{strip_hidden, Record};
 use leon_core::{ApiError, Window};
 use serde_json::{json, Value};
@@ -60,6 +61,13 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
                 zoomed: text(&w["zoomed_block_id"]),
             })
             .collect();
+        let overlays = view["windows"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|w| (text(&w["window_id"]).unwrap_or_default(), decode_overlays(w)))
+            .filter(|(_, o)| *o != Overlays::default())
+            .collect();
         let active = view["windows"].as_array().and_then(|ws| ws.iter().position(|w| w["active"] == true));
         let mut session = Session {
             id: text(sid).unwrap_or_default(),
@@ -68,6 +76,7 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
             active: active.unwrap_or(0),
             windows,
             blocks: Vec::new(),
+            overlays,
         };
         for b in blocks["blocks"].as_array().into_iter().flatten() {
             let p =
@@ -81,6 +90,7 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
             session.blocks.push(Block {
                 id: text(&b["block_id"]).unwrap_or_default(),
                 window_id: text(&b["window_id"]).unwrap_or_default(),
+                label: text(&b["label"]),
                 command: serde_json::from_value(b["command"].clone()).unwrap_or_default(),
                 title: text(&b["title"]),
                 cwd: text(&b["cwd"]),
@@ -97,4 +107,28 @@ fn shown(mut r: Record) -> Record {
     r.title = r.title.map(|t| strip_hidden(&t));
     r.msg = r.msg.map(|m| strip_hidden(&m));
     r
+}
+
+/// A window's floats and drawers from its `session.view` entry. Only the fields this client knows
+/// are read (a newer server may add some, and the types refuse unknown ones), and a window whose
+/// placements a server should never send (bounds outside the window, a size past 1) gets none.
+pub fn decode_overlays(window: &Value) -> Overlays {
+    let pick = |v: &Value, keys: &[&str]| -> Value {
+        keys.iter().map(|k| (k.to_string(), v[*k].clone())).filter(|(_, v)| !v.is_null()).collect()
+    };
+    let entries = |key: &str| window[key].as_array().cloned().unwrap_or_default();
+    let floating: Vec<Value> = entries("floating")
+        .iter()
+        .map(|f| {
+            let mut f = pick(f, &["block_id", "bounds", "hidden"]);
+            f["bounds"] = pick(&f["bounds"], &["x", "y", "width", "height"]);
+            f
+        })
+        .collect();
+    let docked: Vec<Value> =
+        entries("docked").iter().map(|d| pick(d, &["block_id", "side", "size", "hidden"])).collect();
+    serde_json::from_value::<Overlays>(json!({ "floating": floating, "docked": docked }))
+        .ok()
+        .filter(|o| o.check().is_ok())
+        .unwrap_or_default()
 }

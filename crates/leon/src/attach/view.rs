@@ -266,25 +266,7 @@ impl Tui {
         };
         let panes_area = Rect { height: area.height.saturating_sub(1), ..area };
         let w = s.windows.get(s.active);
-        if !self.overlay_view.as_ref().is_some_and(|(sid, rev, _)| sid == &s.id && *rev == s.revision) {
-            match self.remote.call("session.view", json!({"session_id": s.id})) {
-                Ok(v) => self.overlay_view = Some((s.id.clone(), s.revision, v)),
-                Err(e) => self.say(e.message),
-            }
-        }
-        let overlays = self
-            .overlay_view
-            .as_ref()
-            .filter(|(sid, _, _)| sid == &s.id)
-            .and_then(|(_, _, v)| v["windows"].as_array())
-            .and_then(|ws| ws.iter().find(|v| w.is_some_and(|w| v["window_id"] == w.id)))
-            .and_then(|v| {
-                serde_json::from_value::<leon_core::overlays::Overlays>(
-                    json!({"floating":v["floating"],"docked":v["docked"]}),
-                )
-                .ok()
-            })
-            .unwrap_or_default();
+        let overlays = w.map(|w| s.overlay(&w.id)).unwrap_or_default();
         let (tile_area, overlays) = super::overlays::layout(&overlays, panes_area);
         let laid = match w.and_then(|w| w.layout.as_ref()) {
             Some(tree) => panes::layout(

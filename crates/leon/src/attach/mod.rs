@@ -140,7 +140,6 @@ struct Tui {
     /// A config sequence in progress (`ctrl+x>…`).
     pending: Vec<Chord>,
     /// Per block, the size this client last asked for (the size rule, docs/architecture.md).
-    overlay_view: Option<(String, u64, serde_json::Value)>,
     asked: std::collections::HashMap<String, (u16, u16)>,
     /// A failed action's message, for the status bar; set from other threads too.
     note: Arc<Mutex<Option<String>>>,
@@ -160,7 +159,6 @@ impl Tui {
             after_prefix: false,
             pending: Vec::new(),
             asked: Default::default(),
-            overlay_view: None,
             note: Arc::default(),
             tx,
         };

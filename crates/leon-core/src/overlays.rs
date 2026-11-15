@@ -159,13 +159,21 @@ impl State {
         if s.overlay(&s.windows[w].id).docked.iter().any(|d| d.side == side && d.block_id != id) {
             return Err(ApiError::bad_request("that side already has a dock"));
         }
-        s.detach_placed(w, id);
-        s.overlays.entry(s.windows[w].id.clone()).or_default().docked.push(Docked {
-            block_id: id.into(),
-            side,
-            size,
-            hidden: false,
-        });
+        // a resize of a drawer on its own side keeps its place: the list order decides which
+        // drawer spans the corner
+        let wid = s.windows[w].id.clone();
+        match s.overlays.get_mut(&wid).and_then(|o| o.docked.iter_mut().find(|d| d.block_id == id && d.side == side)) {
+            Some(d) => (d.size, d.hidden) = (size, false),
+            None => {
+                s.detach_placed(w, id);
+                s.overlays.entry(wid).or_default().docked.push(Docked {
+                    block_id: id.into(),
+                    side,
+                    size,
+                    hidden: false,
+                });
+            }
+        }
         s.windows[w].focus = Some(id.into());
         s.windows[w].zoomed = None;
         self.focus_block(sid, id)?;
