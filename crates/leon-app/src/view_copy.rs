@@ -212,6 +212,9 @@ impl Workspace {
         let args = json!({ "query": query, "regex": false, "case_sensitive": false });
         let Ok(found) = self.term_call(id, "find", args) else { return };
         let matches: Vec<Range> = serde_json::from_value(found["matches"].clone()).unwrap_or_default();
+        if let Some(cm) = self.term.copy.as_mut() {
+            cm.truncated = (found["truncated"] == true).then_some(matches.len());
+        }
         if let Some(to) = copy_mode::pick(&matches, at, forward != reverse) {
             self.copy_to(id, to);
         }
@@ -274,6 +277,11 @@ impl Workspace {
                 (None, Some((Kind::Line, _))) => "COPY LINE".into(),
                 (None, Some(_)) => "COPY VISUAL".into(),
                 (None, None) => "COPY".into(),
+            };
+            // find stopped short: the matches past these aren't stepped to
+            let badge = match cm.truncated.filter(|_| cm.prompt.is_none()) {
+                Some(n) => format!("{badge} · {n}+ matches"),
+                None => badge,
             };
             let col = c.frame.cols.saturating_sub(badge.chars().count());
             stamp(&mut c.frame, 0, col, &badge, t.bg, t.accent);

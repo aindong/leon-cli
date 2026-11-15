@@ -220,11 +220,13 @@ pub struct CopyMode {
     pub prompt: Option<(bool, String)>,
     /// The last search, the same way.
     pub search: Option<(bool, String)>,
+    /// How many matches the last search found, when find stopped short of them all.
+    pub truncated: Option<usize>,
 }
 
 impl CopyMode {
     pub fn new(block: String, cursor: Pos) -> CopyMode {
-        CopyMode { block, cursor, selection: None, prompt: None, search: None }
+        CopyMode { block, cursor, selection: None, prompt: None, search: None, truncated: None }
     }
 
     /// `v` or `V`: a selection of `kind` from the cursor; the same key again ends it, the other
