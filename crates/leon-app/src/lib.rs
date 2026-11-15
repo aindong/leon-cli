@@ -2,6 +2,7 @@
 
 pub mod attention;
 pub mod chrome;
+pub mod copy_mode;
 pub mod embedded;
 pub mod floats;
 pub mod hosts;
@@ -17,6 +18,7 @@ pub mod panes;
 pub mod remote;
 pub mod render;
 pub mod scrollback;
+pub mod stamp;
 pub mod status;
 pub mod switcher;
 pub mod theme;

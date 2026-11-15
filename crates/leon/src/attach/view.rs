@@ -44,6 +44,8 @@ impl Tui {
         if super::lock(&self.note).take().is_some() {
             *dirty = true;
         }
+        // every key closes the repeat window; only a repeatable one opens it again
+        let mut window = std::mem::take(&mut self.repeat);
         let Some(c) = keys::chord(&k) else {
             // a key binding syntax can't name ends any prefix or sequence, and goes to the pane
             *dirty |= self.after_prefix || !self.pending.is_empty();
@@ -51,9 +53,28 @@ impl Tui {
             self.forward(&k);
             return Flow::Go;
         };
+        let now = std::time::Instant::now();
+        let repeat = self.keys.config.repeat_time;
+        if !self.after_prefix && self.pending.is_empty() {
+            let keys = &self.keys;
+            let find = |p: &[Chord], c: &Chord| match p == std::slice::from_ref(&keys.prefix) {
+                true => keys.repeatable(c),
+                false => keys.config.repeatable(p, c).map(|b| After::Config(Pressed::Run(b))),
+            };
+            if let Some((after, prefix)) = window.press(&c, now, find) {
+                self.repeat.ran(&prefix, true, repeat, now);
+                return match after {
+                    After::Run(a, args) => self.action(&a, args.as_ref()),
+                    After::Config(Pressed::Run(b)) => self.binding(b, prefix, &c),
+                    _ => Flow::Go,
+                };
+            }
+        }
         if self.after_prefix {
             (self.after_prefix, *dirty) = (false, true);
             let prefix = self.keys.prefix.clone();
+            let repeats = self.keys.repeatable(&c).is_some();
+            self.repeat.ran(std::slice::from_ref(&prefix), repeats, repeat, now);
             return match self.keys.after_prefix(&c) {
                 After::Run(a, args) => self.action(&a, args.as_ref()),
                 After::Config(Pressed::Run(b)) => self.binding(b, vec![prefix], &c),
@@ -75,6 +96,7 @@ impl Tui {
         match self.keys.config.press(&self.pending, &c) {
             Pressed::Run(b) => {
                 let prefix = std::mem::take(&mut self.pending);
+                self.repeat.ran(&prefix, b.repeats, repeat, now);
                 self.binding(b, prefix, &c)
             }
             Pressed::Pending => {

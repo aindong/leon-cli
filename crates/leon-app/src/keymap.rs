@@ -3,6 +3,8 @@
 
 #[cfg(all(feature = "gui", target_os = "macos"))]
 use gpui::Keystroke;
+use std::time::{Duration, Instant};
+
 use leon_lua::keys::{parse, Chord, Key};
 use serde_json::{json, Value};
 
@@ -42,6 +44,8 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+f", "client.find.open"),
     ("cmd+g", "client.find.next"),
     ("cmd+shift+g", "client.find.previous"),
+    ("cmd+shift+c", "client.copy_mode"),
+    ("cmd+shift+h", "client.hints"),
     ("cmd+up", "client.scroll.top"),
     ("cmd+down", "client.scroll.bottom"),
 ];
@@ -120,6 +124,9 @@ pub struct Bound {
     pub action: Option<String>,
     pub args: Option<Value>,
     pub from_config: bool,
+    /// tmux `bind -r`: after it runs, its last key (or another repeatable one after the same
+    /// prefix) works again without the prefix for `Keymap::repeat_time`.
+    pub repeats: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -147,6 +154,10 @@ pub struct Keymap {
     pub actions: Vec<ConfigAction>,
     /// `leon.set("copy_on_select", true)` in the config.
     pub copy_on_select: bool,
+    /// How long a repeatable binding's keys work without the prefix (`leon.set("repeat_time")`).
+    pub repeat_time: Duration,
+    /// The config's own hint patterns (`leon.set("hint_patterns")`).
+    pub hint_patterns: Vec<String>,
     /// The `notify_*` settings.
     pub notify: crate::attention::Settings,
 }
@@ -172,6 +183,7 @@ impl Keymap {
                 action: Some(a.into()),
                 args,
                 from_config: false,
+                repeats: false,
             })
             .collect();
         let list = |k: &str| km[k].as_array().cloned().unwrap_or_default();
@@ -194,6 +206,7 @@ impl Keymap {
                 action,
                 args: b.get("args").filter(|a| !a.is_null()).cloned(),
                 from_config: true,
+                repeats: b["repeats"] == true,
             });
         }
         let actions = list("server_actions")
@@ -206,14 +219,25 @@ impl Keymap {
                 })
             })
             .collect();
-        let copy_on_select = km["settings"]["copy_on_select"] == true;
-        let on = |name: &str| km["settings"][name] != false; // on unless the config turned it off
+        let settings = &km["settings"];
+        let on = |name: &str| settings[name] != false; // on unless the config turned it off
         let notify = crate::attention::Settings {
             blocked: on("notify_blocked"),
             error: on("notify_error"),
             done: on("notify_done"),
         };
-        Keymap { generation: km["generation"].as_u64().unwrap_or(0), bindings, actions, copy_on_select, notify }
+        Keymap {
+            generation: km["generation"].as_u64().unwrap_or(0),
+            bindings,
+            actions,
+            copy_on_select: settings["copy_on_select"] == true,
+            notify,
+            repeat_time: Duration::from_millis(settings["repeat_time"].as_u64().unwrap_or(REPEAT_TIME)),
+            hint_patterns: settings["hint_patterns"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|p| p.as_str().map(String::from)).collect())
+                .unwrap_or_default(),
+        }
     }
 
     /// Resolve `next` after the pending `prefix`.
@@ -224,6 +248,14 @@ impl Keymap {
         match hits.clone().find(|b| b.seq.len() > at + 1) {
             Some(_) => Pressed::Pending,
             None => hits.next_back().map_or(Pressed::Unbound, |b| Pressed::Run(b.clone())),
+        }
+    }
+
+    /// The repeatable binding `next` completes after `prefix`, if any.
+    pub fn repeatable(&self, prefix: &[Chord], next: &Chord) -> Option<Bound> {
+        match self.press(prefix, next) {
+            Pressed::Run(b) if b.repeats => Some(b),
+            _ => None,
         }
     }
 
@@ -252,6 +284,35 @@ impl Keymap {
         let first = all.clone().next();
         let b = all.rfind(|b| b.from_config).or(first)?;
         Some(b.seq.iter().map(glyphs).collect::<Vec<_>>().join(" "))
+    }
+}
+
+/// tmux's `repeat-time` default, for a keymap that doesn't say.
+const REPEAT_TIME: u64 = 500;
+
+/// The window after a repeatable binding ran (tmux `bind -r`): until it closes, a key that
+/// completes a repeatable binding after the same prefix runs it with no prefix typed. Any other
+/// key, or one past the window, closes it and is handled as if no prefix had been typed.
+#[derive(Debug, Default)]
+pub struct Repeat(Option<(Vec<Chord>, Instant)>);
+
+impl Repeat {
+    /// A binding ran after `prefix`: a repeatable one with a prefix opens the window for `time`,
+    /// anything else closes it.
+    pub fn ran(&mut self, prefix: &[Chord], repeats: bool, time: Duration, now: Instant) {
+        self.0 = (repeats && !prefix.is_empty() && !time.is_zero()).then(|| (prefix.to_vec(), now + time));
+    }
+
+    /// A key at `now`: what `find(prefix, key)` makes of it while the window is open, with the
+    /// prefix. The window closes either way; the caller's `ran` opens it again.
+    pub fn press<T>(
+        &mut self,
+        key: &Chord,
+        now: Instant,
+        find: impl FnOnce(&[Chord], &Chord) -> Option<T>,
+    ) -> Option<(T, Vec<Chord>)> {
+        let (prefix, _) = self.0.take().filter(|(_, until)| now <= *until)?;
+        Some((find(&prefix, key)?, prefix))
     }
 }
 

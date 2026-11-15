@@ -4786,6 +4786,7 @@ same facts for the server you run.
 | `action` | string \| null |  |  |
 | `args` | any |  |  |
 | `fn` | boolean | yes | Bound to a Lua function. |
+| `repeats` | boolean | yes | After the sequence, its last key works again without the prefix for `repeat_time`. |
 | `source` | string | yes | `file:line`. |
 
 **`ModeView`:**
@@ -4823,6 +4824,8 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `copy_on_select` | boolean | yes | Copy a selection to the clipboard as it is made (default false). |
+| `repeat_time` | integer (uint64) | yes | Milliseconds after a repeatable binding (`repeats`) during which its keys work without the prefix (default 500; 0 turns repeat off). |
+| `hint_patterns` | [string] | yes | Regular expressions hints match besides the built-in ones (group 1, if any, is the text). |
 | `notify_blocked` | boolean | yes | Notify when a block becomes blocked (default true). |
 | `notify_error` | boolean | yes | Notify when a block reports an error (default true). |
 | `notify_done` | boolean | yes | Notify when a long run finishes while the app is in the background (default true). |
@@ -4918,6 +4921,10 @@ same facts for the server you run.
             "description": "Bound to a Lua function.",
             "type": "boolean"
           },
+          "repeats": {
+            "description": "After the sequence, its last key works again without the prefix for `repeat_time`.",
+            "type": "boolean"
+          },
           "source": {
             "description": "`file:line`.",
             "type": "string"
@@ -4926,6 +4933,7 @@ same facts for the server you run.
         "required": [
           "key",
           "fn",
+          "repeats",
           "source"
         ]
       },
@@ -5030,6 +5038,19 @@ same facts for the server you run.
             "description": "Copy a selection to the clipboard as it is made (default false).",
             "type": "boolean"
           },
+          "repeat_time": {
+            "description": "Milliseconds after a repeatable binding (`repeats`) during which its keys work without the\nprefix (default 500; 0 turns repeat off).",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "hint_patterns": {
+            "description": "Regular expressions hints match besides the built-in ones (group 1, if any, is the text).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "notify_blocked": {
             "description": "Notify when a block becomes blocked (default true).",
             "type": "boolean"
@@ -5045,6 +5066,8 @@ same facts for the server you run.
         },
         "required": [
           "copy_on_select",
+          "repeat_time",
+          "hint_patterns",
           "notify_blocked",
           "notify_error",
           "notify_done"

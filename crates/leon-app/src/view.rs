@@ -235,6 +235,8 @@ pub struct Workspace {
     keymap_asked: Option<Instant>,
     /// The chords of a sequence typed so far (`ctrl+b`).
     pending: Vec<Chord>,
+    /// The window after a repeatable binding ran (tmux `bind -r`).
+    repeat: keymap::Repeat,
     palette: Option<Palette>,
     /// Window ids of the tabs shown, most recent first (the switcher's order).
     recent: Vec<String>,
@@ -369,6 +371,7 @@ impl Workspace {
             inbox: Arc::default(),
             keymap_asked: None,
             pending: Vec::new(),
+            repeat: keymap::Repeat::default(),
             palette: None,
             recent: Vec::new(),
             activity: false,
@@ -440,23 +443,6 @@ impl Workspace {
         Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
     }
 
-    /// The active window and the blocks it shows: tiles in leaf order, then floats and drawers.
-    fn shown(&self) -> Option<(leon_core::Window, Panes)> {
-        let w = self.active_window()?;
-        let mut ids: Panes = match &w.zoomed {
-            Some(z) => vec![z.clone()],
-            None => w.layout.as_ref().map(|t| t.leaves().into_iter().map(String::from).collect()).unwrap_or_default(),
-        };
-        ids.extend(self.overlay_ids(&w));
-        let m = self.app.model();
-        let s = m.session(self.session_id.as_deref()?)?;
-        if w.layout.is_none() && !s.overlays.contains_key(&w.id) {
-            return None;
-        }
-        ids.retain(|id| s.blocks.iter().any(|b| b.id == *id));
-        Some((w, ids))
-    }
-
     /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
     /// killed from the CLI, or its host went away) hands over to the session now in its place.
     fn settle(&mut self, rows: &[SessionRow]) {
@@ -485,6 +471,8 @@ impl Workspace {
 mod activity;
 #[path = "view_bars.rs"]
 mod bars;
+#[path = "view_copy.rs"]
+mod copy;
 #[path = "view_find.rs"]
 mod find;
 #[path = "view_floats.rs"]

@@ -132,7 +132,7 @@ impl Workspace {
     }
 
     /// What the server makes of selection `s` on pane `id`, with its text if asked.
-    fn selected(&self, id: &str, s: &Sel, text: bool) -> Option<Selected> {
+    pub(super) fn selected(&self, id: &str, s: &Sel, text: bool) -> Option<Selected> {
         let args = json!({ "kind": s.kind, "anchor": s.anchor, "head": s.head, "text": text });
         serde_json::from_value(self.term_call(id, "selection", args).ok()?).ok()
     }

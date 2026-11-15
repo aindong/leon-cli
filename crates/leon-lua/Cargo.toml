@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+leon-core.workspace = true
 libc.workspace = true
 mlua.workspace = true
 serde_json.workspace = true

@@ -12,6 +12,23 @@ pub(super) struct Tiling {
 }
 
 impl Workspace {
+    /// The active window and the blocks it shows: tiles in leaf order, then floats and drawers.
+    pub(super) fn shown(&self) -> Option<(leon_core::Window, Panes)> {
+        let w = self.active_window()?;
+        let mut ids: Panes = match &w.zoomed {
+            Some(z) => vec![z.clone()],
+            None => w.layout.as_ref().map(|t| t.leaves().into_iter().map(String::from).collect()).unwrap_or_default(),
+        };
+        ids.extend(self.overlay_ids(&w));
+        let m = self.app.model();
+        let s = m.session(self.session_id.as_deref()?)?;
+        if w.layout.is_none() && !s.overlays.contains_key(&w.id) {
+            return None;
+        }
+        ids.retain(|id| s.blocks.iter().any(|b| b.id == *id));
+        Some((w, ids))
+    }
+
     /// The active window's panes, placed by `panes::tiles` in the pane area (the window less the
     /// sidebar and the titlebar row, so the size is known now, not a frame late) less its
     /// drawers, then the drawers and floats over them (`render_overlays`).
@@ -97,7 +114,7 @@ impl Workspace {
         let t = &DARK;
         let focused = tiling.target.as_deref() == Some(id);
         let id = id.to_string();
-        let view = self.composed(&id);
+        let view = self.drawn(&id);
         let marks = self.pane_marks(&id, &view);
         let canvas = terminal_canvas(
             self.app.clone(),

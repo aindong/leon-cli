@@ -219,6 +219,8 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘A | Select everything in the pane, scrollback too |
 | ⌘F | Find in the pane: ↩ and ⇧↩ step, ⌥C case, ⌥R regex, esc closes |
 | ⌘G, ⌘⇧G | Next, previous match |
+| ⌘⇧C | Copy mode: vi keys over the scrollback (h j k l, w b, 0 $, g ⇧G, ⌃U ⌃D), v and ⇧V select, / and ? search with n and ⇧N, y copies, esc or q leaves |
+| ⌘⇧H | Hints: a label on every URL, path, hash, IP and long number on screen; type one to copy it, in upper case to type it into the pane |
 | ⇧PageUp, ⇧PageDown | Scroll a page back, forward |
 | ⌘↑, ⌘↓ | Scroll to the oldest line, back to the bottom |
 | ⌘B | Show or hide the sidebar |

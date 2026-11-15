@@ -8,6 +8,7 @@ pub mod keys;
 mod runtime;
 mod sandbox;
 mod script;
+mod settings;
 
 pub use runtime::{CallCtx, Host, Runtime, LOAD_LIMIT, MAX_DEPTH, TIMED_OUT};
 pub use script::{run_script, ScriptOptions, MAX_TIMERS};
@@ -36,6 +37,11 @@ pub struct Config {
     pub resume: Option<Resume>,
     /// `leon.set("copy_on_select", true)`: the app copies a selection as it is made. None is off.
     pub copy_on_select: Option<bool>,
+    /// `leon.set("repeat_time", ms)`: how long after a repeatable binding its keys work without the
+    /// prefix. None leaves the client's default (500 ms); 0 turns repeat off.
+    pub repeat_time: Option<u64>,
+    /// `leon.set("hint_patterns", {...})`: regular expressions hints match besides the built-in ones.
+    pub hint_patterns: Vec<String>,
     /// `leon.set("notify_blocked" | "notify_error" | "notify_done", false)`: the app's notifications
     /// for a block becoming blocked, erroring, or finishing a long run. None is on.
     pub notify_blocked: Option<bool>,
@@ -71,6 +77,9 @@ pub struct Binding {
     pub target: Target,
     /// `file:line` of the `leon.bind` call.
     pub source: String,
+    /// `{ repeats = true }` (tmux `bind -r`): after this sequence, its last key works again without
+    /// the prefix for `repeat_time`.
+    pub repeats: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]

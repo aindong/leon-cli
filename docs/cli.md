@@ -361,9 +361,7 @@ leon do --for 1m ./watch.lua
 
 ### `leon actions`
 
-List the actions: the config's (`leon.action`, with the `file:line` that defines each), then
-the app's own actions (`client.*`, `pane.*`, `session.*`, source `app`), which its keys and
-command palette run. `--json` prints the same list.
+Config actions, then the app's own actions.
 
 ### `leon keymap`
 
