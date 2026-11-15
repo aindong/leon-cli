@@ -8,13 +8,14 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::*, px, rgb, size, App, Bounds, Context, SharedString, Subscription, TitlebarOptions, Window,
-    WindowBounds, WindowHandle, WindowOptions,
+    div, point, prelude::*, px, rgb, size, App, Bounds, Context, FocusHandle, FontWeight, KeyDownEvent, SharedString,
+    Subscription, TitlebarOptions, Window, WindowBounds, WindowHandle, WindowOptions,
 };
 use leon_lua::rewrite::{read_only, write_setting};
 use leon_lua::settings::{load_theme, theme_names, themes_dir, FONT_SIZES};
 use serde_json::{json, Value};
 
+use crate::icons::{Icon, ROW_ICON};
 use crate::look::Look;
 use crate::remote::Remote;
 use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
@@ -73,6 +74,9 @@ pub struct SettingsWindow {
     /// The installed families of `FONTS`.
     fonts: Vec<String>,
     dark: bool,
+    /// A change is being written.
+    saving: bool,
+    focus: FocusHandle,
     _appearance: Subscription,
 }
 
@@ -91,10 +95,15 @@ fn load(config: &Path) -> Result<Loaded, String> {
 impl SettingsWindow {
     /// Open the window on `config`, the init.lua the local `server` loaded.
     pub fn open(config: PathBuf, server: Rc<Remote>, cx: &mut App) -> Option<WindowHandle<SettingsWindow>> {
-        let bounds = Bounds::centered(None, size(px(720.), px(760.)), cx);
+        let bounds = Bounds::centered(None, size(px(720.), px(780.)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: Some(TitlebarOptions { title: Some("Settings".into()), ..Default::default() }),
+            // drawn in the theme's chrome, as the main window's is, not in the macOS appearance
+            titlebar: Some(TitlebarOptions {
+                title: Some("Settings".into()),
+                appears_transparent: true,
+                traffic_light_position: Some(point(px(14.), px(13.))),
+            }),
             window_min_size: Some(size(px(560.), px(420.))),
             ..WindowOptions::default()
         };
@@ -109,6 +118,8 @@ impl SettingsWindow {
             sw.dark = crate::view::is_dark(window.appearance());
             cx.notify();
         });
+        let focus = cx.focus_handle();
+        window.focus(&focus);
         let mut sw = SettingsWindow {
             config,
             server,
@@ -116,6 +127,8 @@ impl SettingsWindow {
             error: None,
             fonts,
             dark: crate::view::is_dark(window.appearance()),
+            saving: false,
+            focus,
             _appearance: appearance,
         };
         sw.reload(cx);
@@ -157,6 +170,8 @@ impl SettingsWindow {
             return;
         }
         let (config, key, server) = (self.config.clone(), key.to_string(), self.server.clone());
+        self.saving = true;
+        cx.notify();
         cx.spawn(async move |this, cx| {
             let path = config.clone();
             let written = cx.background_executor().spawn(async move { write_setting(&path, &key, &value) }).await;
@@ -171,6 +186,7 @@ impl SettingsWindow {
             }
             let loaded = cx.background_executor().spawn(async move { load(&config) }).await;
             this.update(cx, |sw, cx| {
+                sw.saving = false;
                 sw.error = error.or(loaded.as_ref().err().cloned());
                 if let Ok(l) = loaded {
                     sw.loaded = Some(l);
@@ -191,36 +207,66 @@ impl SettingsWindow {
 impl Render for SettingsWindow {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme();
-        let mut body = div().flex().flex_col().gap(px(28.)).p(px(28.));
+        let mut body = div().flex().flex_col().gap(px(32.)).px(px(28.)).pb(px(28.));
         if self.loaded.is_some() {
             body = body
                 .child(self.theme_section(&t, cx))
                 .child(self.font_section(&t, cx))
                 .child(self.toggles_section(&t, cx));
         }
-        let footer = match &self.error {
-            Some(e) => div().text_color(rgb(t.error)).child(e.clone()),
-            None => div().text_color(rgb(t.muted)).child(format!("Saved to {}", self.config.display())),
+        let footer = match (&self.error, self.saving) {
+            (_, true) => div().text_color(rgb(t.muted)).child("Saving…"),
+            (Some(e), _) => div().text_color(rgb(t.error)).child(e.clone()),
+            (None, _) => {
+                div().text_color(rgb(t.muted)).child(format!("Every change is written to {}", shown(&self.config)))
+            }
         };
         div()
             .id("settings")
+            .track_focus(&self.focus)
+            .on_key_down(cx.listener(|_, e: &KeyDownEvent, window, _| {
+                let k = &e.keystroke;
+                if k.key == "escape" || (k.modifiers.platform && k.key == "w") {
+                    window.remove_window();
+                }
+            }))
             .size_full()
-            .overflow_y_scroll()
+            .flex()
+            .flex_col()
             .bg(rgb(t.chrome))
             .text_color(rgb(t.text))
             .font_family(".SystemUIFont")
             .text_size(px(UI_TEXT))
-            .child(body.child(footer.text_size(px(SECONDARY_TEXT))))
+            .child(
+                div()
+                    .h(px(38.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_color(rgb(t.title))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("Settings"),
+            )
+            .child(
+                div()
+                    .id("settings-body")
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .child(body.child(footer.text_size(px(SECONDARY_TEXT)))),
+            )
     }
 }
 
 impl SettingsWindow {
     fn section(t: &Theme, title: &str) -> gpui::Div {
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(10.))
-            .child(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(title.to_uppercase()))
+        div().flex().flex_col().gap(px(12.)).child(
+            div()
+                .text_size(px(UI_TEXT + 2.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(rgb(t.title))
+                .child(title.to_string()),
+        )
     }
 
     /// A setting's read-only line under its control.
@@ -259,6 +305,7 @@ impl SettingsWindow {
                         })
                         .child(dots(p.as_ref()))
                         .child(div().flex_1().child(n.clone()))
+                        .when(on, |d| d.child(Icon::Done.at(ROW_ICON, t.accent)))
                         .when(p.is_none(), |d| d.child(div().text_color(rgb(t.error)).child("won't load"))),
                 );
             }
@@ -267,7 +314,7 @@ impl SettingsWindow {
                 .flex()
                 .flex_col()
                 .gap(px(10.))
-                .child(div().text_color(rgb(t.title)).child(title.to_string()))
+                .child(div().text_color(rgb(t.text)).child(title.to_string()))
                 .child(preview(shown.as_ref()))
                 .child(list)
         };
@@ -296,44 +343,53 @@ impl SettingsWindow {
         let (back, next) = (step(-1), step(1));
         let smaller = (pt - 1.).max(FONT_SIZES.0);
         let bigger = (pt + 1.).min(FONT_SIZES.1);
+        let label = |text: &str| div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(text.to_string());
         Self::section(t, "Font")
             .child(
                 div()
                     .flex()
-                    .items_center()
-                    .gap(px(24.))
+                    .gap(px(32.))
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .child(button(t, "font-back", "‹", !family_locked, cx, move |sw, cx| {
-                                sw.choose("font.family", json!(back), cx)
-                            }))
-                            .child(
-                                div().min_w(px(150.)).flex().justify_center().font_family(family.clone()).child(family),
-                            )
-                            .child(button(t, "font-next", "›", !family_locked, cx, move |sw, cx| {
-                                sw.choose("font.family", json!(next), cx)
-                            })),
+                        div().flex().flex_col().gap(px(6.)).child(label("Family")).child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(8.))
+                                .child(button(t, "font-back", "‹", !family_locked, cx, move |sw, cx| {
+                                    sw.choose("font.family", json!(back), cx)
+                                }))
+                                .child(
+                                    div().w(px(140.)).flex().justify_center().font_family(family.clone()).child(family),
+                                )
+                                .child(button(t, "font-next", "›", !family_locked, cx, move |sw, cx| {
+                                    sw.choose("font.family", json!(next), cx)
+                                })),
+                        ),
                     )
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .child(button(
-                                t,
-                                "size-down",
-                                "−",
-                                !size_locked && pt > FONT_SIZES.0,
-                                cx,
-                                move |sw, cx| sw.choose("font.size", json!(smaller), cx),
-                            ))
-                            .child(div().min_w(px(56.)).flex().justify_center().child(format!("{pt} pt")))
-                            .child(button(t, "size-up", "+", !size_locked && pt < FONT_SIZES.1, cx, move |sw, cx| {
-                                sw.choose("font.size", json!(bigger), cx)
-                            })),
+                        div().flex().flex_col().gap(px(6.)).child(label("Size")).child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(8.))
+                                .child(button(
+                                    t,
+                                    "size-down",
+                                    "−",
+                                    !size_locked && pt > FONT_SIZES.0,
+                                    cx,
+                                    move |sw, cx| sw.choose("font.size", json!(smaller), cx),
+                                ))
+                                .child(div().w(px(52.)).flex().justify_center().child(format!("{pt} pt")))
+                                .child(button(
+                                    t,
+                                    "size-up",
+                                    "+",
+                                    !size_locked && pt < FONT_SIZES.1,
+                                    cx,
+                                    move |sw, cx| sw.choose("font.size", json!(bigger), cx),
+                                )),
+                        ),
                     ),
             )
             .children(Self::locked(t, &family_row))
@@ -379,6 +435,15 @@ impl SettingsWindow {
     }
 }
 
+/// `path` with the home folder as `~`.
+fn shown(path: &Path) -> String {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    match home.as_deref().and_then(|h| path.strip_prefix(h).ok()) {
+        Some(rest) => format!("~/{}", rest.display()),
+        None => path.display().to_string(),
+    }
+}
+
 /// A small square button with a label; inert when not `enabled`.
 fn button(
     t: &Theme,
@@ -407,6 +472,8 @@ fn button(
 /// An on/off switch.
 fn switch(t: &Theme, on: bool, locked: bool) -> impl IntoElement {
     let track = if on { t.accent } else { t.border };
+    // the lighter of the pane and title colours, so the knob is light on either theme
+    let knob = if t.is_dark() { t.title } else { t.bg };
     div()
         .w(px(34.))
         .h(px(20.))
@@ -417,7 +484,7 @@ fn switch(t: &Theme, on: bool, locked: bool) -> impl IntoElement {
         .when(on, |d| d.justify_end())
         .bg(rgb(track))
         .when(locked, |d| d.opacity(0.5))
-        .child(div().size(px(16.)).rounded_full().bg(rgb(t.title)))
+        .child(div().size(px(16.)).rounded_full().bg(rgb(knob)))
 }
 
 /// A theme's ANSI 1–6 as dots, for its row in the list.

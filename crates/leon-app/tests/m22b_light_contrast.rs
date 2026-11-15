@@ -7,12 +7,11 @@ use std::collections::BTreeSet;
 use leon_app::theme::{contrast, Theme, DARK, LIGHT};
 
 /// Backgrounds that never carry text, and why.
-const NOT_SURFACES: [(&str, &str); 5] = [
+const NOT_SURFACES: [(&str, &str); 4] = [
     ("accent", "the focused pane's edge, a switch that is on, and the badge and hint labels checked in PAIRS"),
     ("working", "the host row's dot"),
     ("blocked", "the Activity count badge, checked in PAIRS"),
     ("border", "dividers, outlines and a switch that is off"),
-    ("title", "the Settings switch's knob"),
 ];
 
 /// Text colours that only ever sit on one background, and why.
