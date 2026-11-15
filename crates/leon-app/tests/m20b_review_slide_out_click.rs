@@ -24,8 +24,7 @@ fn a_click_on_a_drawer_sliding_out_leaves_it_hidden(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     app.call("session.toggle", json!({ "session_id": sid, "label": "scratch" })).unwrap();
-    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.sliding())), "hiding starts a slide out");
-    let b = at(cx, &format!("dock-{id}")).expect("still drawn while it slides out");
+    let b = in_slide_frame(&ws, cx, &format!("dock-{id}")).expect("still drawn while it slides out");
     // its part still on screen: the top strip (half slid out, its centre is past the window's edge)
     let p = gpui::point(b.origin.x + b.size.width / 2., b.origin.y + gpui::px(10.));
     cx.simulate_mouse_down(p, MouseButton::Left, Modifiers::none());

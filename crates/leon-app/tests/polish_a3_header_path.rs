@@ -56,7 +56,9 @@ fn a_header_too_narrow_for_its_path_cuts_the_middle_and_tells_the_rest(cx: &mut 
     cx.executor().advance_clock(Duration::from_secs(1));
     assert!(drawn(cx, "tooltip"), "hovering a cut title shows the whole");
 
-    run_until(&t, "cd / && echo at-root", "at-root");
+    // sh says where it went, as a shell with integration does (OSC 7): the app reads a pane's
+    // directory again only when an event comes, and a plain `cd` sends none
+    run_until(&t, "cd / && printf '\\033]7;file:///\\007' && echo at-root", "at-root");
     let short = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.pane_title(&id)).is_some_and(|t| t.ends_with(" /")));
     assert!(short);
     let (shown, tip) = ws.read_with(cx, |ws, cx| ws.header_title(&id, 200., cx));

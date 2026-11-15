@@ -45,8 +45,7 @@ fn a_drawer_slides_in_and_out(cx: &mut TestAppContext) {
 
     let sid = sid(&ws, cx);
     toggle(&app, &sid, false);
-    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.sliding())), "hiding starts a slide out");
-    assert!(drawn(cx, &format!("dock-{id}")), "still drawn while it slides out");
+    assert!(in_slide_frame(&ws, cx, &format!("dock-{id}")).is_some(), "still drawn while it slides out");
     after_slide(&ws, cx);
     assert!(!drawn(cx, &format!("dock-{id}")), "gone once the slide is over");
     assert!(!ws.read_with(cx, |ws, _| ws.sliding()));
