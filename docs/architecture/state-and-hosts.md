@@ -47,7 +47,9 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   <session_id>` or `codex resume <session_id>` from the agent's SessionStart JSON (an id of
   `[A-Za-z0-9._-]`, no leading `-`), and only when the hook, its parent or its grandparent is its
   terminal's foreground process group: the interactive agent, not a nested `claude -p` that an
-  agent's tool started without a terminal. Restored blocks follow the config's
+  agent's tool started without a terminal; and not when one of those three has `-p`, `--print` or
+  `--print=…` in its argv before any `--` (Claude Code's print mode: argv, not the program's name,
+  since an npm install runs as `node …/claude`). Restored blocks follow the config's
   `leon.set("resume", …)`, read once the start-up config has loaded and before restoring (the
   restore waits at most 1 s for it, since nothing is served until the restore is done; past that
   nothing is offered, as with `"never"`): `"ask"` (default) types Ctrl-U and the shell-quoted command

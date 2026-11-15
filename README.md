@@ -99,9 +99,11 @@ From any terminal (the server starts by itself):
 
 ```sh
 leon new demo                                    # 1. a session called "demo"
-leon -s demo run --label py -- python3           # 2. run a program in a new tab
+leon -s demo run --label py -- python3 -q        # 2. run a program in a new tab
+leon -s demo wait -b py --text '>>>'             #    and wait for its prompt
 leon -s demo send -b py 'print(6 * 7)'           # 3. type into it (no Enter yet)
 leon -s demo send-key -b py enter                # 4. press Enter
+leon -s demo wait -b py --text 42                #    and wait for the answer
 leon -s demo capture -b py --trim                # 5. read its screen: 42
 ```
 
@@ -160,8 +162,10 @@ leon hosts check
 ```
 
 A dropped Wi-Fi link is retried for a minute: `leon events` and the app resume without losing or
-repeating an event, and `leon attach` says it is reconnecting, then reconnects and redraws (keys typed while the link
-is down are lost). Use ssh keys or an agent: each connection is its own ssh session.
+repeating an event, and `leon attach` says it is reconnecting, then reconnects and redraws. Keys typed while the link
+is stalled or down arrive whole or not at all, and the status bar says how many were not sent
+(a stall that starts mid-word, within a second of the last reply, can still catch the keys already
+on their way). Use ssh keys or an agent: each connection is its own ssh session.
 
 The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
 and tabs and a dot for its connection. A remote pane works like a local one, with the host's name in
@@ -184,7 +188,8 @@ screens under a "reconnecting" note.
 leon skill setup
 ```
 
-installs a skill and a session-start hook for Claude Code and Codex. Then, working in a leon
+installs a skill and a session-start hook for Claude Code and Codex (each one whose config dir
+exists or whose program is on your PATH; it says which, and why). Then, working in a leon
 terminal, ask "run the tests beside you", and the agent does what you would:
 
 ```sh
@@ -226,7 +231,7 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘⇧↩ | Zoom the pane (again to undo) |
 | ⌘W | Close the pane |
 | ⌘⌥F, ⌘⌥⇧F | Float the pane above the others, put it back in the tiles (drag its header to move it, an edge to resize it) |
-| ⌘J | Show or hide the scratch drawer: a shell at the bottom that keeps running while hidden |
+| ⌘J | Show or hide the scratch drawer: a shell at the bottom, opened in the focused pane's directory, that keeps running while hidden |
 | ⌘⌃←, ⌘⌃→, ⌘⌃↓ | Dock the pane as a drawer on the left, right or bottom (drag its edge to resize it) |
 | ⌘⇧], ⌘⇧[ | Next, previous tab |
 | ⌘1 … ⌘9 | Go to tab 1–9 |

@@ -39,7 +39,7 @@ pub fn record(agent: Agent) {
     let var = |n| std::env::var(n).ok().filter(|v| !v.is_empty());
     let Some(block) = var("LEON_BLOCK") else { return };
     let Some(command) = stdin_json().and_then(|v| command(agent, &v)) else { return };
-    if !interactive() {
+    if !interactive() || (agent == Agent::Claude && print_mode()) {
         return;
     }
     let socket = var("LEON_SERVER").map_or_else(leon_core::paths::socket_path, PathBuf::from);
@@ -85,6 +85,32 @@ fn interactive() -> bool {
     false
 }
 
+/// Whether this is Claude Code's print mode (`claude -p`, `--print`): a one-shot run, with nothing
+/// to resume. Read from the argv of the hook, its parent and its grandparent (the agent, under the
+/// hook's shell), not from a program name: an npm install runs as `node …/claude -p`.
+fn print_mode() -> bool {
+    // SAFETY: getpid has no preconditions.
+    let mut pid = unsafe { libc::getpid() };
+    for _ in 0..3 {
+        if argv(pid).is_some_and(|a| print_flag(&a)) {
+            return true;
+        }
+        match process(pid) {
+            Some(p) => pid = p.ppid,
+            None => return false,
+        }
+    }
+    false
+}
+
+/// `-p` (also among short flags written together, `-cp`), `--print` or `--print=…` among the
+/// options, before any `--`.
+fn print_flag(argv: &[String]) -> bool {
+    let short =
+        |a: &str| a.strip_prefix('-').is_some_and(|f| f.contains('p') && f.chars().all(|c| c.is_ascii_alphabetic()));
+    argv.iter().skip(1).take_while(|a| *a != "--").any(|a| short(a) || a == "--print" || a.starts_with("--print="))
+}
+
 struct Process {
     ppid: i32,
     pgid: i32,
@@ -118,6 +144,42 @@ fn process(_pid: i32) -> Option<Process> {
     None
 }
 
+/// A process's argv: `KERN_PROCARGS2` is argc, the exec path, NUL padding, then the arguments.
+#[cfg(target_os = "macos")]
+fn argv(pid: i32) -> Option<Vec<String>> {
+    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid];
+    let mut size: libc::size_t = 0;
+    let null = std::ptr::null_mut();
+    // SAFETY: a size query, then a read of at most `size` bytes into a buffer that long.
+    let mut buf = unsafe {
+        if libc::sysctl(mib.as_mut_ptr(), 3, null, &mut size, null, 0) != 0 {
+            return None;
+        }
+        let mut buf = vec![0u8; size];
+        if libc::sysctl(mib.as_mut_ptr(), 3, buf.as_mut_ptr().cast(), &mut size, null, 0) != 0 {
+            return None;
+        }
+        buf
+    };
+    buf.truncate(size);
+    let argc = usize::try_from(i32::from_ne_bytes(buf.get(..4)?.try_into().ok()?)).ok()?;
+    let rest = &buf[4..];
+    let rest = &rest[rest.iter().position(|&b| b == 0)?..];
+    let rest = &rest[rest.iter().position(|&b| b != 0)?..];
+    Some(rest.split(|&b| b == 0).take(argc).map(|a| String::from_utf8_lossy(a).into_owned()).collect())
+}
+
+#[cfg(target_os = "linux")]
+fn argv(pid: i32) -> Option<Vec<String>> {
+    let raw = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    Some(raw.split(|&b| b == 0).filter(|a| !a.is_empty()).map(|a| String::from_utf8_lossy(a).into_owned()).collect())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn argv(_pid: i32) -> Option<Vec<String>> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,5 +194,24 @@ mod tests {
             assert_eq!(command(Agent::Claude, &input(bad)), None, "{bad:?}");
         }
         assert_eq!(command(Agent::Claude, &json!({ "session_id": 5 })), None);
+    }
+
+    #[test]
+    fn print_flags_before_a_double_dash() {
+        let v = |s: &str| s.split(' ').map(String::from).collect::<Vec<_>>();
+        for yes in
+            ["claude -p hi", "node /x/claude --print hi", "claude --print=json", "claude --model m -p", "claude -cp q"]
+        {
+            assert!(print_flag(&v(yes)), "{yes}");
+        }
+        for no in ["claude", "claude --resume abc", "claude -- -p", "-p", "claude -c", "claude --printer", "claude -"] {
+            assert!(!print_flag(&v(no)), "{no}");
+        }
+    }
+
+    #[test]
+    fn reads_its_own_argv() {
+        let me = argv(std::process::id() as i32).expect("our own argv");
+        assert_eq!(me, std::env::args().collect::<Vec<_>>());
     }
 }
