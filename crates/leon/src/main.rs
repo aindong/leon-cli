@@ -8,6 +8,7 @@ mod commands;
 mod events;
 mod hosts;
 mod layout;
+mod login_path;
 mod script;
 mod settings;
 mod skill;

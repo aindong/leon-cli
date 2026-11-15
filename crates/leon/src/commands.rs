@@ -265,6 +265,7 @@ fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
     let socket = socket_path();
     match cmd {
         ServerCmd::Run { autostarted, restore, config } => {
+            crate::login_path::adopt();
             let idle = std::env::var("LEON_IDLE_EXIT_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
             let info = leon_server::Info {
                 pid: std::process::id(),

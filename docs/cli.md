@@ -173,7 +173,8 @@ Close a window and end its programs. Closing a session's last window destroys th
 ### `leon run [FLAGS] -- CMD…`
 
 Run a command in a new window and print the new block's ID. The command runs directly, not
-through a shell; for pipes or `&&`, use `leon run -- sh -c '…'`.
+through a shell; for pipes or `&&`, use `leon run -- sh -c '…'`. It is found on your login shell's
+PATH, even when the server was started by Leon.app from Finder.
 
 - `--label LABEL`: name the block, so `-b LABEL` finds it.
 - `--keep-open`: keep the block after the program exits, so you can still read its output.

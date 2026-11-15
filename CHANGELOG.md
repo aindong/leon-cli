@@ -28,6 +28,14 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### Daily-driver fixes (API `1.5.0`)
+
+#### Fixed
+
+- Programs started by `leon run`, `leon split`, `leon float --new` and Lua are found on the login
+  shell's PATH. A server started by Leon.app from Finder had launchd's `/usr/bin:/bin:/usr/sbin:/sbin`,
+  so `leon run -- cargo test` failed; one started over ssh had sshd's.
+
 ### Joined panes, their events, long socket paths (API `1.5.0`)
 
 #### Fixed

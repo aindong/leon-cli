@@ -69,6 +69,13 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   unpacks the tarball in `ubuntu:24.04` (both pinned by digest), and fails unless each `leon
   --version` prints the version. Rust links glibc dynamically: the binary needs glibc 2.34 or newer
   (measured on arm64 and amd64; no musl build yet).
+- **The login shell's PATH.** `leon server run` first asks the login shell for its PATH
+  (`$SHELL -l -c 'printenv PATH'`, started from the system PATH, stdin /dev/null, killed after 2 s;
+  about 20 ms), since Leon.app opened from Finder starts the server with launchd's bare PATH and
+  `leon server proxy` over ssh with sshd's, and programs then weren't found (docs/spec/cli.md: commands
+  run with the login shell's env). If every dir of the server's own PATH is in the login one, the
+  login PATH is used in its order; otherwise the server was started from a terminal with dirs of its
+  own, which keep their order, and the login PATH's other dirs go after them. Only PATH is taken.
 - **`LEON_BIN_DIR`.** Every terminal gets the server binary's directory as `LEON_BIN_DIR` and at
   the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
   `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an
