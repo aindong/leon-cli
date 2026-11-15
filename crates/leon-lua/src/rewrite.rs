@@ -26,20 +26,14 @@ pub fn write_setting(config: &Path, key: &str, value: &Value) -> Result<String, 
     // the value as the settings would hold it, or why it isn't one (checked before any rewrite)
     let mut want = before.settings.clone();
     want.set(key, value, &crate::settings::themes_dir(config))?;
+    if let Some(why) = read_only(config, &src, &before.setting_sources, key) {
+        return Err(why);
+    }
     let new = match before.setting_sources.get(key) {
         None => append(&src, key, value),
         Some(at) => {
-            let refuse = |why: &str| {
-                format!("{key} is set at {at}{why}; change it there (or remove that line and run this again)")
-            };
-            let (file, line) = at.rsplit_once(':').unwrap_or_default();
-            if file != shown {
-                return Err(refuse(", in a file other than the config"));
-            }
-            let line = line.parse().unwrap_or(0);
-            replace(&src, line, key, value).ok_or_else(|| {
-                refuse(" by code `leon config set` can't rewrite: it changes only leon.set(\"KEY\", <literal>)")
-            })?
+            let line = at.rsplit_once(':').and_then(|(_, l)| l.parse().ok()).unwrap_or(0);
+            replace(&src, line, key, value).ok_or_else(|| format!("{key}: can't rewrite its call at {shown}:{line}"))?
         }
     };
     let after =
@@ -51,6 +45,29 @@ pub fn write_setting(config: &Path, key: &str, value: &Value) -> Result<String, 
     }
     save(config, exists, &new)?;
     Ok(after.setting_sources.get(key).cloned().unwrap_or(shown))
+}
+
+/// Why `write_setting` would refuse to change `key` in the config at `config` whose text is `src`
+/// and whose `leon.set` calls are at `sources` (`Config::setting_sources`), or None when it can.
+pub fn read_only(
+    config: &Path,
+    src: &str,
+    sources: &std::collections::BTreeMap<String, String>,
+    key: &str,
+) -> Option<String> {
+    let at = sources.get(key)?;
+    let refuse =
+        |why: &str| format!("{key} is set at {at}{why}; change it there (or remove that line and run this again)");
+    let (file, line) = at.rsplit_once(':').unwrap_or_default();
+    if file != config.display().to_string() {
+        return Some(refuse(", in a file other than the config"));
+    }
+    let line = line.parse().unwrap_or(0);
+    // any value will do: only whether the call is one `replace` understands matters
+    match replace(src, line, key, &Value::Bool(true)) {
+        Some(_) => None,
+        None => Some(refuse(" by code `leon config set` can't rewrite: it changes only leon.set(\"KEY\", <literal>)")),
+    }
 }
 
 /// Write `text` over the file `config` resolves to (a symlink stays one), through a temp file
