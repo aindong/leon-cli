@@ -1,6 +1,7 @@
 //! M7b criterion 6 (.agent/plans/2026-11-14-m7b-ship.md): docs/cli.md can't drift from `--help`.
 //! Every command has a "`leon PATH …`" heading, every long flag of a command appears in its own
-//! section (global flags anywhere), and every heading names a real command.
+//! section (global flags anywhere), and every heading names a real command. The reference is
+//! docs/cli.md and the parts it links in docs/cli/.
 
 mod help_walk;
 
@@ -22,7 +23,14 @@ fn mentions(text: &str, flag: &str) -> bool {
 
 #[test]
 fn cli_md_covers_every_command_and_flag() {
-    let doc = std::fs::read_to_string(help_walk::repo().join("docs/cli.md")).expect("docs/cli.md exists");
+    let mut parts: Vec<_> = std::fs::read_dir(help_walk::repo().join("docs/cli"))
+        .map(|d| d.flatten().map(|e| e.path()).collect())
+        .unwrap_or_default();
+    parts.sort();
+    let mut doc = std::fs::read_to_string(help_walk::repo().join("docs/cli.md")).expect("docs/cli.md exists");
+    for p in parts {
+        doc += &std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+    }
     let lines: Vec<&str> = doc.lines().collect();
     let all = help_walk::all();
     let globals = all.iter().find(|h| h.path.is_empty()).unwrap().long_flags();

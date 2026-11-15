@@ -16,7 +16,7 @@ fn the_docs_cover_m12_and_m13() {
     let guide = doc("crates/leon/src/skill/guide.md");
     assert!(guide.contains("leon notify"), "the agent guide tells agents about leon notify");
     let lua = doc("docs/lua.md");
-    for s in ["notify_blocked", "notify_error", "notify_done"] {
+    for s in ["notifications.blocked", "notifications.error", "notifications.done"] {
         assert!(lua.contains(s), "lua.md documents {s}");
     }
     // main split the decisions into docs/architecture/ (M15)

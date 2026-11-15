@@ -227,10 +227,37 @@ any`, and a `?` suffix for optional ones.
 
 ## Settings
 
-`leon.set(name, value)` sets one of the server's settings. `resume` is what a
-block restored after a server restart does with the resume command its program registered for
-itself (`set_resume`, which leon's agent hook calls for Claude Code and Codex). `"ask"` (the
-default) types the command at the new prompt and waits for Enter; `"always"` runs it; `"never"`
+`leon.set(name, value)` sets a setting. init.lua is the only place settings live; `leon config
+get` and `set` ([cli/settings.md](cli/settings.md)) read and edit them in place. The app follows
+`theme` and `font.*` from M22b and the rest now. A bad value is a skipped call with a `file:line`
+message, and the setting keeps its default.
+
+| Setting | Takes | Default |
+|---|---|---|
+| `theme` | a theme name, or `{ dark = NAME, light = NAME }` to follow the OS appearance | `"leon-dark"` |
+| `font.family` | a font's name | `"Menlo"` |
+| `font.size` | points, 8 to 32 | `13` |
+| `notifications.done`, `notifications.blocked`, `notifications.error` | `true` or `false` (below) | `true` |
+| `copy_on_select` | `true` or `false` | `false` |
+| `repeat_time` | milliseconds, 0 (off) to 10000 | `500` |
+| `hint_patterns` | a list of regular expressions, at most 32 | `{}` |
+| `resume` | `"ask"`, `"always"` or `"never"` | `"ask"` |
+
+`theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored; an unknown name is
+an error.
+
+```lua
+leon.set("theme", { dark = "leon-dark", light = "leon-light" })
+leon.set("font.family", "Menlo")
+leon.set("font.size", 14)
+leon.set("notifications.done", false)
+leon.set("notifications.blocked", true)
+leon.set("notifications.error", true)
+```
+
+`resume` is what a block restored after a server restart does with the resume command its program
+registered for itself (`set_resume`, which leon's agent hook calls for Claude Code and Codex).
+`"ask"` types the command at the new prompt and waits for Enter; `"always"` runs it; `"never"`
 leaves the prompt empty. The server reads it at start, before it restores (it waits at most a
 second for the config, and past that offers nothing, as with `"never"`); `leon config check` prints it.
 
@@ -238,8 +265,8 @@ second for the config, and past that offers nothing, as with `"never"`); `leon c
 leon.set("resume", "always")
 ```
 
-`copy_on_select` (default `false`) makes the app copy a selection to the clipboard as soon as you
-make it, without ⌘C. The app reads it with the keymap, so a reload takes effect within a second.
+`copy_on_select` makes the app copy a selection to the clipboard as soon as you make it, without
+⌘C. The app reads it with the keymap, so a reload takes effect within a second.
 
 ```lua
 leon.set("copy_on_select", true)
@@ -264,13 +291,22 @@ and `?` search down and up, `n` and `N` step; `y` (or Enter) copies the selectio
 or `q` leaves.
 
 The app notifies you (macOS banners, only from the bundled Leon.app) when a block becomes blocked
-(`notify_blocked`), reports an error (`notify_error`), or finishes a run of 30 s or more while the
-app is in the background (`notify_done`). Each defaults to `true`; set it to `false` to turn that
-kind off. Blocked and error don't notify for the pane you are looking at, a block notifies at most
+(`notifications.blocked`), reports an error (`notifications.error`), or finishes a run of 30 s or
+more while the app is in the background (`notifications.done`). Each defaults to `true`; set it to
+`false` to turn that kind off. Blocked and error don't notify for the pane you are looking at, a block notifies at most
 once a minute per state, and at most four notices go out a minute in all (the rest come as one).
 
 ```lua
-leon.set("notify_done", false)
+leon.set("notifications.done", false)
+```
+
+The server reports the effective settings, defaults filled in and `theme` always as
+`{ dark, light }`, with `server.settings`; a reload that changes any of them sends `--all`
+subscribers a `settings_changed` event carrying the same object. A script can read them:
+
+```lua script
+local r = assert(leon.call("server.settings"))
+assert(r.settings.font.size >= 8 and r.settings.theme.dark ~= nil)
 ```
 
 ## Function bindings
@@ -369,7 +405,7 @@ print("timed out:", slow.timed_out)
 | `leon.unbind(key)` | config | Remove a key's bindings; returns the count. |
 | `leon.mode(name[, {exclusive, prefix}])` | config | Declare a mode; `prefix` (one key) is `leon attach`'s for the `attach` mode. |
 | `leon.bindings([filter])`, `leon.modes()` | config | List bindings and modes made so far. |
-| `leon.set(name, value)` | config | A setting: `resume` = `"ask"`, `"always"` or `"never"`; `copy_on_select`, `notify_blocked`, `notify_error`, `notify_done` = `true` or `false`. |
+| `leon.set(name, value)` | config | A setting (Settings, above): `theme`, `font.family`, `font.size`, `notifications.*`, `copy_on_select`, `repeat_time`, `hint_patterns`, `resume`. |
 | `leon.action{name, title, run, description?, args?}` | both | Define an action. |
 | `leon.invoke(name[, args])` | both | Run an action (nested at most 16 deep). |
 | `leon.session.<method>(params)` | both | Call a session method; fills `session_id`. |

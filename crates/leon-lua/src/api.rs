@@ -19,6 +19,8 @@ pub(crate) struct State {
     pub(crate) runs: Vec<(String, Function)>,
     /// Past the load (or in a script): config-only calls refuse, bad calls aren't diagnosed, logs go to stderr.
     pub(crate) live: bool,
+    /// `themes/` beside the config, where `leon.set("theme", NAME)` looks for NAME.
+    pub(crate) themes: std::path::PathBuf,
 }
 
 pub(crate) struct Entry {
@@ -68,13 +70,8 @@ pub(crate) fn config(lua: &Lua) -> Config {
         unbinds: c.unbinds.clone(),
         diagnostics: c.diagnostics.clone(),
         logs: c.logs.clone(),
-        resume: c.resume,
-        copy_on_select: c.copy_on_select,
-        repeat_time: c.repeat_time,
-        hint_patterns: c.hint_patterns.clone(),
-        notify_blocked: c.notify_blocked,
-        notify_error: c.notify_error,
-        notify_done: c.notify_done,
+        settings: c.settings.clone(),
+        setting_sources: c.setting_sources.clone(),
     }
 }
 
@@ -163,7 +160,7 @@ pub(crate) fn leon_table(lua: &Lua, script: bool) -> mlua::Result<Table> {
         leon.set("modes", func(lua, "modes", loading(modes))?)?;
         leon.set("action", func(lua, "action", loading(action))?)?;
         leon.set("on", func(lua, "on", on_in_config)?)?;
-        leon.set("set", func(lua, "set", loading(crate::settings::set))?)?;
+        leon.set("set", func(lua, "set", loading(set))?)?;
     }
     leon.set("log", func(lua, "log", log)?)?;
     let json = lua.create_table()?;
@@ -344,6 +341,18 @@ fn mode(lua: &Lua, (name, opts): (String, Option<Table>)) -> Result<(), Bad> {
         Some(m) => (m.exclusive, m.prefix) = (exclusive, prefix),
         None => st.cfg.modes.push(Mode { name, exclusive, prefix, source }),
     }
+    Ok(())
+}
+
+/// `leon.set(name, value)`: one of [`crate::settings::KEYS`].
+fn set(lua: &Lua, (name, value): (String, Value)) -> Result<(), Bad> {
+    let v: serde_json::Value = lua.from_value(value)?;
+    let mut st = state(lua);
+    let themes = st.themes.clone();
+    st.cfg.settings.set(&name, &v, &themes)?;
+    drop(st);
+    let at = caller(lua);
+    state(lua).cfg.setting_sources.insert(name, at);
     Ok(())
 }
 

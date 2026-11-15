@@ -13,7 +13,7 @@ section is a milestone from [docs/roadmap.md](docs/roadmap.md) and
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.2.0`.
+one is `1.3.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -27,6 +27,31 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+### M22a — Themes and settings, the model half (API `1.3.0`)
+
+#### Added
+
+- A theme model outside the app (`leon_core::theme`): the terminal palette, the app's chrome
+  and the status colours. `leon-dark` is the app's colours unchanged; `leon-light` is new, Iron on
+  Parchment, with every text and status colour at 4.5:1 or more.
+- `leon theme list`, `leon theme import FILE [--name NAME]` (Ghostty theme files and iTerm2
+  `.itermcolors`, stored in `themes/` beside init.lua) and `leon theme show NAME`.
+- Settings in init.lua: `leon.set` takes `theme` (a name, or `{dark, light}` to follow the OS),
+  `font.family`, `font.size`, `notifications.done|blocked|error`, as well as `copy_on_select`,
+  `repeat_time`, `hint_patterns` and `resume`. `leon config get [KEY]` reads them; `leon config set KEY VALUE` edits init.lua in
+  place, keeping comments, and refuses a key set by code it can't rewrite.
+- `server.settings` (stable): every effective setting and where each was set, and the
+  `settings_changed` event when a reload changes them. This additive change raises `api_version`
+  from `1.2.0` to `1.3.0`.
+
+#### Changed
+
+- The notification switches are `notifications.blocked`, `notifications.error` and
+  `notifications.done` (M13 shipped them unreleased as `notify_*`; those names are gone), and
+  `client.keymap`'s settings carry them as `notifications`.
+
+The app doesn't use the themes, fonts or `leon config set` yet; that is M22b.
 
 ### M19: tmux migrants
 
@@ -61,8 +86,8 @@ fields it doesn't know. The full policy is in
 - The blocked count on the Activity button and the Dock icon, shown only when something is blocked.
 - Notifications from Leon.app (UNUserNotificationCenter) when a block blocks or errors, or a run of
   30 s or more finishes while the app is in the background; once a minute per block and state, four
-  a minute in all; `leon.set("notify_blocked" | "notify_error" | "notify_done", false)` turns a kind
-  off. Clicking one goes to its pane.
+  a minute in all; `leon.set("notifications.blocked" | "notifications.error" |
+  "notifications.done", false)` turns a kind off. Clicking one goes to its pane.
 - `leon notify [-b BLOCK] [--state working|blocked|done|error] [--title T] [--body B]` and the
   experimental block method `dev.leon.terminal.report_status`: a status for your own block, held to
   the OSC 7501 rules.

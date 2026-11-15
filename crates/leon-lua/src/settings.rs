@@ -1,80 +1,245 @@
-//! `leon.set`: the config's settings.
+//! The settings `leon.set` takes (docs/lua.md "Settings"), typed and with their defaults; the one
+//! check both `leon.set` and `leon config set` use; and the themes a setting can name: leon's
+//! built-in ones and the files in `themes/` beside init.lua.
 
-use mlua::{Lua, Value};
+use std::path::{Path, PathBuf};
 
-use crate::api::{state, Bad};
+use leon_core::theme::{self, Theme};
+use serde_json::{json, Value};
 
-/// `leon.set(name, value)`: a setting: `resume` (`"ask"`, `"always"`, `"never"`), `repeat_time`
-/// (milliseconds), `hint_patterns` (a list of regular expressions), or one of the booleans
-/// `copy_on_select`, `notify_blocked`, `notify_error`, `notify_done`.
-pub(crate) fn set(lua: &Lua, (name, value): (String, Value)) -> Result<(), Bad> {
-    if name == "repeat_time" {
-        let ms = match value {
-            Value::Integer(i) => Some(i as f64),
-            Value::Number(n) => Some(n),
-            _ => None,
-        };
-        let ms = ms.filter(|ms| ms.fract() == 0. && (0. ..=10_000.).contains(ms));
-        let ms = ms.ok_or_else(|| Bad("repeat_time is whole milliseconds, 0 to 10000 (0 turns repeat off)".into()))?;
-        state(lua).cfg.repeat_time = Some(ms as u64);
-        return Ok(());
+use crate::Resume;
+
+/// Every key `leon.set` takes.
+pub const KEYS: [&str; 10] = [
+    "theme",
+    "font.family",
+    "font.size",
+    "notifications.done",
+    "notifications.blocked",
+    "notifications.error",
+    "copy_on_select",
+    "repeat_time",
+    "hint_patterns",
+    "resume",
+];
+
+/// The app's own font size range (it clamps ⌘+ and ⌘- to it too).
+pub const FONT_SIZES: (f64, f64) = (8., 32.);
+
+/// The theme for each OS appearance; one name is the same for both.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ThemeChoice {
+    pub dark: String,
+    pub light: String,
+}
+
+/// The app's notifications (docs/architecture/attention.md), by kind.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Notifications {
+    /// A long run finished while the app was in the background.
+    pub done: bool,
+    /// A block became blocked.
+    pub blocked: bool,
+    /// A block reported an error.
+    pub error: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Settings {
+    pub theme: ThemeChoice,
+    pub font_family: String,
+    pub font_size: f64,
+    pub notifications: Notifications,
+    /// The app copies a selection to the clipboard as it is made.
+    pub copy_on_select: bool,
+    /// Milliseconds after a repeatable binding during which its keys work without the prefix; 0
+    /// turns repeat off.
+    pub repeat_time: u64,
+    /// Regular expressions hints match besides the built-in ones.
+    pub hint_patterns: Vec<String>,
+    /// What a restored block does with its program's resume command.
+    pub resume: Resume,
+}
+
+impl Default for Settings {
+    /// Today's app: the dark theme whatever the OS, Menlo 13, every notification, 500 ms repeat.
+    fn default() -> Self {
+        let dark = "leon-dark".to_string();
+        Settings {
+            theme: ThemeChoice { light: dark.clone(), dark },
+            font_family: "Menlo".into(),
+            font_size: 13.,
+            notifications: Notifications { done: true, blocked: true, error: true },
+            copy_on_select: false,
+            repeat_time: 500, // tmux's repeat-time default
+            hint_patterns: vec![],
+            resume: Resume::Ask,
+        }
     }
-    if name == "hint_patterns" {
-        state(lua).cfg.hint_patterns = hint_patterns(value)?;
-        return Ok(());
+}
+
+impl Settings {
+    /// All of them, as `server.settings` reports them.
+    pub fn to_json(&self) -> Value {
+        let n = &self.notifications;
+        json!({
+            "theme": { "dark": self.theme.dark, "light": self.theme.light },
+            "font": { "family": self.font_family, "size": self.font_size },
+            "notifications": { "done": n.done, "blocked": n.blocked, "error": n.error },
+            "copy_on_select": self.copy_on_select,
+            "repeat_time": self.repeat_time,
+            "hint_patterns": self.hint_patterns,
+            "resume": self.resume.as_str(),
+        })
     }
-    let mut st = state(lua);
-    let cfg = &mut st.cfg;
-    let flag = match name.as_str() {
-        "copy_on_select" => Some(&mut cfg.copy_on_select),
-        "notify_blocked" => Some(&mut cfg.notify_blocked),
-        "notify_error" => Some(&mut cfg.notify_error),
-        "notify_done" => Some(&mut cfg.notify_done),
-        _ => None,
+
+    /// One key's value (`font.size` is `13.0`); None for a key that isn't a setting.
+    pub fn get(&self, key: &str) -> Option<Value> {
+        if !KEYS.contains(&key) {
+            return None;
+        }
+        key.split('.').try_fold(self.to_json(), |v, part| v.get(part).cloned())
+    }
+
+    /// Set `key` to `v`, or say why not. A theme name must be built in or a file in `themes`.
+    pub fn set(&mut self, key: &str, v: &Value, themes: &Path) -> Result<(), String> {
+        let flag = || v.as_bool().ok_or_else(|| format!("{key} must be true or false"));
+        match key {
+            "theme" => {
+                let name = |v: &Value, what: &str| {
+                    let n = v.as_str().ok_or_else(|| format!("{what} must be a theme name"))?;
+                    load_theme(themes, n).map(|_| n.to_string())
+                };
+                self.theme = match v {
+                    Value::Object(o) => {
+                        if let Some(k) = o.keys().find(|k| *k != "dark" && *k != "light") {
+                            return Err(format!("theme has no {k:?}; give {{ dark = NAME, light = NAME }}"));
+                        }
+                        let get =
+                            |k| o.get(k).ok_or_else(|| "theme needs both dark and light, not just one".to_string());
+                        ThemeChoice {
+                            dark: name(get("dark")?, "theme.dark")?,
+                            light: name(get("light")?, "theme.light")?,
+                        }
+                    }
+                    Value::String(_) => {
+                        let n = name(v, "theme")?;
+                        ThemeChoice { dark: n.clone(), light: n }
+                    }
+                    _ => return Err("theme must be a theme name or { dark = NAME, light = NAME }".into()),
+                };
+            }
+            "font.family" => match v.as_str().map(str::trim) {
+                Some(f) if !f.is_empty() && f.len() <= 200 => self.font_family = f.to_string(),
+                _ => return Err("font.family must be a font's name".into()),
+            },
+            "font.size" => match v.as_f64() {
+                Some(s) if (FONT_SIZES.0..=FONT_SIZES.1).contains(&s) => self.font_size = s,
+                _ => return Err(format!("font.size must be a number from {} to {}", FONT_SIZES.0, FONT_SIZES.1)),
+            },
+            "notifications.done" => self.notifications.done = flag()?,
+            "notifications.blocked" => self.notifications.blocked = flag()?,
+            "notifications.error" => self.notifications.error = flag()?,
+            "copy_on_select" => self.copy_on_select = flag()?,
+            "repeat_time" => match v.as_f64() {
+                Some(ms) if ms.fract() == 0. && (0. ..=10_000.).contains(&ms) => self.repeat_time = ms as u64,
+                _ => return Err("repeat_time is whole milliseconds, 0 to 10000 (0 turns repeat off)".into()),
+            },
+            "hint_patterns" => self.hint_patterns = hint_patterns(v)?,
+            "resume" => {
+                let r = Resume::ALL.into_iter().find(|r| v.as_str() == Some(r.as_str()));
+                self.resume = r.ok_or("resume must be \"ask\", \"always\" or \"never\"")?;
+            }
+            _ if key.starts_with("notifications.") => {
+                return Err(format!("unknown setting {key:?}; the notification kinds are done, blocked and error"))
+            }
+            _ => return Err(format!("unknown setting {key:?}; the settings are {}", KEYS.join(", "))),
+        }
+        Ok(())
+    }
+}
+
+/// A list of at most `MAX_PATTERNS` strings, each a regular expression leon_core::hints compiles.
+fn hint_patterns(v: &Value) -> Result<Vec<String>, String> {
+    use leon_core::hints::{compile, MAX_PATTERNS};
+    let list = match v {
+        Value::Array(list) => list.as_slice(),
+        Value::Object(o) if o.is_empty() => &[], // Lua's `{}`
+        Value::Object(_) => {
+            return Err("hint_patterns must be a list of regular expressions, not a table with keys".into())
+        }
+        v => return Err(format!("hint_patterns must be a list of regular expressions, got {}", kind(v))),
     };
-    if let Some(flag) = flag {
-        let Value::Boolean(on) = value else { return Err(format!("{name} must be true or false").into()) };
-        *flag = Some(on);
-        return Ok(());
+    if list.len() > MAX_PATTERNS {
+        return Err(format!("at most {MAX_PATTERNS} hint patterns, got {}", list.len()));
     }
-    drop(st);
-    if name != "resume" {
+    list.iter()
+        .map(|p| {
+            let p = p.as_str().ok_or("hint_patterns holds strings only")?;
+            compile(p)?;
+            Ok(p.to_string())
+        })
+        .collect()
+}
+
+/// A JSON value's type as Lua names it, for messages.
+fn kind(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "nil",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) | Value::Object(_) => "table",
+    }
+}
+
+/// `themes/` in the folder of the config file at `config`.
+pub fn themes_dir(config: &Path) -> PathBuf {
+    let dir = config.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    dir.join("themes")
+}
+
+/// A name a stored theme can have: a file name in `themes/`, and a word `leon config set theme`
+/// can take (no `=` or `,`).
+pub fn check_name(name: &str) -> Result<(), String> {
+    let bad = name.is_empty()
+        || name.len() > 64
+        || name.starts_with('.')
+        || name.chars().any(|c| c.is_control() || "/\\=,".contains(c));
+    if bad {
         return Err(format!(
-            "unknown setting {name:?}; the settings are \"resume\", \"copy_on_select\", \"repeat_time\", \
-             \"hint_patterns\", \"notify_blocked\", \"notify_error\" and \"notify_done\""
-        )
-        .into());
+            "{name:?} can't name a theme: use up to 64 characters, no / \\ = or comma, not starting with ."
+        ));
     }
-    let text = match &value {
-        Value::String(s) => s.to_str().map(|s| s.to_string()).unwrap_or_default(),
-        _ => String::new(),
-    };
-    let policy = crate::Resume::ALL.into_iter().find(|r| r.as_str() == text);
-    let policy = policy.ok_or_else(|| Bad("resume must be \"ask\", \"always\" or \"never\"".into()))?;
-    state(lua).cfg.resume = Some(policy);
     Ok(())
 }
 
-/// The config's hint patterns: a list of at most `MAX_PATTERNS` strings, each a regular expression
-/// leon_core::hints compiles.
-fn hint_patterns(value: Value) -> Result<Vec<String>, Bad> {
-    use leon_core::hints::{compile, MAX_PATTERNS};
-    let Value::Table(t) = value else {
-        return Err(format!("hint_patterns must be a list of regular expressions, got {}", value.type_name()).into());
-    };
-    let len = t.raw_len();
-    if t.pairs::<Value, Value>().count() != len {
-        return Err("hint_patterns must be a list of regular expressions, not a table with keys".into());
+/// The built-in names, then the stored themes in `themes`, sorted.
+pub fn theme_names(themes: &Path) -> Vec<String> {
+    let mut stored: Vec<String> = std::fs::read_dir(themes)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().to_str()?.strip_suffix(".theme").map(str::to_string))
+        .filter(|n| check_name(n).is_ok() && theme::builtin(n).is_none())
+        .collect();
+    stored.sort();
+    theme::BUILTIN.iter().map(|(n, _)| n.to_string()).chain(stored).collect()
+}
+
+/// The theme called `name`: built in, else `themes/NAME.theme`.
+pub fn load_theme(themes: &Path, name: &str) -> Result<Theme, String> {
+    if let Some(t) = theme::builtin(name) {
+        return Ok(t);
     }
-    if len > MAX_PATTERNS {
-        return Err(format!("at most {MAX_PATTERNS} hint patterns, got {len}").into());
+    check_name(name)?;
+    let path = themes.join(format!("{name}.theme"));
+    let read = theme::import::read_file(&path);
+    match read {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(format!("no theme {name:?}; `leon theme list` shows them, `leon theme import` adds one"))
+        }
+        Err(e) => Err(format!("can't read {}: {e}", path.display())),
+        Ok(bytes) => theme::import::parse(&bytes).map_err(|e| format!("{}: {e}", path.display())),
     }
-    let mut out = Vec::new();
-    for v in t.sequence_values::<Value>() {
-        let Value::String(s) = v? else { return Err("hint_patterns holds strings only".into()) };
-        let p = s.to_str().map_err(|e| Bad(e.to_string()))?.to_string();
-        compile(&p).map_err(Bad)?;
-        out.push(p);
-    }
-    Ok(out)
 }

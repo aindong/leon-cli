@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.2.0**. Every method is marked:
+API version **1.3.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -18,7 +18,7 @@ same facts for the server you run.
 ## Contents
 
 - [help](#help): 1
-- [server](#server): 5
+- [server](#server): 6
 - [session](#session): 28
 - [target](#target): 1
 - [block](#block): 5
@@ -351,7 +351,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.2.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.3.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -433,9 +433,196 @@ same facts for the server you run.
 
 </details>
 
+### `server.settings`
+
+*stable*. The effective settings from init.lua (theme, font, notifications, copy_on_select, resume), defaults filled in, and where each was set. A reload that changes them emits `settings_changed` with the same object to `--all` subscribers.
+
+**Input:** none
+
+**Output:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `settings` | `Effective` | yes | The effective settings: init.lua's `leon.set` calls over the defaults. |
+| `sources` | object | yes | Where each setting was last set, as `file:line`, by key (`font.size`); a setting at its default isn't listed. |
+
+**`Effective`:** The shape of `leon_lua::Settings::to_json`, which builds it.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `theme` | `ThemeChoice` | yes |  |
+| `font` | `Font` | yes |  |
+| `notifications` | `Notifications` | yes |  |
+| `copy_on_select` | boolean | yes | The app copies a selection to the clipboard as it is made. |
+| `repeat_time` | integer (uint64) | yes | Milliseconds after a repeatable binding during which its keys work without the prefix (0 turns repeat off). |
+| `hint_patterns` | [string] | yes | Regular expressions hints match besides the built-in ones. |
+| `resume` | string | yes | What a restored block does with its program's resume command: `ask`, `always` or `never`. |
+
+**`ThemeChoice`:** A theme name for each OS appearance (the same one for both unless init.lua gives two).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `dark` | string | yes |  |
+| `light` | string | yes |  |
+
+**`Font`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `family` | string | yes |  |
+| `size` | number | yes | Points, from 8 to 32. |
+
+**`Notifications`:** Which notifications the app posts.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `done` | boolean | yes | A long run finished while the app was in the background. |
+| `blocked` | boolean | yes | A block became blocked. |
+| `error` | boolean | yes | A block reported an error. |
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "NoParams",
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "SettingsView",
+    "type": "object",
+    "properties": {
+      "settings": {
+        "description": "The effective settings: init.lua's `leon.set` calls over the defaults.",
+        "$ref": "#/$defs/Effective"
+      },
+      "sources": {
+        "description": "Where each setting was last set, as `file:line`, by key (`font.size`); a setting at its\ndefault isn't listed.",
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "settings",
+      "sources"
+    ],
+    "$defs": {
+      "Effective": {
+        "description": "The shape of `leon_lua::Settings::to_json`, which builds it.",
+        "type": "object",
+        "properties": {
+          "theme": {
+            "$ref": "#/$defs/ThemeChoice"
+          },
+          "font": {
+            "$ref": "#/$defs/Font"
+          },
+          "notifications": {
+            "$ref": "#/$defs/Notifications"
+          },
+          "copy_on_select": {
+            "description": "The app copies a selection to the clipboard as it is made.",
+            "type": "boolean"
+          },
+          "repeat_time": {
+            "description": "Milliseconds after a repeatable binding during which its keys work without the prefix\n(0 turns repeat off).",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "hint_patterns": {
+            "description": "Regular expressions hints match besides the built-in ones.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "resume": {
+            "description": "What a restored block does with its program's resume command: `ask`, `always` or `never`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "theme",
+          "font",
+          "notifications",
+          "copy_on_select",
+          "repeat_time",
+          "hint_patterns",
+          "resume"
+        ]
+      },
+      "ThemeChoice": {
+        "description": "A theme name for each OS appearance (the same one for both unless init.lua gives two).",
+        "type": "object",
+        "properties": {
+          "dark": {
+            "type": "string"
+          },
+          "light": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dark",
+          "light"
+        ]
+      },
+      "Font": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string"
+          },
+          "size": {
+            "description": "Points, from 8 to 32.",
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "required": [
+          "family",
+          "size"
+        ]
+      },
+      "Notifications": {
+        "description": "Which notifications the app posts.",
+        "type": "object",
+        "properties": {
+          "done": {
+            "description": "A long run finished while the app was in the background.",
+            "type": "boolean"
+          },
+          "blocked": {
+            "description": "A block became blocked.",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "A block reported an error.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "done",
+          "blocked",
+          "error"
+        ]
+      }
+    }
+  }
+}
+```
+
+</details>
+
 ### `server.config_reload`
 
-*stable*. Re-read init.lua. A failed load keeps the last good config; a good one bumps the keymap generation and emits `keymap_changed`. Local socket only.
+*stable*. Re-read init.lua. A failed load keeps the last good config; a good one bumps the keymap generation and emits `keymap_changed`, and `settings_changed` if a setting changed. Local socket only.
 
 **Input:** none
 
@@ -4826,9 +5013,15 @@ same facts for the server you run.
 | `copy_on_select` | boolean | yes | Copy a selection to the clipboard as it is made (default false). |
 | `repeat_time` | integer (uint64) | yes | Milliseconds after a repeatable binding (`repeats`) during which its keys work without the prefix (default 500; 0 turns repeat off). |
 | `hint_patterns` | [string] | yes | Regular expressions hints match besides the built-in ones (group 1, if any, is the text). |
-| `notify_blocked` | boolean | yes | Notify when a block becomes blocked (default true). |
-| `notify_error` | boolean | yes | Notify when a block reports an error (default true). |
-| `notify_done` | boolean | yes | Notify when a long run finishes while the app is in the background (default true). |
+| `notifications` | `Notifications` | yes | Which notifications the app posts (`notifications.*`, default all). |
+
+**`Notifications`:** Which notifications the app posts.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `done` | boolean | yes | A long run finished while the app was in the background. |
+| `blocked` | boolean | yes | A block became blocked. |
+| `error` | boolean | yes | A block reported an error. |
 
 <details><summary>JSON Schemas</summary>
 
@@ -5051,26 +5244,39 @@ same facts for the server you run.
               "type": "string"
             }
           },
-          "notify_blocked": {
-            "description": "Notify when a block becomes blocked (default true).",
-            "type": "boolean"
-          },
-          "notify_error": {
-            "description": "Notify when a block reports an error (default true).",
-            "type": "boolean"
-          },
-          "notify_done": {
-            "description": "Notify when a long run finishes while the app is in the background (default true).",
-            "type": "boolean"
+          "notifications": {
+            "description": "Which notifications the app posts (`notifications.*`, default all).",
+            "$ref": "#/$defs/Notifications"
           }
         },
         "required": [
           "copy_on_select",
           "repeat_time",
           "hint_patterns",
-          "notify_blocked",
-          "notify_error",
-          "notify_done"
+          "notifications"
+        ]
+      },
+      "Notifications": {
+        "description": "Which notifications the app posts.",
+        "type": "object",
+        "properties": {
+          "done": {
+            "description": "A long run finished while the app was in the background.",
+            "type": "boolean"
+          },
+          "blocked": {
+            "description": "A block became blocked.",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "A block reported an error.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "done",
+          "blocked",
+          "error"
         ]
       }
     }

@@ -18,8 +18,8 @@ fn errors(c: &Config) -> Vec<String> {
 fn good_patterns_load_in_order() {
     let c = load_src(r#"leon.set("hint_patterns", { "[A-Z]+-\\d+", "id=(\\w+)" })"#);
     assert!(errors(&c).is_empty(), "{:?}", errors(&c));
-    assert_eq!(c.hint_patterns, vec![r"[A-Z]+-\d+".to_string(), r"id=(\w+)".to_string()]);
-    assert!(load_src("").hint_patterns.is_empty());
+    assert_eq!(c.settings.hint_patterns, vec![r"[A-Z]+-\d+".to_string(), r"id=(\w+)".to_string()]);
+    assert!(load_src("").settings.hint_patterns.is_empty());
 }
 
 #[test]
@@ -39,6 +39,6 @@ fn bad_patterns_are_refused_naming_the_problem() {
         let e = errors(&c);
         assert_eq!(e.len(), 1, "{src} should be refused once: {e:?}");
         assert!(e[0].contains(word), "{src}: {:?} should name {word}", e[0]);
-        assert!(c.hint_patterns.is_empty(), "{src} set nothing");
+        assert!(c.settings.hint_patterns.is_empty(), "{src} set nothing");
     }
 }

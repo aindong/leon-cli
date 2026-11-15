@@ -1,6 +1,10 @@
-//! leon's dark theme, from the brand palette (brand/README.md "Palette"): the terminal palette and
-//! the app's chrome around it, as 0xRRGGBB. The app takes every colour it draws from here.
+//! leon's themes, from the brand palette (brand/README.md "Palette"): the terminal palette and the
+//! app's chrome around it, as 0xRRGGBB. The app takes every colour it draws from here. [`import`]
+//! reads Ghostty, iTerm2 and leon theme files.
 
+pub mod import;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Theme {
     pub fg: u32,
     /// The terminal pane (Coal).
@@ -60,6 +64,80 @@ pub const DARK: Theme = Theme {
     found: 0x5B4C30,
     link: 0xE6AA91,
 };
+
+/// leon's light theme: Iron text on Parchment, Sand chrome, Oxide for focus and links, and the
+/// status colours deepened until they read at 4.5:1 on Parchment and Sand.
+pub const LIGHT: Theme = Theme {
+    fg: 0x292521,
+    bg: 0xF5F0E7,
+    cursor: 0xB64C32,
+    ansi: [
+        0x292521, 0xB03A2E, 0x4F6B32, 0x80600F, 0x2F5F8A, 0x8A3D6E, 0x2C6B63, 0xD8CEC2, // normal
+        0x65594F, 0x9A2F24, 0x3F5A26, 0x6B500A, 0x24507A, 0x76305D, 0x215A53, 0xEBE3D7, // bright
+    ],
+    chrome: 0xEBE3D7,
+    hover: 0xDFD8CC,
+    border: 0xD0C8BE,
+    text: 0x292521,
+    title: 0x1F1C19,
+    muted: 0x65594F,
+    accent: 0xB64C32,
+    selected: 0xE5DCD5,
+    brand: 0xB64C32,
+    working: 0x9C4019,
+    done: 0x47613A,
+    blocked: 0x77580C,
+    error: 0x9C3346,
+    selection: 0xD8CDC7,
+    found: 0xEED9AD,
+    link: 0xB64C32,
+};
+
+/// The themes every leon has, by the name settings use.
+pub const BUILTIN: [(&str, Theme); 2] = [("leon-dark", DARK), ("leon-light", LIGHT)];
+
+pub fn builtin(name: &str) -> Option<Theme> {
+    BUILTIN.iter().find(|(n, _)| *n == name).map(|(_, t)| *t)
+}
+
+impl Theme {
+    /// leon's own token names in a theme file, beside Ghostty's `background`, `palette` and so on.
+    pub const TOKENS: [&'static str; 15] = [
+        "chrome", "hover", "border", "text", "title", "muted", "accent", "selected", "brand", "working", "done",
+        "blocked", "error", "found", "link",
+    ];
+
+    /// The colour a theme file names `key`: a Ghostty key or one of [`Theme::TOKENS`].
+    pub fn slot(&mut self, key: &str) -> Option<&mut u32> {
+        Some(match key {
+            "background" => &mut self.bg,
+            "foreground" => &mut self.fg,
+            "cursor-color" => &mut self.cursor,
+            "selection-background" => &mut self.selection,
+            "chrome" => &mut self.chrome,
+            "hover" => &mut self.hover,
+            "border" => &mut self.border,
+            "text" => &mut self.text,
+            "title" => &mut self.title,
+            "muted" => &mut self.muted,
+            "accent" => &mut self.accent,
+            "selected" => &mut self.selected,
+            "brand" => &mut self.brand,
+            "working" => &mut self.working,
+            "done" => &mut self.done,
+            "blocked" => &mut self.blocked,
+            "error" => &mut self.error,
+            "found" => &mut self.found,
+            "link" => &mut self.link,
+            _ => return None,
+        })
+    }
+
+    /// The pane is nearer black than white.
+    pub fn is_dark(&self) -> bool {
+        contrast(self.bg, 0) < contrast(self.bg, 0xFFFFFF)
+    }
+}
 
 /// The app's text sizes in points: UI text, and secondary text (session labels, shortcuts).
 pub const UI_TEXT: f32 = 13.;
