@@ -17,7 +17,7 @@ pub fn install(cx: &mut App) {
     cx.on_action(|_: &Quit, cx| cx.quit());
     // closing the Settings window leaves the app running; closing the workspace's quits it
     cx.on_window_closed(|cx| {
-        if !cx.windows().iter().any(|w| w.downcast::<Workspace>().is_some()) {
+        if quits(cx) {
             cx.quit()
         }
     })
@@ -53,4 +53,9 @@ pub fn run(server: Remote) {
             .expect("open the leon window");
         cx.activate(true);
     });
+}
+
+/// After a window closed: quit when no workspace window is left (closing Settings doesn't quit).
+pub fn quits(cx: &App) -> bool {
+    !cx.windows().iter().any(|w| w.downcast::<Workspace>().is_some())
 }

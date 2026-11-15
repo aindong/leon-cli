@@ -473,7 +473,7 @@ mod look_view;
 #[path = "view_start.rs"]
 mod start;
 pub use look_view::is_dark;
-pub use start::{init, install, run};
+pub use start::{init, install, quits, run};
 #[path = "view_menus.rs"]
 mod menus;
 #[path = "view_model.rs"]
