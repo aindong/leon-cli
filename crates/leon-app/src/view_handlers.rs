@@ -280,7 +280,7 @@ impl Workspace {
     /// `capture` and agents see the new size before the tab is shown.
     pub(super) fn set_font_size(&mut self, pt: f32, window: &mut Window, cx: &mut Context<Self>) {
         self.font_size = pt.clamp(FONT_SIZES.0, FONT_SIZES.1);
-        let (cell_w, line_h) = cell_size(window, self.font_size);
+        let (cell_w, line_h) = cell_size(window, &self.font_family, self.font_size);
         let area = self.pane_area(window);
         // (remote, session, block, its pane's text area) for every pane of every window on every
         // machine, then resize off the lock

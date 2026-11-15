@@ -10,11 +10,11 @@ impl Workspace {
         if self.palette_open() {
             return Some(self.render_palette(cx).into_any_element());
         }
-        self.pending_hint().map(|hint| render_hint(hint).into_any_element())
+        self.pending_hint().map(|hint| render_hint(hint, &self.theme).into_any_element())
     }
 
     fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let query = self.palette_query();
         let selected = self.palette_selected();
         let matches = self.palette_matches();
@@ -106,8 +106,7 @@ impl Workspace {
 }
 
 /// A pending sequence (`ctrl+b`) and what may follow it, bottom right.
-fn render_hint((prefix, next): (String, Vec<(String, String)>)) -> impl IntoElement {
-    let t = &DARK;
+fn render_hint((prefix, next): (String, Vec<(String, String)>), t: &Theme) -> impl IntoElement {
     let mut rows = div().flex().flex_col().gap(px(2.));
     for (key, what) in next {
         rows = rows.child(

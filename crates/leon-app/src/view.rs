@@ -29,12 +29,13 @@ use crate::chrome::{self, Places, Settings, SidebarList};
 use crate::hosts::{HostState, Hosts};
 use crate::icons::{Icon, ROW_ICON, TOOLBAR_ICON, TOOLBAR_TARGET};
 use crate::keymap::{self, Bound, Keymap, Pressed};
+use crate::look::Look;
 use crate::panes::{self, Divider, GAP};
 use crate::remote::Remote;
 use crate::render::{self, Frame};
 use crate::status::{self, Indicator};
 use crate::switcher;
-use crate::theme::{Theme, DARK, SECONDARY_TEXT, UI_TEXT};
+use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
 
 actions!(
     leon,
@@ -61,9 +62,8 @@ actions!(
     ]
 );
 
-const FONT_FAMILY: &str = "Menlo";
-/// The terminal font size in points: the default, and the range cmd+= / cmd+- move in.
-const FONT_SIZE: f32 = 13.;
+/// The range cmd+= / cmd+- move the terminal font size in (points); init.lua's `font.size` is
+/// the size cmd+0 returns to.
 const FONT_SIZES: (f32, f32) = (8., 32.);
 const LINE_HEIGHT: f32 = 1.3;
 /// The titlebar row: the traffic lights, the toolbar, and in top style the tabs.
@@ -165,6 +165,8 @@ struct Palette {
 struct KeymapInbox {
     asking: bool,
     reply: Option<Value>,
+    /// The `server.settings` reply asked for when the keymap's generation moved to the one given.
+    settings: Option<(u64, Value)>,
 }
 
 /// The blocks on screen, in leaf order.
@@ -251,6 +253,16 @@ pub struct Workspace {
     /// The window is the key window: the user is looking at leon.
     window_active: bool,
     font_size: f32,
+    /// init.lua's settings as drawn (`look.rs`); the theme for the OS appearance now (`dark`),
+    /// and the terminal font. `refit` fits every pane again at the next render (a new font).
+    look: Look,
+    dark: bool,
+    theme: Theme,
+    font_family: SharedString,
+    refit: bool,
+    /// The config the local server loaded, from its keymap: where the theme files and the
+    /// Settings window's init.lua are.
+    config_path: Option<PathBuf>,
     /// Where the spinner's clock starts.
     epoch: Instant,
     /// The pane last seen with the focus, and whether the window was active: a change is the user
@@ -263,6 +275,7 @@ pub struct Workspace {
     _bounds: Subscription,
     _quit: Subscription,
     _release: Subscription,
+    _appearance: Subscription,
 }
 
 impl Workspace {
@@ -351,6 +364,10 @@ impl Workspace {
             async {}
         });
         let release = cx.on_release(|ws, _| ws.save_settings());
+        let appearance = cx.observe_window_appearance(window, |ws, window, cx| {
+            ws.set_appearance(look_view::is_dark(window.appearance()), cx)
+        });
+        let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
         Workspace {
             app,
             hosts,
@@ -379,7 +396,13 @@ impl Workspace {
             dock: None,
             platform: false,
             window_active: window.is_window_active(),
-            font_size: FONT_SIZE,
+            font_size: look.font_size,
+            theme: look.theme(dark),
+            font_family: look.font_family.clone().into(),
+            look,
+            dark,
+            refit: false,
+            config_path: None,
             epoch: Instant::now(),
             seen_focus: None,
             term: scroll::TermUi::default(),
@@ -388,6 +411,7 @@ impl Workspace {
             _bounds: bounds,
             _quit: quit,
             _release: release,
+            _appearance: appearance,
         }
     }
 
@@ -494,6 +518,8 @@ mod header;
 mod hosts_view;
 #[path = "view_keys.rs"]
 mod keys;
+#[path = "view_look.rs"]
+mod look_view;
 #[path = "view_menus.rs"]
 mod menus;
 #[path = "view_model.rs"]

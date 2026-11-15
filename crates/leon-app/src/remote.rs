@@ -149,6 +149,10 @@ struct Shared {
     /// The event connection's write side, for `block.watch`.
     events: Mutex<UnixStream>,
     watched: Mutex<Vec<String>>,
+    /// The colours the server resolves this app's screens and lines with (`block.watch`'s
+    /// `palette`); unused once the server refused it (a leon older than M22b).
+    palette: Mutex<Option<Value>>,
+    palette_refused: AtomicBool,
     alive: AtomicBool,
     closing: AtomicBool,
     /// Over a link: whether the connections are up.
@@ -205,9 +209,27 @@ impl Shared {
         }
     }
 
+    /// The palette to send, unless the server refused one.
+    fn palette(&self) -> Option<Value> {
+        lock(&self.palette).clone().filter(|_| !self.palette_refused.load(Ordering::SeqCst))
+    }
+
+    /// The server didn't take a palette: stop sending it, and watch again without (held as
+    /// `Remote::watch` holds it).
+    pub(super) fn refuse_palette(&self) {
+        if !self.palette_refused.swap(true, Ordering::SeqCst) {
+            eprintln!("leon: this server is older than leon's themes; its panes keep leon-dark's colours");
+            let watched = lock(&self.watched);
+            let _ = self.send_watch(&watched);
+        }
+    }
+
     fn send_watch(&self, ids: &[String]) -> io::Result<()> {
-        let mut line =
-            serde_json::to_vec(&json!({ "id": 0, "method": "block.watch", "params": { "block_ids": ids } }))?;
+        let mut params = json!({ "block_ids": ids });
+        if let Some(p) = self.palette() {
+            params["palette"] = p;
+        }
+        let mut line = serde_json::to_vec(&json!({ "id": 0, "method": "block.watch", "params": params }))?;
         line.push(b'\n');
         lock(&self.events).write_all(&line)
     }
@@ -257,6 +279,8 @@ impl Remote {
             wakers: Mutex::default(),
             events: Mutex::new(events),
             watched: Mutex::default(),
+            palette: Mutex::default(),
+            palette_refused: AtomicBool::new(false),
             alive: AtomicBool::new(true),
             closing: AtomicBool::new(false),
             link: Mutex::new(LinkState::Up),
@@ -361,6 +385,44 @@ impl Remote {
             m.screen_updates.retain(|id, _| ids.contains(id));
             drop(m);
             *watched = ids;
+        }
+    }
+
+    /// Resolve this app's screens with `theme`'s terminal colours from now on: the watched screens
+    /// come again, whole, in them. Nothing is sent when they didn't change.
+    pub fn set_palette(&self, theme: &leon_core::theme::Theme) {
+        let p = json!({ "fg": theme.fg, "bg": theme.bg, "cursor": theme.cursor, "ansi": theme.ansi });
+        let watched = lock(&self.shared.watched);
+        if lock(&self.shared.palette).replace(p.clone()) == Some(p)
+            || self.shared.palette_refused.load(Ordering::SeqCst)
+        {
+            return;
+        }
+        if let Err(e) = self.shared.send_watch(&watched) {
+            eprintln!("leon: can't watch the panes: {e}");
+        }
+    }
+
+    /// `block.method` `dev.leon.terminal.lines` in this app's palette (without one on a server
+    /// that refuses it).
+    pub fn lines(&self, session_id: &str, block_id: &str, from: usize, count: usize) -> Result<Value, ApiError> {
+        let call = |palette: Option<Value>| {
+            let mut args = json!({ "from": from, "count": count });
+            if let Some(p) = palette {
+                args["palette"] = p;
+            }
+            let p = json!({ "session_id": session_id, "block_id": block_id, "method": "dev.leon.terminal.lines", "args": args });
+            self.call("block.method", p)
+        };
+        match self.shared.palette() {
+            Some(p) => match call(Some(p)) {
+                Err(e) if e.message.contains("unknown field `palette`") => {
+                    self.shared.refuse_palette();
+                    call(None)
+                }
+                r => r,
+            },
+            None => call(None),
         }
     }
 

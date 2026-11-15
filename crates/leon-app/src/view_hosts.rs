@@ -98,7 +98,11 @@ impl Workspace {
     /// The poll's share: pick up hosts that connected or gave up, and select a session made over
     /// a link once its host's model has it.
     pub(super) fn poll_hosts(&mut self) {
-        if self.hosts.poll() && !self.hosts.machines()[self.host].remote().is_some_and(|r| Rc::ptr_eq(r, &self.app)) {
+        let changed = self.hosts.poll();
+        if changed {
+            self.send_palette(); // a host that connected gets the theme's colours
+        }
+        if changed && !self.hosts.machines()[self.host].remote().is_some_and(|r| Rc::ptr_eq(r, &self.app)) {
             self.use_host(0); // the selected host went away
         }
         let later = lock(&self.select_later).clone();
@@ -144,7 +148,7 @@ impl Workspace {
 
     /// A machine's label: a dot for its state, the name, and under it a note while not connected.
     pub(super) fn host_label(&self, h: usize, m: &Machine, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let state = m.state();
         let dot = match state {
             HostState::Connected => t.done,
@@ -213,7 +217,7 @@ impl Workspace {
             _ => return None,
         };
         self.shown()?;
-        let t = &DARK;
+        let t = &self.theme;
         // the pane area is the window's bottom right corner (`pane_area`)
         let (w, h) = self.pane_area(window);
         let view = window.viewport_size();

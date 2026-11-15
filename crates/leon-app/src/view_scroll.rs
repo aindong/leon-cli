@@ -54,7 +54,7 @@ pub(super) struct PaneView {
     carry: f32,
     /// `scrolled` when the view left the bottom: the pill counts from there.
     left_at: usize,
-    cache: HashMap<usize, Row>,
+    pub(super) cache: HashMap<usize, Row>,
     /// What the cache and every number belong to: (lines, cols, alt screen).
     key: (usize, usize, bool),
     history: usize,
@@ -131,9 +131,14 @@ impl Workspace {
         }
     }
 
+    /// History rows `from` on of pane `id`, in this app's colours (`Remote::lines`).
+    pub fn lines(&self, id: &str, from: usize, count: usize) -> Option<Lines> {
+        let got = self.app.lines(&self.session_of(id), id, from, count);
+        got.ok().and_then(|v| serde_json::from_value::<Lines>(v).ok())
+    }
+
     fn fetch(&mut self, id: &str, from: usize, count: usize) {
-        let got = self.term_call(id, "lines", json!({ "from": from, "count": count }));
-        let Some(lines) = got.ok().and_then(|v| serde_json::from_value::<Lines>(v).ok()) else { return };
+        let Some(lines) = self.lines(id, from, count) else { return };
         let pv = self.term.panes.entry(id.to_string()).or_default();
         if pv.cache.len() > MAX_CACHED {
             pv.cache.clear();
@@ -247,7 +252,7 @@ impl Workspace {
     /// to the bottom.
     pub(super) fn render_jump(&self, id: &str, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let n = self.new_lines(id)?;
-        let t = &DARK;
+        let t = &self.theme;
         let block = id.to_string();
         let label = if n == 1 { "↓ 1 new line".to_string() } else { format!("↓ {n} new lines") };
         Some(

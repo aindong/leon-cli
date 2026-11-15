@@ -13,7 +13,7 @@ impl Workspace {
         stats: Rc<RefCell<Stats>>,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let size = self.pane_area(window);
         let active = window.is_window_active();
         let font_size = self.font_size;
@@ -37,7 +37,7 @@ impl Workspace {
                 (sid.clone(), id.clone()),
                 (view.frame, marks),
                 active && focused,
-                font_size,
+                (self.font_family.clone(), font_size, self.theme),
                 (stats.clone(), self.term.painted.clone()),
             );
             let finding = self.term.find.as_ref().is_some_and(|f| f.block == id);
@@ -180,6 +180,9 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.note_focus(window);
+        if std::mem::take(&mut self.refit) {
+            self.set_font_size(self.font_size, window, cx); // a new font from init.lua
+        }
         DRAWN.with(|d| d.borrow_mut().clear());
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
@@ -238,10 +241,10 @@ impl Render for Workspace {
             .on_action(cx.listener(|ws, _: &Find, w, cx| ws.run_action("client.find.open", None, "menu", w, cx)))
             .size_full()
             .flex()
-            .bg(rgb(DARK.chrome))
+            .bg(rgb(self.theme.chrome))
             .font_family(".SystemUIFont")
             .text_size(px(UI_TEXT))
-            .text_color(rgb(DARK.text))
+            .text_color(rgb(self.theme.text))
             .children(places.sidebar.map(|list| self.render_sidebar(&rows, list, cx)))
             .child(column)
             .children(self.render_stale(window))

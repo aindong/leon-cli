@@ -148,7 +148,7 @@ impl Workspace {
             "client.pane_header.reveal" => self.toggle_pane_headers(cx),
             "client.font.increase" => self.set_font_size(self.font_size + 1., window, cx),
             "client.font.decrease" => self.set_font_size(self.font_size - 1., window, cx),
-            "client.font.reset" => self.set_font_size(FONT_SIZE, window, cx),
+            "client.font.reset" => self.set_font_size(self.look.font_size, window, cx),
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
@@ -320,8 +320,15 @@ impl Workspace {
     }
 
     /// Ask the server for its keymap now and then, off the UI thread (a reload holds the config
-    /// for up to 5 s); apply a reply whose generation moved.
+    /// for up to 5 s); apply a reply whose generation moved, and then the settings of that reload
+    /// (every reload moves the generation, and `settings_changed` only comes with one).
     pub(super) fn refresh_keymap(&mut self, cx: &mut Context<Self>) {
+        let settings = lock(&self.inbox).settings.take();
+        // one asked for under an older generation may come after a newer one: it is dropped
+        if let Some((_, settings)) = settings.filter(|(g, _)| *g == self.keymap.generation) {
+            self.apply_settings(&settings);
+            cx.notify();
+        }
         let reply = {
             let mut inbox = lock(&self.inbox);
             let due = self.keymap_asked.is_none_or(|t| t.elapsed() >= KEYMAP_POLL);
@@ -338,15 +345,28 @@ impl Workspace {
             inbox.reply.take()
         };
         if let Some(km) = reply.filter(|km| km["generation"].as_u64() != Some(self.keymap.generation)) {
-            self.keymap = Keymap::app(&km);
+            self.use_keymap(&km);
+            let (back, generation) = (self.inbox.clone(), self.keymap.generation);
+            self.hosts.local().spawn("server.settings", json!({}), move |r| {
+                lock(&back).settings = r.ok().map(|s| (generation, s));
+            });
             cx.notify();
         }
     }
 
-    /// Fetch the keymap and apply it now, waiting for the server (tests, and nothing on a hot path).
+    fn use_keymap(&mut self, km: &Value) {
+        self.keymap = Keymap::app(km);
+        self.config_path = km["path"].as_str().map(PathBuf::from).or_else(leon_lua::config_path);
+    }
+
+    /// Fetch the keymap and the settings and apply them now, waiting for the server (tests, and
+    /// nothing on a hot path).
     pub fn sync_keymap(&mut self) {
         if let Ok(km) = self.hosts.local().call("client.keymap", json!({})) {
-            self.keymap = Keymap::app(&km);
+            self.use_keymap(&km);
+        }
+        if let Ok(settings) = self.hosts.local().call("server.settings", json!({})) {
+            self.apply_settings(&settings);
         }
     }
 }

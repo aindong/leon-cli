@@ -5,7 +5,7 @@ use super::*;
 
 impl Workspace {
     pub(super) fn render_header(&self, id: &str, focused: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let shown = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
         let caption = self.header_caption(id);
         let frame = self.pulse();
@@ -77,7 +77,7 @@ impl Workspace {
                     .text_color(rgb(t.muted))
                     .child(host)
             }))
-            .children(shown.map(|i| status_mark(i, frame).debug_selector(|| sel(format!("header-status-{id}")))))
+            .children(shown.map(|i| status_mark(i, frame, t).debug_selector(|| sel(format!("header-status-{id}")))))
             .child(
                 div()
                     .debug_selector(|| sel(format!("caption-{id}")))
@@ -96,7 +96,7 @@ impl Workspace {
     /// No session: the name, the tagline, and the things to know, each one a click away. Sized for
     /// a big window: one column, keys in a fixed-width lane so the descriptions line up.
     pub(super) fn render_empty(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         let mut hints = div().flex().flex_col().gap(px(6.)).mt(px(36.)).w_full();
         for (i, (keys, what, action)) in self.empty_items().into_iter().enumerate() {
             hints = hints.child(
@@ -118,7 +118,7 @@ impl Workspace {
                                 .rounded(px(5.))
                                 .bg(rgb(t.hover))
                                 .text_color(rgb(t.accent))
-                                .font_family(FONT_FAMILY)
+                                .font_family(self.font_family.clone())
                                 .text_size(px(UI_TEXT + 1.))
                                 .child(keys),
                         ),

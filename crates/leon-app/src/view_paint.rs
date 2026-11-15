@@ -2,18 +2,18 @@
 
 use super::*;
 
-pub(super) fn terminal_font(bold: bool, italic: bool) -> Font {
+pub(super) fn terminal_font(family: &SharedString, bold: bool, italic: bool) -> Font {
     Font {
         weight: if bold { FontWeight::BOLD } else { FontWeight::NORMAL },
         style: if italic { FontStyle::Italic } else { FontStyle::Normal },
-        ..font(FONT_FAMILY)
+        ..font(family.clone())
     }
 }
 
-/// A terminal cell's (width, height) at `pt`.
-pub(super) fn cell_size(window: &Window, pt: f32) -> (Pixels, Pixels) {
+/// A terminal cell's (width, height) in `family` at `pt`.
+pub(super) fn cell_size(window: &Window, family: &SharedString, pt: f32) -> (Pixels, Pixels) {
     let ts = window.text_system();
-    let font_id = ts.resolve_font(&terminal_font(false, false));
+    let font_id = ts.resolve_font(&terminal_font(family, false, false));
     let cell_w = ts.advance(font_id, px(pt), 'm').map(|s| s.width).ok().filter(|w| *w > px(0.)).unwrap_or(px(8.));
     (cell_w, (px(pt) * LINE_HEIGHT).round())
 }
@@ -54,12 +54,13 @@ pub(super) fn terminal_canvas(
     (sid, block_id): (String, String),
     (frame, marks): (Frame, Vec<CellMark>),
     active: bool,
-    font_size: f32,
+    (family, font_size, theme): (SharedString, f32, Theme),
     (stats, painted): (Rc<RefCell<Stats>>, scroll::PaintedMap),
 ) -> impl IntoElement {
+    let family2 = family.clone();
     canvas(
         move |bounds, window, _| {
-            let (cell_w, line_h) = cell_size(window, font_size);
+            let (cell_w, line_h) = cell_size(window, &family2, font_size);
             let (rows, cols) = cells_in(bounds.size.width, bounds.size.height, cell_w, line_h);
             app.fit(&sid, &block_id, rows, cols);
             (frame, cell_w, line_h, (rows as usize, cols as usize), block_id)
@@ -67,7 +68,7 @@ pub(super) fn terminal_canvas(
         move |bounds, (frame, cell_w, line_h, size, id), window, cx| {
             let p = scroll::Painted { origin: bounds.origin, cell: (cell_w, line_h), size };
             painted.borrow_mut().insert(id, p);
-            paint_frame(&frame, &marks, &DARK, bounds, (cell_w, line_h), font_size, active, window, cx);
+            paint_frame(&frame, &marks, &theme, bounds, (cell_w, line_h), (&family, font_size), active, window, cx);
             stats.borrow_mut().painted();
         },
     )
@@ -81,7 +82,7 @@ pub(super) fn paint_frame(
     t: &Theme,
     bounds: Bounds<Pixels>,
     (cell_w, line_h): (Pixels, Pixels),
-    font_size: f32,
+    (family, font_size): (&SharedString, f32),
     active: bool,
     window: &mut Window,
     cx: &mut App,
@@ -113,7 +114,7 @@ pub(super) fn paint_frame(
                 s.map_or((false, false, false, false), |s| (s.bold, s.italic, s.underline, s.strikeout));
             let run = TextRun {
                 len: text.len(),
-                font: terminal_font(bold, italic),
+                font: terminal_font(family, bold, italic),
                 color: rgb(color).into(),
                 background_color: None,
                 underline: underline.then(|| UnderlineStyle { thickness: px(1.), color: None, wavy: false }),
