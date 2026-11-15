@@ -7,7 +7,10 @@ use crate::palette::{self, Item};
 
 impl Workspace {
     pub(super) fn key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let ks = &ev.keystroke;
+        let ks = &match (self.native_key)() {
+            Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
+            None => ev.keystroke.clone(),
+        };
         let chord = keymap::chord(ks);
         // every key closes the repeat window; only a repeatable one opens it again
         let mut repeat = std::mem::take(&mut self.repeat);

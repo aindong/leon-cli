@@ -206,6 +206,9 @@ pub struct Workspace {
     dock: Option<String>,
     /// Post notifications and set the Dock badge (the real app; never tests).
     platform: bool,
+    /// The native key event being handled, as (key code, text): `input::current_key_event` in the
+    /// real app, a stand-in in tests, none otherwise.
+    native_key: fn() -> Option<(u16, String)>,
     /// The window is the key window: the user is looking at leon.
     window_active: bool,
     font_size: f32,
@@ -252,6 +255,7 @@ impl Workspace {
         });
         let mut ws = Self::with_hosts(app, settings_path(), hosts, window, cx);
         ws.platform = true;
+        ws.native_key = crate::input::current_key_event;
         crate::notify::prepare();
         ws
     }
@@ -354,6 +358,7 @@ impl Workspace {
             notifier: Default::default(),
             dock: None,
             platform: false,
+            native_key: || None,
             window_active: window.is_window_active(),
             font_size: look.font_size,
             theme: look.theme(dark),
@@ -374,6 +379,11 @@ impl Workspace {
             _release: release,
             _appearance: appearance,
         }
+    }
+
+    /// Stand in for the native key event `key_down` reads (tests).
+    pub fn set_native_key(&mut self, read: fn() -> Option<(u16, String)>) {
+        self.native_key = read;
     }
 
     /// The selected session, if any.

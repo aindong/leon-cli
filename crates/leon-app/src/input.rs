@@ -28,3 +28,43 @@ pub fn key_bytes(ks: &Keystroke, app_cursor: bool) -> Option<Vec<u8>> {
 
 /// Pastes are wrapped by the server now (`block.event` paste), which knows the program's mode.
 pub use leon_core::keys::paste_bytes;
+
+/// GPUI rebuilds a key's text from its key code through the keyboard layout, so an event with key
+/// code 0 and text of its own (what automation and some accessibility tools send) arrives as `a`.
+/// When the event's `characters` disagree with what GPUI made, they are the key. A real key on
+/// code 0 (`a` in QWERTY, `q` in AZERTY, with shift or option) agrees, and stays as it is.
+pub fn retext(ks: Keystroke, key_code: u16, characters: &str) -> Keystroke {
+    let m = &ks.modifiers;
+    if key_code != 0 || m.control || m.platform || characters.is_empty() || ks.key_char.as_deref() == Some(characters) {
+        return ks;
+    }
+    let key = characters.chars().next().map(|c| c.to_lowercase().to_string()).unwrap_or_default();
+    Keystroke { key, key_char: Some(characters.to_string()), ..ks }
+}
+
+/// The key code and text of the key event AppKit is dispatching now (`[NSApp currentEvent]`):
+/// GPUI calls `key_down` from inside it. Main thread only (the real app's).
+pub fn current_key_event() -> Option<(u16, String)> {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+    const KEY_DOWN: usize = 10; // NSEventTypeKeyDown
+    let cls = AnyClass::get(c"NSApplication")?;
+    unsafe {
+        let app: *mut AnyObject = msg_send![cls, sharedApplication];
+        let ev: *mut AnyObject = if app.is_null() { return None } else { msg_send![app, currentEvent] };
+        if ev.is_null() {
+            return None;
+        }
+        let kind: usize = msg_send![ev, type];
+        if kind != KEY_DOWN {
+            return None;
+        }
+        let code: u16 = msg_send![ev, keyCode];
+        let text: *mut AnyObject = msg_send![ev, characters];
+        let utf8: *const std::ffi::c_char = if text.is_null() { return None } else { msg_send![text, UTF8String] };
+        if utf8.is_null() {
+            return None;
+        }
+        Some((code, std::ffi::CStr::from_ptr(utf8).to_string_lossy().into_owned()))
+    }
+}
