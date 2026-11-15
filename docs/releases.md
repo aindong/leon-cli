@@ -167,8 +167,8 @@ leons keep reading it.
 
 **For an updater.**
 
-- Build the keys in: read `crates/leon/release-keys.pub` at compile time. Nothing in leon reads
-  it yet.
+- Build the keys in: read `crates/leon/release-keys.pub` at compile time. `leon self-update`
+  does, and follows every rule here ([updates.md](updates.md)).
 - Verify `latest.json` against those keys before reading anything from it.
 - Refuse a `version` that isn't newer than the running one, by semver order. An old release is
   still validly signed, so this is the only thing that stops a downgrade. It cannot tell an old

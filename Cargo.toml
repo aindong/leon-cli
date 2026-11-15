@@ -14,6 +14,7 @@ leon-lua = { path = "crates/leon-lua" }
 # default-features off so `leon` can take its GPUI-free modules on Linux (the `gui` feature)
 leon-app = { path = "crates/leon-app", default-features = false }
 leon-hosts = { path = "crates/leon-hosts" }
+leon-update = { path = "crates/leon-update" }
 alacritty_terminal = "0.26"
 base64 = "0.22"
 # runtime_shaders: builds without the Metal Toolchain (docs/architecture.md).
@@ -36,6 +37,25 @@ schemars = "1.2"
 serde = { version = "1", features = ["derive"] }
 # float_roundtrip: saved split ratios must parse back bit for bit (persist.rs).
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+# The updater (crates/leon-update): minisign signatures, sha256 sums, version order, and the two
+# archive formats a release has. zip: deflate only, and only on macOS, which alone has the app.
+flate2 = "1.1"
+minisign-verify = "0.3"
+semver = "1"
+sha2 = "0.10"
+tar = "0.4"
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
+
+# The updater hashes and unpacks whole release files, and its end-to-end tests do that to a real
+# leon: unoptimized, each takes most of a minute.
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.minisign-verify]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.crc32fast]
+opt-level = 3

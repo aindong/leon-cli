@@ -28,6 +28,17 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### Updates
+
+#### Added
+
+- `leon self-update` installs the newest release: it verifies the signed manifest against the
+  keys built into leon, takes a release only if it is newer, checks the file's sha256 and
+  signature, and swaps the new leon in atomically. `--check` only reports, and exits 10 when a
+  newer release exists. A leon installed by Homebrew or from a `.deb` is told the command that
+  updates it instead. leon never checks on its own. `LEON_RELEASE_URL` points it at a mirror.
+  [docs/updates.md](docs/updates.md) has the checks and what each refusal means.
+
 ### Releases
 
 #### Added

@@ -68,6 +68,18 @@ ln -s ~/.local/leon-*-linux/leon ~/.local/bin/   # and put its leon on your PATH
 Every file is signed: [docs/releases.md](docs/releases.md#checking-a-download) says how to check
 one.
 
+### Updating
+
+```sh
+leon self-update --check   # is there a newer release?
+leon self-update           # download it, check its signature, and replace this leon
+```
+
+leon updates only when you ask, and checks the release's signature before it installs anything.
+A leon from Homebrew is updated by `brew upgrade`, and one from a `.deb` by installing the new
+`.deb`; `leon self-update` tells you which. A running server keeps the old version until
+`leon server stop`. The details are in [docs/updates.md](docs/updates.md).
+
 ### From source
 
 To build leon yourself you need a Rust toolchain ([rustup](https://rustup.rs)) and git. The two

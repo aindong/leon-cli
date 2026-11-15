@@ -89,6 +89,13 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   `LICENSE` and `THIRD-PARTY-NOTICES.txt` in `Contents/Resources`, ad-hoc signed); opened from Finder it runs with no arguments, which opens the app. `scripts/install.sh`
   copies the app to `~/Applications` and links `~/.local/bin/leon` to the binary inside it. Both
   replace only what they made: an app with our bundle id, or a link whose text is our binary's path.
+- **Updates.** `leon self-update` is the `leon-update` crate: `Config::load` (the one place the
+  environment is read: `LEON_RELEASE_URL`, and in debug builds only the tests' `LEON_TEST_UPDATE`),
+  `check` (manifest, signature, rules) and `install` (download, sha256 and signature, unpack,
+  rename). It shells out to `curl` behind `fetch.rs`, pins the keys in
+  `crates/leon/release-keys.pub` with `include_str!`, stages in `.leon-update` beside the install
+  under a `flock`, and never replaces a Homebrew or dpkg install. The rules and their reasons are
+  in docs/updates.md and docs/releases.md.
 - **Linux packages.** `scripts/package-linux.sh [--arch arm64|amd64]` builds a release binary
   (symbols stripped) in the same pinned image and writes, to `target/linux/<arch>/` (emptied
   first), the bare `leon` (which `m16a_docker_sshd` runs behind a real sshd),

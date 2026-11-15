@@ -45,6 +45,7 @@ These work with every command.
 | 2 | bad command line (`leon` with a typo suggests the nearest command) |
 | 3 | target not found or ambiguous |
 | 4 | server unreachable |
+| 10 | `self-update --check`: a newer release is available |
 | 130 | interrupted (Ctrl-C) |
 
 `leon wait` and `leon run --wait` exit with the program's own status instead.
@@ -407,6 +408,12 @@ Remove hosts (exit 3 if one isn't there).
 
 Reach each host (default: every one) as a command would, and print `ok` with its leon version,
 or why not. Exit 4 if any host failed.
+
+## Updates
+
+### `leon self-update`
+
+Updates leon to the newest release; `--check` only reports (exit 10): [updates.md](updates.md).
 
 ## Agents
 
