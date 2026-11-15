@@ -39,6 +39,8 @@ fields it doesn't know. The full policy is in
   directory to the host, where it doesn't exist (`leon -H devbox run -- make test` failed with "no
   directory"). They start in the host's home, or in `--cwd`, which must then be an absolute path on
   the host (a relative one exits 2) and is checked there, not on this disk.
+- A program that isn't on PATH fails with `can't start the program: NAME isn't on PATH` instead
+  of a message listing every PATH entry.
 
 ### Joined panes, their events, long socket paths (API `1.5.0`)
 
