@@ -28,6 +28,27 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### M22b — Themes and settings in the app
+
+#### Added
+
+- The app draws with init.lua's `theme`, `font.family` and `font.size`: panes, the window around
+  them and the status colours. A `{ dark, light }` theme follows the macOS appearance and switches
+  with it. Changes apply when the config reloads, without a restart.
+- A Settings window (⌘,, "Settings…" in the leon menu and the palette; action `client.settings`):
+  the theme for dark and for light mode with a preview of each, font family and size,
+  notifications per kind and copy on select. Each change is written to init.lua by
+  `leon config set`'s code; a setting set by code it can't rewrite shows read-only with its
+  `file:line`.
+- `block.watch` and `dev.leon.terminal.lines` take an optional `palette` (`fg`, `bg`, `cursor`,
+  `ansi`) that the connection's screens and lines are resolved with; without it they are
+  leon-dark's, as before. Both methods are Experimental, so `api_version` stays `1.3.0`.
+
+#### Changed
+
+- leon-light: the selected row is a step deeper than a hovered one, and the accent, secondary and
+  status colours are a little darker, so all of them read at 4.5:1 on every surface.
+
 ### M22a — Themes and settings, the model half (API `1.3.0`)
 
 #### Added
