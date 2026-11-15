@@ -1,53 +1,48 @@
 # leon
 
-<p align="center"><img src="brand/marketing/hero.png" alt="leon: keep your work in view" width="100%"></p>
+<p align="center"><img src="docs/images/banner.png" alt="leon: keep your work in view. A lion app icon beside a sketch of panes with an agent working, tests done and a review blocked." width="100%"></p>
 
-**A fast, scriptable terminal multiplexer for macOS.** Sessions, tabs and split panes live in a
-server with a stable API. You drive them from a native app, from the `leon` command, from
-Lua, or let your coding agent drive them for you. It's built in Rust, with GPUI for the app.
+**leon is a terminal multiplexer for people who run several terminal programs and coding agents at
+once.** A server keeps your sessions, tabs and split panes, and the programs in them, running. You
+work with them from a native macOS app, from the `leon` command in any terminal, from Lua scripts,
+or through your coding agent, which can open a pane beside itself, run your tests there and read
+the result. Programs can report whether they are working, blocked or done, so you can see which
+one needs you. It runs on macOS and Linux (the app is macOS only for now) and is written in Rust.
+
+![The leon app: splitting a tab, switching sessions with ⌘K, a scratch drawer, and an agent that reports it is working and then blocked](docs/images/demo-app.gif)
+
+![The leon command in a terminal: a new session, a run that waits for its program, typing into Python and waiting for its answer, then leon attach and a split](docs/images/demo-cli.gif)
+
+## Features
 
 - **Persistent layout.** Programs keep running when the app quits: closing the window or ⌘Q only
   detaches, and the app opens again on the same sessions, tabs, splits and live screens. When the
   server itself stops, sessions, tabs, splits and each pane's directory are saved and come back on
-  its next start, with the same stable IDs you script against (the programs in them don't).
-- **Scriptable from the shell.** `leon run`, `send`, `capture` and `wait` open terminals, type into
-  them, read their screens and wait for programs, with fixed exit codes and `--json` everywhere.
-- **Agent-ready.** One command teaches Claude Code and Codex to open panes beside themselves, run
-  your tests there and read the results.
-- **Lua inside.** Key bindings, modes, your own actions, and scripts that react to events.
-
-![The leon app: three sessions in the sidebar with their tabs as rows, a tab split into three panes, and an agent's progress on its tab row and its pane header](docs/images/app-status.png)
-
-Programs report what they're doing (working, blocked, done) and the app shows it once in each
-place: a symbol on the tab's row, and the symbol with the program's own words in the pane's header.
-Tabs take the title the program set. The command palette (⌘⇧P) runs any action, yours included:
-
-![The command palette, filtered to "log", listing a config action with its shortcut](docs/images/app-palette.png)
-
-Key bindings from your `init.lua` work in the app, sequences too, with a hint of what can follow:
-
-![A ctrl+b key sequence in progress, with a hint listing the keys that can follow](docs/images/app-sequence.png)
+  its next start, with the same IDs you script against (the programs in them don't).
+- **The `leon` command.** `leon run`, `send`, `capture` and `wait` open panes, type into
+  them, read their screens and wait for programs, with fixed exit codes and `--json` output.
+  `leon attach` shows a session in any terminal, over ssh too.
+- **The macOS app.** Sidebar or titlebar tabs, splits, floating panes, a scratch drawer, a
+  command palette, a session switcher, scrollback with find and copy mode, and themes.
+- **Agents.** `leon skill setup` teaches Claude Code and Codex to work in panes beside
+  themselves, and their panes offer to resume the same conversation after a restart.
+- **Status and attention.** A program that writes an OSC 7501 report (agents do) shows its state
+  on its tab and pane. The Activity list, the Dock badge and notifications tell you what is
+  blocked, failed or finished.
+- **Remote hosts.** `-H devbox` acts on the leon server on another machine through your own `ssh`,
+  and the app shows each host's sessions beside your own.
+- **Lua.** Key bindings, modes, your own actions, and scripts that react to events.
+- **An API.** Every client uses the same socket API, which describes itself (`leon api list`)
+  and has a compatibility promise for anyone writing their own client.
 
 ## Install
 
-Each release has `Leon-<version>-macos-arm64.zip` (Apple Silicon), a tarball and a `.deb` for
-Linux on arm64 and x86_64, and `SHA256SUMS`. `shasum -a 256 -c --ignore-missing SHA256SUMS`
-catches a damaged download; the sums aren't signed, so it can't tell a tampered release from a
-real one. `leon --version` names the release and the commit it was built from. Or build from a
-checkout, as below.
+There is no published release yet, so build leon from source. You need a Rust toolchain
+([rustup](https://rustup.rs)) and git.
 
 ### macOS
 
-You need macOS 11 or later. From a release, unzip `Leon.app` into `~/Applications` and link its
-`leon` command:
-
-```text
-ditto -x -k Leon-*-macos-arm64.zip ~/Applications
-xattr -dr com.apple.quarantine ~/Applications/Leon.app   # signed ad hoc, not notarized
-mkdir -p ~/.local/bin && ln -s ~/Applications/Leon.app/Contents/MacOS/leon ~/.local/bin/leon
-```
-
-To build it yourself you need a Rust toolchain. From a checkout of this repository:
+You need macOS 11 or later. From a checkout of this repository:
 
 ```sh
 scripts/install.sh
@@ -57,19 +52,24 @@ That builds `Leon.app`, copies it to `~/Applications`, and links the `leon` comm
 `~/.local/bin` (use `--prefix DIR` for `DIR/bin`). It never uses root, prints each thing it does,
 is safe to run again, and refuses to replace anything at those paths that it didn't install.
 `scripts/install.sh --uninstall` removes both. Open **Leon** from Finder, Spotlight or the Dock, or
-type `leon`.
+type `leon`. To build only the app, `scripts/bundle.sh` writes `target/release/Leon.app`.
 
-The app is a client of the leon server: it attaches to the one running (from the shell or an
+The app is a client of the leon server. It attaches to the one running (from the shell or an
 earlier launch) or starts it. Quitting the app leaves the server and your programs running;
 `leon server stop`, or **Quit and End All Sessions…** in the leon menu, ends them.
-
-To build only the app: `scripts/bundle.sh` writes `target/release/Leon.app`.
 
 ### Linux
 
 On Linux leon is the server, the CLI and `leon attach` (agents and Lua scripts too); the app isn't
-there yet, so `leon` alone in a terminal runs `leon attach`. Install a release's `.deb` or tarball
-as below, or build the packages with Docker, from a checkout:
+there yet, so `leon` alone in a terminal runs `leon attach`. Build it with `cargo`:
+
+```sh
+cargo build --release -p leon
+```
+
+That gives a headless `target/release/leon`; put it on your `PATH`. It needs glibc 2.34 or newer
+(Debian 12, Ubuntu 22.04, RHEL 9 and later). The socket goes in `$XDG_RUNTIME_DIR/leon` when your
+session sets it. With Docker you can build packages instead:
 
 ```sh
 scripts/package-linux.sh                 # or --arch amd64 / --arch arm64
@@ -89,13 +89,17 @@ tar xzf target/linux/*/leon-*-"$(uname -m)"-linux.tar.gz -C ~/.local
 ln -s ~/.local/leon-*-linux/leon ~/.local/bin/leon
 ```
 
-Or build from source with a Rust toolchain and no Docker: `cargo build --release -p leon` gives a
-headless `target/release/leon`. The binary needs glibc 2.34 or newer (Debian 12, Ubuntu 22.04,
-RHEL 9 and later). The socket goes in `$XDG_RUNTIME_DIR/leon` when your session sets it.
+### Release files
+
+`scripts/release.sh` builds, from a clean clone of one commit, the files a release will have:
+`Leon-<version>-macos-arm64.zip` (Leon.app, signed ad hoc and not notarized), a tarball and a
+`.deb` for Linux on arm64 and x86_64, and `SHA256SUMS`. It runs on macOS and needs Docker for the
+Linux packages. `leon --version` names the release and the commit it was built from.
 
 ## The first five commands
 
-From any terminal (the server starts by itself):
+A two-minute quickstart, from any terminal (the server starts by itself). Python stands in for any
+program you want to drive:
 
 ```sh
 leon new demo                                    # 1. a session called "demo"
@@ -107,9 +111,9 @@ leon -s demo wait -b py --text 42                #    and wait for the answer
 leon -s demo capture -b py --trim                # 5. read its screen: 42
 ```
 
-Targets (`-s` session, `-b` block) are an ID, a label, a position or the end of an ID. Inside a
-leon terminal you can drop `-s`: commands act on your own session. `leon ls` lists sessions;
-`leon --help` lists everything, with the exit codes at the bottom.
+Targets (`-s` session, `-b` block, leon's name for a pane) are an ID, a label, a position or the
+end of an ID. Inside a leon terminal you can drop `-s`: commands act on your own session. `leon ls`
+lists sessions; `leon --help` lists everything, with the exit codes at the bottom.
 
 ## Split it
 
@@ -120,7 +124,8 @@ leon -s demo zoom                                            # fill the window; 
 ```
 
 In the app: ⌘D splits right, ⌘⇧D splits down, ⌘⌥ and an arrow moves between panes, and dragging a
-divider resizes.
+divider resizes. `leon attach demo` shows the session in this terminal (ctrl+b d detaches). When
+you are done, `leon kill demo` ends the session and its programs.
 
 ## In any terminal: `leon attach`
 
@@ -149,10 +154,10 @@ binding on the prefix key itself.
 
 ## Work on your devbox
 
-Commands that talk to the server take `-H` to act on the leon server on another machine instead, through your own
-`ssh` (no account, relay or VPN; `~/.ssh/config` and `ProxyJump` work). Put `leon` on the other
-machine's PATH or in `~/.local/bin`; the first command there starts its server, and programs keep
-running after you disconnect.
+Commands that talk to the server take `-H` to act on the leon server on another machine instead,
+through your own `ssh` (no account, relay or VPN; `~/.ssh/config` and `ProxyJump` work). Put `leon`
+on the other machine's PATH or in `~/.local/bin`; the first command there starts its server, and
+programs keep running after you disconnect.
 
 ```text
 leon hosts add devbox ssh://me@devbox.example.com
@@ -162,16 +167,16 @@ leon hosts check
 ```
 
 A dropped Wi-Fi link is retried for a minute: `leon events` and the app resume without losing or
-repeating an event, and `leon attach` says it is reconnecting, then reconnects and redraws. Keys typed while the link
-is stalled or down arrive whole or not at all, and the status bar says how many were not sent
-(a stall that starts mid-word, within a second of the last reply, can still catch the keys already
-on their way). Use ssh keys or an agent: each connection is its own ssh session.
+repeating an event, and `leon attach` says it is reconnecting, then reconnects and redraws. Keys
+typed while the link is stalled or down arrive whole or not at all, and the status bar says how many
+were not sent (a stall that starts mid-word, within a second of the last reply, can still catch the
+keys already on their way). Use ssh keys or an agent, because each connection is its own ssh session.
 
 The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
 and tabs and a dot for its connection. A remote pane works like a local one, with the host's name in
 its header; New Session, New Tab and splits act on the machine of the focused pane, and the palette
 has New Session on each machine and Add Host… (a label, then an `ssh://` endpoint). Click a host's
-label to fold it away. The app's ssh never asks for a password: a host that needs one says
+label to fold it away. The app's ssh never asks for a password. A host that needs one says
 `needs login: run leon hosts check devbox in a terminal`; do that once (accept the host key, unlock
 your key), and the app's next try gets in. While a link is down the host's panes keep their last
 screens under a "reconnecting" note.
@@ -204,6 +209,11 @@ what it created. See [docs/agents.md](docs/agents.md).
 
 ## Know what needs you
 
+Programs report what they're doing (working, blocked, done), and the app shows it in two places.
+The tab's row gets a symbol, and the pane's header gets the symbol with the program's own words.
+
+![The leon app: three sessions in the sidebar with their tabs as rows, a tab split into three panes, and an agent's progress on its tab row and its pane header](docs/images/app-status.png)
+
 ⌘K switches to any session, tab or block on any host, the most recent first, and ⌘⇧A lists what
 needs you: blocked first (with what it is waiting for), then errors, finished runs you haven't
 looked at, and work in progress. The toolbar button for it shows how many blocks are blocked, and so
@@ -214,8 +224,6 @@ OSC 7501 reports for its own block with `leon notify`:
 ```text
 leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 ```
-
-![The session switcher over the panes, filtered to "api", with each row's host, session and tab](docs/images/app-switcher.png)
 
 ![The Activity list in the sidebar: two blocked agents with their questions, a failed deploy, a finished README review and builds in progress, and the blocked count on the toolbar](docs/images/app-activity.png)
 
@@ -252,37 +260,26 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
 
-These are defaults: a `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
-removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow.
-A pane whose program reports its status (OSC 7501, as agents do) shows a pulsing dot while working,
-a warning, question or key icon when it is blocked, a check when done or a cross on an error, on its tab and in its pane header (a collapsed
-session's label shows its most urgent one); done and error clear when you go to the pane. Pane
-headers name the program and where it is, and hold split, zoom and close buttons; "Show or Hide
-Pane Headers" in the palette turns them off. Every button names its action and shortcut on hover.
-Drag the sidebar's edge to resize it.
+These are defaults. A `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
+removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow. Every
+button names its action and shortcut on hover. The wheel scrolls a pane back through its
+scrollback; drag to select, option+drag for a rectangle; hold ⌘ over a link to open it with a click.
+A program that asks for the mouse (an editor or `htop`) gets clicks and the wheel; hold shift to
+select anyway.
 
-The wheel and trackpad scroll a pane back through its scrollback (fetched from the server as you
-go). New output doesn't move what you are reading; a "↓ N new lines" pill takes you back down, and
-so does typing. Drag to select, double-click a word, triple-click a line, shift+click to extend,
-option+drag for a rectangle; a line that wrapped copies as one line. With
-`leon.set("copy_on_select", true)` in your `init.lua` a selection is copied as you make it. A
-program that asks for the mouse (vim, htop, tmux) gets clicks and the wheel; hold shift to select
-anyway. Hold ⌘ over a link (OSC 8, or a URL, even one that wraps) to underline it and ⌘-click to
-open it; anything but an `http(s)` link shows its full address first. The window opens at most of the screen the first time, then
-where you left it.
+## Configuration
 
-Tabs live in one place. ⌘⇧S moves them from the sidebar to the titlebar, beside the session's name,
-and the sidebar then lists only sessions; the app remembers the choice:
+leon reads `~/.config/leon/init.lua` (or `$LEON_CONFIG`). Settings have their own commands, and the
+app's Settings window (⌘,) writes the same file:
 
-![Top tab style: the session's tabs in the titlebar row, the sidebar listing only sessions](docs/images/app-top.png)
+```sh
+leon config set font.size 15
+leon config set theme dark=leon-dark,light=leon-light
+leon theme list
+leon config check
+```
 
-With no session open, the app says what to do next:
-
-![The empty state: leon's icon, the tagline, and the keys for a new session and the palette, plus leon skill setup and leon hosts add](docs/images/app-empty.png)
-
-## Script it in Lua
-
-`~/.config/leon/init.lua` defines key bindings, modes and actions; `leon do` runs scripts.
+The same file defines key bindings, modes and your own actions, and `leon do` runs scripts:
 
 ```lua
 leon.action{
@@ -294,32 +291,54 @@ leon.action{
 ```
 
 ```sh
-leon config check
 leon config reload
 leon do name_session label=api
 leon do -e 'print(#leon.session.view().windows .. " tabs")'
 ```
 
-See [docs/lua.md](docs/lua.md).
+`leon theme import FILE` brings in a color scheme from another terminal's theme file. See
+[docs/lua.md](docs/lua.md) for every setting and function, and [docs/cli/settings.md](docs/cli/settings.md).
+
+## Roadmap
+
+leon is at 0.1.0, not yet tagged. What has landed, milestone by milestone, is in
+[docs/roadmap.md](docs/roadmap.md) and [CHANGELOG.md](CHANGELOG.md). What comes next:
+
+- **The app on Linux.** Linux has the server, the CLI, `leon attach`, agents and Lua; the GPUI app
+  is macOS only for now.
+- **Two clients on one tab.** With the app and `leon attach` showing the same tab, each pane takes
+  the size of the client that last changed its layout, and the other client clips or pads it.
+- **Lookalike link hosts.** ⌘-click opens an `http(s)` link without asking, even when its host uses
+  non-ASCII letters that look like another's; only other kinds of link show their address first.
+- **`codex exec` runs.** leon tells a one-shot `claude -p` run from an interactive agent, but not
+  yet a `codex exec` run, which can still be offered a resume meant for an interactive session.
 
 ## Docs
 
 - [docs/cli.md](docs/cli.md): every command and flag.
 - [docs/lua.md](docs/lua.md): the config and scripts, with examples that a test runs.
-- [docs/agents.md](docs/agents.md): agents driving leon.
+- [docs/agents.md](docs/agents.md): agents driving leon, and the OSC 7501 status format.
+- [docs/recipes.md](docs/recipes.md): project and git worktree sessions as a Lua recipe.
 - [docs/integrators.md](docs/integrators.md): writing a client for leon's socket API in any
   language, and the compatibility promise. [docs/api.md](docs/api.md): every method.
-  [CHANGELOG.md](CHANGELOG.md): what changed.
-- [docs/recipes.md](docs/recipes.md): project and git worktree sessions as a Lua recipe.
-- [docs/architecture.md](docs/architecture.md): how it's built. [docs/roadmap.md](docs/roadmap.md):
-  what's next.
+- [docs/architecture.md](docs/architecture.md): how it's built.
+  [docs/performance.md](docs/performance.md): what it costs, measured.
+- [CHANGELOG.md](CHANGELOG.md): what changed.
 
-## Develop
+## Build and test
 
 ```sh
 cargo build
 cargo test
 cargo clippy --all-targets -- -D warnings
+cargo fmt --check
 ```
 
-GPUI is built with its `runtime_shaders` feature, so you don't need Xcode's Metal toolchain.
+GPUI is built with its `runtime_shaders` feature, so you don't need Xcode's Metal toolchain. The
+terminal tests run a real shell in a PTY, and the doc tests run the commands in these docs.
+`scripts/linux-test.sh` runs the tests for everything but the app on Linux, in Docker.
+
+## License
+
+[MIT](LICENSE). The Instrument Sans font in `brand/fonts` is under the
+[SIL Open Font License](brand/fonts/OFL.txt).
