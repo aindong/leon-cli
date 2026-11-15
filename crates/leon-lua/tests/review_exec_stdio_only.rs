@@ -46,6 +46,10 @@ fn an_exec_child_sees_no_descriptor_another_thread_holds() {
         };
         made.send(fd).unwrap();
         let _ = held.recv();
+        for fd in [pipe[0], pipe[1], fd] {
+            // SAFETY: a descriptor this thread made.
+            unsafe { libc::close(fd) };
+        }
     });
     let planted = planted.recv().unwrap();
     assert!(planted >= 100, "{}", std::io::Error::last_os_error());
