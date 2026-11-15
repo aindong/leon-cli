@@ -102,6 +102,7 @@ impl Workspace {
     /// what's gone, and missing rows are fetched.
     pub(super) fn sync_pane(&mut self, id: &str) {
         let live = self.live(id);
+        let pinned = self.term.copy.as_ref().is_some_and(|c| c.block == id);
         let key = (live.lines, live.cols, live.view.alt_screen);
         let pv = self.term.panes.entry(id.to_string()).or_default();
         let renumbered = pv.key != key || live.view.history < pv.history;
@@ -113,7 +114,11 @@ impl Workspace {
         if pv.selection.as_ref().and_then(|s| s.range).is_some_and(|r| r.start.line < oldest) {
             pv.selection = None;
         }
-        pv.top = scrollback::clamp(&live, pv.top);
+        let top = scrollback::clamp(&live, pv.top, pinned);
+        if pv.top.is_none() && top.is_some() {
+            pv.left_at = live.view.scrolled;
+        }
+        pv.top = top;
         let missing = scrollback::compose(&live, pv.top, &pv.cache).missing;
         self.check_copy(id);
         if renumbered {
@@ -176,7 +181,7 @@ impl Workspace {
     pub(super) fn scroll_to(&mut self, id: &str, top: Option<usize>) {
         let live = self.live(id);
         let pv = self.term.panes.entry(id.to_string()).or_default();
-        let top = scrollback::clamp(&live, top);
+        let top = scrollback::clamp(&live, top, false);
         if pv.top.is_none() && top.is_some() {
             pv.left_at = live.view.scrolled;
         }

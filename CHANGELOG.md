@@ -28,6 +28,17 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### Loose ends after M12–M21
+
+#### Fixed
+
+- The find bar's count ends in `+` (`n of N+`) and copy mode's badge says `N+ matches` when find
+  stopped short of every match (10000, or 300 ms).
+- Copy mode holds the view still while output arrives, also with its cursor on the bottom row
+  (tmux); it no longer ends when a resize shortens the screen under its cursor.
+- `scripts/linux-test.sh` runs as a user named `builder`, so the privacy test no longer takes the
+  project's name in the README for the login.
+
 ### M19: tmux migrants
 
 #### Added
