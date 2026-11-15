@@ -3,9 +3,17 @@
 # Actions are pinned by commit, with their tag beside them.
 name: CI
 
+# A push to a PR branch is one run (pull_request); a merge into dev or main starts its own.
 on:
   push:
+    branches: [main, dev]
   pull_request:
+
+# A newer push cancels the PR's older run. A run on main or dev is alone in its group (its run id):
+# a shared group would cancel the one waiting when a third arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

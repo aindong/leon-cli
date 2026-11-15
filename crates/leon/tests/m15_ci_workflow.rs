@@ -22,10 +22,47 @@ fn jobs(ci: &str) -> Vec<(String, String)> {
     out
 }
 
+/// The lines under a top-level key such as `on:`, up to the next top-level key, without comments.
+fn section<'a>(ci: &'a str, key: &str) -> Vec<&'a str> {
+    ci.lines()
+        .skip_while(|l| l.trim_end() != format!("{key}:"))
+        .skip(1)
+        .take_while(|l| l.starts_with(' ') || l.starts_with('#') || l.is_empty())
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect()
+}
+
+fn ci() -> String {
+    std::fs::read_to_string(help_walk::repo().join(".github/workflows/ci.yml")).expect("ci.yml exists")
+}
+
+/// A push to a PR branch is one run (the `pull_request` one), not two; a merge into `dev` and a
+/// release merge into `main` still start a run of their own.
+#[test]
+fn a_push_to_a_pr_branch_starts_one_run() {
+    let ci = ci();
+    assert_eq!(section(&ci, "on"), ["push:", "branches: [main, dev]", "pull_request:"], "the triggers: {ci}");
+}
+
+/// A newer push cancels the PR's older run. A run on `main` or `dev` is in a group of its own (its
+/// run id), so no later run cancels it or takes its place while it waits.
+#[test]
+fn a_new_push_cancels_the_prs_older_run_and_never_one_on_main_or_dev() {
+    let ci = ci();
+    assert_eq!(
+        section(&ci, "concurrency"),
+        [
+            "group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}",
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+        ],
+        "the concurrency block: {ci}"
+    );
+}
+
 #[test]
 fn ci_runs_the_full_macos_gate_and_linux_on_both_arches() {
-    let ci = std::fs::read_to_string(help_walk::repo().join(".github/workflows/ci.yml")).expect("ci.yml exists");
-    let jobs = jobs(&ci);
+    let jobs = jobs(&ci());
     let mac = jobs.iter().find(|(on, _)| on.starts_with("macos-")).expect("a macOS job");
     for step in ["cargo fmt --check", "cargo clippy --all-targets -- -D warnings", "cargo test --no-fail-fast"] {
         assert!(mac.1.contains(step), "the macOS job runs {step}: {}", mac.1);
