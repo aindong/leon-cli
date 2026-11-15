@@ -57,8 +57,9 @@ fn an_idle_server_does_not_rewrite_its_file() {
     let quiet = r#"{"label":"quiet","layout":{"block":{"options":{"command":["sleep","300"]}}}}"#;
     env.ok(&["api", "call", "session.create", quiet]);
     let file = env.state_dir().join("sessions.json");
-    let end = Instant::now() + Duration::from_secs(5);
-    while !file.exists() {
+    // the save that holds the session: on a busy machine the one soon after start comes first, without it
+    let end = Instant::now() + Duration::from_secs(30);
+    while !std::fs::read_to_string(&file).unwrap_or_default().contains("\"quiet\"") {
         assert!(Instant::now() < end, "never saved");
         std::thread::sleep(Duration::from_millis(100));
     }

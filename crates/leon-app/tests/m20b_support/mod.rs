@@ -6,9 +6,11 @@
 mod m10b;
 pub use m10b::*;
 
-use gpui::{Entity, VisualTestContext};
+use std::time::{Duration, Instant};
+
+use gpui::{Bounds, Entity, Pixels, VisualTestContext};
 use leon_app::embedded::Embedded;
-use leon_app::view::Workspace;
+use leon_app::view::{self, Workspace};
 use serde_json::{json, Value};
 
 /// The selected session's id.
@@ -55,6 +57,22 @@ pub fn float_order(app: &Embedded, sid: &str) -> Vec<String> {
 
 pub fn focused_id(app: &Embedded, sid: &str) -> Option<String> {
     view_window(app, sid)["focused_block_id"].as_str().map(String::from)
+}
+
+/// Wait for a drawer to start sliding, then give `sel`'s bounds in that very frame (None: it isn't
+/// drawn). `shows` sleeps before each look, and on a busy machine that sleep outlasts the 120 ms
+/// slide, so the look would be at a later frame.
+pub fn in_slide_frame(ws: &Entity<Workspace>, cx: &mut VisualTestContext, sel: &str) -> Option<Bounds<Pixels>> {
+    let end = Instant::now() + Duration::from_secs(10);
+    loop {
+        cx.run_until_parked();
+        if ws.read_with(cx, |ws, _| ws.sliding()) {
+            break;
+        }
+        assert!(Instant::now() < end, "no drawer started sliding");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    view::drawn().contains(sel).then(|| cx.debug_bounds(Box::leak(sel.to_string().into_boxed_str()))).flatten()
 }
 
 /// The first tiled block of the active window.
