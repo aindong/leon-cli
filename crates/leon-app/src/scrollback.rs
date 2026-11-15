@@ -20,17 +20,21 @@ pub fn bounds(live: &Frame) -> (usize, usize) {
     (live.view.scrolled.saturating_sub(live.view.history), live.view.scrolled)
 }
 
-/// `top` kept inside the scrollback; None when that is the bottom (following the output).
-pub fn clamp(live: &Frame, top: Option<usize>) -> Option<usize> {
+/// `top` kept inside the scrollback; None when that is the bottom (following the output). A
+/// `pinned` view (copy mode, as in tmux) never follows: at the bottom, or None, it is the bottom.
+pub fn clamp(live: &Frame, top: Option<usize>, pinned: bool) -> Option<usize> {
     let (oldest, bottom) = bounds(live);
-    top.map(|t| t.clamp(oldest, bottom)).filter(|&t| t < bottom)
+    match pinned {
+        true => Some(top.unwrap_or(bottom).clamp(oldest, bottom)),
+        false => top.map(|t| t.clamp(oldest, bottom)).filter(|&t| t < bottom),
+    }
 }
 
 /// The view from `top` (None: the live screen): rows at or past `scrolled` from the screen, older
 /// ones from `cache`. The cursor shows only where its row is in view.
 pub fn compose(live: &Frame, top: Option<usize>, cache: &HashMap<usize, Row>) -> Composed {
     let scrolled = live.view.scrolled;
-    let Some(top) = clamp(live, top) else {
+    let Some(top) = clamp(live, top, false) else {
         return Composed { frame: live.clone(), top: scrolled, missing: Vec::new() };
     };
     let mut f = Frame { rows: vec![Vec::new(); live.lines], ..live.clone() };

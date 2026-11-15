@@ -13,7 +13,7 @@ pub mod settings;
 
 pub use runtime::{CallCtx, Host, Runtime, LOAD_LIMIT, MAX_DEPTH, TIMED_OUT};
 pub use script::{run_script, ScriptOptions, MAX_TIMERS};
-pub use settings::Settings;
+pub use settings::{Settings, REPEAT_TIME};
 
 use std::fmt;
 use std::path::{Path, PathBuf};

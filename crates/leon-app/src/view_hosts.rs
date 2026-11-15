@@ -251,8 +251,13 @@ impl Workspace {
 
     /// Open the palette asking for a new host's label.
     pub(super) fn ask_host(&mut self, cx: &mut Context<Self>) {
-        self.palette =
-            Some(Palette { query: String::new(), selected: 0, ask: Some((Ask::HostLabel, None)), switch: false });
+        self.palette = Some(Palette {
+            query: String::new(),
+            selected: 0,
+            ask: Some((Ask::HostLabel, None)),
+            switch: false,
+            note: None,
+        });
         cx.notify();
     }
 

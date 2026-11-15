@@ -23,6 +23,10 @@ fn cmd_k_then_enter_jumps_to_another_sessions_tab(cx: &mut TestAppContext) {
 
     cx.simulate_keystrokes("cmd-k");
     assert!(ws.read_with(cx, |ws, _| ws.switcher_open()), "cmd+k opens the switcher");
+    let listed = |cx: &mut gpui::VisualTestContext| {
+        ws.read_with(cx, |ws, _| ws.switcher_rows()).iter().any(|r| r.contains("deploys › rollout"))
+    };
+    assert!(shows(cx, listed), "the app saw the other session");
     let rows = ws.read_with(cx, |ws, _| ws.switcher_rows());
     assert!(rows.iter().any(|r| r.contains("deploys › rollout")), "{rows:?}");
     assert!(rows.iter().all(|r| r.starts_with("This Mac › ")), "rows name their host: {rows:?}");

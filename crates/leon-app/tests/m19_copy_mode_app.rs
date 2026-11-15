@@ -79,7 +79,8 @@ fn search_steps_and_the_ends_of_the_scrollback(cx: &mut TestAppContext) {
     assert_eq!(cursor(&ws, cx, &id).as_deref(), Some("1"), "g: the oldest line");
     assert!(ws.read_with(cx, |ws, _| ws.view_top(&id)).is_some());
     keys(cx, "shift-g");
-    assert_eq!(ws.read_with(cx, |ws, _| ws.view_top(&id)), None, "G: back at the bottom");
+    assert!(ws.read_with(cx, |ws, _| ws.view_top(&id)).is_some(), "G: back at the bottom, held still");
+    assert!(view_lines(&ws, cx, &id).contains(&"alpha beta gamma".to_string()), "the bottom is in view");
     let bottom = ws.read_with(cx, |ws, _| ws.copy_cursor(&id)).unwrap().0.line;
     keys(cx, "ctrl-u");
     let up = ws.read_with(cx, |ws, _| ws.copy_cursor(&id)).unwrap().0.line;

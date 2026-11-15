@@ -39,7 +39,9 @@ pub struct SplitCreated {
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MoveBlock {
+    /// The anchor's session, which the block joins.
     pub session_id: String,
+    /// Any block of the server: one of another session moves into this one.
     pub block_id: String,
     /// The block to put it beside; any window of the session.
     pub anchor_block_id: String,
@@ -157,13 +159,17 @@ pub fn add(r: &mut Registry) {
             Ok(SplitCreated { block_id, window_id, revision: revision(&st, &p.session_id).revision })
         },
     );
-    r.add("session.move_block", "Put a block beside another, in any window of its session.", |ctx, p: MoveBlock| {
-        let (direction, side) = (p.direction.unwrap_or(Direction::Horizontal), p.side.unwrap_or(Side::After));
-        let ratio = ratio(p.ratio)?;
-        let revision =
-            ctx.state().move_block(&p.session_id, &p.block_id, &p.anchor_block_id, direction, side, ratio)?;
-        Ok(Revision { revision })
-    });
+    r.add(
+        "session.move_block",
+        "Put a block beside another in the session; one of another session joins it.",
+        |ctx, p: MoveBlock| {
+            let (direction, side) = (p.direction.unwrap_or(Direction::Horizontal), p.side.unwrap_or(Side::After));
+            let ratio = ratio(p.ratio)?;
+            let revision =
+                ctx.state().move_block(&p.session_id, &p.block_id, &p.anchor_block_id, direction, side, ratio)?;
+            Ok(Revision { revision })
+        },
+    );
     r.add("session.swap_blocks", "Two blocks of a session trade places.", |ctx, p: SwapBlocks| {
         Ok(Revision { revision: ctx.state().swap_blocks(&p.session_id, &p.block_id, &p.other_block_id)? })
     });

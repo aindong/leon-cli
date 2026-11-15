@@ -156,6 +156,8 @@ struct Palette {
     ask: Option<(hosts_view::Ask, Option<String>)>,
     /// The session switcher (⌘K): places to go instead of actions.
     switch: bool,
+    /// Why the last ⌘↩ couldn't split (a row of another machine).
+    note: Option<String>,
 }
 
 /// The last `client.keymap` reply, handed over from the runtime thread that fetched it.

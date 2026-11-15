@@ -33,6 +33,11 @@ impl Workspace {
         self.palette.as_ref().is_some_and(|p| p.switch)
     }
 
+    /// Why the switcher's last ⌘↩ couldn't split, while it says so.
+    pub fn switcher_note(&self) -> Option<String> {
+        self.palette.as_ref().filter(|p| p.switch)?.note.clone()
+    }
+
     /// The open switcher's rows as shown (`host › session › tab`, ` › block` for a block row).
     pub fn switcher_rows(&self) -> Vec<String> {
         self.palette_matches().into_iter().map(|it| it.title).collect()
@@ -59,13 +64,14 @@ impl Workspace {
     }
 
     /// `session.switch`: with no place, open (or close) the switcher; with one, go there, or with
-    /// `split` move its pane beside the focused one when both are in this session on this machine
-    /// (a block shows in one place only), else go there.
+    /// `split` move its pane beside the focused one when both are on this machine (a block shows
+    /// in one place only; from another session it joins this one). On another machine's row
+    /// `split` keeps the switcher open and says why it can't.
     pub(super) fn switch_action(&mut self, args: Option<&Value>, cx: &mut Context<Self>) {
         let Some(a) = args.filter(|a| a["session_id"].is_string()) else {
             self.palette = match self.palette {
                 Some(_) => None,
-                None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: true }),
+                None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: true, note: None }),
             };
             cx.notify();
             return;
@@ -73,13 +79,36 @@ impl Workspace {
         let host = a["host"].as_u64().unwrap_or(0) as usize;
         let (sid, wid, block) = (a["session_id"].as_str(), a["window_id"].as_str(), a["block_id"].as_str());
         let sid = sid.unwrap_or_default().to_string();
-        if a["split"] == true && host == self.host && self.session_id.as_deref() == Some(sid.as_str()) {
+        if a["split"] == true && host != self.host {
+            let machines = self.hosts.machines();
+            let label = |i: usize| machines.get(i).map_or("another machine", |m| m.label.as_str());
+            let (there, here) = (label(host), label(self.host));
+            let note = format!("Can't split: that pane is on {there}, and a pane joins only a window on its own machine ({here} here). ↩ goes there.");
+            match self.palette.as_mut() {
+                Some(p) => p.note = Some(note), // ⌘↩ left it open: the row stays picked
+                None => {
+                    self.palette =
+                        Some(Palette { query: String::new(), selected: 0, ask: None, switch: true, note: Some(note) })
+                }
+            }
+            cx.notify();
+            return;
+        }
+        self.palette = None;
+        if a["split"] == true && host == self.host {
             let moved = block.map(String::from).or_else(|| {
                 let m = self.app.model();
                 let w = m.session(&sid)?.windows.iter().find(|w| Some(w.id.as_str()) == wid)?.clone();
                 target(&w).map(String::from)
             });
-            if let (Some(moved), Some((_, here, _))) = (moved, self.target()) {
+            // a floating or docked focus can't be an anchor: join beside a tiled pane instead
+            let here = self.target().and_then(|(sid, b, _)| {
+                let m = self.app.model();
+                let s = m.session(&sid)?;
+                let l = s.windows.get(s.active)?.layout.as_ref()?;
+                Some(if l.contains(&b) { b } else { l.leaves().first()?.to_string() })
+            });
+            if let (Some(moved), Some(here)) = (moved, here) {
                 if moved != here {
                     let p = json!({ "block_id": moved, "anchor_block_id": here });
                     self.call("session.move_block", p, cx);
@@ -94,7 +123,7 @@ impl Workspace {
     pub(super) fn go_to(
         &mut self,
         host: usize,
-        sid: &str,
+        sid_given: &str,
         window: Option<&str>,
         block: Option<&str>,
         cx: &mut Context<Self>,
@@ -103,7 +132,9 @@ impl Workspace {
         if self.host != host {
             return; // that machine isn't connected now
         }
-        self.session_id = Some(sid.to_string());
+        // a block can have joined another session since `sid` was read (a notice, a stale row)
+        let sid = block.and_then(|b| self.app.model().block(b).map(|(s, _)| s.id.clone()));
+        self.session_id = Some(sid.unwrap_or_else(|| sid_given.to_string()));
         match (block, window) {
             (Some(b), _) => self.call("session.focus_block", json!({ "block_id": b }), cx),
             (None, Some(w)) => self.call("session.focus_window", json!({ "window_id": w }), cx),

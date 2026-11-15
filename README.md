@@ -226,7 +226,7 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘B | Show or hide the sidebar |
 | ⌘⇧S | Tabs in the sidebar or in the titlebar (saved for the next launch) |
 | ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
-| ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same session) |
+| ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
 | ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
 | ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
