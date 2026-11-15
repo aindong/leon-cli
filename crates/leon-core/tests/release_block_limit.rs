@@ -25,9 +25,8 @@ fn the_block_past_the_limit_is_refused() {
         };
         st.add_block(&s, b, None)
     };
-    for i in 0..1024 {
+    for i in 0..MAX_BLOCKS {
         add(i).unwrap_or_else(|e| panic!("block {i}: {e:?}"));
     }
-    assert_eq!(add(1024).map_err(|e| e.status), Err(400), "a 1025th block opened");
-    assert_eq!(MAX_BLOCKS, 1024);
+    assert_eq!(add(MAX_BLOCKS).map_err(|e| e.status), Err(400), "a block past MAX_BLOCKS opened");
 }

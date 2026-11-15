@@ -31,8 +31,9 @@ Key bindings from your `init.lua` work in the app, sequences too, with a hint of
 ## Install
 
 Each release has `Leon-<version>-macos-arm64.zip` (Apple Silicon), a tarball and a `.deb` for
-Linux on arm64 and x86_64, and `SHA256SUMS`; `shasum -a 256 -c SHA256SUMS` checks what you
-downloaded. `leon --version` names the release and the commit it was built from. Or build from a
+Linux on arm64 and x86_64, and `SHA256SUMS`. `shasum -a 256 -c --ignore-missing SHA256SUMS`
+catches a damaged download; the sums aren't signed, so it can't tell a tampered release from a
+real one. `leon --version` names the release and the commit it was built from. Or build from a
 checkout, as below.
 
 ### macOS

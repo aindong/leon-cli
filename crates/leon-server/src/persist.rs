@@ -17,7 +17,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use leon_core::layout::Node;
 use leon_core::model::clean_label;
 use leon_core::panes::check_ratio;
-// More than MAX_BLOCKS (the most the model holds) is taken as corrupt: each would start a shell.
 use leon_core::{ApiError, Block, Session, State, Window, MAX_BLOCKS};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -304,6 +303,7 @@ fn check(saved: &Saved) -> Result<(), String> {
             _ => Ok(()),
         }
     };
+    // more than the model ever holds is corrupt: each block would start a shell
     if saved.sessions.iter().map(|s| s.blocks.len()).sum::<usize>() > MAX_BLOCKS {
         return Err(format!("it has over {MAX_BLOCKS} blocks"));
     }

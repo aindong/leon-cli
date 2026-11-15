@@ -53,10 +53,15 @@ git -C "$src" checkout --quiet --detach "$rev"
 version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$src/Cargo.toml" | head -1)
 out=${out:-"$repo/target/release-files/$version"}
 mkdir -p "$out"
-rm -f "$out"/Leon-*.zip "$out"/leon[-_]* "$out"/SHA256SUMS # only this run's files
+# remove only what an earlier run listed, so a --out that holds other files keeps them
+if [ -f "$out/SHA256SUMS" ]; then
+  (cd "$out" && awk '{ print $2 }' SHA256SUMS | while read -r f; do case "$f" in */*) ;; *) rm -f -- "$f" ;; esac; done && rm SHA256SUMS)
+fi
+files=()
 
 echo "release.sh: cargo build --locked --release -p leon"
 target_dir=${CARGO_TARGET_DIR:-"$src/target"}
+case "$target_dir" in /*) ;; *) target_dir="$PWD/$target_dir" ;; esac # cargo reads it from $src below
 (cd "$src" && CARGO_PROFILE_RELEASE_STRIP=symbols cargo build --locked --release -p leon --target-dir "$target_dir")
 bin="$target_dir/release/leon"
 got=$(LEON_AUTOSTART=0 "$bin" --version)
@@ -65,17 +70,19 @@ got=$(LEON_AUTOSTART=0 "$bin" --version)
 "$src/scripts/bundle.sh" --bin "$bin" --out "$tmp/app/Leon.app"
 zip="$out/Leon-$version-macos-$(uname -m).zip"
 ditto -c -k --keepParent "$tmp/app/Leon.app" "$zip"
+files+=("$(basename "$zip")")
 echo "release.sh: wrote $zip"
 
 for a in ${arches[@]+"${arches[@]}"}; do
   echo "release.sh: Linux $a (scripts/package-linux.sh)"
   (cd "$src" && scripts/package-linux.sh --arch "$a")
-  cp "$src/target/linux/$a"/leon-*-linux.tar.gz "$src/target/linux/$a"/leon_*.deb "$out/"
+  for f in "$src/target/linux/$a"/leon-*-linux.tar.gz "$src/target/linux/$a"/leon_*.deb; do
+    cp "$f" "$out/"
+    files+=("$(basename "$f")")
+  done
 done
 
 cd "$out"
-files=(Leon-*.zip)
-for f in leon[-_]*; do [ -e "$f" ] && files+=("$f"); done
 shasum -a 256 "${files[@]}" > SHA256SUMS
 echo "release.sh: leon $version ($hash), in $out:"
 cat SHA256SUMS

@@ -208,10 +208,7 @@ async fn bind(socket: &Path) -> io::Result<(UnixListener, (u64, u64), Option<std
             Err(e) => return Err(e),
         }
         if UnixStream::connect(socket).await.is_ok() {
-            return Err(io::Error::new(
-                io::ErrorKind::AddrInUse,
-                format!("a leon server already listens on {}", socket.display()),
-            ));
+            return Err(in_use(socket));
         }
         if Instant::now() >= end {
             // Never answered: busy, so leave its socket be; or it lost its path, so take the path.
@@ -228,12 +225,7 @@ async fn bind(socket: &Path) -> io::Result<(UnixListener, (u64, u64), Option<std
     // Still ask the socket: a server from before the lock was held for life doesn't hold it.
     if std::fs::symlink_metadata(socket).is_ok() {
         match UnixStream::connect(socket).await {
-            Ok(_) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::AddrInUse,
-                    format!("a leon server already listens on {}", socket.display()),
-                ))
-            }
+            Ok(_) => return Err(in_use(socket)),
             // Only a refused connection means stale; anything else may be a live server we can't reach.
             Err(e) if e.kind() == io::ErrorKind::ConnectionRefused => std::fs::remove_file(socket)?,
             Err(e) => return Err(io::Error::new(e.kind(), format!("{} is in use: {e}", socket.display()))),
@@ -243,6 +235,10 @@ async fn bind(socket: &Path) -> io::Result<(UnixListener, (u64, u64), Option<std
     std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600))?;
     let m = std::fs::symlink_metadata(socket)?;
     Ok((listener, (m.dev(), m.ino()), alive))
+}
+
+fn in_use(socket: &Path) -> io::Error {
+    io::Error::new(io::ErrorKind::AddrInUse, format!("a leon server already listens on {}", socket.display()))
 }
 
 /// An exclusive flock on `path`, or EWOULDBLOCK if another holds it; released when the file drops.

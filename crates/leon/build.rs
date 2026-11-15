@@ -2,6 +2,7 @@
 //! `0.1.0 (1a2b3c4d5e6f)`. `LEON_GIT_HASH` overrides git (a build with no `.git`, such as Docker
 //! with a worktree's source); with neither, it is the bare version.
 
+use std::path::Path;
 use std::process::Command;
 
 fn git(args: &[&str]) -> Option<String> {
@@ -12,21 +13,21 @@ fn git(args: &[&str]) -> Option<String> {
 
 fn main() {
     println!("cargo:rerun-if-env-changed=LEON_GIT_HASH");
-    // a new commit or checkout moves HEAD or the branch it names (loose or packed)
-    let mut watch = vec!["HEAD".to_string(), "packed-refs".to_string()];
-    watch.extend(git(&["rev-parse", "--symbolic-full-name", "HEAD"]));
-    for p in watch {
-        if let Some(path) = git(&["rev-parse", "--git-path", &p]) {
-            if std::path::Path::new(&path).exists() {
+    let version = env!("CARGO_PKG_VERSION");
+    let given =
+        std::env::var("LEON_GIT_HASH").ok().filter(|h| !h.is_empty() && h.bytes().all(|b| b.is_ascii_hexdigit()));
+    // only this workspace's own repo: from a source tarball, git would find a parent dir's repo
+    let ours = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.git").exists();
+    let hash = given.or_else(|| if ours { git(&["rev-parse", "--short=12", "HEAD"]) } else { None });
+    if ours {
+        // a commit moves a branch's loose ref (made anew when the branch was packed: cargo scans
+        // the dir) and logs/HEAD; a checkout moves HEAD
+        for p in ["HEAD", "logs/HEAD", "packed-refs", "refs/heads"] {
+            if let Some(path) = git(&["rev-parse", "--git-path", p]).filter(|p| Path::new(p).exists()) {
                 println!("cargo:rerun-if-changed={path}");
             }
         }
     }
-    let hash = std::env::var("LEON_GIT_HASH")
-        .ok()
-        .filter(|h| !h.is_empty())
-        .or_else(|| git(&["rev-parse", "--short=12", "HEAD"]));
-    let version = env!("CARGO_PKG_VERSION");
     match hash {
         Some(h) => println!("cargo:rustc-env=LEON_VERSION={version} ({h})"),
         None => println!("cargo:rustc-env=LEON_VERSION={version}"),

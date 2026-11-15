@@ -28,7 +28,7 @@ cargo tree --locked --offline -p leon -e normal,build --prefix none --format '{p
 [ -s "$tmp/crates" ] || { echo "notices.sh: cargo tree listed no crates" >&2; exit 1; }
 # each crate's package dir, then every license file in them with its checksum, in one pass each
 sed 's/^\(.*\) v\([^|]*\)|.*/\1-\2/' "$tmp/crates" | while read -r d; do
-  for p in "$registry"/*/"$d"; do [ -d "$p" ] && echo "$p"; done
+  for p in "$registry"/*/"$d"; do if [ -d "$p" ]; then echo "$p"; fi; done
 done > "$tmp/dirs"
 tr '\n' '\0' < "$tmp/dirs" | xargs -0 -I{} find {} -maxdepth 1 -type f \( -iname 'licen[cs]e*' \
   -o -iname 'copying*' -o -iname 'notice*' -o -iname 'unlicense*' \) -print0 | xargs -0 cksum | sort -k3 > "$tmp/sums"
