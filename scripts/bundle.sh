@@ -7,7 +7,8 @@
 # --out PATH  where the app goes [default: target/release/Leon.app]
 #
 # It only ever replaces a Leon.app it made (bundle id dev.leon.app); anything else at --out is
-# left alone and the script exits 1. The version comes from `leon --version` (Cargo's version).
+# left alone and the script exits 1. The version comes from `leon --version` (`leon 0.1.0 (<commit>)`).
+# Contents/Resources holds LICENSE and THIRD-PARTY-NOTICES.txt (scripts/notices.sh).
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -46,6 +47,7 @@ if [ -z "$bin" ]; then
 fi
 version=$(LEON_AUTOSTART=0 "$bin" --version)
 version=${version#leon }
+version=${version%% *} # Info.plist takes the bare version, not the commit
 if ! printf '%s' "$version" | grep -Eq '^[0-9A-Za-z.+-]+$'; then
   echo "bundle.sh: $bin --version printed an odd version: $version" >&2
   exit 1
@@ -59,6 +61,8 @@ app="$stage/Leon.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/leon"
 cp "$repo/brand/icon/Leon.icns" "$app/Contents/Resources/Leon.icns"
+cp "$repo/LICENSE" "$app/Contents/Resources/LICENSE"
+"$repo/scripts/notices.sh" > "$app/Contents/Resources/THIRD-PARTY-NOTICES.txt"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
