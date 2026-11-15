@@ -114,7 +114,7 @@ jobs:
           case "$VERSION" in *-*) pre=(--prerelease) ;; esac
           gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "leon $VERSION" --notes-file notes.md "${pre[@]}" dist/*
       - name: Publish it (a tag push only; a run by hand leaves the draft)
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         run: gh release edit "$TAG" --draft=false
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -126,7 +126,7 @@ jobs:
   # `brew upgrade` should bring, and a draft has no download URLs.
   homebrew:
     needs: [version, publish]
-    if: github.event_name == 'push' && !contains(needs.version.outputs.version, '-')
+    if: github.event_name == 'push' && github.ref_type == 'tag' && !contains(needs.version.outputs.version, '-')
     runs-on: ubuntu-24.04
     env:
       HAS_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}

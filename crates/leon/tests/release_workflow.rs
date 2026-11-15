@@ -64,8 +64,12 @@ fn a_hand_started_run_stays_a_draft_and_only_one_job_can_write() {
     let steps = steps(&yml);
     assert!(step(&steps, "gh release create").contains("--draft"), "the release is created as a draft");
     let publish = step(&steps, "--draft=false");
-    assert!(publish.contains("if: github.event_name == 'push'"), "only a tag push publishes: {publish}");
+    // a tag, not only a push: a branch push must never publish, even if someone adds that trigger
+    let tag_push = "if: github.event_name == 'push' && github.ref_type == 'tag'";
+    assert!(publish.contains(tag_push), "only a tag push publishes: {publish}");
     assert_eq!(yml.matches("--draft=false").count(), 1);
+    let tap = yml.split("\n  homebrew:\n").nth(1).expect("a homebrew job");
+    assert!(tap.contains(&format!("    {tag_push} && ")), "only a tag push touches the tap: {tap}");
 
     assert!(yml.contains("\npermissions:\n  contents: read\n"), "the default token only reads");
     assert_eq!(yml.matches("contents: write").count(), 1, "one job may write releases");
