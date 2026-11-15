@@ -28,9 +28,10 @@ impl State {
         }
         let s = self.session_mut(session_id)?;
         let (from, to, i) = (s.window_of(block_id)?, s.window_of(anchor_id)?, s.block_index(block_id)?);
-        if !s.windows[to].layout.as_ref().is_some_and(|t| t.contains(anchor_id)) {
+        let Some(tree) = s.windows[to].layout.as_ref().filter(|t| t.contains(anchor_id)) else {
             return Err(ApiError::bad_request("anchor must be tiled"));
-        }
+        };
+        tree.check_insert(anchor_id, (from == to).then_some(block_id))?;
         let (focus, zoomed) = (s.windows[from].focus.clone(), s.windows[from].zoomed.clone());
         s.detach_placed(from, block_id);
         if from == to {
@@ -67,9 +68,10 @@ impl State {
     ) -> Result<u64, ApiError> {
         let t = self.session(to)?;
         let tw = t.window_of(anchor_id)?;
-        if !t.windows[tw].layout.as_ref().is_some_and(|l| l.contains(anchor_id)) {
+        let Some(tree) = t.windows[tw].layout.as_ref().filter(|l| l.contains(anchor_id)) else {
             return Err(ApiError::bad_request("anchor must be tiled"));
-        }
+        };
+        tree.check_insert(anchor_id, None)?;
         let s = self.session_mut(from)?;
         let (fw, i) = (s.window_of(block_id)?, s.block_index(block_id)?);
         s.detach_placed(fw, block_id);

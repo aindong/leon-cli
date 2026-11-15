@@ -57,6 +57,9 @@ pub struct Place {
     pub focus: bool,
 }
 
+/// The most blocks a server holds (docs/spec/core-model.md), and so the most a saved state has.
+pub const MAX_BLOCKS: usize = 1024;
+
 /// A terminal in a window. Dropping the last handle to its `terminal` hangs up the program.
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -227,6 +230,9 @@ impl State {
     /// Add a block to its window: as the whole layout of an empty window (`place` None), or beside
     /// an anchor in a window that has blocks.
     pub fn add_block(&mut self, session_id: &str, block: Block, place: Option<&Place>) -> Result<(), ApiError> {
+        if self.sessions.iter().map(|s| s.blocks.len()).sum::<usize>() >= MAX_BLOCKS {
+            return Err(ApiError::bad_request(format!("too many blocks: a server holds at most {MAX_BLOCKS}")));
+        }
         let s = self.session_mut(session_id)?;
         let w = s.window_index(&block.window_id)?;
         let win = &mut s.windows[w];
@@ -237,6 +243,7 @@ impl State {
                 win.focus = Some(id.clone());
             }
             (Some(tree), Some(p)) => {
+                tree.check_insert(&p.anchor, None)?;
                 if !tree.insert(&p.anchor, &id, p.direction, p.side, p.ratio) {
                     return Err(ApiError::not_found(format!("no block or split {} in {}", p.anchor, win.id)));
                 }

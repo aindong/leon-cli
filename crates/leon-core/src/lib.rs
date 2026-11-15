@@ -18,7 +18,7 @@ pub mod terminal;
 pub mod theme;
 
 pub use error::ApiError;
-pub use model::{Block, Place, Session, State, Window};
+pub use model::{Block, Place, Session, State, Window, MAX_BLOCKS};
 
 /// A new, never-reused ID such as `session:7c9e…`.
 pub fn new_id(kind: &str) -> String {
