@@ -256,7 +256,7 @@ impl Tui {
         let p = json!({ "session_id": t.sid, "block_id": t.block, "method": "dev.leon.terminal.pwd" });
         let pwd =
             self.remote.call("block.method", p).ok().and_then(|r| r["path"].as_str().map(std::path::PathBuf::from));
-        match pwd.filter(|d| d.is_dir()).as_deref().and_then(|d| d.to_str()) {
+        match split_cwd(pwd, self.host.is_some()) {
             Some(d) => json!({ "block": { "options": { "cwd": d } } }),
             None => json!({ "block": {} }),
         }
@@ -280,8 +280,14 @@ impl Tui {
                 (picker::rows(&m.sessions), m.screens.clone())
             };
             self.remote.watch(p.selected_row(&rows).and_then(|r| r.block.clone()).into_iter().collect());
+            let note = self.reconnecting();
             term.draw(|f| match f.area() == area {
-                true => p.draw(f.buffer_mut(), area, &rows, &screens, colors),
+                true => {
+                    p.draw(f.buffer_mut(), area, &rows, &screens, colors);
+                    if let Some(n) = &note {
+                        draw::corner_note(f.buffer_mut(), Rect { height: 1, ..area }, n, colors);
+                    }
+                }
                 false => drawn = false,
             })?;
             return Ok(drawn);
@@ -339,7 +345,8 @@ impl Tui {
         }
         let focus = w.and_then(super::overlays::focused).map(str::to_string);
         let tabs = s.windows.iter().enumerate().map(|(i, w)| (picker::tab_name(&s, w), i == s.active)).collect();
-        let note = super::lock(&self.note).clone().or_else(|| self.reconnecting());
+        // while the link is down actions fail at once: their notes mustn't hide why
+        let note = self.reconnecting().or_else(|| super::lock(&self.note).clone());
         let index = self.remote.model().sessions.iter().position(|x| x.id == s.id).unwrap_or(0);
         let name = picker::session_name(&s, index);
         let bar = Bar {
@@ -400,5 +407,22 @@ impl Tui {
             }
         })?;
         Ok(drawn)
+    }
+}
+
+/// The directory a split starts in: the pane's, when it is still there. Over `-H` it is a path on
+/// the host, which this disk can't vouch for: the host's server checks it.
+fn split_cwd(pwd: Option<std::path::PathBuf>, remote: bool) -> Option<String> {
+    pwd.filter(|d| remote || d.is_dir()).and_then(|d| d.to_str().map(String::from))
+}
+
+#[cfg(test)]
+mod split_cwd_tests {
+    #[test]
+    fn a_remote_panes_directory_is_the_hosts_to_check() {
+        let only_there = std::path::PathBuf::from("/dd-leon-only-on-the-host");
+        assert_eq!(super::split_cwd(Some(only_there.clone()), true).as_deref(), Some("/dd-leon-only-on-the-host"));
+        assert_eq!(super::split_cwd(Some(only_there), false), None, "here, a gone dir falls back to home");
+        assert_eq!(super::split_cwd(None, true), None);
     }
 }

@@ -21,14 +21,14 @@ impl Terminal {
         *r = Registered { command, generation: r.generation + 1, offered: false };
     }
 
-    /// Which registration is current, for `resume_offered`.
+    /// Which registration is current, for `mark_resume_offered`.
     pub fn resume_generation(&self) -> u64 {
         lock(&self.resume).generation
     }
 
     /// A restore typed registration `generation` at the prompt: it isn't saved again, so the next
     /// restart doesn't offer it a second time. A registration made since is left alone.
-    pub fn resume_offered(&self, generation: u64) {
+    pub fn mark_resume_offered(&self, generation: u64) {
         let mut r = lock(&self.resume);
         if r.generation == generation {
             r.offered = true;

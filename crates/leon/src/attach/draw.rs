@@ -165,6 +165,16 @@ pub struct Bar<'a> {
     pub note: Option<&'a str>,
 }
 
+/// A note at the right end of `row` (the picker's heading), as the bar shows one.
+pub fn corner_note(buf: &mut Buffer, row: Rect, note: &str, colors: Colors) {
+    let text = format!(" {note} ");
+    let w = text.chars().count() as u16;
+    if w <= row.width {
+        let style = Style::default().bg(colors.rgb(brand::IRON)).fg(colors.rgb(brand::ROSE));
+        buf.set_stringn(row.x + row.width - w, row.y, &text, w as usize, style);
+    }
+}
+
 /// The one-line bar: the badge, the session, its tabs, and a hint or note on the right.
 pub fn bar(buf: &mut Buffer, row: Rect, b: &Bar, colors: Colors) {
     let base = Style::default().bg(colors.rgb(brand::IRON)).fg(colors.rgb(brand::CHALK));

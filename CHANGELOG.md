@@ -32,13 +32,17 @@ fields it doesn't know. The full policy is in
 
 #### Fixed
 
-- Programs started by `leon run`, `leon split`, `leon float --new` and Lua are found on the login
-  shell's PATH. A server started by Leon.app from Finder had launchd's `/usr/bin:/bin:/usr/sbin:/sbin`,
-  so `leon run -- cargo test` failed; one started over ssh had sshd's.
+- Programs started by `leon run`, `leon split`, `leon float --new` and Lua are found on the PATH
+  of your shell (its login and rc files, `~/.zshrc` included), as in your own tab. A server started
+  by Leon.app from Finder had launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, so `leon run -- cargo test`
+  failed; one started over ssh had sshd's. Only absolute PATH dirs are kept.
 - With `-H`, `leon run`, `leon split` and `leon new` no longer send this machine's working
   directory to the host, where it doesn't exist (`leon -H devbox run -- make test` failed with "no
   directory"). They start in the host's home, or in `--cwd`, which must then be an absolute path on
-  the host (a relative one exits 2) and is checked there, not on this disk.
+  the host (a relative one exits 2, before any ssh) and is checked there, not on this disk. A split
+  made in `leon -H … attach` starts in the pane's directory on the host, not the host's home.
+- A `-H` command started while the host is unreachable fails within 15 s (ssh's `ConnectTimeout`,
+  which covers a stalled login too) instead of waiting out the outage.
 - Sessions are saved while the server runs (a second after a change, the screens' text once a
   minute), not only when it stops. After a crash the next start restored the save from the last
   clean stop: sessions closed since came back, and new ones were gone.
@@ -46,10 +50,10 @@ fields it doesn't know. The full policy is in
   typed at the restored prompt it isn't saved again (`block inspect` still shows it until then). A
   skipped or stale `claude --resume <id>` used to be typed again at every restart. A program that
   resumes registers again, as the skill hook does.
-- `leon -H HOST attach` says `reconnecting to HOST (try N)…` in its status bar while the link is
-  down, instead of freezing without a word, and when it gives up it says the link to the host was
+- `leon -H HOST attach` says `reconnecting to HOST (try N)…` in its status bar (or over its picker)
+  while the link is down, instead of freezing without a word, and when it gives up it says the link to the host was
   lost, not "the leon server went away" (the server there was usually fine).
-- A program that isn't on PATH fails with `can't start the program: NAME isn't on PATH` instead
+- A program that isn't on PATH fails with `can't start the program: NAME isn't on PATH (or isn't executable)` instead
   of a message listing every PATH entry.
 
 ### Joined panes, their events, long socket paths (API `1.5.0`)

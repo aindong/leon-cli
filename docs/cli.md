@@ -415,19 +415,19 @@ Run, start, stop or check the server.
 ### `leon server run`
 
 Run the server in the foreground. Sessions are saved in `$LEON_STATE_DIR` (default
-`~/.local/state/leon`) while it runs and when it stops, and restored when it starts (after a crash,
-as they were a few seconds before it). A restored block runs a fresh
-shell under the text it showed before, and offers its resume command if a program registered one;
+`~/.local/state/leon`) while it runs and when it stops, and restored when it starts. After a crash
+they come back as they were a second or two before it, with each pane's text from up to a minute
+before. A restored block runs a fresh shell under the text it showed before, and offers its resume command if a program registered one;
 nothing else that ran is run again.
 
 - `--config PATH`: the Lua config (default as for `leon config check`).
-- `--restore[=BOOL]`: restore the sessions saved when the last server stopped (default true).
+- `--restore[=BOOL]`: restore the sessions the last server saved (default true).
 
 ### `leon server start`
 
 Start a server in the background. Does nothing if one runs (except make it persistent).
 
-- `--restore[=BOOL]`: restore the sessions saved when the last server stopped (default true).
+- `--restore[=BOOL]`: restore the sessions the last server saved (default true).
 
 ### `leon server stop`
 

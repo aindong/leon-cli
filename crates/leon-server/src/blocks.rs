@@ -145,7 +145,7 @@ pub(crate) fn spawn(
     .map_err(|e| match program {
         // portable-pty's message lists every PATH entry it tried, kilobytes of them
         Some(p) if e.to_string().contains("No viable candidates found in PATH") => {
-            ApiError::bad_request(format!("can't start the program: {p} isn't on PATH"))
+            ApiError::bad_request(format!("can't start the program: {p} isn't on PATH (or isn't executable)"))
         }
         _ => ApiError::bad_request(format!("can't start the program: {e}")),
     })

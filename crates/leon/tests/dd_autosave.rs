@@ -87,3 +87,24 @@ fn stop_discard_leaves_no_file_even_while_a_program_holds_the_shutdown() {
     }
     assert!(!file.exists(), "discard forgets the sessions; nothing wrote them back");
 }
+
+#[test]
+fn a_server_that_keeps_changing_still_saves_within_seconds() {
+    let env = Env::new();
+    env.ok(&["server", "start"]);
+    env.ok(&["new", "busy"]);
+    let file = env.state_dir().join("sessions.json");
+    // a change every 300 ms, for longer than the save may wait
+    let end = Instant::now() + Duration::from_secs(4);
+    let mut n = 0;
+    while Instant::now() < end {
+        n += 1;
+        env.ok(&["session", "rename", "busy", &format!("busy-{n}")]);
+        env.ok(&["session", "rename", &format!("busy-{n}"), "busy"]);
+        if std::fs::read_to_string(&file).unwrap_or_default().contains("\"busy") {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(300));
+    }
+    panic!("never saved while the model kept changing");
+}

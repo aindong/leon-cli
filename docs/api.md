@@ -243,7 +243,7 @@ same facts for the server you run.
 | `socket` | string | yes |  |
 | `autostarted` | boolean | yes | True when a client started this server on demand; it exits once idle. |
 | `sessions` | integer (uint) | yes |  |
-| `state_file` | string \| null |  | Where sessions are saved on stop; null when they aren't (the state dir isn't private). |
+| `state_file` | string \| null |  | Where sessions are saved, while running and on stop; null when they aren't (the state dir isn't private). |
 
 <details><summary>JSON Schemas</summary>
 
@@ -285,7 +285,7 @@ same facts for the server you run.
         "minimum": 0
       },
       "state_file": {
-        "description": "Where sessions are saved on stop; null when they aren't (the state dir isn't private).",
+        "description": "Where sessions are saved, while running and on stop; null when they aren't (the state dir isn't private).",
         "type": [
           "string",
           "null"

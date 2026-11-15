@@ -159,7 +159,7 @@ fn write(saved: &Saved, file: &Path) -> io::Result<()> {
 }
 
 /// How long after a change to the model (a session, tab or pane made, closed, moved or renamed)
-/// it is saved, and how often the screens' text is checked for a change to save.
+/// it is saved, at most, and how often the screens' text is checked for a change to save.
 const AFTER_CHANGE: Duration = Duration::from_secs(1);
 const TEXT_EVERY: Duration = Duration::from_secs(60);
 
@@ -189,7 +189,8 @@ impl Autosave {
             let seen: Vec<_> = st.sessions.iter().map(|s| (s.id.clone(), s.revision)).collect();
             if seen != self.seen {
                 self.seen = seen;
-                self.changed = Some(Instant::now());
+                // the first unsaved change counts: a model that keeps changing is still saved
+                self.changed.get_or_insert_with(Instant::now);
             }
             let due = self.changed.is_some_and(|t| t.elapsed() >= AFTER_CHANGE) || self.checked.elapsed() >= TEXT_EVERY;
             if !due {
@@ -215,6 +216,7 @@ impl Autosave {
 
 /// Forget the saved sessions (`server stop --discard`).
 pub fn discard(file: &Path) -> io::Result<()> {
+    let _ = fs::remove_file(file.with_extension("json.tmp")); // a crashed write's scrollback
     match fs::remove_file(file) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
         _ => Ok(()),

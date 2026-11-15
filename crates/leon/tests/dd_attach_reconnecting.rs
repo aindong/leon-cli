@@ -34,3 +34,21 @@ fn attach_says_it_is_reconnecting_while_the_link_is_down() {
     h.send(b"\x02d");
     assert_restored(&h, 0);
 }
+
+#[test]
+fn the_picker_says_it_too() {
+    let r = Remote::new();
+    r.ok(&["-H", "ssh://box", "new", "r1"]);
+    let vars = r.vars();
+    let vars: Vec<(&str, &str)> = vars.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let h = Host::spawn(&r.local, &attach_then_stty("-H ssh://box"), &vars);
+    h.wait_text("Pick a session");
+
+    std::fs::write(r.fake.path().join("down"), "").unwrap();
+    assert!(r.kill_transports() >= 3, "attach runs over its transports");
+    h.wait_for("the reconnecting note over the picker", |s| s.contains("reconnecting to box"));
+    std::fs::remove_file(r.fake.path().join("down")).unwrap();
+    h.wait_for("the note to go", |s| !s.contains("reconnecting"));
+    h.send(b"\x1b");
+    assert_restored(&h, 0);
+}

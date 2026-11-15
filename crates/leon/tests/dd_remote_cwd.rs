@@ -75,3 +75,14 @@ fn a_cwd_given_with_dash_h_is_the_hosts_and_must_be_absolute() {
     ]);
     assert_eq!(pwd_of(&r, &b), dir.to_str().unwrap());
 }
+
+#[test]
+fn a_relative_cwd_with_dash_h_is_refused_before_any_connection() {
+    let r = Remote::new();
+    for cmd in [&["run", "--cwd", "src", "--", "true"][..], &["split", "--cwd", "src", "--", "true"][..]] {
+        let args: Vec<&str> = ["-H", "ssh://unreachable-box"].iter().chain(cmd).copied().collect();
+        let out = r.run(&args);
+        assert_eq!(out.status.code(), Some(2), "{cmd:?}: {}", String::from_utf8_lossy(&out.stderr));
+    }
+    assert!(r.ssh_calls().is_empty(), "no ssh for a usage error: {:?}", r.ssh_calls());
+}

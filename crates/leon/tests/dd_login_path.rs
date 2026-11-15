@@ -84,3 +84,31 @@ fn a_server_started_from_a_shell_keeps_its_own_path_first() {
     // LEON_BIN_DIR comes first, then this terminal's own dir
     assert_eq!(dirs.get(1).copied(), Some(mine.to_str().unwrap()), "{line}");
 }
+
+#[test]
+fn without_shell_set_the_accounts_shell_is_asked() {
+    // SAFETY: getpwuid's result is read at once, on this thread
+    let has_shell = unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        !pw.is_null() && !(*pw).pw_shell.is_null()
+    };
+    if !has_shell {
+        eprintln!("skipped: this account has no passwd entry");
+        return;
+    }
+    let env = Env::new();
+    let home = env.dir.path().join("home");
+    let tools = home.join("tools");
+    std::fs::create_dir_all(&tools).unwrap();
+    // whichever shell the account has: sh and bash read ~/.profile, zsh ~/.zshrc
+    for rc in [".profile", ".zshrc"] {
+        std::fs::write(home.join(rc), "PATH=\"$HOME/tools:$PATH\"; export PATH\n").unwrap();
+    }
+    let tool = tools.join("dd-account-tool");
+    std::fs::write(&tool, "#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let leon = |args: &[&str]| launchd(&env, &home).env_remove("SHELL").args(args).output().unwrap();
+    assert!(leon(&["server", "start"]).status.success());
+    let out = leon(&["run", "--wait", "--", "dd-account-tool"]);
+    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
+}

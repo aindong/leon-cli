@@ -6,13 +6,14 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
 
 - **Persistence.** The server saves its sessions to `$LEON_STATE_DIR/sessions.json` (default
   `~/.local/state/leon`) on every exit through the socket loop (`server stop`, SIGTERM, SIGINT,
-  SIGHUP, idle exit), and while it runs: the loop's 200 ms tick saves a second after the model
-  changes (a session's revision, or the set of sessions) and checks the screens' text once a
-  minute, writing only when the sessions differ from the last write (the snapshot is taken under
-  the state lock, serialized and written outside it). So a crash (SIGKILL, a panic, power loss)
-  loses seconds, and never brings back the save from the stop before it. The tick is part of the
-  loop, so the final save, or `--discard`'s delete, is always the last write. It restores them after binding (`--restore`, default true; `server stop --discard`
-  skips the save and deletes the file). Saved: sessions, windows, layout trees (split IDs and
+  SIGHUP, idle exit), and restores them after binding (`--restore`, default true; `server stop
+  --discard` skips the save and deletes the file). It also saves while it runs: the loop's 200 ms
+  tick saves at most a second after the first unsaved change to the model (a session's revision,
+  or the set of sessions) and checks the screens' text once a minute, writing only when the
+  sessions differ from the last write (the snapshot is taken under the state lock, serialized and
+  written outside it). So a crash (SIGKILL, a panic, power loss) loses a second of layout and up
+  to a minute of text, and never brings back the save from the stop before it. The tick is part
+  of the loop, so the final save, or `--discard`'s delete, is always the last write. Saved: sessions, windows, layout trees (split IDs and
   ratios), labels, focus, zoom, the active tab, revisions, and per block its label, keep-open, cwd,
   command, scrollback and resume command. IDs come back unchanged. Programs don't survive: a
   restored block runs a fresh login shell in its cwd (the shell process's cwd, else the last OSC 7
@@ -81,12 +82,17 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   --version` prints the version. Rust links glibc dynamically: the binary needs glibc 2.34 or newer
   (measured on arm64 and amd64; no musl build yet).
 - **The login shell's PATH.** `leon server run` first asks the login shell for its PATH
-  (`$SHELL -l -c 'printenv PATH'`, started from the system PATH, stdin /dev/null, killed after 2 s;
-  about 20 ms), since Leon.app opened from Finder starts the server with launchd's bare PATH and
+  (`$SHELL -i -l -c /usr/bin/env`, else the passwd entry's shell; interactive too, so a PATH set in
+  `~/.zshrc` counts as in the user's tab; started from the system PATH with `LEON_AUTOSTART=0`, so an
+  rc line that runs leon can't start a server whose probe runs it again; stdin /dev/null, its
+  session and process group killed after 2 s, in a session of its own so `zsh -i` can't be stopped
+  for taking a terminal; about 20 ms; the last `PATH=` line; an rc file that `exec`s tmux gives
+  nothing and the PATH stays), since Leon.app opened from Finder starts the server with launchd's bare PATH and
   `leon server proxy` over ssh with sshd's, and programs then weren't found (docs/spec/cli.md: commands
   run with the login shell's env). If every dir of the server's own PATH is in the login one, the
   login PATH is used in its order; otherwise the server was started from a terminal with dirs of its
-  own, which keep their order, and the login PATH's other dirs go after them. Only PATH is taken.
+  own, which keep their order, and the login PATH's other dirs go after them. Only absolute dirs
+  are kept (a relative one would be looked up in each program's cwd), and only PATH is taken.
 - **`LEON_BIN_DIR`.** Every terminal gets the server binary's directory as `LEON_BIN_DIR` and at
   the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
   `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an
@@ -95,11 +101,12 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   `Link` (`leon-hosts`): a Unix socket in a fresh private dir, `link-XXXXXX/s` under the runtime
   dir (0700, socket 0600), served by threads in the client process. Each connection to it spawns
   `$LEON_SSH` (default `ssh`) as argv, never through a local shell:
-  `-T -a -x -o ClearAllForwardings=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 [-p PORT]
-  -- [USER@]HOST CMD`, and copies bytes both ways, only for a peer of our uid (as the server checks). So every client that takes a socket path works unchanged over ssh: the CLI,
+  `-T -a -x -o ClearAllForwardings=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3
+  -o ConnectTimeout=15 [-p PORT] -- [USER@]HOST CMD`, and copies bytes both ways, only for a peer of our uid (as the server checks). So every client that takes a socket path works unchanged over ssh: the CLI,
   `leon do` scripts, and `leon_app::remote::Remote` (`leon attach`, and the app). leon adds
   only `-T`, no forwarding (no agent on the host, no port a config's `LocalForward` would bind) and
-  the keepalives (a dead Wi-Fi link is noticed in about 45 s); everything else comes from
+  the keepalives (a dead Wi-Fi link is noticed in about 45 s) and the connect timeout (a command
+  started during an outage fails in 15 s, a stalled banner included); everything else comes from
   `~/.ssh/config`, and passwords stay between ssh and the terminal. Once `leon attach` owns the
   terminal it calls `Link::never_prompt`: later ssh runs get `-o BatchMode=yes`, so a reconnect
   fails and retries instead of reading a password through the TUI's raw keys. CMD is one fixed string

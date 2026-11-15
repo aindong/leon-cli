@@ -131,8 +131,7 @@ fn resolve_target(c: &mut Client, t: &str) -> Result<Pick, Fail> {
 fn gone(host: Option<&str>) -> String {
     match host {
         Some(h) => format!(
-            "lost the link to {h} (down for a minute, or its server stopped); programs there keep running \
-             unless it stopped: leon -H {h} attach to come back"
+            "lost the link to {h}; run leon -H {h} attach to come back (its programs keep running unless its server stopped)"
         ),
         None => "the leon server went away".into(),
     }

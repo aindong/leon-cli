@@ -45,6 +45,10 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         Cmd::New { cwd, .. } | Cmd::Session(SessionCmd::New { cwd, .. }) => {
             cwd.as_deref().map(new_directory).transpose()?
         }
+        Cmd::Run { cwd, .. } | Cmd::Split { cwd, .. } if cli.host.is_some() => {
+            remote_cwd(cwd.as_deref())?;
+            None
+        }
         _ => None,
     };
     let server = crate::hosts::server(cli, cli.autostart)?;
