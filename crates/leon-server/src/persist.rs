@@ -95,6 +95,9 @@ struct SavedBlock {
     /// The command the program registered to resume itself (`set_resume`).
     #[serde(default)]
     resume: Option<Vec<String>>,
+    /// The title the program set: the restored block keeps it until its program sets one.
+    #[serde(default)]
+    title: Option<String>,
 }
 
 /// Check the state dir is private and no other server uses it, and restore from it if asked.
@@ -253,6 +256,7 @@ fn snapshot(st: &State) -> Saved {
                 command: b.terminal.command.clone(),
                 scrollback: Some(restore::inert(&b.terminal.text(true), cap)).filter(|t| !t.is_empty()),
                 resume: b.terminal.resume_to_save(),
+                title: b.terminal.title(),
             })
             .collect(),
     });
@@ -301,6 +305,9 @@ fn restore_session(ctx: &Arc<Ctx>, s: SavedSession, how: &restore::Restoring) ->
             let cwd = b.cwd.clone().filter(|d| d.is_dir());
             let shown = restore::shown(b.scrollback.as_deref(), b.resume.is_some(), how);
             let terminal = Arc::new(crate::blocks::spawn(ctx, &session_id, &b.block_id, vec![], cwd, &shown)?);
+            if let Some(title) = &b.title {
+                terminal.restore_title(title);
+            }
             terminal.set_resume(b.resume.clone()); // first: the offer marks this registration
             if let Some(command) = &b.resume {
                 restore::offer(&terminal, command, how.policy);
