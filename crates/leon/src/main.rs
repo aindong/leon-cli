@@ -10,6 +10,7 @@ mod hosts;
 mod layout;
 mod login_path;
 mod script;
+mod server;
 mod settings;
 mod skill;
 
@@ -23,7 +24,7 @@ use client::Fail;
 pub use settings::{ConfigCmd, ThemeCmd};
 
 #[derive(Parser)]
-#[command(name = "leon", version, about = "A fast, scriptable terminal multiplexer.", after_help = commands::EXIT_CODES)]
+#[command(name = "leon", version = env!("LEON_VERSION"), about = "A fast, scriptable terminal multiplexer.", after_help = commands::EXIT_CODES)]
 pub struct Cli {
     /// Start a personal server when none is running.
     #[arg(long, global = true, env = "LEON_AUTOSTART", default_value = "true", num_args = 0..=1,

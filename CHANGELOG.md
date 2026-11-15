@@ -4,58 +4,85 @@ Everything that changes in leon, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the API follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) through its `api_version`.
 
-leon has had no release yet: every build so far is version 0.1.0. Until the first release, each
-section is a milestone from [docs/roadmap.md](docs/roadmap.md) and
-[docs/research/next-for-leon.md](docs/research/next-for-leon.md), dated by when it landed on
-`main`. Milestones that haven't landed have no section: M15 (Linux) is still to come.
+0.1.0 is the first release. Its section sums up what it brings; under it, each milestone from
+[docs/roadmap.md](docs/roadmap.md) and [docs/research/next-for-leon.md](docs/research/next-for-leon.md)
+keeps its own notes, dated by when it landed on `main`. Milestones that haven't landed have no
+section: M22b (themes and settings in the app) and the app on Linux (M15's second part; Linux has
+the server, the CLI and `leon attach`).
 
 ## Reading `api_version`
 
-`api_version` is the version of the socket API, separate from the build's version. `help.all`
-and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.5.0`.
-
-- **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
-  method removed or renamed, a type narrowed, a new required parameter, a different meaning.
-- **MINOR** goes up when the stable API grows: a new method, or a new optional parameter or result
-  field on an existing one.
-- **PATCH** goes up for fixes that keep every schema as it was.
-
-Only methods marked `stable` are covered. `experimental` and `internal` methods can change in any
-release. A client should check that the major version is the one it was written for and ignore
-fields it doesn't know. The full policy is in
-[docs/integrators.md](docs/integrators.md#compatibility).
+`api_version` (now `1.5.0`) versions the socket API apart from the build: `help.all` and
+`server.version` report it, and it follows semver for `stable` methods, as
+[docs/integrators.md](docs/integrators.md#compatibility) explains.
 
 ## [Unreleased]
 
-### Daily-driver fixes (API `1.5.0`)
+Nothing yet after 0.1.0.
 
-#### Fixed
+## [0.1.0] - not yet tagged
 
-- Programs started by `leon run`, `leon split`, `leon float --new` and Lua are found on the PATH
-  of your shell (its login and rc files, `~/.zshrc` included), as in your own tab. A server started
-  by Leon.app from Finder had launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, so `leon run -- cargo test`
-  failed; one started over ssh had sshd's. Only absolute PATH dirs are kept.
-- With `-H`, `leon run`, `leon split` and `leon new` no longer send this machine's working
-  directory to the host, where it doesn't exist (`leon -H devbox run -- make test` failed with "no
-  directory"). They start in the host's home, or in `--cwd`, which must then be an absolute path on
-  the host (a relative one exits 2, before any ssh) and is checked there, not on this disk. A split
-  made in `leon -H … attach` starts in the pane's directory on the host, not the host's home.
-- A `-H` command started while the host is unreachable fails within 15 s (ssh's `ConnectTimeout`,
-  which covers a stalled login too) instead of waiting out the outage.
-- Sessions are saved while the server runs (a second after a change, the screens' text once a
-  minute), not only when it stops. After a crash the next start restored the save from the last
-  clean stop: sessions closed since came back, and new ones were gone.
-- A resume command is offered at one restart, not at every restart after it: once it has been
-  typed at the restored prompt it isn't saved again (`block inspect` still shows it until then). A
-  skipped or stale `claude --resume <id>` used to be typed again at every restart. A program that
-  resumes registers again, as the skill hook does.
-- `leon -H HOST attach` says `reconnecting to HOST (try N)…` in its status bar (or over its picker)
-  while the link is down, instead of freezing without a word, and when it gives up it says the link to the host was
-  lost, not "the leon server went away" (the server there was usually fine).
-- A program that isn't on PATH fails with `can't start the program: NAME isn't on PATH (or isn't executable)` instead
-  of a message listing every PATH entry.
+The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
 
+### What you get
+
+- **Sessions that outlive every window.** A server owns sessions, tabs, split panes and their
+  programs. Close the app, quit your terminal or drop your ssh link, and everything keeps running.
+  When the server itself stops, the layout, each pane's directory and its scrollback come back on
+  the next start, and an agent's resume command (`claude --resume …`) waits at the new prompt
+  (`leon.set("resume", "always")` runs it).
+- **A native macOS app.** Sessions and tabs in a sidebar or the titlebar, split panes with headers,
+  floating panes and drawers, scrollback, selection, find, copy mode, hints, links and mouse
+  support, a command palette, and ⌘K to switch to any tab on any machine.
+- **Know which agent needs you.** Programs report working, blocked, done or error (OSC 7501, or
+  `leon notify`). The app shows it on tabs and pane headers, lists what needs you under Activity
+  (⌘⇧A), badges the Dock, and sends a notification when you're elsewhere.
+- **Scriptable from the shell.** `leon run`, `send`, `capture`, `wait`, `split`, `events` and the
+  rest, with `--json` and fixed exit codes. `leon api` reaches every method of a versioned socket
+  API, with a compatibility promise and a reference in docs/api.md.
+- **Agent-ready.** `leon skill setup` teaches Claude Code and Codex to open panes beside
+  themselves, run your tests there and read the results.
+- **Lua.** Key bindings, sequences, modes, repeatable keys and your own actions in `init.lua`;
+  scripts with `leon do` that react to events; settings, themes (`leon theme`) and
+  `leon config get/set`.
+- **Any terminal, any machine.** `leon attach` is a tmux-like client in any terminal. `-H HOST`
+  drives the leon server on another machine over your own ssh, and the app shows each host's
+  sessions in its sidebar.
+- **Packages.** Leon.app for Apple Silicon Macs, and a tarball and a `.deb` for Linux on arm64 and
+  x86_64, each with LICENSE and the third-party notices. `scripts/release.sh` builds them all from
+  a clean checkout and prints their SHA-256 sums.
+
+### Fixed in the release audit ([docs/audit-0.1.0.md](docs/audit-0.1.0.md))
+
+- A server could open only about 80 panes when it started with a low open-file limit, which is
+  what launchd gives the app: past that, new panes failed with "Too many open files". The server
+  now raises its own limit, up to 10240.
+- On macOS, a second server could unlink the socket of a live server that was too busy to accept
+  connections, leaving every program running but out of reach. A server now holds `server.lock`
+  for its whole life, and no one unlinks a socket while it is held.
+- A window split more than about 60 levels deep, or more than 1024 blocks, saved fine but then
+  couldn't be loaded, so the next start set every session aside. A window now nests at most 32
+  splits, and a server holds at most 1024 blocks; past either, `session.new_split`,
+  `session.move_block` and the like answer 400. Schemas are unchanged.
+
+### Fixed in the [daily-driver test](docs/research/daily-driver-0.1.0.md)
+
+- `leon run`, `split`, `float --new` and Lua find programs on your shell's PATH (login and rc
+  files), even when Leon.app started the server from Finder with launchd's bare PATH.
+- With `-H`, `run`, `split` and `new` start in the host's home or an absolute `--cwd` there, not
+  this machine's directory, and fail within 15 s while the host is unreachable.
+- Sessions are saved while the server runs, so a crash no longer restores an older save.
+- A resume command is offered at one restart, not at every one after it.
+- `leon -H … attach` says when it is reconnecting; its splits keep a remote pane's directory.
+- A program not on PATH fails with one line instead of listing every PATH entry.
+
+### Added
+
+- `leon --version` names the commit: `leon 0.1.0 (1a2b3c4d5e6f)`.
+- `LICENSE` and `THIRD-PARTY-NOTICES.txt` (every crate built in, with its license) in Leon.app's
+  resources, the Linux tarball and the `.deb`'s docs.
+- `scripts/release.sh`: builds every package from a clean checkout of one commit and writes
+  `SHA256SUMS`. It never tags, pushes or uploads.
 ### Joined panes, their events, long socket paths (API `1.5.0`)
 
 #### Fixed

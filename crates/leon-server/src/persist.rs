@@ -18,7 +18,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use leon_core::layout::Node;
 use leon_core::model::clean_label;
 use leon_core::panes::check_ratio;
-use leon_core::{ApiError, Block, Session, State, Window};
+use leon_core::{ApiError, Block, Session, State, Window, MAX_BLOCKS};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -30,8 +30,6 @@ pub const FILE: &str = "sessions.json";
 const VERSION: u64 = 3;
 /// A bigger file is taken as corrupt: the saved text (`restore::TOTAL`) at most doubles in JSON.
 const MAX_FILE: u64 = 32 << 20;
-/// More blocks than this (the spec's server limit) is taken as corrupt: each would start a shell.
-const MAX_BLOCKS: usize = 1024;
 /// A revision past this is corrupt; the model only ever adds one.
 const MAX_REVISION: u64 = 1 << 53;
 
@@ -367,6 +365,7 @@ fn check(saved: &Saved) -> Result<(), String> {
             _ => Ok(()),
         }
     };
+    // more than the model ever holds is corrupt: each block would start a shell
     if saved.sessions.iter().map(|s| s.blocks.len()).sum::<usize>() > MAX_BLOCKS {
         return Err(format!("it has over {MAX_BLOCKS} blocks"));
     }

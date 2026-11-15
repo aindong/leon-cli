@@ -68,7 +68,8 @@ fn bundle_makes_a_valid_app() {
     assert_eq!(plist(&app, "CFBundlePackageType"), "APPL");
 
     let want = version_of(Path::new(env!("CARGO_BIN_EXE_leon")));
-    let v = want.strip_prefix("leon ").expect("--version prints `leon X`");
+    let v = want.strip_prefix("leon ").expect("--version prints `leon X (commit)`");
+    let v = v.split(' ').next().unwrap();
     assert_eq!(plist(&app, "CFBundleShortVersionString"), v);
     assert_eq!(version_of(&app.join("Contents/MacOS/leon")), want);
 
@@ -79,6 +80,13 @@ fn bundle_makes_a_valid_app() {
     let bytes = std::fs::read(app.join("Contents/Resources").join(&icon)).expect("the icon file exists");
     assert_eq!(&bytes[..4], b"icns", "{icon} is an icns file");
     assert!(bytes.len() > 10_000, "{icon} holds real images ({} bytes)", bytes.len());
+
+    let res = app.join("Contents/Resources");
+    assert_eq!(std::fs::read(res.join("LICENSE")).unwrap(), std::fs::read(help_walk::repo().join("LICENSE")).unwrap());
+    let notices = std::fs::read_to_string(res.join("THIRD-PARTY-NOTICES.txt")).expect("the notices are bundled");
+    for c in ["- alacritty_terminal ", "- gpui ", "- mlua ", "- lua-src ", "Apache License"] {
+        assert!(notices.contains(c), "THIRD-PARTY-NOTICES.txt names {c}");
+    }
 
     let again = bundle(&app);
     assert!(again.status.success(), "rebuilding over its own bundle: {}", String::from_utf8_lossy(&again.stderr));
