@@ -98,6 +98,11 @@ padded. On exit
 (detach, the server stopping, SIGHUP, SIGTERM, SIGINT, SIGQUIT) the terminal is given back as it was; a
 watchdog process does it even after SIGKILL. Killed by a signal, it exits 128 + the signal.
 
+Over `-H`, the status bar says `reconnecting to HOST (try N)…` while a dropped link is retried,
+and keys reach the pane whole or not at all. After a second with no word from the host, typed keys
+wait for a quick check of the link before they go; if it fails, or the link is reconnecting, they
+are dropped, and the bar says how many keys were not sent. Type them again once it is back.
+
 ## Sessions
 
 ### `leon new [LABEL] [--cwd DIR]`

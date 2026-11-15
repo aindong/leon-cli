@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use super::draw::{self, Bar};
 use super::keys::{self, After};
 use super::picker::{self, Picker};
+use super::typing::Send;
 use super::{Flow, Mode, Tui};
 
 /// The app's limit for one paste (a request over the server's 1 MiB would drop the connection).
@@ -28,7 +29,13 @@ impl Tui {
     /// While the link to the host is retried: which try, for the bar.
     fn reconnecting(&self) -> Option<String> {
         match (&self.host, self.remote.link_state()) {
-            (Some(h), LinkState::Reconnecting { attempt, .. }) => Some(format!("reconnecting to {h} (try {attempt})…")),
+            (Some(h), LinkState::Reconnecting { attempt, .. }) => {
+                let lost = match self.typing.dropped {
+                    0 => String::new(),
+                    n => format!(", {n} {} not sent", if n == 1 { "key" } else { "keys" }),
+                };
+                Some(format!("reconnecting to {h} (try {attempt})…{lost}"))
+            }
             _ => None,
         }
     }
@@ -122,12 +129,39 @@ impl Tui {
         }
     }
 
-    /// Type a key into the focused pane, encoded for its cursor-key mode.
-    fn forward(&self, k: &KeyEvent) {
+    /// Type a key into the focused pane, encoded for its cursor-key mode. Over a link it goes
+    /// whole or not at all (`typing`).
+    fn forward(&mut self, k: &KeyEvent) {
         let Some(t) = self.target() else { return };
         let app_cursor = self.remote.model().screens.get(&t.block).is_some_and(|f| f.app_cursor);
-        if let Some(bytes) = keys::bytes(k, app_cursor) {
-            self.remote.write(&t.sid, &t.block, &bytes);
+        let Some(bytes) = keys::bytes(k, app_cursor) else { return };
+        if !self.remote.is_link() {
+            return self.remote.write(&t.sid, &t.block, &bytes);
+        }
+        let up = self.remote.link_state() == LinkState::Up;
+        let next = self.typing.key(&t.sid, &t.block, bytes, up, std::time::Instant::now());
+        self.send_typed(next);
+    }
+
+    /// Send what `typing` asks for; its answer comes back as `Msg::Typed`. Dropped keys are noted.
+    pub(super) fn send_typed(&mut self, next: Send) {
+        let tx = self.tx.clone();
+        let done = move |r: Result<Value, leon_core::ApiError>| {
+            let _ = tx.send(super::Msg::Typed(r.is_ok()));
+        };
+        match next {
+            Send::Nothing => {}
+            Send::Probe => self.remote.send_then("server.version", json!({}), done),
+            Send::Write(sid, block, bytes) => {
+                let args = json!({ "data": String::from_utf8_lossy(&bytes) });
+                let p =
+                    json!({ "session_id": sid, "block_id": block, "method": "dev.leon.terminal.write", "args": args });
+                self.remote.send_then("block.method", p, done);
+            }
+        }
+        if let (n @ 1.., Some(h)) = (self.typing.dropped, &self.host) {
+            let keys = if n == 1 { "key" } else { "keys" };
+            self.say(format!("{n} {keys} not sent: the link to {h} stalled or dropped"));
         }
     }
 
