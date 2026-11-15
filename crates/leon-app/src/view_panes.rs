@@ -100,8 +100,8 @@ impl Workspace {
     }
 
     /// One pane's tile at `rect`: its header (always on a float or drawer, which `grab` moves when
-    /// given), its terminal, the find bar and jump labels, and the focus mark. `kind` names it in
-    /// tests (`pane-`, `float-`, `dock-`).
+    /// given), its terminal, the find bar and jump labels, and the focus mark, in the pane's own
+    /// theme (faded without the focus). `kind` names it in tests (`pane-`, `float-`, `dock-`).
     pub(super) fn pane_tile(
         &self,
         kind: &str,
@@ -111,7 +111,7 @@ impl Workspace {
         tiling: &Tiling,
         cx: &mut Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
-        let t = &self.theme;
+        let t = &self.pane_theme(id);
         let focused = tiling.target.as_deref() == Some(id);
         let id = id.to_string();
         let view = self.drawn(&id);
@@ -119,9 +119,9 @@ impl Workspace {
         let canvas = terminal_canvas(
             self.app.clone(),
             (tiling.sid.clone(), id.clone()),
-            (view.frame, marks),
+            (crate::fade::frame(view.frame, t.chrome, self.pane_fade(&id)), marks),
             tiling.active && focused,
-            (self.font_family.clone(), self.font_size, self.theme),
+            (self.font_family.clone(), self.font_size, *t),
             (tiling.stats.clone(), self.term.painted.clone()),
         );
         let headers = self.settings.pane_headers || kind != "pane";
@@ -253,6 +253,7 @@ impl Render for Workspace {
         DRAWN.with(|d| d.borrow_mut().clear());
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
+        self.note_fades(&shown);
         if self.term.find.as_ref().is_some_and(|f| !shown.contains(&f.block)) {
             self.term.find = None; // its pane left the screen
         }

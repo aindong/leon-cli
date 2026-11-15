@@ -23,6 +23,10 @@ pub const KEYS: [&str; 10] = [
     "resume",
 ];
 
+/// How far the app fades the panes without the focus toward the window's background, unless the
+/// config says: the strongest fade that keeps body text at 4.5:1 on both built-in themes.
+pub const FADE: f64 = 0.35;
+
 /// The app's own font size range (it clamps ⌘+ and ⌘- to it too).
 pub const FONT_SIZES: (f64, f64) = (8., 32.);
 

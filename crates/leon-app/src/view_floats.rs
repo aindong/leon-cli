@@ -113,7 +113,6 @@ impl Workspace {
         (area, origin): ((f32, f32), (f32, f32)),
         cx: &mut Context<Self>,
     ) -> Div {
-        let t = &self.theme;
         for d in placed.docks.iter().filter(|d| terms.contains(&d.block_id)) {
             let tile = self.pane_tile("dock", &d.block_id, d.rect, None, tiling, cx);
             out = out.child(if d.leaving { tile } else { tile.occlude() });
@@ -128,6 +127,7 @@ impl Workspace {
         }
         for f in placed.floats.iter().filter(|f| terms.contains(&f.block_id)) {
             let focused = tiling.target.as_deref() == Some(f.block_id.as_str());
+            let t = self.pane_theme(&f.block_id);
             let mv = Grab::Move { bounds: f.bounds, area };
             out = out.child(
                 self.pane_tile("float", &f.block_id, f.rect, Some(mv), tiling, cx)

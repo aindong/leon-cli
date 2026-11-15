@@ -14,6 +14,8 @@ pub struct Look {
     pub light: Theme,
     pub font_family: String,
     pub font_size: f32,
+    /// How far the panes without the focus are faded (0 to 0.8; 0 is off).
+    pub fade: f32,
 }
 
 impl Default for Look {
@@ -40,6 +42,7 @@ impl Look {
             light: theme("light", &d.theme.light, LIGHT),
             font_family: settings["font"]["family"].as_str().unwrap_or(&d.font_family).to_string(),
             font_size: settings["font"]["size"].as_f64().unwrap_or(d.font_size) as f32,
+            fade: leon_lua::settings::FADE as f32,
         }
     }
 

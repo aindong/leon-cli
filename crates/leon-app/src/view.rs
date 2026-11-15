@@ -239,6 +239,8 @@ pub struct Workspace {
     /// Scrollback, selection, find and links per pane.
     term: scroll::TermUi,
     floats: floats_view::FloatUi,
+    /// Each shown pane's fade (view_fade.rs).
+    fade: fade_view::FadeUi,
     _poll: Task<()>,
     _activation: Subscription,
     _bounds: Subscription,
@@ -394,6 +396,7 @@ impl Workspace {
             seen_focus: None,
             term,
             floats: Default::default(),
+            fade: Default::default(),
             _poll: poll,
             _activation: activation,
             _bounds: bounds,
@@ -452,6 +455,8 @@ mod bars;
 mod calls;
 #[path = "view_copy.rs"]
 mod copy;
+#[path = "view_fade.rs"]
+mod fade_view;
 #[path = "view_find.rs"]
 mod find;
 #[path = "view_floats.rs"]
