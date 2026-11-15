@@ -46,6 +46,9 @@ fields it doesn't know. The full policy is in
   typed at the restored prompt it isn't saved again (`block inspect` still shows it until then). A
   skipped or stale `claude --resume <id>` used to be typed again at every restart. A program that
   resumes registers again, as the skill hook does.
+- `leon -H HOST attach` says `reconnecting to HOST (try N)…` in its status bar while the link is
+  down, instead of freezing without a word, and when it gives up it says the link to the host was
+  lost, not "the leon server went away" (the server there was usually fine).
 - A program that isn't on PATH fails with `can't start the program: NAME isn't on PATH` instead
   of a message listing every PATH entry.
 

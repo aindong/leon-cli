@@ -3,6 +3,7 @@
 
 use leon_app::keymap::{Bound, Pressed};
 use leon_app::panes;
+use leon_app::remote::LinkState;
 use leon_lua::keys::Chord;
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::{Position, Rect};
@@ -24,6 +25,14 @@ struct Target {
 }
 
 impl Tui {
+    /// While the link to the host is retried: which try, for the bar.
+    fn reconnecting(&self) -> Option<String> {
+        match (&self.host, self.remote.link_state()) {
+            (Some(h), LinkState::Reconnecting { attempt, .. }) => Some(format!("reconnecting to {h} (try {attempt})…")),
+            _ => None,
+        }
+    }
+
     fn session_id(&self) -> Option<&str> {
         match &self.mode {
             Mode::Attached(sid) => Some(sid),
@@ -330,7 +339,7 @@ impl Tui {
         }
         let focus = w.and_then(super::overlays::focused).map(str::to_string);
         let tabs = s.windows.iter().enumerate().map(|(i, w)| (picker::tab_name(&s, w), i == s.active)).collect();
-        let note = super::lock(&self.note).clone();
+        let note = super::lock(&self.note).clone().or_else(|| self.reconnecting());
         let index = self.remote.model().sessions.iter().position(|x| x.id == s.id).unwrap_or(0);
         let name = picker::session_name(&s, index);
         let bar = Bar {

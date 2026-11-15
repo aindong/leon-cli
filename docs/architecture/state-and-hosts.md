@@ -144,7 +144,9 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   the call, the refetch, then a callback) run in order on one queue thread over the call
   connection, so a slow or stalled link never holds the thread that asked; while the link is down
   they fail at once. Keys typed while the link is down are lost; while attached, stderr is
-  /dev/null, so ssh's errors during a reconnect aren't shown.
+  /dev/null, so ssh's errors during a reconnect aren't shown. Instead `leon attach`'s status bar
+  says `reconnecting to HOST (try N)…` while the client relinks (it wakes the TUI on each try), and
+  when the host's hold runs out it exits naming the link, not the server, which may be fine.
 - **The app's hosts.** `leon_app::hosts` holds the machines the window shows: This Mac (the
   socket the app started with), then each host from the hosts list, read at start and after Add
   Host. Each host is connected on a thread of its own: a `Link` (with `never_prompt`, so ssh runs
