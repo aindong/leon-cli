@@ -31,7 +31,14 @@ fn activity_lists_what_needs_you_and_a_click_jumps_and_clears_done(cx: &mut Test
     assert_eq!(rows[0].status, Indicator::Error, "error before done");
     assert_eq!(rows[1].block_id, other_block);
     assert!(rows[1].place.starts_with("This Mac › ci › "), "{}", rows[1].place);
-    assert!(rows[1].caption.as_deref().is_some_and(|c| c.contains("tests")), "{:?}", rows[1].caption);
+    // the row's title (A2): the title the shell set, if it set one, else the status's own
+    match term(&s.app, &other_block).title() {
+        Some(own) => {
+            assert_eq!(rows[1].title, own);
+            assert!(rows[1].caption.as_deref().is_some_and(|c| c.contains("tests")), "{:?}", rows[1].caption);
+        }
+        None => assert_eq!(rows[1].title, "tests"),
+    }
 
     let row = at(cx, "activity-row-1").expect("the done row is drawn");
     cx.simulate_click(center(row), Modifiers::none());

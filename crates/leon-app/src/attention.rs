@@ -28,8 +28,12 @@ pub struct Row {
     pub block_id: String,
     /// `host › session › tab`.
     pub place: String,
+    /// The block as the user knows it: its label, the title its program set, the title of its
+    /// status (an agent's own name for its task), else its tab's title.
+    pub title: String,
     pub status: Indicator,
-    /// The program's title and msg, bidi-isolated (`status::caption_of`).
+    /// The program's title and msg, bidi-isolated (`status::caption_of`); the msg alone when the
+    /// status title is the row's title.
     pub caption: Option<String>,
     /// When it entered this state, as far as the app saw.
     pub since: Instant,
@@ -134,8 +138,13 @@ impl Tracker {
                     let records = b.newest_first();
                     let Some(state) = status::indicator_of(&records) else { continue };
                     let tab = s.windows.iter().find(|w| w.id == b.window_id).map(|w| switcher::tab_title(s, w));
-                    let place = format!("{label} › {} › {}", switcher::session_title(s, i), tab.unwrap_or_default());
-                    let caption = status::caption_of(&records);
+                    let tab = tab.unwrap_or_default();
+                    let place = format!("{label} › {} › {tab}", switcher::session_title(s, i));
+                    let (title, caption) = match (b.label.clone().or(b.title.clone()), status::status_title(&records)) {
+                        (Some(own), _) => (own, status::caption_of(&records)),
+                        (None, Some(task)) => (task, status::status_msg(&records)),
+                        (None, None) => (tab, status::caption_of(&records)),
+                    };
                     let key = (host, b.id.clone());
                     let rank = priority(state);
                     let was = self.seen.get(&key).copied();
@@ -170,6 +179,7 @@ impl Tracker {
                         session_id: s.id.clone(),
                         block_id: b.id.clone(),
                         place,
+                        title,
                         status: state,
                         caption,
                         since,
@@ -302,6 +312,26 @@ impl Notifier {
 pub fn clean(s: &str) -> String {
     let one_line = s.replace(['\u{2028}', '\u{2029}'], " ");
     cut(&strip_hidden(&one_line), NOTICE_TEXT)
+}
+
+/// `s` cut before byte `end` (where it would run past its room, as GPUI's wrapper says) after the
+/// last word that leaves room for "…"; one word too long for the room is cut inside. A bidi
+/// isolate it cut through is closed again.
+pub fn cut_words(s: &str, end: usize) -> String {
+    if end >= s.len() {
+        return s.to_string();
+    }
+    let end = (0..=end).rev().find(|&i| s.is_char_boundary(i)).unwrap_or(0);
+    let head = s[..end].trim_end();
+    let kept = match head.rfind(char::is_whitespace) {
+        Some(i) => head[..i].trim_end_matches([' ', '·']),
+        None => head.char_indices().last().map_or("", |(i, _)| &head[..i]),
+    };
+    let mut out = format!("{kept}…");
+    if out.matches('\u{2068}').count() > out.matches('\u{2069}').count() {
+        out.push('\u{2069}');
+    }
+    out
 }
 
 /// `s` in at most `most` chars, an ellipsis ending one that was longer.
