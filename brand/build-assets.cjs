@@ -6,7 +6,7 @@
  * icon/leon-1024.png, from it: enlarged 3× with a Lanczos-3 filter, its own rounded tile kept and
  * everything outside made clear (the numbers are in check-icon.cjs, which then compares the pixels).
  * No image generator and no AI upscaler touches it.
- * Flat marks and the optical 16pt SVG are hand-authored, independent vector assets.
+ * Flat marks and the optical 16 px SVG are hand-authored, independent vector assets.
  */
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -32,8 +32,8 @@ async function main() {
   // A standalone SVG wrapper is provided for consumers requiring SVG format.
   // It embeds the canonical raster; it is not editable vector artwork.
   const master = await fs.readFile(path.join(root, 'icon/leon-1024.png'));
-  // The tile fills 80.5% of the master (Apple's grid); the page, OG and banner layouts were drawn
-  // for a tile at 87.5%, so they take this crop and the icon keeps its size in them.
+  // The tile fills 80.5% of the master (Apple's grid); the page and OG layouts were drawn for a
+  // tile at 87.5%, so they take this crop and the icon keeps its size in them.
   const framed = () => sharp(master).extract({ left: 40, top: 40, width: 944, height: 944 });
   await fs.writeFile(path.join(root, 'icon/leon-1024.svg'), `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="leon Pocket guardian app icon"><title>leon Pocket guardian — raster master wrapper</title><image width="1024" height="1024" href="data:image/png;base64,${master.toString('base64')}"/></svg>\n`);
   const pageIcon = await framed().resize(580, 580).png(png).toBuffer();
@@ -49,7 +49,8 @@ async function main() {
   const tile = await sharp(master).extract({ left: TILE.x, top: TILE.y, width: TILE.width, height: TILE.height }).resize(BANNER.width, BANNER.height).raw().toBuffer();
   const banner = await sharp(bannerPath).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   // written pixel by pixel: sharp's composite would round the banner's own soft corners again
-  for (let y = 84; y < 316; y++) for (let x = 60; x < 288; x++) {
+  const pad = 5; // the old icon's tile was that much larger
+  for (let y = BANNER.top - pad; y < BANNER.top + BANNER.height + pad; y++) for (let x = BANNER.left - pad; x < BANNER.left + BANNER.width + pad; x++) {
     const [tx, ty] = [x - BANNER.left, y - BANNER.top], inTile = tx >= 0 && ty >= 0 && tx < BANNER.width && ty < BANNER.height;
     const at = (ty * BANNER.width + tx) * 4, alpha = inTile ? tile[at + 3] / 255 : 0;
     const pixel = [0xF5, 0xF0, 0xE7].map((ground, c) => Math.round(inTile ? tile[at + c] * alpha + ground * (1 - alpha) : ground));

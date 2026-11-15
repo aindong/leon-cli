@@ -18,6 +18,10 @@ fn header(path: &str) -> (u32, u32, u8) {
 fn the_original_is_committed_and_the_master_keeps_its_colours() {
     let (w, h, _) = header("brand/icon/leon-original-280.png");
     assert_eq!((w, h), (280, 280), "the original thumbnail");
+    // the art is this file's bytes (FNV-1a): a redrawn or regenerated thumbnail is a different brand
+    let bytes = std::fs::read(repo("brand/icon/leon-original-280.png")).unwrap();
+    let hash = bytes.iter().fold(0xcbf29ce484222325u64, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x100000001b3));
+    assert_eq!(hash, 0xb7f512617e286653, "brand/icon/leon-original-280.png is the original, byte for byte");
     // colour type 6 is RGBA: a 256-colour palette would dither the original's grain
     assert_eq!(header("brand/icon/leon-1024.png"), (1024, 1024, 6), "the master is 1024 x 1024 RGBA");
 }
