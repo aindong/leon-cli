@@ -32,10 +32,12 @@ pub use leon_core::keys::paste_bytes;
 /// GPUI rebuilds a key's text from its key code through the keyboard layout, so an event with key
 /// code 0 and text of its own (what automation and some accessibility tools send) arrives as `a`.
 /// When the event's `characters` disagree with what GPUI made, they are the key. A real key on
-/// code 0 (`a` in QWERTY, `q` in AZERTY, with shift or option) agrees, and stays as it is.
+/// code 0 (`a` in QWERTY, `q` in AZERTY, with shift or option) agrees, and stays as it is; so
+/// does one that differs only in case (Caps Lock, which GPUI leaves out of every key alike).
 pub fn retext(ks: Keystroke, key_code: u16, characters: &str) -> Keystroke {
     let m = &ks.modifiers;
-    if key_code != 0 || m.control || m.platform || characters.is_empty() || ks.key_char.as_deref() == Some(characters) {
+    let agrees = ks.key_char.as_deref().is_some_and(|c| c.to_lowercase() == characters.to_lowercase());
+    if key_code != 0 || m.control || m.platform || characters.is_empty() || agrees {
         return ks;
     }
     let key = characters.chars().next().map(|c| c.to_lowercase().to_string()).unwrap_or_default();

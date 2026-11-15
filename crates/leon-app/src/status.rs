@@ -114,7 +114,7 @@ pub fn caption_of(newest_first: &[&Record]) -> Option<String> {
 
 /// The title of the record behind the indicator: what an agent calls its task.
 pub fn status_title(newest_first: &[&Record]) -> Option<String> {
-    top_record(newest_first)?.title.clone()
+    top_record(newest_first)?.title.as_deref().map(|t| t.chars().take(CAPTION).collect())
 }
 
 /// The caption's msg alone, for where its title is said already.

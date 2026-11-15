@@ -23,6 +23,8 @@ fn a_stopped_server_leaves_a_notice_with_start_and_quit(cx: &mut TestAppContext)
     assert!(drawn(cx, "server-stopped-start"), "Start It Again");
     assert!(drawn(cx, "server-stopped-quit"), "Quit");
     assert!(!drawn(cx, "empty-state"), "not the no-session state");
+    cx.simulate_keystrokes("cmd-shift-p");
+    assert!(!ws.read_with(cx, |ws, _| ws.palette_open()), "keys act on nothing behind the notice");
 
     // Start It Again: this executable with its arguments (a test workspace records it, never spawns)
     let start = at(cx, "server-stopped-start").unwrap();
@@ -44,8 +46,11 @@ fn quit_and_end_all_still_quits_without_the_notice(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(eventually(|| s.app.stopped()), "the server stopped");
     drop(s); // its connections close, as a stopped server's do
-             // the poll sees the server gone; GPUI's test platform ignores quit(), so the window stays
-    for _ in 0..20 {
+             // the poll sees the server gone; GPUI's test platform ignores quit(), so the window stays.
+             // A negative needs a window of time: the poll wakes at once on the drop (a stop from outside
+             // shows its notice within it, the test above), and this gives it a second and a half
+    let end = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+    while std::time::Instant::now() < end && !ws.read_with(cx, |ws, _| ws.server_stopped()) {
         cx.run_until_parked();
         std::thread::sleep(std::time::Duration::from_millis(20));
     }

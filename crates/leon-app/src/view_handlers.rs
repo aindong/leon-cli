@@ -241,7 +241,7 @@ impl Workspace {
     }
 
     /// Ask once, naming how many sessions end; on yes, stop the server (it saves, then every
-    /// program ends) and quit. The app quits anyway when the server goes.
+    /// program ends) and quit, without the notice a server stopped from outside leaves.
     pub(super) fn quit_and_end_all(&mut self, _: &QuitAndEndAll, window: &mut Window, cx: &mut Context<Self>) {
         let app = self.hosts.local().clone(); // This Mac's server; hosts keep theirs
         let n = app.model().sessions.len();
@@ -271,13 +271,17 @@ impl Workspace {
             Ok(exe) => exe,
             Err(e) => return eprintln!("leon: can't find leon to start it again: {e}"),
         };
+        // it must start the server even when this one was told not to (`--autostart=false`)
+        let args: Vec<_> =
+            std::env::args_os().skip(1).filter(|a| !a.to_string_lossy().starts_with("--autostart")).collect();
         if !self.platform {
-            let args = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned());
+            let args = args.iter().map(|a| a.to_string_lossy().into_owned());
             self.relaunched = Some(std::iter::once(exe.display().to_string()).chain(args).collect());
             return;
         }
         use std::os::unix::process::CommandExt;
-        match std::process::Command::new(&exe).args(std::env::args_os().skip(1)).process_group(0).spawn() {
+        let mut again = std::process::Command::new(&exe);
+        match again.args(&args).env("LEON_AUTOSTART", "true").process_group(0).spawn() {
             Ok(_) => cx.quit(),
             Err(e) => eprintln!("leon: can't start leon again: {e}"),
         }

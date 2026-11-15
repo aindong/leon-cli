@@ -21,7 +21,9 @@ impl Workspace {
         let shown = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
         let caption = self.header_caption(id);
         let frame = self.pulse();
-        let (title, tip) = self.header_title(id, (width - HEADER_PARTS).min(TITLE_MAX), cx);
+        // shortcut: the host badge's width from its length, not measured; fine for short labels
+        let badge = self.pane_host(id).map_or(0., |h| h.chars().count() as f32 * 7. + 16.);
+        let (title, tip) = self.header_title(id, (width - HEADER_PARTS - badge).min(TITLE_MAX), cx);
         let theme = self.theme;
         let group = SharedString::from(format!("pane-{id}"));
         let overlay = self.is_overlay(id);

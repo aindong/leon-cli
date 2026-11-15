@@ -140,10 +140,12 @@ impl Tracker {
                     let tab = s.windows.iter().find(|w| w.id == b.window_id).map(|w| switcher::tab_title(s, w));
                     let tab = tab.unwrap_or_default();
                     let place = format!("{label} › {} › {tab}", switcher::session_title(s, i));
+                    // a notice is titled by the place, so its body keeps the whole caption
+                    let whole = status::caption_of(&records);
                     let (title, caption) = match (b.label.clone().or(b.title.clone()), status::status_title(&records)) {
-                        (Some(own), _) => (own, status::caption_of(&records)),
+                        (Some(own), _) => (own, whole.clone()),
                         (None, Some(task)) => (task, status::status_msg(&records)),
-                        (None, None) => (tab, status::caption_of(&records)),
+                        (None, None) => (tab, whole.clone()),
                     };
                     let key = (host, b.id.clone());
                     let rank = priority(state);
@@ -165,7 +167,7 @@ impl Tracker {
                                     block_id: b.id.clone(),
                                     place: place.clone(),
                                     to: state,
-                                    caption: caption.clone(),
+                                    caption: whole,
                                     worked,
                                 });
                             }
@@ -315,17 +317,19 @@ pub fn clean(s: &str) -> String {
 }
 
 /// `s` cut before byte `end` (where it would run past its room, as GPUI's wrapper says) after the
-/// last word that leaves room for "…"; one word too long for the room is cut inside. A bidi
-/// isolate it cut through is closed again.
+/// last word that leaves room for "…"; text with no space near the end (a long word, a URL, CJK)
+/// is cut inside. A bidi isolate it cut through is closed again.
 pub fn cut_words(s: &str, end: usize) -> String {
+    /// The longest last word given up whole for the ellipsis's room.
+    const WORD: usize = 20;
     if end >= s.len() {
         return s.to_string();
     }
     let end = (0..=end).rev().find(|&i| s.is_char_boundary(i)).unwrap_or(0);
     let head = s[..end].trim_end();
     let kept = match head.rfind(char::is_whitespace) {
-        Some(i) => head[..i].trim_end_matches([' ', '·']),
-        None => head.char_indices().last().map_or("", |(i, _)| &head[..i]),
+        Some(i) if head[i..].chars().count() <= WORD => head[..i].trim_end_matches([' ', '·']),
+        _ => head.char_indices().last().map_or("", |(i, _)| &head[..i]),
     };
     let mut out = format!("{kept}…");
     if out.matches('\u{2068}').count() > out.matches('\u{2069}').count() {

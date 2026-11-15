@@ -61,5 +61,12 @@ fn a_header_too_narrow_for_its_path_cuts_the_middle_and_tells_the_rest(cx: &mut 
     assert!(short);
     let (shown, tip) = ws.read_with(cx, |ws, cx| ws.header_title(&id, 200., cx));
     assert_eq!((shown, tip), (format!("{program} /"), None), "nothing cut, no tooltip");
+
+    // a title the program set is its own: never cut in the middle, no tooltip
+    let long = "a title the program set that is far too long for its header";
+    run_until(&t, &format!("printf '\\033]2;{long}\\007'; echo titled"), "titled");
+    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.pane_title(&id)).as_deref() == Some(long)));
+    let (shown, tip) = ws.read_with(cx, |ws, cx| ws.header_title(&id, 100., cx));
+    assert_eq!((shown.as_str(), tip), (long, None));
     s.app.stop();
 }

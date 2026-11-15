@@ -7,6 +7,9 @@ use crate::palette::{self, Item};
 
 impl Workspace {
     pub(super) fn key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.stopped {
+            return; // nothing to type into: the notice's buttons and ⌘Q are what's left
+        }
         let ks = &match (self.native_key)() {
             Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
             None => ev.keystroke.clone(),

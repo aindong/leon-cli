@@ -319,7 +319,7 @@ impl Render for Workspace {
             .child(column)
             .children(self.render_stale(window))
             // last, so it paints over the panes: GPUI paints children in order
-            .children(self.render_overlay(cx))
+            .children(self.render_overlay(cx).filter(|_| !self.stopped))
     }
 }
 
