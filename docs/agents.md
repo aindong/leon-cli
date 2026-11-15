@@ -100,7 +100,8 @@ don't survive, and a saved command is never run again. What does come back is a 
 registered for its own block with `set_resume`. The hook does that for you: `claude --resume <id>`
 for Claude Code, `codex resume <id>` for Codex, from the session id the agent gives its hook. It
 records only for an agent in the foreground of its terminal, so a nested `claude -p` run by
-another agent's tool doesn't replace the interactive session's command.
+another agent's tool doesn't replace the interactive session's command, and never for Claude
+Code's print mode (`-p`, `--print`): a one-shot run has nothing to resume.
 
 Any other program can register its own:
 
