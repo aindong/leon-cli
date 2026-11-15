@@ -84,7 +84,7 @@ impl Workspace {
 
     /// The toolbar's Activity button, with the blocked count when there is one.
     pub(super) fn activity_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &DARK;
+        let t = &self.theme;
         div()
             .relative()
             .child(self.tool("toolbar-activity", Icon::Blocked, "client.sidebar.activity.toggle", cx))
@@ -107,7 +107,7 @@ impl Workspace {
     /// The Activity list: blocked, error, done, working, each with where it is, what it says and
     /// how long it has waited; a click goes to its pane (which clears a done or error there).
     pub(super) fn render_activity(&self, cx: &mut Context<Self>) -> gpui::Div {
-        let t = &DARK;
+        let t = &self.theme;
         let (frame, now) = (self.pulse(), Instant::now());
         let rows = self.attention.rows();
         let mut list =
@@ -144,7 +144,7 @@ impl Workspace {
                     .rounded(px(6.))
                     .cursor_pointer()
                     .hover(|d| d.bg(rgb(t.hover)))
-                    .child(div().pt(px(2.)).child(status_mark(mark, frame)))
+                    .child(div().pt(px(2.)).child(status_mark(mark, frame, t)))
                     .child(
                         div()
                             .flex_1()

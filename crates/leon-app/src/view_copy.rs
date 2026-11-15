@@ -276,7 +276,7 @@ impl Workspace {
     /// program's cursor hidden) or the hint labels written over it.
     pub(super) fn drawn(&self, id: &str) -> Composed {
         let mut c = self.composed(id);
-        let t = &DARK;
+        let t = &self.theme;
         if let Some(cm) = self.term.copy.as_ref().filter(|m| m.block == id) {
             c.frame.cursor = None;
             let badge = match (&cm.prompt, cm.selection) {

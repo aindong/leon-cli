@@ -182,20 +182,20 @@ impl Workspace {
     /// The find bar, in pane `id`'s header while it is open there.
     pub(super) fn render_find_bar(&self, id: &str, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let f = self.term.find.as_ref().filter(|f| f.block == id)?;
-        let t = &DARK;
+        let (t, theme) = (&self.theme, self.theme);
         let count = self.find_count().unwrap_or_default();
         let toggle = |name: &'static str, label: &'static str, on: bool, key: &'static str, cx: &mut Context<Self>| {
             div()
                 .id(SharedString::from(format!("find-{name}-{id}")))
                 .px(px(5.))
                 .rounded(px(4.))
-                .font_family(FONT_FAMILY)
+                .font_family(self.font_family.clone())
                 .cursor_pointer()
                 .text_color(rgb(if on { t.title } else { t.muted }))
                 .when(on, |d| d.bg(rgb(t.selected)))
                 .hover(|d| d.text_color(rgb(t.title)))
                 .child(label)
-                .tooltip(move |_, cx| cx.new(|_| super::bars::Tip(format!("{label}   ⌥{key}").into())).into())
+                .tooltip(move |_, cx| cx.new(|_| super::bars::Tip(format!("{label}   ⌥{key}").into(), theme)).into())
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |ws, _, _, cx| {

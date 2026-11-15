@@ -25,6 +25,8 @@ pub fn menus() -> Vec<Menu> {
             items: vec![
                 MenuItem::action("About leon", About),
                 MenuItem::separator(),
+                MenuItem::action("Settings…", OpenSettings),
+                MenuItem::separator(),
                 MenuItem::action("Quit leon", Quit),
                 MenuItem::action("Quit and End All Sessions…", QuitAndEndAll),
             ],

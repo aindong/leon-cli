@@ -8,6 +8,7 @@ use gpui::{ScrollWheelEvent, TouchPhase};
 use leon_core::screen::{Lines, Row};
 use leon_core::search::{Kind, Link, Pos, Range};
 
+use super::calls::{Reply, Waiting};
 use super::*;
 use crate::scrollback::{self, Composed};
 
@@ -20,10 +21,6 @@ const MAX_CACHED: usize = 5000;
 pub(super) type PaintedMap = Rc<RefCell<HashMap<String, Painted>>>;
 /// Opens a link.
 pub(super) type Opener = Rc<dyn Fn(&str)>;
-/// A reply to a call made over a link, applied to the workspace on the next poll.
-pub(super) type Reply = Box<dyn FnOnce(&mut Workspace) + Send>;
-/// A call over a link waiting for the one of its kind that is out.
-type Waiting = Box<dyn FnOnce(&mut Workspace)>;
 
 /// The M11 state of the panes: scroll, selection, find, links.
 #[derive(Default)]
@@ -46,8 +43,8 @@ pub(super) struct TermUi {
     pub(super) wake: Option<Arc<dyn Fn() + Send + Sync>>,
     /// Over a link, the kinds of call with one out, and the newest call of each kind waiting for it
     /// (`term_call_latest`).
-    in_flight: HashSet<String>,
-    waiting: HashMap<String, Waiting>,
+    pub(super) in_flight: HashSet<String>,
+    pub(super) waiting: HashMap<String, Waiting>,
     /// Text a copy over a link built, for the poll to put on the clipboard, and how many copies
     /// started (a newer one drops an older one still fetching).
     pub(super) clip: Option<String>,
@@ -73,7 +70,7 @@ pub(super) struct PaneView {
     carry: f32,
     /// `scrolled` when the view left the bottom: the pill counts from there.
     left_at: usize,
-    cache: HashMap<usize, Row>,
+    pub(super) cache: HashMap<usize, Row>,
     /// What the cache and every number belong to: (lines, cols, alt screen).
     key: (usize, usize, bool),
     history: usize,
@@ -93,36 +90,6 @@ pub(super) struct Sel {
     pub(super) dragging: bool,
 }
 
-/// A call's reply on its way to the poll. One dropped unanswered (its link went away with the call
-/// still queued) answers "unreachable", so nothing waits for it for ever (`term_call_latest`).
-struct OnReply {
-    replies: Arc<Mutex<Vec<Reply>>>,
-    wake: Option<Arc<dyn Fn() + Send + Sync>>,
-    then: Option<ThenReply>,
-}
-
-type ThenReply = Box<dyn FnOnce(&mut Workspace, Result<Value, leon_core::ApiError>) + Send>;
-
-impl OnReply {
-    fn deliver(mut self, r: Result<Value, leon_core::ApiError>) {
-        let Some(then) = self.then.take() else { return };
-        self.replies.lock().unwrap_or_else(|e| e.into_inner()).push(Box::new(move |ws: &mut Workspace| then(ws, r)));
-        if let Some(wake) = &self.wake {
-            wake();
-        }
-    }
-}
-
-impl Drop for OnReply {
-    fn drop(&mut self) {
-        if self.then.is_some() {
-            let gone = leon_core::ApiError::new(503, "unreachable", "the link went away");
-            OnReply { replies: self.replies.clone(), wake: self.wake.take(), then: self.then.take() }
-                .deliver(Err(gone));
-        }
-    }
-}
-
 impl Workspace {
     /// The screen the server last pushed for `id` (empty before the first).
     pub(super) fn live(&self, id: &str) -> Arc<Frame> {
@@ -130,88 +97,8 @@ impl Workspace {
     }
 
     /// The session block `id` is in.
-    fn session_of(&self, id: &str) -> String {
+    pub(super) fn session_of(&self, id: &str) -> String {
         self.app.model().block(id).map(|(s, _)| s.id.clone()).unwrap_or_default()
-    }
-
-    /// Send an input event (mouse, wheel, paste) to block `id`; over a link it queues like a key.
-    pub(super) fn block_event(&self, id: &str, event: Value) {
-        let p = json!({ "session_id": self.session_of(id), "block_id": id, "event": event });
-        self.app.send("block.event", p);
-    }
-
-    /// Call a terminal method on block `id` and wait for the reply: This Mac's server only (a host's
-    /// goes through `term_call_then`).
-    pub(super) fn term_call(&self, id: &str, method: &str, args: Value) -> Result<Value, leon_core::ApiError> {
-        self.app.call("block.method", self.term_params(id, method, args))
-    }
-
-    fn term_params(&self, id: &str, method: &str, args: Value) -> Value {
-        let sid = self.session_of(id);
-        json!({ "session_id": sid, "block_id": id, "method": format!("dev.leon.terminal.{method}"), "args": args })
-    }
-
-    /// Call a terminal method on block `id`, then `then` with the reply: here at once; over a link
-    /// once the link's queue has run it (the next poll applies it), so a slow or hostile host never
-    /// holds the window.
-    pub(super) fn term_call_then(
-        &mut self,
-        id: &str,
-        method: &str,
-        args: Value,
-        then: impl FnOnce(&mut Self, Result<Value, leon_core::ApiError>) + Send + 'static,
-    ) {
-        if !self.app.is_link() {
-            let r = self.term_call(id, method, args);
-            return then(self, r);
-        }
-        let reply =
-            OnReply { replies: self.term.replies.clone(), wake: self.term.wake.clone(), then: Some(Box::new(then)) };
-        self.app.send_then("block.method", self.term_params(id, method, args), move |r| reply.deliver(r));
-    }
-
-    /// `term_call_then` with one call of kind `key` out at a time over a link: a newer one waits
-    /// for the reply (replacing any older one waiting), so a stalled link holds one call per kind,
-    /// not one per mouse move or key.
-    pub(super) fn term_call_latest(
-        &mut self,
-        key: &str,
-        id: &str,
-        method: &'static str,
-        args: Value,
-        then: impl FnOnce(&mut Self, Result<Value, leon_core::ApiError>) + Send + 'static,
-    ) {
-        if !self.app.is_link() {
-            return self.term_call_then(id, method, args, then);
-        }
-        if self.term.in_flight.contains(key) {
-            let (k, id) = (key.to_string(), id.to_string());
-            let next = move |ws: &mut Workspace| ws.term_call_latest(&k, &id, method, args, then);
-            self.term.waiting.insert(key.to_string(), Box::new(next));
-            return;
-        }
-        self.term.in_flight.insert(key.to_string());
-        let key = key.to_string();
-        self.term_call_then(id, method, args, move |ws, r| {
-            ws.term.in_flight.remove(&key);
-            then(ws, r);
-            if let Some(next) = ws.term.waiting.remove(&key) {
-                next(ws);
-            }
-        });
-    }
-
-    /// The poll's share: apply the replies that came over a link (true when any did), and forget
-    /// the scroll state of panes no machine has any more (closed, or their host went).
-    pub(super) fn poll_terms(&mut self) -> bool {
-        let replies = std::mem::take(&mut *self.term.replies.lock().unwrap_or_else(|e| e.into_inner()));
-        let replied = !replies.is_empty();
-        for r in replies {
-            r(self);
-        }
-        let hosts = &self.hosts;
-        self.term.panes.retain(|id, _| hosts.remotes().any(|(_, r)| r.model().block(id).is_some()));
-        replied
     }
 
     /// Before a pane is drawn: a new size or screen starts its numbering over (the cache,
@@ -249,6 +136,12 @@ impl Workspace {
         }
     }
 
+    /// History rows `from` on of pane `id`, in this app's colours (`Remote::lines`), waited for.
+    pub fn lines(&self, id: &str, from: usize, count: usize) -> Option<Lines> {
+        let got = self.app.lines(&self.session_of(id), id, from, count);
+        got.ok().and_then(|v| serde_json::from_value::<Lines>(v).ok())
+    }
+
     /// Fetch `count` history rows of pane `id` from `from` into its cache, one fetch per pane at a
     /// time (over a link the rows come on a later poll). A reply trimmed to its byte cap can end
     /// before `need`: then it asks from there, or that row never comes.
@@ -261,7 +154,10 @@ impl Workspace {
         }
         pv.fetching = Some(ticket);
         let block = id.to_string();
-        self.term_call_then(id, "lines", json!({ "from": from, "count": count }), move |ws, got| {
+        self.term_call_then(id, "lines", self.app.lines_args(from, count), move |ws, got| {
+            if let Err(e) = &got {
+                ws.app.lines_failed(e); // a server too old for the palette is asked without it next time
+            }
             // a pane renumbered meanwhile (a resize, a history clear) dropped this fetch
             let Some(pv) = ws.term.panes.get_mut(&block).filter(|p| p.fetching == Some(ticket)) else { return };
             pv.fetching = None;
@@ -383,7 +279,7 @@ impl Workspace {
     /// to the bottom.
     pub(super) fn render_jump(&self, id: &str, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let n = self.new_lines(id)?;
-        let t = &DARK;
+        let t = &self.theme;
         let block = id.to_string();
         let label = if n == 1 { "↓ 1 new line".to_string() } else { format!("↓ {n} new lines") };
         Some(

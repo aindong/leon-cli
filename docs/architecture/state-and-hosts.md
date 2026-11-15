@@ -194,6 +194,16 @@ Persistence, scrollback, resume, terminal reads, packaging, other machines, and 
   records each key's `file:line`, `leon_lua::rewrite` edits one literal in a `leon.set` call and
   proves the edit by loading it before renaming it over the file, and the server's
   `server.settings` and `settings_changed` carry names, not colours; M22b resolves the names.
+- **Themes and settings in the app (M22b).** The app asks `server.settings` whenever the keymap
+  generation moves (every reload moves it, and `settings_changed` only comes with one), drops a
+  reply asked for under an older generation, and resolves the theme names itself from the
+  `themes/` beside the config the server loaded; a name that no longer loads falls back to the
+  built-in theme for that appearance. Pane colours are worked out on the server, so each
+  connection sends its palette (`palette` on `block.watch` and `terminal.lines`: fg, bg, cursor,
+  ANSI 0-15) and its screens come resolved in it, remote hosts' too; a server older than M22b
+  refuses the field and its panes keep leon-dark's colours. The Settings window (⌘,) reads
+  init.lua itself and writes through `leon_lua::rewrite::write_setting`, then reloads the server,
+  so init.lua stays the one place settings live.
 - **Docs are tested.** `docs/cli.md` is checked against every `--help`; the `sh` blocks in the docs
   run against the real binary (a bad command line fails); `docs/lua.md`'s examples go through
   `leon config check` and `leon do -e`.

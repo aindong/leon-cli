@@ -252,8 +252,11 @@ impl Workspace {
                     None if tries == 0 => return eprintln!("leon: not copied: the host didn't send the rows"),
                     None => {
                         let block_id = id.to_string();
-                        let args = json!({ "from": line, "count": last + 1 - line });
+                        let args = self.app.lines_args(line, last + 1 - line);
                         return self.term_call_then(id, "lines", args, move |ws, reply| {
+                            if let Err(e) = &reply {
+                                ws.app.lines_failed(e);
+                            }
                             let rows = reply.ok().and_then(|v| serde_json::from_value::<Lines>(v).ok());
                             let rows = rows.map(|l| l.rows).unwrap_or_default();
                             let wanted = rows.into_iter().filter(|row| (line..=last).contains(&row.line));

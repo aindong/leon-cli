@@ -224,12 +224,18 @@ fn sidebar_rows_read_each_block_once(cx: &mut gpui::TestAppContext) {
     let remote = std::rc::Rc::new(connect(&f));
     cx.update(leon_app::view::init);
     let (ws, cx) = cx.add_window_view(move |window, cx| leon_app::view::Workspace::new(remote, window, cx));
-    let took = ws.read_with(cx, |ws, _| {
-        let t = Instant::now();
-        let (sessions, _) = ws.indicators();
-        assert_eq!(sessions.len(), 8);
-        t.elapsed()
-    });
+    // the best of three: a per-window filter takes far longer every time, a busy machine now and then
+    let took = (0..3)
+        .map(|_| {
+            ws.read_with(cx, |ws, _| {
+                let t = Instant::now();
+                let (sessions, _) = ws.indicators();
+                assert_eq!(sessions.len(), 8);
+                t.elapsed()
+            })
+        })
+        .min()
+        .unwrap();
     assert!(took < Duration::from_millis(50), "8 sessions of 1024 tabs and 1024 blocks took {took:?}");
 }
 
