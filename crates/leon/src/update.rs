@@ -11,9 +11,13 @@ const AVAILABLE: i32 = 10;
 pub fn run(check: bool) -> Result<(), Fail> {
     let cfg = Config::load();
     let target = Target::running().map_err(Fail::Other)?;
-    let release = match leon_update::check(&cfg).map_err(Fail::Other)? {
+    let release = match leon_update::check(&cfg, &target).map_err(Fail::Other)? {
         Check::NoRelease => {
             println!("no release yet: leon {} is the newest there is.", cfg.version());
+            // a mistyped mirror answers 404 too
+            if let Some(address) = cfg.mirror_address() {
+                println!("(LEON_RELEASE_URL is set: {address} is not there.)");
+            }
             return Ok(());
         }
         Check::UpToDate { latest } => {

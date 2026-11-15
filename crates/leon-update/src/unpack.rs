@@ -49,21 +49,18 @@ fn destination(name: &str, into: &Path, path: &Path) -> Result<PathBuf, String> 
     Ok(dest)
 }
 
-/// A symlink at `path` pointing at `target` stays inside the archive's directory: followed part
-/// by part from where the link is, it never steps above the top.
+/// A symlink at `path` may only point down from where it is: no `..` and no absolute target.
+/// Then it cannot leave the archive's directory, whatever other links it passes through. (Counting
+/// `..` against the path's depth is not enough: a link to `.` makes a deeper path that is not
+/// deeper on disk.)
 fn link_stays_inside(name: &str, path: &Path, target: &Path) -> Result<(), String> {
-    let leaves =
-        || refusing(name, path, &format!("its link to \"{}\" leaves the archive's directory", target.display()));
-    let mut depth = path.components().filter(|c| matches!(c, Component::Normal(_))).count().saturating_sub(1);
-    for part in target.components() {
-        match part {
-            Component::Normal(_) => depth += 1,
-            Component::CurDir => {}
-            Component::ParentDir => depth = depth.checked_sub(1).ok_or_else(leaves)?,
-            Component::RootDir | Component::Prefix(_) => return Err(leaves()),
+    match target.components().all(|part| matches!(part, Component::Normal(_) | Component::CurDir)) {
+        true => Ok(()),
+        false => {
+            let why = format!("its link to \"{}\" could leave the archive's directory", target.display());
+            Err(refusing(name, path, &why))
         }
     }
-    Ok(())
 }
 
 /// Count `more` bytes against the cap.
@@ -113,7 +110,7 @@ fn tar_gz(file: std::fs::File, name: &str, into: &Path) -> Result<(), String> {
 fn zip(file: std::fs::File, name: &str, into: &Path) -> Result<(), String> {
     use std::io::Read;
     use std::os::unix::ffi::OsStrExt;
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
     let io = |e: std::io::Error| format!("{name}: can't unpack it: {e}");
     let odd = |e: zip::result::ZipError| format!("{name}: can't unpack it: {e}");
     let mut archive = zip::ZipArchive::new(file).map_err(odd)?;
@@ -129,12 +126,15 @@ fn zip(file: std::fs::File, name: &str, into: &Path) -> Result<(), String> {
             continue;
         }
         let dest = destination(name, into, &path)?;
+        // 0755 whatever the umask: under a loose one the installed app's directories would be
+        // writable by the user's whole group
+        let mkdir = |dir: &Path| std::fs::DirBuilder::new().recursive(true).mode(0o755).create(dir).map_err(io);
         if entry.is_dir() {
-            std::fs::create_dir_all(&dest).map_err(io)?;
+            mkdir(&dest)?;
             continue;
         }
         if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent).map_err(io)?;
+            mkdir(parent)?;
         }
         if entry.is_symlink() {
             let mut target = String::new();
@@ -158,14 +158,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn links_are_followed_part_by_part() {
+    fn links_only_point_down() {
         let ok = |path: &str, target: &str| link_stays_inside("a", Path::new(path), Path::new(target)).is_ok();
         assert!(ok("top/link", "README.md"));
-        assert!(ok("top/a/link", "../b/c"));
-        assert!(ok("top/link", ".."), "the top itself is inside");
-        assert!(!ok("link", ".."), "one step above the top");
-        assert!(!ok("top/link", "../.."));
-        assert!(!ok("top/link", "a/../../.."), "down one and up three");
+        assert!(ok("top/link", "./docs/cli.md"));
+        assert!(ok("Leon.app/Contents/Frameworks/X.framework/X", "Versions/Current/X"));
+        // any step up is refused, even one that would stay inside: with a link to "." in the
+        // archive, "a/../.." is two steps up on disk and only one by counting
+        for up in ["..", "../b/c", "a/../..", "../..", "a/../../.."] {
+            assert!(!ok("top/a/link", up), "{up}");
+        }
         assert!(!ok("top/link", "/etc/passwd"));
     }
 

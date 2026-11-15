@@ -26,21 +26,19 @@ impl Staging {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
             // no install it cannot finish: say so now, before anything is downloaded
-            Err(e) => {
-                return Err(format!(
-                    "can't write to {}: {e}. leon never asks for a password: run this as a user who can write there, or update by hand from {RELEASES}",
-                    parent.display()
-                ))
-            }
+            Err(e) => return Err(cant_write(parent, &e.to_string())),
         }
         let in_the_way =
             || format!("{} is in the way: it is not a staging directory leon made; move it away", dir.display());
         // O_NOFOLLOW: a symlink of that name is someone else's, and so is whatever it points at
-        let lock = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_DIRECTORY)
-            .open(&dir)
-            .map_err(|_| in_the_way())?;
+        let lock =
+            OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW | libc::O_DIRECTORY).open(&dir).map_err(
+                |e| match e.kind() {
+                    // an update that just finished removed it between our create and our open
+                    std::io::ErrorKind::NotFound => format!("{} went away; run the update again", dir.display()),
+                    _ => in_the_way(),
+                },
+            )?;
         let meta = lock.metadata().map_err(|_| in_the_way())?;
         // SAFETY: geteuid has no preconditions.
         if !meta.is_dir() || meta.uid() != unsafe { libc::geteuid() } {
@@ -48,7 +46,13 @@ impl Staging {
         }
         // SAFETY: the fd is open for the life of `lock`.
         if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-            return Err(format!("another update is running in {}; wait for it to finish", dir.display()));
+            let e = std::io::Error::last_os_error();
+            return Err(match e.kind() {
+                std::io::ErrorKind::WouldBlock => {
+                    format!("another update is running in {}; wait for it to finish", dir.display())
+                }
+                _ => format!("can't lock {}: {e}", dir.display()),
+            });
         }
         // the directory we locked is still the one at that path (an update that just finished
         // removes its own)
@@ -64,13 +68,26 @@ impl Staging {
     }
 }
 
-/// Remove everything in `dir`, following no symlink.
+/// The refusal for a place leon may not write: it never reaches for more rights.
+pub(crate) fn cant_write(path: &Path, why: &str) -> String {
+    format!(
+        "can't write to {}: {why}. leon never asks for a password: run this as a user who can write there, or update by hand from {RELEASES}",
+        path.display()
+    )
+}
+
+/// Remove everything in `dir`, following no symlink. A directory without write access for its
+/// owner (an old app's, an archive's) is opened up first, or it would block every later update.
 fn clear(dir: &Path) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
-        match entry.file_type()?.is_dir() {
-            true => std::fs::remove_dir_all(entry.path())?,
-            false => std::fs::remove_file(entry.path())?,
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))?;
+            clear(&path)?;
+            std::fs::remove_dir(&path)?;
+        } else {
+            std::fs::remove_file(&path)?;
         }
     }
     Ok(())
@@ -79,7 +96,7 @@ fn clear(dir: &Path) -> std::io::Result<()> {
 impl Drop for Staging {
     fn drop(&mut self) {
         // while the lock is still held; `lock` closes after this
-        let _ = std::fs::remove_dir_all(&self.dir);
+        let _ = clear(&self.dir).and_then(|()| std::fs::remove_dir(&self.dir));
         let _ = &self.lock;
     }
 }

@@ -19,7 +19,8 @@ fn release_leon() -> PathBuf {
     let mut cargo = Command::new(env!("CARGO"));
     cargo
         .current_dir(release_kit::repo())
-        .args(["build", "--locked", "--release", "-p", "leon", "--no-default-features", "--target-dir"])
+        // --offline: every crate was fetched to build this test
+        .args(["build", "--locked", "--offline", "--release", "-p", "leon", "--no-default-features", "--target-dir"])
         .arg(&target)
         // this test's own cargo settings are for the debug build around it
         .env_remove("CARGO_TARGET_DIR")
@@ -41,6 +42,8 @@ fn a_release_build_ignores_the_test_seam() {
     assert_eq!(o.code, 10, "a debug build takes the throwaway key: {}", o.text());
 
     // the same setup with the release binary in the install's place
+    // a new file, not new bytes in the old one: macOS remembers a file's signature by its inode
+    std::fs::remove_file(&leon.exe).unwrap();
     std::fs::copy(&release, &leon.exe).unwrap();
     let before = leon.state();
     for args in [&[][..], &["--check"]] {

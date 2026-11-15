@@ -11,7 +11,6 @@ use serde_json::json;
 use update_kit::{name_for, run, Install, Release, Server, VERSION};
 
 const FORMULA: &str = "brew upgrade aindong/leon/leon";
-const CASK: &str = "brew upgrade --cask aindong/leon/leon";
 
 fn assert_deferred(leon: &Install, rel: &Release, srv: &Server, env: &[(&str, &str)], says: &str) {
     let before = leon.state();
@@ -60,8 +59,11 @@ impl Arg0 for std::process::Command {
     }
 }
 
+// macOS only: a cask is an app, and a release has an app only for macOS
+#[cfg(target_os = "macos")]
 #[test]
 fn a_homebrew_cask_install_prints_brew_upgrade_cask() {
+    const CASK: &str = "brew upgrade --cask aindong/leon/leon";
     // Homebrew moves a cask's app to /Applications and leaves a symlink in its Caskroom
     let rel = Release::new();
     let leon = Install::app();
@@ -72,6 +74,8 @@ fn a_homebrew_cask_install_prints_brew_upgrade_cask() {
     assert_deferred(&leon, &rel, &rel.serve(), &[("HOMEBREW_PREFIX", prefix.to_str().unwrap())], CASK);
     // and an app that stayed inside the Caskroom
     let leon = Install::at("brew/Caskroom/leon/0.0.1/Leon.app/Contents/MacOS/leon");
+    let plist = leon.home.join("brew/Caskroom/leon/0.0.1/Leon.app/Contents/Info.plist");
+    std::fs::write(plist, update_kit::INFO_PLIST).unwrap();
     assert_deferred(&leon, &rel, &rel.serve(), &[], CASK);
 }
 

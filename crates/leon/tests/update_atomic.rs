@@ -57,8 +57,7 @@ fn kill_at(rel: &Release, kind: &str, step: &str) -> (Server, Install, (u64, u64
     let before = leon.state();
     let mut seam = Install::seam(rel);
     seam["pause"] = step.into();
-    let child = spawn_until_paused(leon.cmd_with(&srv.url(), &seam).arg("self-update"), step);
-    kill(child);
+    drop(spawn_until_paused(leon.cmd_with(&srv.url(), &seam).arg("self-update"), step)); // killed
     assert!(!leon.leftovers().is_empty(), "the kill at {step} left the staging directory");
     (srv, leon, before)
 }

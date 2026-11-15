@@ -45,7 +45,10 @@ fn a_certificate_nobody_vouches_for_is_refused() {
         Tls(server.spawn().unwrap())
     };
     let mut first = serve(format!("127.0.0.1:{port}"));
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // it listens, or (LibreSSL) it has exited over the address
+    until("openssl to listen or give up", 30, || {
+        TcpStream::connect(("127.0.0.1", port)).is_ok() || first.0.try_wait().unwrap().is_some()
+    });
     let _server = match first.0.try_wait().unwrap() {
         Some(_) => serve(port.to_string()),
         None => first,

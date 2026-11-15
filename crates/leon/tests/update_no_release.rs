@@ -18,6 +18,8 @@ fn a_404_for_the_manifest_reads_as_no_release_yet() {
         let o = leon.update(&rel, &srv, args);
         assert_eq!(o.code, 0, "the same status as up to date: {}", o.text());
         assert!(o.out.contains("no release yet"), "it says so: {}", o.text());
+        // with LEON_RELEASE_URL set, a 404 may be a mistyped address: the line names it
+        assert!(o.out.contains(&format!("{}/latest.json", srv.url())), "and where it asked: {}", o.text());
         assert_eq!(o.err, "", "and nothing else");
     }
     leon.assert_unchanged(before, "no release yet");

@@ -90,7 +90,8 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   copies the app to `~/Applications` and links `~/.local/bin/leon` to the binary inside it. Both
   replace only what they made: an app with our bundle id, or a link whose text is our binary's path.
 - **Updates.** `leon self-update` is the `leon-update` crate: `Config::load` (the one place the
-  environment is read: `LEON_RELEASE_URL`, and in debug builds only the tests' `LEON_TEST_UPDATE`),
+  environment is read for what leon trusts and where it looks: `LEON_RELEASE_URL`, and in debug
+  builds only the tests' `LEON_TEST_UPDATE`; `HOMEBREW_PREFIX` only helps find a cask install),
   `check` (manifest, signature, rules) and `install` (download, sha256 and signature, unpack,
   rename). It shells out to `curl` behind `fetch.rs`, pins the keys in
   `crates/leon/release-keys.pub` with `include_str!`, stages in `.leon-update` beside the install

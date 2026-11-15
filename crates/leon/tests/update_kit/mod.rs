@@ -12,7 +12,7 @@ mod server;
 use std::io::Read;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
@@ -97,9 +97,13 @@ pub fn app_zip(app: &Path) -> Vec<u8> {
 pub fn fake_app(dir: &Path, leon: &[u8]) -> PathBuf {
     let app = dir.join("Leon.app");
     write_exe(&app.join("Contents/MacOS/leon"), leon);
-    std::fs::write(app.join("Contents/Info.plist"), "<plist version=\"1.0\"><dict/></plist>\n").unwrap();
+    std::fs::write(app.join("Contents/Info.plist"), INFO_PLIST).unwrap();
     app
 }
+
+/// An Info.plist with the one thing the updater reads: the bundle id that marks an app as leon's.
+pub const INFO_PLIST: &str =
+    "<plist version=\"1.0\"><dict>\n<key>CFBundleIdentifier</key><string>dev.leon.app</string>\n</dict></plist>\n";
 
 /// The test binary with different bytes, so a release's leon can be told from the installed one:
 /// on macOS signed again under another identifier, on Linux with bytes after the ELF image.
@@ -246,9 +250,32 @@ impl Out {
     }
 }
 
+/// Spawn `cmd`, trying again while its program is "busy": on Linux a file just written cannot be
+/// run while a child another test thread forked still holds it open, for the moment before its exec.
+pub fn spawn(cmd: &mut Command) -> Child {
+    for _ in 0..200 {
+        match cmd.spawn() {
+            Err(e) if e.raw_os_error() == Some(26) => std::thread::sleep(Duration::from_millis(10)),
+            child => return child.unwrap_or_else(|e| panic!("{cmd:?}: {e}")),
+        }
+    }
+    panic!("{cmd:?}: its program stayed busy");
+}
+
+/// A paused update. Dropping it kills it (SIGKILL: no handler runs, nothing is tidied), so a
+/// failed assertion never leaves one holding the staging lock.
+pub struct Paused(Child);
+
+impl Drop for Paused {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 /// Run `cmd` to its end, or panic after `secs` (macOS has no `timeout`).
 pub fn run(cmd: &mut Command, secs: u64) -> Out {
-    let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut child = spawn(cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()));
     let (mut o, mut e) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
     let out = std::thread::spawn(move || {
         let mut s = String::new();
@@ -277,10 +304,10 @@ pub fn run(cmd: &mut Command, secs: u64) -> Out {
 
 /// Start `cmd` (an update whose seam pauses it at `step`) and return once it has paused there.
 /// Panics, killing it, if a minute passes or it ends without pausing.
-pub fn spawn_until_paused(cmd: &mut Command, step: &str) -> std::process::Child {
+pub fn spawn_until_paused(cmd: &mut Command, step: &str) -> Paused {
     use std::io::BufRead;
-    let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped()).spawn().unwrap();
-    let stderr = child.stderr.take().unwrap();
+    let mut child = Paused(spawn(cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped())));
+    let stderr = child.0.stderr.take().unwrap();
     let (tx, lines) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         for line in std::io::BufReader::new(stderr).lines().map_while(Result::ok) {
@@ -294,17 +321,13 @@ pub fn spawn_until_paused(cmd: &mut Command, step: &str) -> std::process::Child 
         match lines.recv_timeout(Duration::from_secs(60)) {
             Ok(line) if line.contains(&format!("paused at {step}")) => return child,
             Ok(line) => seen.push(line),
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                panic!("the update never paused at {step}; it said: {seen:?}");
-            }
+            Err(_) => panic!("the update never paused at {step}; it said: {seen:?}"),
         }
     }
 }
 
 /// Poll until `pred` holds, or panic after `secs`.
-pub fn until(what: &str, secs: u64, pred: impl Fn() -> bool) {
+pub fn until(what: &str, secs: u64, mut pred: impl FnMut() -> bool) {
     let end = Instant::now() + Duration::from_secs(secs);
     while !pred() {
         assert!(Instant::now() < end, "timed out waiting for {what}");
@@ -343,7 +366,7 @@ impl Install {
         // one line each: the arguments hold a newline
         let record =
             "echo \"$*\" | tr '\\n' ' ' >> \"$(dirname \"$0\")/curl-ran\"; echo >> \"$(dirname \"$0\")/curl-ran\"";
-        write_exe(&fake.join("curl"), format!("#!/bin/sh\n{record}\nexec {} \"$@\"\n", curl.trim()).as_bytes());
+        write_exe(&fake.join("curl"), format!("#!/bin/sh\n{record}\nexec '{}' \"$@\"\n", curl.trim()).as_bytes());
         Install { tmp, home, root: exe.clone(), exe }
     }
 
@@ -356,7 +379,7 @@ impl Install {
     pub fn app() -> Install {
         let mut i = Install::at("Applications/Leon.app/Contents/MacOS/leon");
         i.root = i.home.join("Applications/Leon.app");
-        std::fs::write(i.root.join("Contents/Info.plist"), "<plist version=\"1.0\"><dict/></plist>\n").unwrap();
+        std::fs::write(i.root.join("Contents/Info.plist"), INFO_PLIST).unwrap();
         i
     }
 

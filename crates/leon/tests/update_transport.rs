@@ -74,6 +74,30 @@ fn a_redirect_that_stays_on_loopback_is_followed() {
 }
 
 #[test]
+fn an_address_is_not_a_pattern_for_many() {
+    // curl takes {a,b,c} and [1-9] in an address as many addresses unless told not to
+    let rel = Release::new();
+    let (srv, leon) = (rel.serve(), Install::cli());
+    for pattern in ["{a,b,c}", "[1-9]"] {
+        let url = format!("{}/{pattern}", srv.url());
+        let before = srv.asked().len();
+        let o = run(leon.cmd_with(&url, &Install::seam(&rel)).args(["self-update", "--check"]), 60);
+        assert_eq!(o.code, 0, "nothing is at that address, which reads as no release: {}", o.text());
+        assert_eq!(srv.asked().len() - before, 1, "one request, to the address as written: {:?}", srv.asked());
+    }
+}
+
+#[test]
+fn a_redirect_longer_than_a_pipe_holds_does_not_hang() {
+    // curl reports where a redirect goes on stderr; leon must be reading it while it reads the body
+    let rel = Release::new();
+    let (srv, leon) = (rel.serve(), Install::cli());
+    srv.set("latest.json", Mode::Redirect(format!("{}/{}", srv.url(), "a".repeat(80_000))));
+    let o = run(leon.cmd(&rel, &srv).args(["self-update", "--check"]), 20);
+    assert!(o.code == 0 || o.code == 1, "it ends, with no release or an error: {}", o.text());
+}
+
+#[test]
 fn redirects_that_never_end_are_given_up_on() {
     let rel = Release::new();
     let (srv, leon) = (rel.serve(), Install::cli());

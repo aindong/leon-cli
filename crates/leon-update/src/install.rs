@@ -14,6 +14,9 @@ use crate::manifest::{self, File};
 use crate::stage::Staging;
 use crate::{Config, Release};
 
+/// What marks an app bundle as leon's (scripts/bundle.sh writes it).
+const BUNDLE_ID: &[u8] = b"<string>dev.leon.app</string>";
+
 /// Who updates this leon.
 #[derive(Debug, PartialEq)]
 pub enum Method {
@@ -48,6 +51,15 @@ impl Target {
             Some(app) => ("app", app.to_path_buf()),
             None => ("cli", exe.clone()),
         };
+        // only leon's own app is leon's to swap out, as scripts/install.sh and bundle.sh hold:
+        // inside another app, a new Leon.app in its place would delete that app
+        let plist = std::fs::read(root.join("Contents/Info.plist")).unwrap_or_default();
+        if kind == "app" && !plist.windows(BUNDLE_ID.len()).any(|w| w == BUNDLE_ID) {
+            return Err(format!(
+                "this leon is inside {}, which is not a Leon.app (bundle id dev.leon.app); leon will not replace another app",
+                root.display()
+            ));
+        }
         Ok(Target { kind, root, exe })
     }
 
@@ -146,10 +158,19 @@ pub fn tidy(target: &Target) {
 /// Replace `target` with `release`. `say` gets a line for each slow step. Only for
 /// `Method::Own`: the caller sends Homebrew's and dpkg's installs to their own tools.
 pub fn install(cfg: &Config, release: &Release, target: &Target, say: &mut dyn FnMut(String)) -> Result<(), String> {
+    // whoever calls: a package manager's install is never replaced
+    if target.method() != Method::Own {
+        return Err(format!("{} belongs to a package manager, which updates it", target.root.display()));
+    }
     let (os, arch) = platform();
     let file = release.file(target.kind, os, arch)?;
     let keys = manifest::keys(&cfg.keys)?;
     let parent = target.root.parent().ok_or("the running leon has no directory")?;
+    // an app trades places with the new one, which needs write access to the app itself: one
+    // that root or another user installed is refused here, before anything is downloaded
+    if target.kind == "app" && !writable(&target.root) {
+        return Err(crate::stage::cant_write(&target.root, "Permission denied"));
+    }
     let staging = Staging::take(parent)?;
 
     let (archive, url) = (staging.dir.join("download"), cfg.url_of(file));
@@ -186,8 +207,13 @@ pub fn install(cfg: &Config, release: &Release, target: &Target, say: &mut dyn F
     // the new leon runs on this machine and is the version the manifest promised
     let ran =
         Command::new(&leon).arg("--version").env("LEON_AUTOSTART", "0").stdin(std::process::Stdio::null()).output();
-    let says = ran.map(|o| String::from_utf8_lossy(&o.stdout).lines().next().unwrap_or_default().to_string());
-    let says = says.unwrap_or_default();
+    // its first line: the version, or why it could not start
+    let first = |bytes: &[u8]| String::from_utf8_lossy(bytes).lines().next().unwrap_or_default().to_string();
+    let says = match ran {
+        Ok(o) if o.stdout.is_empty() => first(&o.stderr),
+        Ok(o) => first(&o.stdout),
+        Err(e) => e.to_string(),
+    };
     if says.split_whitespace().nth(1) != Some(&release.version) {
         return Err(format!(
             "the leon in {} does not run as leon {} here (it said \"{says}\")",
@@ -195,6 +221,11 @@ pub fn install(cfg: &Config, release: &Release, target: &Target, say: &mut dyn F
         ));
     }
 
+    // on disk before it replaces the old one: a crash just after the rename must not leave a
+    // leon that is half written
+    std::fs::File::open(&leon)
+        .and_then(|f| f.sync_all())
+        .map_err(|e| format!("can't write {}: {e}", leon.display()))?;
     cfg.step("installing");
     swap(&new, &target.root)
         .map_err(|e| format!("can't replace {}: {e}; nothing was changed", target.root.display()))?;
@@ -213,10 +244,12 @@ fn verify(keys: &[minisign_verify::PublicKey], file: &File, archive: &Path) -> R
     let (mut sha, mut size, mut chunk) = (Sha256::new(), 0u64, vec![0u8; 1 << 20]);
     let mut input = std::fs::File::open(archive).map_err(io)?;
     loop {
-        let n = input.read(&mut chunk).map_err(io)?;
-        if n == 0 {
-            break;
-        }
+        let n = match input.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(io(e)),
+        };
         size += n as u64;
         sha.update(&chunk[..n]);
         verifiers.iter_mut().for_each(|v| v.update(&chunk[..n]));
@@ -230,6 +263,14 @@ fn verify(keys: &[minisign_verify::PublicKey], file: &File, archive: &Path) -> R
         true => Ok(()),
         false => Err(manifest::not_verified(&file.name, ours)),
     }
+}
+
+/// This user may write to `path` (access(2), so ACLs and read-only mounts count).
+fn writable(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else { return false };
+    // SAFETY: a NUL-terminated path that lives past the call.
+    unsafe { libc::access(path.as_ptr(), libc::W_OK) == 0 }
 }
 
 /// Put `new` where `old` is, in one system call.

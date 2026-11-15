@@ -33,6 +33,23 @@ fn a_destination_that_is_not_writable_is_named_and_nothing_is_downloaded() {
     assert_eq!(o.code, 10, "--check still reports the release: {}", o.text());
 }
 
+// macOS only: the app kind is a zip of Leon.app, and only macOS has it
+#[cfg(target_os = "macos")]
+#[test]
+fn an_app_that_is_not_this_users_to_move_is_refused_before_the_download() {
+    // as an app that root or another admin put in the group-writable /Applications
+    let rel = Release::new();
+    let (srv, leon) = (rel.serve(), Install::app());
+    let before = leon.state();
+    set_mode(&leon.root, 0o555);
+    let o = leon.update(&rel, &srv, &[]);
+    set_mode(&leon.root, 0o755);
+    assert_refused(&o, &["can't write", leon.root.to_str().unwrap()]);
+    leon.assert_unchanged(before, "an app that cannot be moved");
+    assert!(!srv.asked().contains(&name("app")), "nothing was downloaded: {:?}", srv.asked());
+    assert!(!leon.sudo_ran(), "leon never runs sudo");
+}
+
 #[test]
 fn a_writable_destination_never_needs_sudo_either() {
     let rel = Release::new();

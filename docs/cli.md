@@ -381,8 +381,8 @@ leon -H devbox attach
 This machine's working directory means nothing on the host: with `-H`, `run`, `split` and `new`
 start in the host's home unless `--cwd` gives an absolute path there (a relative one exits 2).
 
-`leon server run|start|proxy`, `leon app`, `leon config check`, `leon skill` and `leon hosts` are
-about this machine and refuse `-H`; `leon server status` and `leon server stop` work over it.
+`leon server run|start|proxy`, `leon app`, `leon config check`, `leon skill`, `leon hosts` and
+`leon self-update` are about this machine and refuse `-H`; `leon server status` and `leon server stop` work over it.
 
 ### `leon hosts`
 

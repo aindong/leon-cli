@@ -131,8 +131,11 @@ impl Release {
             .ok_or_else(|| format!("release {} has no {kind} file for {os} {arch}", self.version))
     }
 
-    /// This machine's system is new enough for the release's files.
-    pub(crate) fn runs_here(&self) -> Result<(), String> {
+    /// This machine's system is new enough for the release's files, and the release has a file
+    /// for this kind of install.
+    pub(crate) fn runs_here(&self, kind: &str) -> Result<(), String> {
+        let (os, arch) = crate::install::platform();
+        self.file(kind, os, arch)?;
         let (system, floor) = match (std::env::consts::OS, &self.min_os) {
             ("macos", MinOs { macos: Some(floor), .. }) => ("macOS", floor),
             ("linux", MinOs { linux_glibc: Some(floor), .. }) => ("glibc", floor),

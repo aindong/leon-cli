@@ -88,7 +88,7 @@ fn a_symlink_that_leaves_the_directory_is_refused() {
     for target in ["../../..", "/", "a/../../../.."] {
         let leon = Install::cli();
         let archive = tarball(|tar, top| entry(tar, &format!("{top}/out"), EntryType::Symlink, target, b""));
-        assert_archive_refused(&leon, archive, "leaves the archive's directory", "out");
+        assert_archive_refused(&leon, archive, "could leave the archive's directory", "out");
     }
 }
 
@@ -198,6 +198,38 @@ fn a_good_archive_keeps_the_executable_bit_and_links_that_stay_inside() {
     assert_eq!(leon.version(), format!("leon {VERSION} (fake)"));
 }
 
+// macOS only: only the app kind (a zip of Leon.app) installs directories it made
+#[cfg(target_os = "macos")]
+#[test]
+fn an_installed_app_is_not_writable_by_others_under_a_loose_umask() {
+    let rel = Release::new();
+    let (srv, leon) = (rel.serve(), Install::app());
+    let inner = leon.cmd(&rel, &srv);
+    let mut sh = std::process::Command::new("/bin/sh");
+    sh.args(["-c", "umask 002 && exec \"$0\" self-update"]).arg(inner.get_program());
+    for (k, v) in inner.get_envs() {
+        match v {
+            Some(v) => sh.env(k, v),
+            None => sh.env_remove(k),
+        };
+    }
+    let o = update_kit::run(&mut sh, 60);
+    assert_eq!(o.code, 0, "{}", o.text());
+    assert_eq!(leon.version(), format!("leon {VERSION} (fake)"), "the app was replaced");
+    let mut dirs = vec![leon.root.clone()];
+    while let Some(dir) = dirs.pop() {
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let mode = e.metadata().unwrap().permissions().mode();
+            assert_eq!(mode & 0o022, 0, "{} is writable by others: {mode:o}", e.path().display());
+            if e.file_type().unwrap().is_dir() {
+                dirs.push(e.path());
+            }
+        }
+        let mode = std::fs::metadata(&dir).unwrap().permissions().mode();
+        assert_eq!(mode & 0o022, 0, "{} is writable by others: {mode:o}", dir.display());
+    }
+}
+
 // macOS only: the app kind is a zip, and only macOS has it
 #[cfg(target_os = "macos")]
 #[test]
@@ -223,7 +255,7 @@ fn a_zip_with_a_bad_entry_is_refused() {
             zip.start_file("Leon.app/../../../zip-dotdot-evil", exe).unwrap();
             zip.write_all(b"planted").unwrap();
         }),
-        ("leaves the archive's directory", "zip-out", &|zip, _| {
+        ("could leave the archive's directory", "zip-out", &|zip, _| {
             zip.add_symlink("Leon.app/zip-out", "../../..", exe).unwrap();
         }),
         ("written through a link", "zip-through-evil", &|zip, _| {

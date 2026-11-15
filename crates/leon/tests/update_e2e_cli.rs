@@ -28,7 +28,7 @@ fn a_cli_install_updates_itself_to_the_served_release() {
     assert!(o.out.contains(&format!("leon {VERSION}")) && o.out.contains(leon.exe.to_str().unwrap()), "{}", o.text());
     assert!(o.out.contains("leon server stop"), "it says what a running server needs: {}", o.text());
 
-    assert_ne!(leon.state(), before, "the file was replaced, not written in place");
+    assert_ne!(leon.state().0, before.0, "a new inode: the file was replaced, not written in place");
     assert_eq!(sha256(&std::fs::read(&leon.exe).unwrap()), new_sum, "the installed leon is the release's");
     assert!(leon.leftovers().is_empty(), "no staging directory is left: {:?}", leon.leftovers());
     let version = leon.version();

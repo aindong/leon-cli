@@ -42,8 +42,10 @@ pub struct Config {
 }
 
 impl Config {
-    /// The one place the environment is read. `LEON_RELEASE_URL` moves where releases come from,
-    /// which is safe only because every check below still runs against the built-in keys.
+    /// The one place the environment is read for what leon trusts and where it looks.
+    /// `LEON_RELEASE_URL` moves where releases come from, which is safe only because every check
+    /// below still runs against the built-in keys. (`HOMEBREW_PREFIX`, read in `install`, can
+    /// only make leon leave an install to Homebrew.)
     pub fn load() -> Config {
         let mirror = std::env::var("LEON_RELEASE_URL").ok().map(|m| m.trim_end_matches('/').to_string());
         let mirror = mirror.filter(|m| !m.is_empty());
@@ -90,6 +92,11 @@ impl Config {
         &self.version
     }
 
+    /// The manifest's address when `LEON_RELEASE_URL` moved it; None for the release server.
+    pub fn mirror_address(&self) -> Option<&str> {
+        self.mirror.as_ref().map(|_| self.address.as_str())
+    }
+
     /// Where a release file is fetched from: the mirror when one is set, else the manifest's url.
     pub(crate) fn url_of(&self, file: &manifest::File) -> String {
         match &self.mirror {
@@ -121,9 +128,9 @@ pub enum Check {
     Available(Release),
 }
 
-/// Fetch the manifest and its signature, verify them, and say whether the release is newer.
-/// Errors are one line each, ready to show.
-pub fn check(cfg: &Config) -> Result<Check, String> {
+/// Fetch the manifest and its signature, verify them, and say whether the release is newer and
+/// `target` can take it. Errors are one line each, ready to show.
+pub fn check(cfg: &Config, target: &Target) -> Result<Check, String> {
     let keys = manifest::keys(&cfg.keys)?;
     let (status, bytes) = fetch::get(cfg, &cfg.address, MANIFEST_LIMIT, "latest.json")?;
     match status {
@@ -143,9 +150,12 @@ pub fn check(cfg: &Config) -> Result<Check, String> {
     let release = manifest::read(&bytes)?;
     let running = semver::Version::parse(&cfg.version)
         .map_err(|e| format!("this leon's own version, {}, is not a version: {e}", cfg.version))?;
-    if release.semver.cmp_precedence(&running) != std::cmp::Ordering::Greater {
+    // a pre-release is for a leon that is one: nothing can move a released leon onto a release
+    // candidate, however validly it is signed
+    let for_testers = !release.semver.pre.is_empty() && running.pre.is_empty();
+    if for_testers || release.semver.cmp_precedence(&running) != std::cmp::Ordering::Greater {
         return Ok(Check::UpToDate { latest: release.version });
     }
-    release.runs_here()?;
+    release.runs_here(target.kind)?;
     Ok(Check::Available(release))
 }

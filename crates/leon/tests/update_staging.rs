@@ -16,7 +16,7 @@ fn a_second_update_of_the_same_install_is_turned_away() {
     let before = leon.state();
     let mut seam = Install::seam(&rel);
     seam["pause"] = "unpacked".into();
-    let mut first = spawn_until_paused(leon.cmd_with(&srv.url(), &seam).arg("self-update"), "unpacked");
+    let first = spawn_until_paused(leon.cmd_with(&srv.url(), &seam).arg("self-update"), "unpacked");
 
     let staging = leon.exe.parent().unwrap().join(".leon-update");
     assert_eq!(leon.leftovers(), std::slice::from_ref(&staging), "one staging directory, beside the install");
@@ -31,9 +31,8 @@ fn a_second_update_of_the_same_install_is_turned_away() {
     assert_eq!(still, held, "the first update's files were not touched");
     assert_eq!(leon.state(), before, "and nothing was installed");
 
-    first.kill().unwrap();
-    first.wait().unwrap();
-    // the lock went with the process: the next update takes the directory over
+    drop(first); // killed
+                 // the lock went with the process: the next update takes the directory over
     let o = leon.update(&rel, &srv, &[]);
     assert_eq!(o.code, 0, "{}", o.text());
     assert_eq!(leon.version(), format!("leon {VERSION} (fake)"));

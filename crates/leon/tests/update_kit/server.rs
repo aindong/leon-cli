@@ -12,7 +12,7 @@ use std::time::Duration;
 /// How the server answers for one file instead of serving it.
 #[derive(Clone)]
 pub enum Mode {
-    /// This status and an empty body.
+    /// This status, with an error page for a body.
     Status(u16),
     /// 200 with these bytes instead of the file's.
     Bytes(Vec<u8>),
@@ -116,7 +116,10 @@ fn serve(
     };
     match (mode, file) {
         (Some(Mode::Status(code)), _) => {
-            let _ = stream.write_all(head_for(&format!("{code} Told To"), Some(0)).as_bytes());
+            // with an error page, as real servers send: longer than a signature may be
+            let page = "<p>told to answer this</p>\n".repeat(400);
+            let _ = stream.write_all(head_for(&format!("{code} Told To"), Some(page.len())).as_bytes());
+            let _ = stream.write_all(page.as_bytes());
         }
         (Some(Mode::Redirect(to)), _) => {
             let _ = stream.write_all(

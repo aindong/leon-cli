@@ -56,6 +56,16 @@ fn a_pre_release_that_sorts_lower_is_not_taken() {
 }
 
 #[test]
+fn a_released_leon_is_never_offered_a_pre_release() {
+    // newer by semver order, and correctly signed: still only for a leon that is a pre-release
+    let rel = release("99.0.0-rc.1");
+    let (srv, leon) = (rel.serve(), Install::cli());
+    assert_not_taken(&leon, &rel, &srv, "0.1.0");
+    let o = update_as(&leon, &rel, &srv, "99.0.0-rc.0", &["--check"]);
+    assert_eq!(o.code, 10, "a pre-release leon follows the pre-releases: {}", o.text());
+}
+
+#[test]
 fn parts_are_compared_as_numbers() {
     let rel = release("0.10.0");
     let (srv, leon) = (rel.serve(), Install::cli());
