@@ -40,6 +40,9 @@ pub use link::LinkState;
 const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long a `Remote::spawn` call may take: the server's limit on a Lua action, and some.
 const SPAWN_TIMEOUT: Duration = Duration::from_secs(leon_server::lua::ACTION_LIMIT.as_secs() + 5);
+/// How long a watch line may take to write over a link: the window's thread writes it, so a
+/// stalled link fails it instead, and the re-attach that follows watches the set again.
+const WATCH_WRITE: Duration = Duration::from_millis(100);
 /// How long the first call over a link waits.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 /// One session as the app shows it.

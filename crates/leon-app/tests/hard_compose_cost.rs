@@ -24,3 +24,12 @@ fn compose_with_many_background_rects_is_one_pass() {
     assert!(c.frame.backgrounds.iter().all(|b| b.line >= 10), "rects move down with their rows");
     assert!(took < Duration::from_millis(200), "compose took {took:?}");
 }
+
+#[test]
+fn a_huge_scrolled_count_from_a_host_does_not_overflow() {
+    let view = View { scrolled: usize::MAX, history: usize::MAX, ..View::default() };
+    let backgrounds = vec![BgRect { line: 1, col: 0, len: 1, color: 7 }];
+    let live = Frame { lines: 2, cols: 4, rows: vec![Vec::new(); 2], backgrounds, view, ..Frame::default() };
+    let c = scrollback::compose(&live, Some(0), &HashMap::new());
+    assert!(c.frame.backgrounds.is_empty(), "a screen rect far below the view isn't drawn");
+}

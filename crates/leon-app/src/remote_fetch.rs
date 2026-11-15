@@ -80,8 +80,7 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
             .map(|w| Window {
                 id: text(&w["window_id"]).unwrap_or_default(),
                 label: text(&w["label"]),
-                // a ratio outside (0, 1) gives rects that aren't finite
-                layout: serde_json::from_value(w["layout"].clone()).ok().filter(ratios_ok),
+                layout: serde_json::from_value(w["layout"].clone()).ok().filter(layout_ok),
                 focus: text(&w["focused_block_id"]),
                 zoomed: text(&w["zoomed_block_id"]),
             })
@@ -126,6 +125,16 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
         out.push(session);
     }
     Ok(out)
+}
+
+/// Whether a server's layout is one to draw: each block in it once, at most `MAX_LISTED` of them
+/// (each frame lays out every leaf, per pane shown), and every ratio in (0, 1) (others give rects
+/// that aren't finite).
+fn layout_ok(n: &Node) -> bool {
+    let leaves = n.leaves();
+    let once =
+        leaves.len() <= MAX_LISTED && leaves.iter().collect::<std::collections::HashSet<_>>().len() == leaves.len();
+    once && ratios_ok(n)
 }
 
 /// Whether every split in `n` has a ratio a server should send (`check_ratio`).

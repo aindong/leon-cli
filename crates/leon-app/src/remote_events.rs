@@ -80,6 +80,7 @@ pub(super) fn attach(
     let snapshot = c.call("session.attach_all", p).map_err(|e| io::Error::other(e.message))?;
     c.r.get_ref().set_read_timeout(None)?;
     let write = c.r.get_ref().try_clone()?;
+    write.set_write_timeout(Some(if resumable { WATCH_WRITE } else { CALL_TIMEOUT }))?;
     Ok((c.r, write, snapshot))
 }
 

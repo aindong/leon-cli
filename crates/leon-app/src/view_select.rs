@@ -17,6 +17,31 @@ use crate::scrollback;
 /// How many times a copy over a link asks the host for rows it doesn't hold (each reply is capped).
 const COPY_FETCHES: u32 = 64;
 
+/// A copy over a link on its way: its range, whether it is a block, and which copy it is.
+#[derive(Clone, Copy)]
+struct Copying {
+    range: Range,
+    block: bool,
+    seq: u64,
+}
+
+/// What selection `s` covers, worked out without the server: from anchor to head in reading order
+/// (a line selection takes whole lines; a word one, until the server widens it, the cells dragged).
+fn local_range(s: &Sel, cols: usize) -> Range {
+    let (lo, hi) = (s.anchor.min(s.head), s.anchor.max(s.head));
+    match s.kind {
+        Kind::Line => {
+            Range { start: Pos { line: lo.line, col: 0 }, end: Pos { line: hi.line, col: cols.saturating_sub(1) } }
+        }
+        _ => Range { start: lo, end: hi },
+    }
+}
+
+/// Whether `got` only widens `here` on the same lines (a word's ends past the cells dragged).
+fn widens(here: Range, got: Range) -> bool {
+    got.start.line == here.start.line && got.end.line == here.end.line && got.start <= here.start && got.end >= here.end
+}
+
 fn button(b: MouseButton) -> Option<Button> {
     match b {
         MouseButton::Left => Some(Button::Left),
@@ -57,8 +82,11 @@ impl Workspace {
                 .hovered
                 .clone()
                 .filter(|(b, l)| b == id && pos.is_some_and(|p| (l.start..=l.end).contains(&p)));
-            let link =
-                hovered.map(|(_, l)| l).or_else(|| self.link_at(id, ev.position).filter(|_| !self.app.is_link()));
+            let link = match hovered {
+                Some((_, l)) => Some(l),
+                None if self.app.is_link() => None,
+                None => self.link_at(id, ev.position),
+            };
             if let Some(link) = link {
                 // a host's uri opens without asking only when it is the text drawn there
                 let checked =
@@ -153,18 +181,34 @@ impl Workspace {
         self.ask_range(id);
     }
 
-    /// Have the server's range for pane `id`'s selection put on it (over a link on a later poll,
-    /// and only while the selection is still the one asked about).
+    /// Have the server's range for pane `id`'s selection put on it. Over a link the range is
+    /// worked out here at once (a copy right after a motion has it), and a word selection takes
+    /// the host's wider answer on a later poll only on the lines the anchor and head are on.
     pub(super) fn ask_range(&mut self, id: &str) {
-        let Some(s) = self.term.panes.get(id).and_then(|p| p.selection.as_ref()) else { return };
+        let cols = self.live(id).cols;
+        let link = self.app.is_link();
+        let Some(s) = self.term.panes.get_mut(id).and_then(|p| p.selection.as_mut()) else { return };
         let asked = (s.kind, s.anchor, s.head);
+        let here = local_range(s, cols);
+        if link {
+            s.range = Some(here);
+            if s.kind != Kind::Word {
+                return;
+            }
+        }
         let args = json!({ "kind": s.kind, "anchor": s.anchor, "head": s.head, "text": false });
         let block = id.to_string();
         self.term_call_latest(&format!("selection {id}"), id, "selection", args, move |ws, got| {
             let got = got.ok().and_then(|v| serde_json::from_value::<Selected>(v).ok());
+            let got = got.map(|g| Range { start: g.start, end: g.end });
+            // a host's range only widens a word on the lines asked about
+            let got = match link {
+                false => got,
+                true => Some(got.filter(|g| widens(here, *g)).unwrap_or(here)),
+            };
             let still = |s: &&mut Sel| (s.kind, s.anchor, s.head) == asked;
             if let Some(s) = ws.term.panes.get_mut(&block).and_then(|p| p.selection.as_mut()).filter(still) {
-                s.range = got.map(|g| Range { start: g.start, end: g.end });
+                s.range = got;
             }
         });
     }
@@ -175,8 +219,10 @@ impl Workspace {
         let Some(s) = self.term.panes.get(id).and_then(|p| p.selection.as_ref()).filter(|s| s.range.is_some()) else {
             return;
         };
+        self.term.copies += 1; // a newer copy drops what an older one still fetches
         if let (true, Some(r)) = (self.app.is_link(), s.range) {
-            self.copy_drawn(id, r, s.kind == Kind::Block, HashMap::new(), COPY_FETCHES);
+            let job = Copying { range: r, block: s.kind == Kind::Block, seq: self.term.copies };
+            self.copy_drawn(id, job, HashMap::new(), COPY_FETCHES);
         } else {
             let args = json!({ "kind": s.kind, "anchor": s.anchor, "head": s.head, "text": true });
             let got = self.term_call(id, "selection", args).ok();
@@ -187,52 +233,52 @@ impl Workspace {
         }
     }
 
-    /// Over a link: the text of range `r`'s cells (`block`: the same columns on each line), from
-    /// the screen, the history cache and `got`, onto `term.clip`. Rows not held yet are fetched
-    /// from the host (up to `tries` more times), and this runs again with them once they come.
-    fn copy_drawn(&mut self, id: &str, r: Range, block: bool, mut got: HashMap<usize, Vec<Span>>, tries: u32) {
-        let live = self.live(id);
+    /// Over a link: the text of a copy's cells, from the screen, the history cache and `got`,
+    /// onto `term.clip`. Rows not held yet are fetched from the host (up to `tries` more times),
+    /// and this runs again with them once they come, unless a newer copy started meanwhile.
+    fn copy_drawn(&mut self, id: &str, job: Copying, mut got: HashMap<usize, Vec<Span>>, tries: u32) {
+        if job.seq != self.term.copies {
+            return;
+        }
+        let (r, live) = (job.range, self.live(id));
+        // never past the screen's last row, whatever a range says
+        let last = r.end.line.min(live.view.scrolled + live.lines.saturating_sub(1));
         let mut lines = Vec::new();
-        for line in r.start.line..=r.end.line {
+        for line in r.start.line..=last {
             let spans = match line.checked_sub(live.view.scrolled) {
                 Some(l) => live.rows.get(l).cloned().unwrap_or_default(),
-                None => match got.remove(&line).or_else(|| self.cached_row(id, line).map(|r| r.spans.clone())) {
+                None => match got.get(&line).cloned().or_else(|| self.cached_row(id, line).map(|r| r.spans.clone())) {
                     Some(spans) => spans,
                     None if tries == 0 => return eprintln!("leon: not copied: the host didn't send the rows"),
                     None => {
                         let block_id = id.to_string();
-                        let args = json!({ "from": line, "count": r.end.line + 1 - line });
+                        let args = json!({ "from": line, "count": last + 1 - line });
                         return self.term_call_then(id, "lines", args, move |ws, reply| {
                             let rows = reply.ok().and_then(|v| serde_json::from_value::<Lines>(v).ok());
                             let rows = rows.map(|l| l.rows).unwrap_or_default();
-                            // rows already held, and only rows in the history
-                            got.extend(
-                                rows.into_iter().filter(|row| row.line >= line).map(|row| (row.line, row.spans)),
-                            );
-                            ws.copy_drawn(&block_id, r, block, got, tries - 1);
+                            let wanted = rows.into_iter().filter(|row| (line..=last).contains(&row.line));
+                            got.extend(wanted.map(|row| (row.line, row.spans)));
+                            ws.copy_drawn(&block_id, job, got, tries - 1);
                         });
                     }
                 },
             };
-            if let Some((from, to)) = scrollback::covered(r.start, r.end, block, line, live.cols) {
+            if let Some((from, to)) = scrollback::covered(r.start, r.end, job.block, line, live.cols) {
                 lines.push(scrollback::text_of(&spans, live.cols, from, to));
             }
         }
         self.term.clip = Some(lines.join("\n"));
     }
 
-    /// The text drawn over `start..=end` of pane `id` (a link wrapped over rows is joined); None
-    /// when a row of it isn't held.
+    /// The text the view shows over `start..=end` of pane `id` (a link wrapped over rows is
+    /// joined); None when a row of it is off the view.
     fn drawn_over(&self, id: &str, start: Pos, end: Pos) -> Option<String> {
-        let live = self.live(id);
+        let c = self.composed(id);
         let mut text = String::new();
         for line in start.line..=end.line {
-            let row = match line.checked_sub(live.view.scrolled) {
-                Some(l) => live.rows.get(l)?.clone(),
-                None => self.cached_row(id, line)?.spans.clone(),
-            };
-            let (from, to) = scrollback::covered(start, end, false, line, live.cols)?;
-            text.push_str(&scrollback::text_of(&row, live.cols, from, to));
+            let row = c.frame.rows.get(line.checked_sub(c.top)?)?;
+            let (from, to) = scrollback::covered(start, end, false, line, c.frame.cols)?;
+            text.push_str(&scrollback::text_of(row, c.frame.cols, from, to));
         }
         Some(text)
     }
@@ -265,12 +311,19 @@ impl Workspace {
         let pos = match (cmd, &self.term.hovered, pos) {
             (true, Some(h), _) if on(h) => return,
             (true, _, Some(pos)) => pos,
-            _ => return self.set_hovered(None, cx),
+            _ => {
+                self.term.hover_at = None;
+                return self.set_hovered(None, cx);
+            }
         };
-        let block = id.to_string();
+        let asked = (id.to_string(), pos);
+        self.term.hover_at = Some(asked.clone());
         self.term_call_latest("link_at", id, "link_at", json!(pos), move |ws, got| {
-            let link = got.ok().and_then(|v| serde_json::from_value::<Option<Link>>(v).ok()).flatten();
-            ws.term.hovered = link.map(|l| (block, l));
+            // a late answer counts only while cmd is held over the cell it was asked for
+            if ws.term.hover_at.as_ref() == Some(&asked) {
+                let link = got.ok().and_then(|v| serde_json::from_value::<Option<Link>>(v).ok()).flatten();
+                ws.term.hovered = link.map(|l| (asked.0, l));
+            }
         });
         cx.notify();
     }

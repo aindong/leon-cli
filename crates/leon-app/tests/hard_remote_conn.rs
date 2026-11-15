@@ -162,7 +162,7 @@ fn a_server_that_stops_reading_cant_hold_a_write() {
     let f = serve(one_session());
     let remote = connect(&f);
     remote.call("test.deafen", json!({})).unwrap();
-    let big = "x".repeat(16 << 20);
+    let big = "x".repeat(64 << 20);
     let took = call_fails_in(remote, "test.big", json!({ "data": big }));
     assert!(took < Duration::from_secs(7), "a write to a deaf server took {took:?}");
 }
@@ -173,8 +173,8 @@ fn a_spawned_call_to_a_silent_server_ends() {
     let remote = connect(&f);
     let (tx, rx) = mpsc::channel();
     remote.spawn("test.silent", json!({}), move |r| drop(tx.send(r)));
-    // the Lua limit (30 s), and a little
-    let r = rx.recv_timeout(Duration::from_secs(40)).expect("the spawned call ended");
+    // the Lua limit (30 s), and 7 s
+    let r = rx.recv_timeout(Duration::from_secs(37)).expect("the spawned call ended");
     assert_eq!(r.expect_err("no reply came").code, "unreachable");
 }
 
@@ -231,4 +231,21 @@ fn sidebar_rows_read_each_block_once(cx: &mut gpui::TestAppContext) {
         t.elapsed()
     });
     assert!(took < Duration::from_millis(50), "8 sessions of 1024 tabs and 1024 blocks took {took:?}");
+}
+
+#[test]
+fn a_layouts_leaves_are_capped_and_each_named_once() {
+    fn tree(depth: u32, n: &mut u32) -> Value {
+        if depth == 0 {
+            return json!({ "block": { "block_id": "block:0" } });
+        }
+        *n += 1;
+        let id = format!("split:{n}");
+        let (before, after) = (tree(depth - 1, n), tree(depth - 1, n));
+        json!({ "split": { "split_id": id, "direction": "horizontal", "ratio": 0.5, "before": before, "after": after } })
+    }
+    // 32768 leaves, all the one block: the render lays out each, per pane shown
+    let f = serve(Listing { layout: Some(tree(15, &mut 0)), ..one_session() });
+    let leaves = connect(&f).model().sessions[0].windows[0].layout.as_ref().map_or(0, |t| t.leaves().len());
+    assert_eq!(leaves, 0, "a layout naming a block twice is dropped");
 }

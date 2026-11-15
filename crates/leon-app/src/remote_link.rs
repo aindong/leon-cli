@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use leon_core::ApiError;
 use serde_json::{json, Value};
 
-use super::{attach, lock, unreachable, Conn, Remote, Shared, CALL_TIMEOUT};
+use super::{attach, lock, unreachable, Conn, Remote, Shared, CALL_TIMEOUT, WATCH_WRITE};
 
 /// A quiet event connection is pinged after this long, and ended when as long again brings nothing.
 const PING_AFTER: Duration = Duration::from_secs(5);
@@ -136,6 +136,7 @@ fn resume_or_attach(shared: &Shared) -> Option<(BufReader<UnixStream>, UnixStrea
             Ok(_) => {
                 c.r.get_ref().set_read_timeout(None).ok()?;
                 let write = c.r.get_ref().try_clone().ok()?;
+                write.set_write_timeout(Some(WATCH_WRITE)).ok()?;
                 shared.resumes.fetch_add(1, Ordering::SeqCst);
                 return Some((c.r, write));
             }

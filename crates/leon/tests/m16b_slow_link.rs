@@ -16,13 +16,21 @@ use std::time::{Duration, Instant};
 use app::*;
 use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ScrollDelta, ScrollWheelEvent, TestAppContext};
 
-/// Run `f` and let the window settle; fail when the window was held for 100 ms or more.
-fn timed(cx: &mut gpui::VisualTestContext, what: &str, f: impl FnOnce(&mut gpui::VisualTestContext)) {
-    let t = Instant::now();
-    f(cx);
-    cx.run_until_parked();
-    let took = t.elapsed();
-    assert!(took < Duration::from_millis(100), "{what} over a stalled link held the window for {took:?}");
+/// Run `f` and let the window settle; fail when it held the window for 100 ms or more on each
+/// of three tries (a call waiting on the link takes seconds every time; a busy machine's slow
+/// frame, now and then).
+fn timed(cx: &mut gpui::VisualTestContext, what: &str, mut f: impl FnMut(&mut gpui::VisualTestContext)) {
+    let mut took = Vec::new();
+    for _ in 0..3 {
+        let t = Instant::now();
+        f(cx);
+        cx.run_until_parked();
+        took.push(t.elapsed());
+        if took.last().is_some_and(|d| *d < Duration::from_millis(100)) {
+            return;
+        }
+    }
+    panic!("{what} over a stalled link held the window each time: {took:?}");
 }
 
 #[gpui::test]

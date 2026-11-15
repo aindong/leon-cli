@@ -42,8 +42,8 @@ pub fn compose(live: &Frame, top: Option<usize>, cache: &HashMap<usize, Row>) ->
     let mut missing = Vec::new();
     // the screen's rects in one pass: screen line l shows on row l + scrolled - top
     let shift = scrolled - top;
-    let shown = live.backgrounds.iter().filter(|b| b.line + shift < live.lines);
-    f.backgrounds.extend(shown.map(|b| BgRect { line: b.line + shift, ..*b }));
+    let shown = live.backgrounds.iter().filter_map(|b| Some((b.line.checked_add(shift)?, b)));
+    f.backgrounds.extend(shown.filter(|(l, _)| *l < live.lines).map(|(line, b)| BgRect { line, ..*b }));
     for r in 0..live.lines {
         let abs = top + r;
         if abs >= scrolled {

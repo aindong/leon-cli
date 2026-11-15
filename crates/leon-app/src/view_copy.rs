@@ -216,7 +216,7 @@ impl Workspace {
         }
         let args = json!({ "query": query, "regex": false, "case_sensitive": false });
         let block = id.to_string();
-        self.term_call_latest("find", id, "find", args, move |ws, got| {
+        self.term_call_latest("copy find", id, "find", args, move |ws, got| {
             let Ok(found) = got else { return };
             let matches: Vec<Range> = serde_json::from_value(found["matches"].clone()).unwrap_or_default();
             // still in copy mode on that pane, and still where the search started

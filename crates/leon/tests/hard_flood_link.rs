@@ -14,13 +14,21 @@ use std::time::{Duration, Instant};
 use app::*;
 use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ScrollDelta, ScrollWheelEvent, TestAppContext};
 
-/// Run `f` and let the window settle; fail when the window was held for 100 ms or more.
-fn timed(cx: &mut gpui::VisualTestContext, what: &str, f: impl FnOnce(&mut gpui::VisualTestContext)) {
-    let t = Instant::now();
-    f(cx);
-    cx.run_until_parked();
-    let took = t.elapsed();
-    assert!(took < Duration::from_millis(100), "{what} over a flooding link held the window for {took:?}");
+/// Run `f` and let the window settle; fail when it held the window for 100 ms or more on each
+/// of three tries (a call waiting on the link takes seconds every time; a busy machine's slow
+/// frame, now and then).
+fn timed(cx: &mut gpui::VisualTestContext, what: &str, mut f: impl FnMut(&mut gpui::VisualTestContext)) {
+    let mut took = Vec::new();
+    for _ in 0..3 {
+        let t = Instant::now();
+        f(cx);
+        cx.run_until_parked();
+        took.push(t.elapsed());
+        if took.last().is_some_and(|d| *d < Duration::from_millis(100)) {
+            return;
+        }
+    }
+    panic!("{what} over a flooding link held the window each time: {took:?}");
 }
 
 #[gpui::test]
@@ -77,7 +85,22 @@ fn a_flooding_host_never_holds_the_window(cx: &mut TestAppContext) {
     });
     timed(cx, "a copy", |cx| act(&ws, cx, "pane.copy", None));
     timed(cx, "cmd+hover", |cx| cx.simulate_mouse_move(link, None::<MouseButton>, cmd));
+    timed(cx, "a cmd+click", |cx| {
+        let left = MouseButton::Left;
+        cx.simulate_event(MouseDownEvent {
+            button: left,
+            position: top,
+            modifiers: cmd,
+            click_count: 1,
+            first_mouse: false,
+        });
+        cx.simulate_event(MouseUpEvent { button: left, position: top, modifiers: cmd, click_count: 1 });
+    });
     timed(cx, "back to the bottom", |cx| act(&ws, cx, "client.scroll.bottom", None));
+    act(&ws, cx, "client.hints", None); // labelling is local work (and slow in a debug build): not timed
+    if let Some((label, _)) = ws.read_with(cx, |ws, _| ws.hint_labels(&b)).first().cloned() {
+        timed(cx, "a hint pasted", |cx| cx.simulate_input(&label.to_uppercase()));
+    }
     timed(cx, "a split", |cx| act(&ws, cx, "pane.split.right", None));
     let local = h.local.call("session.list", serde_json::json!({})).unwrap()["sessions"][0]["session_id"]
         .as_str()

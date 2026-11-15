@@ -28,6 +28,41 @@ fn click(cx: &mut VisualTestContext, at: gpui::Point<gpui::Pixels>, modifiers: M
     cx.run_until_parked();
 }
 
+/// Drag over the row that shows `text`, again until the selection holds (the pane's first resize
+/// renumbers its rows, which drops a selection).
+fn drag_over(ws: &gpui::Entity<leon_app::view::Workspace>, cx: &mut VisualTestContext, b: &str, text: &str) {
+    let none = Modifiers::none();
+    let selected = shows(cx, |cx| {
+        let row = row_of(ws, cx, b, text);
+        let at = |cx: &mut VisualTestContext, col| ws.read_with(cx, |ws, _| ws.cell_position(b, row, col)).unwrap();
+        let (from, to) = (at(cx, 0), at(cx, text.chars().count() - 1));
+        let left = MouseButton::Left;
+        cx.simulate_event(MouseDownEvent {
+            button: left,
+            position: from,
+            modifiers: none,
+            click_count: 1,
+            first_mouse: false,
+        });
+        cx.simulate_mouse_move(to, left, none);
+        cx.simulate_event(MouseUpEvent { button: left, position: to, modifiers: none, click_count: 1 });
+        cx.run_until_parked();
+        ws.read_with(cx, |ws, _| ws.highlighted_text(b)).as_deref() == Some(text)
+    });
+    assert!(selected, "the drag selected {text:?}: {:?}", ws.read_with(cx, |ws, _| ws.highlighted_text(b)));
+}
+
+/// The clipboard once it no longer holds `was` (10 s at most).
+fn clipboard_after(cx: &mut VisualTestContext, was: &str) -> Option<String> {
+    let now = |cx: &mut VisualTestContext| cx.read_from_clipboard().and_then(|c| c.text());
+    let end = Instant::now() + Duration::from_secs(10);
+    while now(cx).as_deref() == Some(was) && Instant::now() < end {
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    now(cx)
+}
+
 #[gpui::test]
 fn a_hosts_replies_dont_decide_what_is_copied_or_opened(cx: &mut TestAppContext) {
     let h = hosted();
@@ -89,6 +124,24 @@ fn a_hosts_replies_dont_decide_what_is_copied_or_opened(cx: &mut TestAppContext)
     cx.run_until_parked();
     assert!(opened.borrow().is_empty());
     std::fs::remove_file(h.r.fake.path().join("lie")).unwrap();
+
+    // a selection reply that widens the range can't make a copy take more than was dragged over
+    for widen in [r#""start":{"col":0,"line":0}"#, r#""end":{"col":0,"line":3000000}"#] {
+        std::fs::write(h.r.fake.path().join("widen"), widen).unwrap();
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string("before".into()));
+        drag_over(&ws, cx, &b, "copy me please");
+        act(&ws, cx, "pane.copy", None);
+        assert_eq!(clipboard_after(cx, "before").as_deref(), Some("copy me please"), "with {widen}");
+    }
+    std::fs::remove_file(h.r.fake.path().join("widen")).unwrap();
+
+    // copy mode's keys typed back to back: the yank copies what `v` and the motions selected
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string("before".into()));
+    act(&ws, cx, "client.copy_mode", None);
+    let up = row_of(&ws, cx, &b, "ready-remote") + 1 - row_of(&ws, cx, &b, "copy me please");
+    let keys = format!("{} 0 v {} y", vec!["k"; up].join(" "), vec!["l"; 13].join(" "));
+    cx.simulate_keystrokes(&keys);
+    assert_eq!(clipboard_after(cx, "before").as_deref(), Some("copy me please"), "copy mode's yank");
 
     // the host goes: the rows its pane held go with it
     let held = shows(cx, |cx| {

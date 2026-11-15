@@ -48,8 +48,12 @@ pub(super) struct TermUi {
     /// (`term_call_latest`).
     in_flight: HashSet<String>,
     waiting: HashMap<String, Waiting>,
-    /// Text a copy over a link built, for the poll to put on the clipboard.
+    /// Text a copy over a link built, for the poll to put on the clipboard, and how many copies
+    /// started (a newer one drops an older one still fetching).
     pub(super) clip: Option<String>,
+    pub(super) copies: u64,
+    /// Over a link, the cell cmd+hover last asked about (a late answer for another is dropped).
+    pub(super) hover_at: Option<(String, Pos)>,
     /// Numbers each history fetch, so a reply only fills the pane that asked.
     fetches: u64,
 }
@@ -87,6 +91,36 @@ pub(super) struct Sel {
     /// What the server made of it; None until the drag covers a cell.
     pub(super) range: Option<Range>,
     pub(super) dragging: bool,
+}
+
+/// A call's reply on its way to the poll. One dropped unanswered (its link went away with the call
+/// still queued) answers "unreachable", so nothing waits for it for ever (`term_call_latest`).
+struct OnReply {
+    replies: Arc<Mutex<Vec<Reply>>>,
+    wake: Option<Arc<dyn Fn() + Send + Sync>>,
+    then: Option<ThenReply>,
+}
+
+type ThenReply = Box<dyn FnOnce(&mut Workspace, Result<Value, leon_core::ApiError>) + Send>;
+
+impl OnReply {
+    fn deliver(mut self, r: Result<Value, leon_core::ApiError>) {
+        let Some(then) = self.then.take() else { return };
+        self.replies.lock().unwrap_or_else(|e| e.into_inner()).push(Box::new(move |ws: &mut Workspace| then(ws, r)));
+        if let Some(wake) = &self.wake {
+            wake();
+        }
+    }
+}
+
+impl Drop for OnReply {
+    fn drop(&mut self) {
+        if self.then.is_some() {
+            let gone = leon_core::ApiError::new(503, "unreachable", "the link went away");
+            OnReply { replies: self.replies.clone(), wake: self.wake.take(), then: self.then.take() }
+                .deliver(Err(gone));
+        }
+    }
 }
 
 impl Workspace {
@@ -131,13 +165,9 @@ impl Workspace {
             let r = self.term_call(id, method, args);
             return then(self, r);
         }
-        let (replies, wake) = (self.term.replies.clone(), self.term.wake.clone());
-        self.app.send_then("block.method", self.term_params(id, method, args), move |r| {
-            replies.lock().unwrap_or_else(|e| e.into_inner()).push(Box::new(move |ws: &mut Workspace| then(ws, r)));
-            if let Some(wake) = wake {
-                wake();
-            }
-        });
+        let reply =
+            OnReply { replies: self.term.replies.clone(), wake: self.term.wake.clone(), then: Some(Box::new(then)) };
+        self.app.send_then("block.method", self.term_params(id, method, args), move |r| reply.deliver(r));
     }
 
     /// `term_call_then` with one call of kind `key` out at a time over a link: a newer one waits
