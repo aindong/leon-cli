@@ -45,12 +45,15 @@ Every leon terminal has two variables:
 - `LEON_BLOCK`: this terminal's own ID, e.g. `block:91c0…`.
 
 leon commands default to them, so an agent's `leon run` opens a tab in *its own* session, beside
-the user's other work, without any flags. With neither variable set the agent isn't inside leon:
+the user's other work, without any flags. Its own session is the one that holds `LEON_BLOCK` now:
+a pane moved into another session (⌘↩ in the app's switcher) keeps the `LEON_SESSION` it started
+with, since a running program's environment can't change, so leon looks the block up and uses
+`LEON_SESSION` only when `LEON_BLOCK` isn't set or is gone. With neither variable set the agent isn't inside leon:
 it should run `leon ls` and ask which session to use.
 
 How an agent should read the user's words:
 
-- "here", "beside you", "in this session": its own `LEON_SESSION`.
+- "here", "beside you", "in this session": its own session, the one holding `LEON_BLOCK`.
 - "the tests pane", "session api": a name the user gives always wins over the defaults; pass it with
   `-b` or `-s`.
 - If a name matches more than one thing, leon lists them and exits 3: ask, don't guess.

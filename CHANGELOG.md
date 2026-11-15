@@ -28,6 +28,15 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### Joined panes, their events, long socket paths
+
+#### Fixed
+
+- A command run in a pane that joined another session acts on the session that holds its
+  `LEON_BLOCK` now, not the `LEON_SESSION` it started with: `leon run`, `leon split`, a short
+  `-b` name, `leon events`, scripts, and the agent hook's resume registration. `LEON_SESSION` is
+  the fallback when `LEON_BLOCK` isn't set or is gone.
+
 ### Loose ends after M12–M21 (API `1.4.0`)
 
 #### Changed

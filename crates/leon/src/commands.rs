@@ -358,8 +358,16 @@ pub(crate) fn resolve(c: &mut Client, kind: &str, query: &str, session_id: Optio
     Ok(r["id"].as_str().unwrap_or_default().to_string())
 }
 
-/// The session a command acts on: an explicit target, then `-s`, then `$LEON_SESSION`, then the
-/// only session if there is exactly one.
+/// The caller's own session: the one holding `$LEON_BLOCK` now, else `$LEON_SESSION`. A pane can
+/// join another session (`session.move_block`) while its program keeps the env it started with.
+pub(crate) fn own_session(c: &mut Client) -> Option<String> {
+    let var = |n| std::env::var(n).ok().filter(|s: &String| !s.is_empty());
+    let held = var("LEON_BLOCK").and_then(|b| c.call("target.resolve", json!({ "kind": "block", "query": b })).ok());
+    held.and_then(|r| r["session_id"].as_str().map(String::from)).or_else(|| var("LEON_SESSION"))
+}
+
+/// The session a command acts on: an explicit target, then `-s`, then your own (`own_session`),
+/// then the only session if there is exactly one.
 pub(crate) fn pick_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<String, Fail> {
     find_session(c, cli, explicit)?
         .ok_or_else(|| Fail::Api(ApiError::not_found("which session? pass -s or set LEON_SESSION")))
@@ -367,8 +375,11 @@ pub(crate) fn pick_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) ->
 
 /// `pick_session`, but None when nothing names a session and there isn't exactly one.
 pub(crate) fn find_session(c: &mut Client, cli: &Cli, explicit: Option<&str>) -> Result<Option<String>, Fail> {
-    let env = std::env::var("LEON_SESSION").ok().filter(|s| !s.is_empty());
-    if let Some(q) = explicit.or(cli.session.as_deref()).or(env.as_deref()) {
+    let own = match explicit.or(cli.session.as_deref()) {
+        Some(_) => None,
+        None => own_session(c),
+    };
+    if let Some(q) = explicit.or(cli.session.as_deref()).or(own.as_deref()) {
         return resolve(c, "session", q, None).map(Some);
     }
     let r = c.call("session.list", json!({}))?;
