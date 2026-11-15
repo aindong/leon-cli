@@ -30,7 +30,8 @@ fn cmd_enter_with_a_floating_pane_focused_joins_beside_a_tiled_one(cx: &mut Test
     let floating = fl["block_id"].as_str().unwrap().to_string();
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.target_block()) == Some(floating.clone())));
     let (_, moved) = other_tab(&s);
-    cx.run_until_parked();
+    // the switcher lists what the app's model has: wait for the new tab to reach it
+    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.pane_title(&moved).is_some())));
     cx.simulate_keystrokes("cmd-k");
     // the app hears of the new tab by an event, a moment after it was made
     let listed = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.switcher_rows());
@@ -50,7 +51,8 @@ fn a_pane_that_joins_a_zoomed_window_is_not_hidden(cx: &mut TestAppContext) {
     let a = ws.read_with(cx, |ws, _| ws.target_block()).unwrap();
     s.app.call("session.zoom_block", json!({ "session_id": here, "block_id": a, "zoom": true })).unwrap();
     let (_, moved) = other_tab(&s);
-    cx.run_until_parked();
+    // the switcher lists what the app's model has: wait for the new tab to reach it
+    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.pane_title(&moved).is_some())));
     cx.simulate_keystrokes("cmd-k");
     // the app hears of the new tab by an event, a moment after it was made
     let listed = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.switcher_rows());

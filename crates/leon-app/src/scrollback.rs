@@ -40,13 +40,14 @@ pub fn compose(live: &Frame, top: Option<usize>, cache: &HashMap<usize, Row>) ->
     let mut f = Frame { rows: vec![Vec::new(); live.lines], ..live.clone() };
     f.backgrounds.clear();
     let mut missing = Vec::new();
+    // the screen's rects in one pass: screen line l shows on row l + scrolled - top
+    let shift = scrolled - top;
+    let shown = live.backgrounds.iter().filter_map(|b| Some((b.line.checked_add(shift)?, b)));
+    f.backgrounds.extend(shown.filter(|(l, _)| *l < live.lines).map(|(line, b)| BgRect { line, ..*b }));
     for r in 0..live.lines {
         let abs = top + r;
         if abs >= scrolled {
-            let l = abs - scrolled;
-            f.rows[r] = live.rows.get(l).cloned().unwrap_or_default();
-            let bgs = live.backgrounds.iter().filter(|b| b.line == l);
-            f.backgrounds.extend(bgs.map(|b| BgRect { line: r, ..*b }));
+            f.rows[r] = live.rows.get(abs - scrolled).cloned().unwrap_or_default();
         } else if let Some(row) = cache.get(&abs) {
             f.rows[r] = row.spans.clone();
             let bgs = row.backgrounds.iter();
@@ -89,8 +90,9 @@ pub fn cells(spans: &[Span], cols: usize) -> Vec<char> {
                 }
             }
         } else if let Some(c) = s.text.chars().next() {
-            // a wide char, or a char with marks: its first char in its first cell
-            for i in 0..s.cells {
+            // a wide char, or a char with marks: its first char in its first cell (as far as the
+            // row goes: `cells` comes from the server unchecked)
+            for i in 0..s.cells.min(cols.saturating_sub(s.col)) {
                 if let Some(cell) = out.get_mut(s.col + i) {
                     *cell = if i == 0 { c } else { '\0' };
                 }

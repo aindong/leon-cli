@@ -48,6 +48,7 @@ actions!(
         PreviousTab,
         Paste,
         ToggleSidebar,
+        About,
         Quit,
         QuitAndEndAll,
         SplitRight,
@@ -293,6 +294,8 @@ impl Workspace {
         let woke = wake.clone();
         app.on_change(move || woke());
         crate::notify::on_click(wake.clone());
+        let mut term = scroll::TermUi::default();
+        term.wake = Some(wake.clone());
         let hosts = Hosts::new(app.clone(), hosts, wake);
         let poll = cx.spawn(async move |this, cx| loop {
             let timer = cx.background_executor().timer(POLL);
@@ -309,11 +312,15 @@ impl Workspace {
                     return;
                 }
                 ws.poll_hosts();
+                let replied = ws.poll_terms();
+                if let Some(text) = ws.term.clip.take() {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                }
                 ws.poll_attention(cx);
                 ws.stats.borrow_mut().report();
                 ws.refresh_keymap(cx);
                 let now = ws.signature();
-                if now != ws.seen || ws.sliding() {
+                if now != ws.seen || ws.sliding() || replied {
                     ws.seen = now;
                     cx.notify();
                 }
@@ -385,7 +392,7 @@ impl Workspace {
             settings_window: None,
             epoch: Instant::now(),
             seen_focus: None,
-            term: scroll::TermUi::default(),
+            term,
             floats: Default::default(),
             _poll: poll,
             _activation: activation,
@@ -441,6 +448,8 @@ impl Workspace {
 mod activity;
 #[path = "view_bars.rs"]
 mod bars;
+#[path = "view_calls.rs"]
+mod calls;
 #[path = "view_copy.rs"]
 mod copy;
 #[path = "view_find.rs"]
@@ -485,7 +494,7 @@ mod stats;
 #[path = "view_switch.rs"]
 mod switch;
 use bars::status_mark;
-pub use menus::menus;
+pub use menus::{about_text, menus, set_version};
 use paint::*;
 use panes_view::*;
 use stats::Stats;

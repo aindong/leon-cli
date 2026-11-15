@@ -55,11 +55,18 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   the screens (a watch set is per connection). A half-dead link (lost Wi-Fi, a stopped proxy)
   closes nothing, so a watchdog pings an event connection that has been quiet for 5 s and shuts it
   down when 5 s more bring no line: about 15 s to notice, not ssh's 45. Over a link the client's
-  calls that nobody waits for (keys, resizes, the focus event, pastes) and layout changes (`act_later`:
-  the call, the refetch, then a callback) run in order on one queue thread over the call
-  connection, so a slow or stalled link never holds the thread that asked; while the link is down
-  they fail at once. `leon attach` sends keys whole or not at all (`attach/typing.rs`): a write sent
-  into a stalled link may land long after, over the old ssh connection and behind anything sent on
+  calls that nobody waits for (keys, resizes, mouse and wheel reports, the focus event, pastes) and
+  layout changes (`act_later`: the call, the refetch, then a callback) run in order on one queue
+  thread over the call connection, so a slow, stalled or hostile link never holds the thread that
+  asked; while the link is down they fail at once. The app's calls whose reply it uses (history
+  rows, `find`, `link_at`, a word selection's ends) go through that queue too, one of each kind out
+  at a time, and the next poll applies the reply (a copy-mode motion into rows not fetched yet sees
+  them on its next try); other selections are worked out in the app. Every call has one deadline
+  for its write and its reply (5 s; a Lua call 35 s), which lines that aren't the reply don't
+  extend, and a watch line waits at most 100 ms. A copy from a host's pane is the text of the cells
+  the app drew over the range dragged, never the host's `selection` text, and a host's link opens
+  without asking only when its uri is the text on screen there. `leon attach` sends keys whole or
+  not at all (`attach/typing.rs`): a write sent into a stalled link may land long after, over the old ssh connection and behind anything sent on
   the new one, so after a second with no answer on the call connection keys wait (up to 4 KiB)
   behind a `server.version` probe and go in one write when it answers; a failed probe or write
   drops every key waiting, as does a key typed while the link reconnects, and the bar counts the

@@ -23,6 +23,8 @@ use leon_core::{ApiError, Window};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+#[path = "remote_conn.rs"]
+mod conn;
 #[path = "remote_events.rs"]
 mod events;
 #[path = "remote_fetch.rs"]
@@ -31,14 +33,21 @@ mod fetch_model;
 mod link;
 #[path = "remote_palette.rs"]
 mod palette;
+use conn::{left, Conn};
 use events::{attach, read_events};
 pub use fetch_model::decode_overlays;
 use fetch_model::{fetch, read_line};
 use link::Job;
 pub use link::LinkState;
 
-/// How long a UI call waits for its reply before giving up (the server answers in microseconds).
+/// How long a whole call (its write and its reply) may take before it gives up (the server answers
+/// in microseconds); lines that aren't the reply don't extend it.
 const CALL_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long a `Remote::spawn` call may take: the server's limit on a Lua action, and some.
+const SPAWN_TIMEOUT: Duration = Duration::from_secs(leon_server::lua::ACTION_LIMIT.as_secs() + 5);
+/// How long a watch line may take to write over a link: the window's thread writes it, so a
+/// stalled link fails it instead, and the re-attach that follows watches the set again.
+const WATCH_WRITE: Duration = Duration::from_millis(100);
 /// How long the first call over a link waits.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 /// One session as the app shows it.
@@ -140,43 +149,6 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 fn unreachable(e: impl std::fmt::Display) -> ApiError {
     ApiError::new(503, "unreachable", format!("the leon server can't be reached: {e}"))
-}
-
-/// One NDJSON connection used for request and reply only.
-struct Conn {
-    r: BufReader<UnixStream>,
-    id: u64,
-}
-
-impl Conn {
-    fn open(socket: &Path, timeout: Option<Duration>) -> io::Result<Conn> {
-        let s = UnixStream::connect(socket)?;
-        s.set_read_timeout(timeout)?;
-        Ok(Conn { r: BufReader::new(s), id: 0 })
-    }
-
-    fn call(&mut self, method: &str, params: Value) -> Result<Value, ApiError> {
-        self.id += 1;
-        let mut line = serde_json::to_vec(&json!({ "id": self.id, "method": method, "params": params })).expect("json");
-        line.push(b'\n');
-        self.r.get_mut().write_all(&line).map_err(unreachable)?;
-        loop {
-            let mut reply = String::new();
-            match read_line(&mut self.r, &mut reply) {
-                Ok(0) => return Err(unreachable("the connection closed")),
-                Err(e) => return Err(unreachable(e)),
-                Ok(_) => {}
-            }
-            let mut v: Value = serde_json::from_str(&reply).map_err(unreachable)?;
-            if v["id"] != self.id {
-                continue; // a late reply to a call that timed out
-            }
-            return match v.get_mut("error").filter(|e| !e.is_null()) {
-                Some(e) => Err(serde_json::from_value(e.take()).unwrap_or_else(unreachable)),
-                None => Ok(v["result"].take()),
-            };
-        }
-    }
 }
 
 /// What the reader thread and the UI share.
@@ -303,7 +275,7 @@ impl Remote {
         let first = if retry.is_some() { CONNECT_TIMEOUT } else { CALL_TIMEOUT };
         let mut calls = Conn::open(socket, Some(first)).map_err(|e| no_server(&e))?;
         calls.call("server.version", json!({})).map_err(|e| no_server(&e.message))?;
-        calls.r.get_ref().set_read_timeout(Some(CALL_TIMEOUT)).map_err(|e| no_server(&e))?;
+        calls.timeout = Some(CALL_TIMEOUT);
         let fetch = Conn::open(socket, Some(first)).map_err(|e| no_server(&e))?;
         let (r, events, snapshot) = attach(socket, retry.is_some(), first).map_err(|e| no_server(&e))?;
         let shared = Arc::new(Shared {
@@ -330,7 +302,7 @@ impl Remote {
         });
         shared.restart_stream(&snapshot);
         shared.refresh().map_err(|e| no_server(&e.message))?;
-        lock(&shared.fetch).r.get_ref().set_read_timeout(Some(CALL_TIMEOUT)).map_err(|e| no_server(&e))?;
+        lock(&shared.fetch).timeout = Some(CALL_TIMEOUT);
         let reader = shared.clone();
         std::thread::Builder::new()
             .name("leon-events".into())
@@ -376,7 +348,9 @@ impl Remote {
     pub fn spawn(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
         let (socket, method) = (self.shared.socket.clone(), method.to_string());
         std::thread::spawn(move || {
-            done(Conn::open(&socket, None).map_err(unreachable).and_then(|mut c| c.call(&method, params)))
+            done(
+                Conn::open(&socket, Some(SPAWN_TIMEOUT)).map_err(unreachable).and_then(|mut c| c.call(&method, params)),
+            )
         });
     }
 

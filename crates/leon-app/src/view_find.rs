@@ -87,29 +87,37 @@ impl Workspace {
         true
     }
 
-    /// Ask the server for the matches; the newest is current at first, else the one that was.
+    /// Ask the server for the matches; the newest is current at first, else the one that was (over
+    /// a link they come on a later poll, and only for the query still typed).
     pub(super) fn run_find(&mut self) {
         let Some(f) = self.term.find.as_ref() else { return };
-        let (id, was) = (f.block.clone(), f.current.and_then(|i| f.matches.get(i)).copied());
+        let id = f.block.clone();
+        let asked = (f.query.clone(), f.regex, f.case);
         let args = json!({ "query": f.query, "regex": f.regex, "case_sensitive": f.case });
         // read first: output arriving during the call brings another run
         let seen = self.app.model().screen_updates.get(&id).copied();
-        let got = self.term_call(&id, "find", args);
-        let Some(f) = self.term.find.as_mut() else { return };
-        (f.seen, f.ran) = (seen, Instant::now());
-        match got {
-            Ok(v) => {
-                f.matches = serde_json::from_value(v["matches"].clone()).unwrap_or_default();
-                f.truncated = v["truncated"] == true;
-                f.error = None;
+        if let Some(f) = self.term.find.as_mut() {
+            (f.seen, f.ran) = (seen, Instant::now());
+        }
+        let block = id.clone();
+        self.term_call_latest("find", &id, "find", args, move |ws, got| {
+            let same = |f: &&mut find::Find| f.block == block && (f.query.clone(), f.regex, f.case) == asked;
+            let Some(f) = ws.term.find.as_mut().filter(same) else { return };
+            let was = f.current.and_then(|i| f.matches.get(i)).copied();
+            match got {
+                Ok(v) => {
+                    f.matches = serde_json::from_value(v["matches"].clone()).unwrap_or_default();
+                    f.truncated = v["truncated"] == true;
+                    f.error = None;
+                }
+                Err(e) => (f.matches, f.truncated, f.error) = (Vec::new(), false, Some(e.message)),
             }
-            Err(e) => (f.matches, f.truncated, f.error) = (Vec::new(), false, Some(e.message)),
-        }
-        let kept = was.and_then(|w| f.matches.iter().position(|m| *m == w));
-        f.current = kept.or(f.matches.len().checked_sub(1));
-        if kept.is_none() {
-            self.show_match();
-        }
+            let kept = was.and_then(|w| f.matches.iter().position(|m| *m == w));
+            f.current = kept.or(f.matches.len().checked_sub(1));
+            if kept.is_none() {
+                ws.show_match();
+            }
+        });
     }
 
     /// Whether output arrived since the matches were found, long enough ago to look again.

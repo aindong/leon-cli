@@ -199,12 +199,12 @@ impl Workspace {
             self.scroll_to(id, Some(to.line + 1 - rows));
         }
         // the server's selection takes both cells, so `v` alone selects the one under the cursor
-        let selection = selection.map(|(kind, anchor)| {
-            let mut s = Sel { kind, anchor, head: to, range: None, dragging: false };
-            s.range = self.selected(id, &s, false).map(|g| Range { start: g.start, end: g.end });
-            s
-        });
+        let selection = selection.map(|(kind, anchor)| Sel { kind, anchor, head: to, range: None, dragging: false });
+        let selecting = selection.is_some();
         self.term.panes.entry(id.to_string()).or_default().selection = selection;
+        if selecting {
+            self.ask_range(id);
+        }
     }
 
     /// The last search again from the cursor (`reverse`: the other way), over find's matches.
@@ -215,14 +215,17 @@ impl Workspace {
             return;
         }
         let args = json!({ "query": query, "regex": false, "case_sensitive": false });
-        let Ok(found) = self.term_call(id, "find", args) else { return };
-        let matches: Vec<Range> = serde_json::from_value(found["matches"].clone()).unwrap_or_default();
-        if let Some(cm) = self.term.copy.as_mut() {
+        let block = id.to_string();
+        self.term_call_latest("copy find", id, "find", args, move |ws, got| {
+            let Ok(found) = got else { return };
+            let matches: Vec<Range> = serde_json::from_value(found["matches"].clone()).unwrap_or_default();
+            // still in copy mode on that pane, and still where the search started
+            let Some(cm) = ws.term.copy.as_mut().filter(|c| c.block == block && c.cursor == at) else { return };
             cm.truncated = (found["truncated"] == true).then_some(matches.len());
-        }
-        if let Some(to) = copy_mode::pick(&matches, at, forward != reverse) {
-            self.copy_to(id, to);
-        }
+            if let Some(to) = copy_mode::pick(&matches, at, forward != reverse) {
+                ws.copy_to(&block, to);
+            }
+        });
     }
 
     pub(super) fn open_hints(&mut self, id: String) {

@@ -18,14 +18,20 @@ impl Workspace {
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let shows = |b: &crate::remote::Block| status::indicator_of(&b.newest_first());
+                // each block read once: per window per block would be a million a poll at the caps
+                let mut by_window = std::collections::HashMap::<&str, Option<Indicator>>::new();
+                for b in &s.blocks {
+                    let shown = status::indicator_of(&b.newest_first());
+                    let w = by_window.entry(&b.window_id).or_default();
+                    *w = status::aggregate([*w, shown]);
+                }
                 let windows: Vec<WindowRow> = s
                     .windows
                     .iter()
                     .map(|w| WindowRow {
                         id: w.id.clone(),
                         title: switcher::tab_title(s, w),
-                        status: status::aggregate(s.blocks.iter().filter(|b| b.window_id == w.id).map(shows)),
+                        status: by_window.get(w.id.as_str()).copied().flatten(),
                     })
                     .collect();
                 SessionRow {

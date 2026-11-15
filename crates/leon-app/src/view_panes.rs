@@ -296,6 +296,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::focus_down))
             .on_action(cx.listener(Self::toggle_zoom))
             .on_action(cx.listener(Self::quit_and_end_all))
+            .on_action(cx.listener(Self::about))
             .child(self.drag_listener(cx))
             .on_action(cx.listener(Self::new_session))
             .on_action(cx.listener(Self::next_tab))

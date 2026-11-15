@@ -29,8 +29,10 @@ pub mod theme;
 pub mod view;
 
 /// Attach to the server on `socket` and run the app until it quits; the server keeps running.
+/// `version` is what About shows after "leon ", as `leon --version` prints it.
 #[cfg(all(feature = "gui", target_os = "macos"))]
-pub fn run(socket: &std::path::Path) -> Result<(), String> {
+pub fn run(socket: &std::path::Path, version: &str) -> Result<(), String> {
+    view::set_version(version);
     view::run(remote::Remote::connect(socket).inspect_err(|e| alert(e))?);
     Ok(())
 }

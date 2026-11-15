@@ -1,7 +1,8 @@
 //! Criterion 2: keystrokes and pastes become the bytes the PTY gets.
 
 use gpui::{Keystroke, Modifiers};
-use leon_app::input::{key_bytes, paste_bytes};
+use leon_app::input::key_bytes;
+use leon_core::keys::paste_bytes;
 
 fn ks(key: &str, key_char: Option<&str>, m: Modifiers) -> Keystroke {
     Keystroke { modifiers: m, key: key.into(), key_char: key_char.map(Into::into) }

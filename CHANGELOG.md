@@ -128,6 +128,18 @@ The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
   couldn't be loaded, so the next start set every session aside. A window now nests at most 32
   splits, and a server holds at most 1024 blocks; past either, `session.new_split`,
   `session.move_block` and the like answer 400. Schemas are unchanged.
+- Over a host's link, a slow or hostile host could freeze the whole window, local panes too:
+  the wheel, scrolling back, find, selections, links and copies waited on the host, and a host
+  sending lines that weren't the reply kept a call waiting for ever. `leon attach -H` couldn't read
+  its detach key meanwhile. Now nothing on the window's thread waits on a link, and every call has
+  one 5 s deadline. A copy from a host's pane copies what the app drew over the range dragged, not
+  the host's reply, and a link whose uri isn't the text drawn asks first.
+- The app freed nothing when a pane closed or its host went, read every block once per tab for the
+  sidebar on each poll, and took whatever counts and layouts a host sent. Remote lists are capped
+  (256 sessions, 1024 tabs, panes and layout leaves per session); a split ratio outside 0 to 1 is
+  refused. Smaller fixes: a mouse release reports the button let go; a non-UTF-8 line no longer
+  drops a server; writes and spawned calls have timeouts. All 14 app findings, with their tests:
+  [docs/audit-0.1.0-app.md](docs/audit-0.1.0-app.md).
 
 ### Fixed in the [daily-driver test](docs/research/daily-driver-0.1.0.md)
 
@@ -152,6 +164,7 @@ The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
 
 ### Added
 
+- The app's leon menu has **About leon**, showing `leon --version`'s string.
 - `leon --version` names the commit: `leon 0.1.0 (1a2b3c4d5e6f)`.
 - `LICENSE` and `THIRD-PARTY-NOTICES.txt` (every crate built in, with its license) in Leon.app's
   resources, the Linux tarball and the `.deb`'s docs.
