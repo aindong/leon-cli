@@ -15,9 +15,9 @@ leon's mark is a lion with a chunky square silhouette, rounded ear and mane bump
 | Single-colour lion | [logo-mark-mono.svg](logo-mark-mono.svg) | [logo-mark-mono-dark.svg](logo-mark-mono-dark.svg) |
 | Existing wordmark | [wordmark.svg](wordmark.svg) | [wordmark-dark.svg](wordmark-dark.svg) |
 
-The flat lion is a manual SVG contour transcription of the cleaned original: one square mane silhouette with rounded top bumps, relaxed lids, a broad nose and a one-sided smile. Light marks use Oxide with Parchment details; dark marks use Amber with Maroon details. Monochrome marks cut the features out of one solid colour. The flat logo is an intentional simplification of the shaded character, not a miniature raster embedded in a logo.
+The flat lion is a manual SVG contour transcription of an earlier cleaned render of the same character: one square mane silhouette with rounded top bumps, relaxed lids, a broad nose and a one-sided smile. Its outline is simpler than the app icon's art: the base is level where the original's bottom is rounded with a small dip in the middle, the cheek tufts are smaller and sit higher, and the curl on top is smaller. Light marks use Oxide with Parchment details; dark marks use Amber with Maroon details. Monochrome marks cut the features out of one solid colour. The flat logo is an intentional simplification of the shaded character, not a miniature raster embedded in a logo.
 
-Keep at least 10 design units of space around the lion. Use flat marks at 24 px or above and lockups at 108 px or above; use the optical app icon for 16 px. Preserve the sideways smile, low lids, original rounded ear bumps, cheek tufts, broad base and single colour field. Do not add a swept top curl, pointed chin, fangs, angry brows, shields, panels or separated colour chips. Do not stretch, rotate or give individual mane parts their own gloss. Keep depth on the app icon; keep logos flat.
+These rules are for the flat marks; the app icon is the original thumbnail, with its own curl and rounded bottom, and is never redrawn. Keep at least 10 design units of space around the lion. Use flat marks at 24 px or above and lockups at 108 px or above; use the optical app icon for 16 px. Preserve the sideways smile, low lids, original rounded ear bumps, cheek tufts, broad base and single colour field. Do not add a swept top curl, pointed chin, fangs, angry brows, shields, panels or separated colour chips. Do not stretch, rotate or give individual mane parts their own gloss. Keep depth on the app icon; keep logos flat.
 
 The custom lowercase wordmark, 360 × 90 lockup frame, tagline and product copy are retained. Use **leon** in copy, **Leon.app** for the bundle and `leon` for commands.
 
@@ -39,7 +39,7 @@ Oxide stays the brand anchor. Maroon replaces Iron as the app tile colour: its w
 | Clay | `#E6AA91` | Dark-mode links |
 | Sand / Coal | `#EBE3D7` / `#1F1C19` | Raised light surface / terminal pane |
 
-The icon's continuous light field moves **Gold → Amber → Coral → Oxide**, with maroon in the deepest shadows. The flat optical source uses stops at 0%, 38%, 70%, 100%. Those are art-direction targets; the approved raster includes continuous lighting and its sampled pixels are not restricted to four hex values. The generated source uses palette optimisation to keep file size small.
+The icon's continuous light field moves **Gold → Amber → Coral → Oxide**, with maroon in the deepest shadows. The flat optical source uses stops at 0%, 38%, 70%, 100%. Those are art-direction targets; the app icon's art has continuous lighting and grain, so its pixels are not restricted to four hex values. The master is a full-colour PNG; the icon slots and web embeds made from it use a 256-colour palette to stay small.
 
 Status accents are quieter than the retired pane colours: **Copper `#E78155`** for `● working`, **Sage `#B8C6AC`** for `✓ done`, **Wheat `#E8C77D`** for `! blocked`, and **Rose `#E28E9B`** for a real error label. Working retains its warm accent; done and blocked return to softer supporting tones. Status always includes a word and distinct symbol. The demo does not invent an error state. Iris and Lagoon are retired from production identity use.
 
@@ -47,9 +47,19 @@ Approved text contrast: Iron/Parchment **13.40:1**, Umber/Parchment **5.98:1**, 
 
 ## Icon sources and small sizes
 
-The canonical [1024 PNG master](icon/leon-1024.png) is the approved imagegen render with alpha outside the macOS rounded tile. The [1024 SVG](icon/leon-1024.svg) is a standalone **raster wrapper**, explicitly embedding that PNG; it is not editable vector artwork. This raster master is permitted by the production brief.
+The art is the original thumbnail 11, [leon-original-280.png](icon/leon-original-280.png): 280 × 280, with its grain and soft mane edge. Production uses it as it is, scaled up. No image generator and no AI upscaler touches it. An earlier cleaned render is in git history only.
 
-The [optical SVG](icon/leon-small.svg) supplies the 16 pt slots at 1× and 2× and the page favicon. It replaces volumetric folds with one rounded mane shape and a simple warm gradient, removes the tile rim/shadow, and enlarges the lids, nose and half-smile. The 32 pt and larger slots use the raster master. Fine facial expression softens at 16 px, so the mane silhouette and broad dark details do the work.
+`build-assets.cjs` makes the [1024 PNG master](icon/leon-1024.png) from it in three steps:
+
+1. Enlarge the thumbnail 3× to 840 × 840 with a Lanczos-3 filter. At 3× every original pixel is still in the result, unchanged, at the centre of its 3 × 3 block.
+2. Place it on a clear 1024 × 1024 canvas with its top-left corner at (92, 94).
+3. Keep the thumbnail's own rounded tile and clear everything else: an 812 × 826 rectangle at (106, 99) with corner radius 126. That is the thumbnail's tile pulled in about 1.3 of its pixels, which cuts off its blend with the parchment around it, so no light fringe is left. Apple's grid has an 824 × 824 tile; the thumbnail's is slightly taller than wide and keeps that shape.
+
+[check-icon.cjs](check-icon.cjs) holds those numbers and compares the pixels: the tile with the filter's output, the original's pixels at the block centres, the clear canvas, the tile's edge, the icon slots and the README banner. The builder runs it as its last step and exits with an error if it fails. The [1024 SVG](icon/leon-1024.svg) is a standalone **raster wrapper**, explicitly embedding that PNG; it is not editable vector artwork.
+
+On macOS 27 the system redraws an app icon in its own rounded shape. This tile is close enough to the grid that the system fills that shape with it; it does not set it on a grey plate.
+
+The [optical SVG](icon/leon-small.svg) supplies one file, the 16 × 16 px slot (16 pt at 1×), and the page favicon. Reduced to 16 px the original's face is a smudge, so that size keeps the optical icon: one rounded mane shape and a simple warm gradient, no tile rim or shadow, and larger lids, nose and half-smile. Every slot of 32 px and up, 16 pt at 2× included, is the original.
 
 ![Native 16, 32, and 128 px icons on light and dark backgrounds](icon/size-check.png)
 
@@ -60,7 +70,7 @@ The proof shows 16/32/128 px on Parchment and Iron, plus direct reduction versus
 ## Marketing, type and rebuild
 
 - [Hero](marketing/hero.png) / [SVG](marketing/hero.svg): **1600 × 600**.
-- [OG](marketing/og.png) / [SVG](marketing/og.svg): **1200 × 630**; the SVG embeds the approved app icon.
+- [OG](marketing/og.png) / [SVG](marketing/og.svg): **1200 × 630**; the SVG embeds the app icon.
 - [Landing page](marketing/index.html): single HTML with inline CSS, embedded font/icon/favicon, phone layout and dark mode.
 - [Copy](marketing/copy.md): unchanged tagline, alternatives, 50-word pitch and 150-word description.
 
@@ -73,4 +83,4 @@ npm install --prefix /tmp/leon-brand-build sharp playwright
 NODE_PATH=/tmp/leon-brand-build/node_modules node brand/build-assets.cjs
 ```
 
-On macOS with Google Chrome and `iconutil`, the builder reads the committed raster master and optical SVG, then regenerates the wrapper, ten icon slots, ICNS, size proof, page embed, OG embed and both banner PNGs. It never regenerates or overwrites the canonical raster and never calls imagegen. Flat logo SVGs and banner layouts are editable sources.
+On macOS with Google Chrome and `iconutil`, the builder reads the original thumbnail and the optical SVG, then makes the master, the wrapper, ten icon slots, ICNS, size proof, page embed, OG embed, both banner PNGs and the icon on the repository README's banner (`docs/images/banner.png`; its layout exists only as that PNG, so the icon is redrawn in place). It never calls an image generator. The page and the OG image show the master's middle 944 px, where the tile fills 87.5% of the frame as their layouts expect; the banner draws the tile alone. Flat logo SVGs and banner layouts are editable sources.

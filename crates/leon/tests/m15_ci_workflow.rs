@@ -1,5 +1,6 @@
 //! M15 criterion 5 (.agent/plans/2026-11-15-m15-linux-server-cli.md): the CI workflow has a macOS
-//! job with the full gate and Linux jobs on both arches running the server + CLI suite.
+//! job with the full gate and Linux jobs on both arches running the server + CLI suite. Also when
+//! it runs: once per push to a PR, and on `main` and `dev` (the why is in ci.yml's comments).
 
 mod help_walk;
 
@@ -22,10 +23,44 @@ fn jobs(ci: &str) -> Vec<(String, String)> {
     out
 }
 
+/// The lines under a top-level key such as `on:`, up to the next top-level key, without comments.
+/// Each keeps its indent: a key moved out of its parent is a different workflow.
+fn section<'a>(ci: &'a str, key: &str) -> Vec<&'a str> {
+    ci.lines()
+        .skip_while(|l| l.trim_end() != format!("{key}:"))
+        .skip(1)
+        .take_while(|l| l.starts_with(' ') || l.starts_with('#') || l.is_empty())
+        .map(str::trim_end)
+        .filter(|l| !l.is_empty() && !l.trim_start().starts_with('#'))
+        .collect()
+}
+
+fn ci() -> String {
+    std::fs::read_to_string(help_walk::repo().join(".github/workflows/ci.yml")).expect("ci.yml exists")
+}
+
+#[test]
+fn a_push_to_a_pr_branch_starts_one_run() {
+    let ci = ci();
+    assert_eq!(section(&ci, "on"), ["  push:", "    branches: [main, dev]", "  pull_request:"], "the triggers: {ci}");
+}
+
+#[test]
+fn a_new_push_cancels_the_prs_older_run_and_never_one_on_main_or_dev() {
+    let ci = ci();
+    assert_eq!(
+        section(&ci, "concurrency"),
+        [
+            "  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}",
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+        ],
+        "the concurrency block: {ci}"
+    );
+}
+
 #[test]
 fn ci_runs_the_full_macos_gate_and_linux_on_both_arches() {
-    let ci = std::fs::read_to_string(help_walk::repo().join(".github/workflows/ci.yml")).expect("ci.yml exists");
-    let jobs = jobs(&ci);
+    let jobs = jobs(&ci());
     let mac = jobs.iter().find(|(on, _)| on.starts_with("macos-")).expect("a macOS job");
     for step in ["cargo fmt --check", "cargo clippy --all-targets -- -D warnings", "cargo test --no-fail-fast"] {
         assert!(mac.1.contains(step), "the macOS job runs {step}: {}", mac.1);
