@@ -271,6 +271,7 @@ impl Render for Workspace {
         self.note_recent();
         let current = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
         let body = match self.shown() {
+            _ if self.stopped => self.render_stopped(cx).into_any_element(),
             Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
             None => self.render_empty(cx).into_any_element(),
         };
@@ -280,7 +281,7 @@ impl Render for Workspace {
             .flex()
             .flex_col()
             .min_w(px(0.))
-            .when(self.titlebar_shown(), |d| d.child(self.render_titlebar(current, cx)))
+            .when(self.titlebar_shown() && !self.stopped, |d| d.child(self.render_titlebar(current, cx)))
             .child(body);
         div()
             .key_context("Workspace")
@@ -313,7 +314,8 @@ impl Render for Workspace {
             .font_family(".SystemUIFont")
             .text_size(px(UI_TEXT))
             .text_color(rgb(self.theme.text))
-            .children(places.sidebar.map(|list| self.render_sidebar(&rows, list, cx)))
+            // a stopped server's sessions are gone: nothing of them stays drawn
+            .children(places.sidebar.filter(|_| !self.stopped).map(|list| self.render_sidebar(&rows, list, cx)))
             .child(column)
             .children(self.render_stale(window))
             // last, so it paints over the panes: GPUI paints children in order

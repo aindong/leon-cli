@@ -249,9 +249,11 @@ impl Workspace {
         let detail = "Every program in them stops. Quit leon (⌘Q) instead to leave them running.";
         let buttons = [PromptButton::Ok("End All Sessions".into()), PromptButton::Cancel("Cancel".into())];
         let answer = window.prompt(PromptLevel::Warning, &format!("End {what} and quit?"), Some(detail), &buttons, cx);
-        cx.spawn(async move |_, cx| {
+        cx.spawn(async move |this, cx| {
             if answer.await == Ok(0) {
+                let _ = this.update(cx, |ws, _| ws.ending = true);
                 if let Err(e) = app.call("server.stop", json!({})) {
+                    let _ = this.update(cx, |ws, _| ws.ending = false);
                     eprintln!("leon: can't stop the server: {}", e.message);
                     return;
                 }
@@ -259,6 +261,26 @@ impl Workspace {
             }
         })
         .detach();
+    }
+
+    /// Start It Again: run this leon as it was started (`leon app` starts the server first), with
+    /// its environment (the private LEON_* dirs), then quit. Not GPUI's restart, which `open`s an
+    /// unbundled binary in Terminal with none of that environment.
+    pub(super) fn start_again(&mut self, cx: &mut Context<Self>) {
+        let exe = match std::env::current_exe() {
+            Ok(exe) => exe,
+            Err(e) => return eprintln!("leon: can't find leon to start it again: {e}"),
+        };
+        if !self.platform {
+            let args = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned());
+            self.relaunched = Some(std::iter::once(exe.display().to_string()).chain(args).collect());
+            return;
+        }
+        use std::os::unix::process::CommandExt;
+        match std::process::Command::new(&exe).args(std::env::args_os().skip(1)).process_group(0).spawn() {
+            Ok(_) => cx.quit(),
+            Err(e) => eprintln!("leon: can't start leon again: {e}"),
+        }
     }
 
     pub(super) fn toggle_sidebar(&mut self, _: &ToggleSidebar, _: &mut Window, cx: &mut Context<Self>) {

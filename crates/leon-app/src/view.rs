@@ -209,6 +209,12 @@ pub struct Workspace {
     /// The native key event being handled, as (key code, text): `input::current_key_event` in the
     /// real app, a stand-in in tests, none otherwise.
     native_key: fn() -> Option<(u16, String)>,
+    /// This Mac's server went away from outside (`leon server stop`): the window says so.
+    stopped: bool,
+    /// The app stops the server itself (Quit and End All Sessions): its going is a quit.
+    ending: bool,
+    /// What Start It Again would run, in a test workspace (which never spawns it).
+    relaunched: Option<Vec<String>>,
     /// The window is the key window: the user is looking at leon.
     window_active: bool,
     font_size: f32,
@@ -293,7 +299,13 @@ impl Workspace {
             futures::future::select(timer, woken.next()).await;
             let alive = this.update(cx, |ws, cx| {
                 if !ws.hosts.local().alive() {
-                    cx.quit(); // the server stopped (`leon server stop`, or the menu's end-all)
+                    // the menu's end-all quits; a stop from outside is said, not a vanishing window
+                    if ws.ending {
+                        cx.quit();
+                    } else if !ws.stopped {
+                        ws.stopped = true;
+                        cx.notify();
+                    }
                     return;
                 }
                 ws.poll_hosts();
@@ -359,6 +371,9 @@ impl Workspace {
             dock: None,
             platform: false,
             native_key: || None,
+            stopped: false,
+            ending: false,
+            relaunched: None,
             window_active: window.is_window_active(),
             font_size: look.font_size,
             theme: look.theme(dark),
@@ -379,6 +394,16 @@ impl Workspace {
             _release: release,
             _appearance: appearance,
         }
+    }
+
+    /// This Mac's server stopped from outside, and the window says so.
+    pub fn server_stopped(&self) -> bool {
+        self.stopped
+    }
+
+    /// What Start It Again ran, in a test workspace.
+    pub fn relaunched(&self) -> Option<Vec<String>> {
+        self.relaunched.clone()
     }
 
     /// Stand in for the native key event `key_down` reads (tests).

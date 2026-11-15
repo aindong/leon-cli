@@ -190,6 +190,59 @@ impl Workspace {
     }
 }
 
+impl Workspace {
+    /// This Mac's server stopped from outside (`leon server stop`): say so, and offer to start it
+    /// again (its saved sessions come back) or to quit.
+    pub(super) fn render_stopped(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = &self.theme;
+        let button = |name: &'static str, label: &'static str, primary: bool| {
+            div()
+                .id(name)
+                .debug_selector(move || sel(name.into()))
+                .px(px(16.))
+                .py(px(7.))
+                .rounded(px(6.))
+                .cursor_pointer()
+                .bg(rgb(if primary { t.accent } else { t.hover }))
+                .text_color(rgb(if primary { t.chrome } else { t.title }))
+                .child(label)
+        };
+        div()
+            .debug_selector(|| sel("server-stopped".into()))
+            .flex_1()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .pb(px(48.))
+            .child(mark())
+            .child(
+                div().mt(px(20.)).text_size(px(UI_TEXT + 9.)).text_color(rgb(t.title)).child("The leon server stopped"),
+            )
+            .child(
+                div()
+                    .mt(px(6.))
+                    .text_size(px(UI_TEXT + 1.))
+                    .text_color(rgb(t.muted))
+                    .child("Start it again to bring back the sessions it saved, or quit."),
+            )
+            .child(
+                div()
+                    .mt(px(28.))
+                    .flex()
+                    .gap(px(10.))
+                    .child(
+                        button("server-stopped-start", "Start It Again", true)
+                            .on_mouse_down(MouseButton::Left, cx.listener(|ws, _, _, cx| ws.start_again(cx))),
+                    )
+                    .child(
+                        button("server-stopped-quit", "Quit", false)
+                            .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| cx.quit())),
+                    ),
+            )
+    }
+}
+
 /// leon's icon (the lion), as the Dock shows it.
 fn mark() -> impl IntoElement {
     static ICON: std::sync::OnceLock<Arc<gpui::Image>> = std::sync::OnceLock::new();
