@@ -71,11 +71,20 @@ pub fn tabs(machines: &[(usize, &str, &Model)]) -> (Vec<Row>, Vec<Row>) {
                     block: None,
                     status: status::aggregate(s.blocks.iter().filter(|b| b.window_id == w.id).map(shows)),
                 };
+                let o = s.overlay(&w.id);
                 for b in s.blocks.iter().filter(|b| b.window_id == w.id) {
-                    // a block named like its tab adds nothing to the tab's row
-                    let Some(title) = b.title.as_ref().filter(|t| **t != tab.tab) else { continue };
+                    // a float or drawer always has a row (by its label first: `leon toggle`'s name),
+                    // marked when hidden; a tile named like its tab adds nothing to the tab's row
+                    let title = match o.contains(&b.id) {
+                        true => {
+                            let name = b.label.clone().or(b.title.clone()).unwrap_or_else(|| program_name(&b.command));
+                            Some(if o.hidden(&b.id) { format!("{name} · hidden") } else { name })
+                        }
+                        false => b.title.clone().filter(|t| *t != tab.tab),
+                    };
+                    let Some(title) = title else { continue };
                     let block_id = Some(b.id.clone());
-                    blocks.push(Row { block_id, block: Some(title.clone()), status: shows(b), ..tab.clone() });
+                    blocks.push(Row { block_id, block: Some(title), status: shows(b), ..tab.clone() });
                 }
                 tabs.push(tab);
             }

@@ -17,7 +17,7 @@ impl Workspace {
     /// A layout for a shell in the target pane's working directory (or the default, `$HOME`).
     /// Over a link the model's cwd is used: no round trip on the UI thread, and the path is the
     /// host's, so it can't be checked here.
-    fn here(&self) -> Value {
+    pub(super) fn here(&self) -> Value {
         let cwd = match self.app.is_link() {
             true => self.target().and_then(|(_, id, _)| self.app.model().block(&id)?.1.cwd.clone()),
             false => {
@@ -106,6 +106,7 @@ impl Workspace {
                 cx.notify();
                 return;
             }
+            Some(Drag::Overlay { .. }) => return self.drag_overlay(ev.position, cx),
             None => return,
         };
         let (at, room) = match d.direction {
@@ -290,14 +291,10 @@ impl Workspace {
             let out = &mut fits;
             for s in &m.sessions {
                 for w in &s.windows {
-                    let Some(tree) = &w.layout else { continue };
-                    // panes a zoom hides keep their split size; the zoomed one fills the area
-                    let zoomed = w.zoomed.as_deref().map(|z| panes::tiles(tree, Some(z), area).panes);
-                    for p in panes::tiles(tree, None, area).panes {
-                        let rect =
-                            zoomed.iter().flatten().find(|z| z.block_id == p.block_id).map_or(p.rect, |z| z.rect);
-                        if s.blocks.iter().any(|b| b.id == p.block_id) {
-                            out.push((remote.clone(), s.id.clone(), p.block_id.clone(), rect));
+                    // panes a zoom hides keep their split size; hidden floats and drawers theirs
+                    for (id, rect) in Self::window_rects(s, w, area) {
+                        if s.blocks.iter().any(|b| b.id == id) {
+                            out.push((remote.clone(), s.id.clone(), id, rect));
                         }
                     }
                 }

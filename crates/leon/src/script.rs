@@ -212,7 +212,12 @@ pub fn reload(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
 
 pub fn actions(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
     let km = c.call("client.keymap", json!({}))?;
-    let actions = km["server_actions"].as_array().cloned().unwrap_or_default();
+    let mut actions = km["server_actions"].as_array().cloned().unwrap_or_default();
+    // the app's own actions, which its keys and palette run
+    let app = leon_app::palette::BUILTINS
+        .iter()
+        .map(|(name, title)| json!({ "name": name, "title": title, "source": "app" }));
+    actions.extend(app);
     if cli.json {
         print_json(&Value::Array(actions));
         return Ok(());

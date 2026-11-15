@@ -189,13 +189,9 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         let Some(at) = self.term.mouse_at else { return };
-        let painted = self.term.painted.borrow().clone();
-        let inside = |p: &super::scroll::Painted| {
-            let (w, h) = (p.cell.0 * p.size.1 as f32, p.cell.1 * p.size.0 as f32);
-            Bounds::new(p.origin, size(w, h)).contains(&at)
-        };
-        match painted.iter().find(|(_, p)| inside(p)) {
-            Some((id, _)) => self.hover(&id.clone(), at, ev.modifiers.platform, cx),
+        // a float over a tile: the float's grid
+        match self.grid_at(at, &self.term.painted.clone()) {
+            Some(id) => self.hover(&id, at, ev.modifiers.platform, cx),
             None if self.term.hovered.take().is_some() => cx.notify(),
             None => {}
         }

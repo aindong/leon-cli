@@ -11,6 +11,7 @@ impl Workspace {
         let frame = self.pulse();
         let title = self.pane_title(id).unwrap_or_default();
         let group = SharedString::from(format!("pane-{id}"));
+        let overlay = self.is_overlay(id);
         let control = |what: &'static str, icon: Icon, action: &'static str, cx: &mut Context<Self>| {
             let (block, name) = (id.to_string(), format!("header-{what}-{id}"));
             div()
@@ -41,9 +42,13 @@ impl Workspace {
             .flex_none()
             .gap(px(2.))
             .when(!focused, |d| d.invisible().group_hover(group.clone(), |d| d.visible()))
-            .child(control("split-right", Icon::SplitRight, "pane.split.right", cx))
-            .child(control("split-down", Icon::SplitDown, "pane.split.down", cx))
-            .child(control("zoom", Icon::Zoom, "pane.zoom", cx))
+            // a float or drawer goes back into the tiles rather than splitting or zooming
+            .when(!overlay, |d| {
+                d.child(control("split-right", Icon::SplitRight, "pane.split.right", cx))
+                    .child(control("split-down", Icon::SplitDown, "pane.split.down", cx))
+                    .child(control("zoom", Icon::Zoom, "pane.zoom", cx))
+            })
+            .when(overlay, |d| d.child(control("unfloat", Icon::Unfloat, "pane.unfloat", cx)))
             .child(control("close", Icon::Close, "pane.close", cx));
         div()
             .debug_selector(|| sel(format!("header-{id}")))

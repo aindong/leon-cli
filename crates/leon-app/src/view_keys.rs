@@ -121,6 +121,13 @@ impl Workspace {
                 self.focus_toward(&name["pane.focus.".len()..], cx)
             }
             "pane.zoom" => self.toggle_zoom(&ToggleZoom, window, cx),
+            "pane.float"
+            | "pane.new_floating"
+            | "pane.unfloat"
+            | "pane.scratch.toggle"
+            | "pane.dock.left"
+            | "pane.dock.right"
+            | "pane.dock.bottom" => self.overlay_action(name, cx),
             "pane.close" => self.close_pane(&ClosePane, window, cx),
             "pane.paste" => self.paste(&Paste, window, cx),
             "client.sidebar.toggle" => self.toggle_sidebar(&ToggleSidebar, window, cx),
