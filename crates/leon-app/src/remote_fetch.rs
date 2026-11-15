@@ -4,6 +4,7 @@
 use std::io::{self, BufRead, BufReader, Read};
 use std::os::unix::net::UnixStream;
 
+use leon_core::overlays::Overlays;
 use leon_core::program_status::{strip_hidden, Record};
 use leon_core::{ApiError, Window};
 use serde_json::{json, Value};
@@ -60,6 +61,13 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
                 zoomed: text(&w["zoomed_block_id"]),
             })
             .collect();
+        let overlays = view["windows"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|w| (text(&w["window_id"]).unwrap_or_default(), decode_overlays(w)))
+            .filter(|(_, o)| *o != Overlays::default())
+            .collect();
         let active = view["windows"].as_array().and_then(|ws| ws.iter().position(|w| w["active"] == true));
         let mut session = Session {
             id: text(sid).unwrap_or_default(),
@@ -68,6 +76,7 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
             active: active.unwrap_or(0),
             windows,
             blocks: Vec::new(),
+            overlays,
         };
         for b in blocks["blocks"].as_array().into_iter().flatten() {
             let p =
@@ -81,6 +90,7 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
             session.blocks.push(Block {
                 id: text(&b["block_id"]).unwrap_or_default(),
                 window_id: text(&b["window_id"]).unwrap_or_default(),
+                label: text(&b["label"]),
                 command: serde_json::from_value(b["command"].clone()).unwrap_or_default(),
                 title: text(&b["title"]),
                 cwd: text(&b["cwd"]),
@@ -97,4 +107,42 @@ fn shown(mut r: Record) -> Record {
     r.title = r.title.map(|t| strip_hidden(&t));
     r.msg = r.msg.map(|m| strip_hidden(&m));
     r
+}
+
+/// The most floats a window may have.
+pub const MAX_FLOATS: usize = 64;
+
+/// A window's floats and drawers from its `session.view` entry. Only the fields this client knows
+/// are read (a newer server may add some, and the types refuse unknown ones), and a window whose
+/// placements a server should never send (bounds outside the window, a size past 1) gets none.
+pub fn decode_overlays(window: &Value) -> Overlays {
+    let list = |key: &str| window[key].as_array().map_or(&[][..], Vec::as_slice);
+    // each frame does work per float per float: a list past what a person could use is refused
+    if list("floating").len() > MAX_FLOATS {
+        return Overlays::default();
+    }
+    // the known fields, the id read as block ids are (nothing hidden)
+    let pick = |v: &Value, keys: &[&str]| -> Value {
+        let mut out: Value =
+            keys.iter().map(|k| (k.to_string(), v[*k].clone())).filter(|(_, v)| !v.is_null()).collect();
+        if let Some(id) = v["block_id"].as_str() {
+            out["block_id"] = json!(strip_hidden(id));
+        }
+        out
+    };
+    let floating: Vec<Value> = list("floating")
+        .iter()
+        .map(|f| {
+            let mut f = pick(f, &["block_id", "bounds", "hidden"]);
+            f["bounds"] = pick(&f["bounds"], &["x", "y", "width", "height"]);
+            f
+        })
+        .collect();
+    let docked: Vec<Value> = list("docked").iter().map(|d| pick(d, &["block_id", "side", "size", "hidden"])).collect();
+    serde_json::from_value::<Overlays>(json!({ "floating": floating, "docked": docked }))
+        .ok()
+        .filter(|o| o.check().is_ok())
+        // each block is placed once
+        .filter(|o| o.ids().collect::<std::collections::HashSet<_>>().len() == o.ids().count())
+        .unwrap_or_default()
 }

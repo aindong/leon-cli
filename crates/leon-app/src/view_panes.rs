@@ -2,9 +2,36 @@
 
 use super::*;
 
+/// What every tile of one frame shares.
+pub(super) struct Tiling {
+    pub(super) sid: String,
+    pub(super) active: bool,
+    pub(super) target: Option<String>,
+    pub(super) several: bool,
+    pub(super) stats: Rc<RefCell<Stats>>,
+}
+
 impl Workspace {
-    /// The active window's panes, placed by `panes::tiles` in the pane area: the window less the
-    /// sidebar and the titlebar row (so the size is known now, not a frame late).
+    /// The active window and the blocks it shows: tiles in leaf order, then floats and drawers.
+    pub(super) fn shown(&self) -> Option<(leon_core::Window, Panes)> {
+        let w = self.active_window()?;
+        let mut ids: Panes = match &w.zoomed {
+            Some(z) => vec![z.clone()],
+            None => w.layout.as_ref().map(|t| t.leaves().into_iter().map(String::from).collect()).unwrap_or_default(),
+        };
+        ids.extend(self.overlay_ids(&w));
+        let m = self.app.model();
+        let s = m.session(self.session_id.as_deref()?)?;
+        if w.layout.is_none() && !s.overlays.contains_key(&w.id) {
+            return None;
+        }
+        ids.retain(|id| s.blocks.iter().any(|b| b.id == *id));
+        Some((w, ids))
+    }
+
+    /// The active window's panes, placed by `panes::tiles` in the pane area (the window less the
+    /// sidebar and the titlebar row, so the size is known now, not a frame late) less its
+    /// drawers, then the drawers and floats over them (`render_overlays`).
     pub(super) fn render_panes(
         &self,
         w: &leon_core::Window,
@@ -15,81 +42,35 @@ impl Workspace {
     ) -> impl IntoElement {
         let t = &DARK;
         let size = self.pane_area(window);
-        let active = window.is_window_active();
-        let font_size = self.font_size;
-        let l = w.layout.as_ref().map(|tree| panes::tiles(tree, w.zoomed.as_deref(), size)).unwrap_or_default();
-        let target = target(w).map(str::to_string);
-        let several = l.panes.len() > 1;
-        let headers = self.settings.pane_headers;
-        let mut out = div().flex_1().relative().bg(rgb(t.chrome));
+        let view = window.viewport_size();
+        let origin = (f32::from(view.width) - size.0, f32::from(view.height) - size.1);
+        let placed = self.placed(w, size);
+        let tiles = placed.tiles;
+        let mut l = w
+            .layout
+            .as_ref()
+            .map(|tree| panes::tiles(tree, w.zoomed.as_deref(), (tiles.w, tiles.h)))
+            .unwrap_or_default();
+        let shift = |r: &mut panes::Rect| (r.x, r.y) = (r.x + tiles.x, r.y + tiles.y);
+        l.panes.iter_mut().for_each(|p| shift(&mut p.rect));
+        for d in &mut l.dividers {
+            shift(&mut d.rect);
+            shift(&mut d.split);
+        }
+        let tiling = Tiling {
+            sid: self.session_id.clone().unwrap_or_default(),
+            active: window.is_window_active(),
+            target: target(w).map(str::to_string),
+            several: l.panes.len() + placed.docks.len() + placed.floats.len() > 1,
+            stats,
+        };
+        let mut out =
+            div().debug_selector(|| sel("panes-area".into())).flex_1().relative().overflow_hidden().bg(rgb(t.chrome));
         self.app.watch(terms.clone()); // only what is on screen is pushed
-        let sid = self.session_id.clone().unwrap_or_default();
         for p in &l.panes {
-            if !terms.contains(&p.block_id) {
-                continue;
+            if terms.contains(&p.block_id) {
+                out = out.child(self.pane_tile("pane", &p.block_id, p.rect, None, &tiling, cx));
             }
-            let focused = target.as_deref() == Some(p.block_id.as_str());
-            let id = p.block_id.clone();
-            let view = self.drawn(&id);
-            let marks = self.pane_marks(&id, &view);
-            let canvas = terminal_canvas(
-                self.app.clone(),
-                (sid.clone(), id.clone()),
-                (view.frame, marks),
-                active && focused,
-                font_size,
-                (stats.clone(), self.term.painted.clone()),
-            );
-            let finding = self.term.find.as_ref().is_some_and(|f| f.block == id);
-            let on_link = self.term.hovered.as_ref().is_some_and(|(b, _)| *b == id);
-            out = out.child(
-                div()
-                    .id(SharedString::from(format!("pane-{id}")))
-                    .debug_selector(|| sel(format!("pane-{id}")))
-                    .group(SharedString::from(format!("pane-{id}")))
-                    .absolute()
-                    .left(px(p.rect.x))
-                    .top(px(p.rect.y))
-                    .w(px(p.rect.w))
-                    .h(px(p.rect.h))
-                    .flex()
-                    .flex_col()
-                    .rounded(px(6.))
-                    .overflow_hidden()
-                    .bg(rgb(t.bg))
-                    .when(headers, |d| d.child(self.render_header(&id, focused, cx)))
-                    // with headers off the find bar floats over the pane, so its size stays
-                    .when(!headers && finding, |d| {
-                        d.child(
-                            div()
-                                .absolute()
-                                .top_0()
-                                .left_0()
-                                .right_0()
-                                .bg(rgb(t.bg))
-                                .child(self.render_header(&id, focused, cx)),
-                        )
-                    })
-                    .child(self.terminal_area(&id, on_link, cx).child(canvas))
-                    .children(self.render_jump(&id, cx))
-                    // the focus mark: the tile's left edge, as the mark's rail holds its pane
-                    .when(several && focused, |d| {
-                        d.child(
-                            div()
-                                .debug_selector(|| sel(format!("focus-edge-{id}")))
-                                .absolute()
-                                .left_0()
-                                .top_0()
-                                .bottom_0()
-                                .w(px(2.))
-                                .bg(rgb(t.accent)),
-                        )
-                    })
-                    .on_mouse_down(MouseButton::Left, {
-                        let id = id.clone();
-                        cx.listener(move |ws, _, _, cx| ws.focus_block(&id, cx))
-                    }),
-            );
         }
         for (i, d) in l.dividers.iter().enumerate() {
             let r = d.rect;
@@ -115,7 +96,92 @@ impl Workspace {
                     ),
             );
         }
-        out
+        self.render_overlays(out, placed, &terms, &tiling, (size, origin), cx)
+    }
+
+    /// One pane's tile at `rect`: its header (always on a float or drawer, which `grab` moves when
+    /// given), its terminal, the find bar and jump labels, and the focus mark. `kind` names it in
+    /// tests (`pane-`, `float-`, `dock-`).
+    pub(super) fn pane_tile(
+        &self,
+        kind: &str,
+        id: &str,
+        rect: panes::Rect,
+        grab: Option<crate::floats::Grab>,
+        tiling: &Tiling,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let t = &DARK;
+        let focused = tiling.target.as_deref() == Some(id);
+        let id = id.to_string();
+        let view = self.drawn(&id);
+        let marks = self.pane_marks(&id, &view);
+        let canvas = terminal_canvas(
+            self.app.clone(),
+            (tiling.sid.clone(), id.clone()),
+            (view.frame, marks),
+            tiling.active && focused,
+            self.font_size,
+            (tiling.stats.clone(), self.term.painted.clone()),
+        );
+        let headers = self.settings.pane_headers || kind != "pane";
+        let finding = self.term.find.as_ref().is_some_and(|f| f.block == id);
+        let on_link = self.term.hovered.as_ref().is_some_and(|(b, _)| *b == id);
+        // built only when shown: building an element notes it as drawn (`sel`)
+        let header = headers.then(|| match grab {
+            Some(g) => div()
+                .on_mouse_down(MouseButton::Left, self.grab_listener(&id, g, cx))
+                .child(self.render_header(&id, focused, cx))
+                .into_any_element(),
+            None => self.render_header(&id, focused, cx).into_any_element(),
+        });
+        let name = format!("{kind}-{id}");
+        div()
+            .id(SharedString::from(name.clone()))
+            .debug_selector(|| sel(name))
+            .group(SharedString::from(format!("pane-{id}")))
+            .absolute()
+            .left(px(rect.x))
+            .top(px(rect.y))
+            .w(px(rect.w))
+            .h(px(rect.h))
+            .flex()
+            .flex_col()
+            .rounded(px(6.))
+            .overflow_hidden()
+            .bg(rgb(t.bg))
+            .children(header)
+            // with headers off the find bar floats over the pane, so its size stays
+            .when(!headers && finding, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .right_0()
+                        .bg(rgb(t.bg))
+                        .child(self.render_header(&id, focused, cx)),
+                )
+            })
+            .child(self.terminal_area(&id, on_link, cx).child(canvas))
+            .children(self.render_jump(&id, cx))
+            // the focus mark: the tile's left edge, as the mark's rail holds its pane
+            .when(tiling.several && focused, |d| {
+                d.child(
+                    div()
+                        .debug_selector(|| sel(format!("focus-edge-{id}")))
+                        .absolute()
+                        .left_0()
+                        .top_0()
+                        .bottom_0()
+                        .w(px(2.))
+                        .bg(rgb(t.accent)),
+                )
+            })
+            .on_mouse_down(MouseButton::Left, {
+                let id = id.clone();
+                cx.listener(move |ws, _, _, cx| ws.focus_block(&id, cx))
+            })
     }
 
     /// A pane's terminal area: the mouse selects, reports to the program, scrolls, and opens links.
@@ -180,6 +246,7 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.note_focus(window);
+        self.note_slides();
         DRAWN.with(|d| d.borrow_mut().clear());
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these

@@ -26,6 +26,7 @@ use leon_lua::keys::Chord;
 use serde_json::{json, Value};
 
 use crate::chrome::{self, Places, Settings, SidebarList};
+use crate::floats;
 use crate::hosts::{HostState, Hosts};
 use crate::icons::{Icon, ROW_ICON, TOOLBAR_ICON, TOOLBAR_TARGET};
 use crate::keymap::{self, Bound, Keymap, Pressed};
@@ -80,11 +81,8 @@ const MAX_PASTE: usize = 400 << 10;
 /// How often the app asks the server for its keymap (a reload elsewhere shows up this late).
 const KEYMAP_POLL: Duration = Duration::from_secs(1);
 
-/// The block input goes to: the one on screen when a block is zoomed, else the focused one. The
-/// model keeps zoom and focus apart (a CLI can zoom any block), so this is what the user sees.
-fn target(w: &leon_core::Window) -> Option<&str> {
-    w.zoomed.as_deref().or(w.focus.as_deref())
-}
+/// The block input goes to.
+use crate::floats::target;
 
 /// GPUI key bindings: only Quit. Every other shortcut goes through `key_down` and the keymap
 /// (`keymap::DEFAULTS` under the config's bindings), since GPUI matches its own bindings before
@@ -177,6 +175,8 @@ enum Drag {
     Divider { divider: Divider, from: Pixels, last: Option<f64> },
     /// The sidebar's edge: where the drag started and the width then.
     Sidebar { from: Pixels, width: f32 },
+    /// A float's header or edge, or a drawer's divider (view_floats.rs).
+    Overlay { block: String, grab: floats::Grab, from: gpui::Point<Pixels>, last: Option<floats::Placement> },
 }
 
 thread_local! {
@@ -258,6 +258,7 @@ pub struct Workspace {
     seen_focus: Option<(String, bool)>,
     /// Scrollback, selection, find and links per pane.
     term: scroll::TermUi,
+    floats: floats_view::FloatUi,
     _poll: Task<()>,
     _activation: Subscription,
     _bounds: Subscription,
@@ -325,7 +326,7 @@ impl Workspace {
                 ws.stats.borrow_mut().report();
                 ws.refresh_keymap(cx);
                 let now = ws.signature();
-                if now != ws.seen {
+                if now != ws.seen || ws.sliding() {
                     ws.seen = now;
                     cx.notify();
                 }
@@ -383,6 +384,7 @@ impl Workspace {
             epoch: Instant::now(),
             seen_focus: None,
             term: scroll::TermUi::default(),
+            floats: Default::default(),
             _poll: poll,
             _activation: activation,
             _bounds: bounds,
@@ -441,19 +443,6 @@ impl Workspace {
         Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
     }
 
-    /// The active window's layout and the blocks it shows, in leaf order.
-    fn shown(&self) -> Option<(leon_core::Window, Panes)> {
-        let m = self.app.model();
-        let s = m.session(self.session_id.as_deref()?)?;
-        let w = s.windows.get(s.active)?;
-        let ids: Vec<&str> = match &w.zoomed {
-            Some(z) => vec![z.as_str()],
-            None => w.layout.as_ref()?.leaves(),
-        };
-        let ids = ids.into_iter().filter(|id| s.blocks.iter().any(|b| b.id == *id)).map(String::from).collect();
-        Some((w.clone(), ids))
-    }
-
     /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
     /// killed from the CLI, or its host went away) hands over to the session now in its place.
     fn settle(&mut self, rows: &[SessionRow]) {
@@ -486,6 +475,8 @@ mod bars;
 mod copy;
 #[path = "view_find.rs"]
 mod find;
+#[path = "view_floats.rs"]
+mod floats_view;
 #[path = "view_handlers.rs"]
 mod handlers;
 #[path = "view_header.rs"]

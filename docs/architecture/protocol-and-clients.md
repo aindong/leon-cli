@@ -199,11 +199,12 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   hidden panes cannot retain focus or zoom. Dock collisions fail atomically.
   Mutations emit the existing `session_view_changed` revision event; clients refetch
   the full view. `block_ids` includes tiled leaves then overlays, including hidden ones.
-  Attach caches the raw window fields on revision changes while sharing the existing
-  screen/event transport. It reserves dock space (in list order, clamped to remaining
+  Attach reads them from the shared client's model (`remote::Session::overlays`) over the
+  existing screen/event transport. It reserves dock space (in list order, clamped to remaining
   space), then paints bordered floats above tiles in z-order. Bounds are relative to
   the whole window; borders reduce terminal content by one cell on each edge. Zero-size
-  content is clipped. GUI rendering/animation is M20b; no new transport is needed.
+  content is clipped. The app's drawing, drags and slides (M20b) are in
+  [Floats and drawers in the app](floats.md); no new transport is needed.
 
   Focus next/previous walks tiles, visible docks, then visible floats in block creation
   order (independent of z-order), honoring `wrap`.

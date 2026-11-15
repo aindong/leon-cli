@@ -8,6 +8,7 @@ fn session(label: &str) -> Session {
         active: 0,
         windows: Vec::new(),
         blocks: Vec::new(),
+        overlays: Default::default(),
     }
 }
 

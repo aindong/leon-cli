@@ -3,7 +3,7 @@
 
 use leon_core::layout::{Direction, Node};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Rect {
     pub x: f32,
     pub y: f32,

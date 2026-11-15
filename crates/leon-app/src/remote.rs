@@ -16,6 +16,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
+use leon_core::overlays::Overlays;
 use leon_core::program_status::Record;
 use leon_core::screen::{self, Frame, Update};
 use leon_core::{ApiError, Window};
@@ -29,6 +30,7 @@ mod fetch_model;
 #[path = "remote_link.rs"]
 mod link;
 use events::{attach, read_events};
+pub use fetch_model::decode_overlays;
 use fetch_model::{fetch, read_line};
 use link::Job;
 pub use link::LinkState;
@@ -47,12 +49,23 @@ pub struct Session {
     pub active: usize,
     pub windows: Vec<Window>,
     pub blocks: Vec<Block>,
+    /// Each window's floats and drawers, by window id (`session.view`'s `floating` and `docked`).
+    pub overlays: HashMap<String, Overlays>,
+}
+
+impl Session {
+    /// Window `id`'s floats (back to front) and drawers; none for a window without any.
+    pub fn overlay(&self, id: &str) -> Overlays {
+        self.overlays.get(id).cloned().unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Block {
     pub id: String,
     pub window_id: String,
+    /// The label it was given (`leon toggle` finds a drawer by it).
+    pub label: Option<String>,
     pub command: Vec<String>,
     /// The title the program set, and where it is (`session.list_blocks`).
     pub title: Option<String>,

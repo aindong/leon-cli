@@ -142,7 +142,6 @@ struct Tui {
     /// The window after a repeatable binding after the prefix ran (tmux `bind -r`).
     repeat: leon_app::keymap::Repeat,
     /// Per block, the size this client last asked for (the size rule, docs/architecture.md).
-    overlay_view: Option<(String, u64, serde_json::Value)>,
     asked: std::collections::HashMap<String, (u16, u16)>,
     /// A failed action's message, for the status bar; set from other threads too.
     note: Arc<Mutex<Option<String>>>,
@@ -163,7 +162,6 @@ impl Tui {
             pending: Vec::new(),
             repeat: Default::default(),
             asked: Default::default(),
-            overlay_view: None,
             note: Arc::default(),
             tx,
         };

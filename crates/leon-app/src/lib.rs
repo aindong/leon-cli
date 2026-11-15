@@ -4,6 +4,7 @@ pub mod attention;
 pub mod chrome;
 pub mod copy_mode;
 pub mod embedded;
+pub mod floats;
 pub mod hosts;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod icons;
