@@ -122,7 +122,7 @@ fn failure(code: Option<i32>, url: &str, host: &str, what: &str, said: &str, tim
         Some(6) => format!("could not find the host {host}: is this machine online?"),
         Some(7) => format!("could not connect to {host}"),
         Some(18) => format!("the download of {what} ended early"),
-        Some(28) => format!("timed out fetching {url}: nothing arrived for {timeout} s"),
+        Some(28) => format!("timed out fetching {url} (it stalled for {timeout} s, or took too long)"),
         Some(35) => format!("could not make a secure connection to {host}: {curl}"),
         Some(51 | 58 | 60 | 77 | 83 | 90 | 91) => format!("the certificate of {host} does not check out: {curl}"),
         _ => format!("could not fetch {url}: {curl}"),

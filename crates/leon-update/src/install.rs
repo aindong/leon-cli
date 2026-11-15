@@ -175,14 +175,19 @@ pub fn install(cfg: &Config, release: &Release, target: &Target, say: &mut dyn F
             (leon.clone(), leon)
         }
     };
+    // a real file at that very path: no link stands in for the binary, the bundle, or a
+    // directory between them
     let is_program = |m: std::fs::Metadata| m.is_file() && m.permissions().mode() & 0o100 != 0;
-    if !leon.symlink_metadata().is_ok_and(is_program) {
+    let direct = leon.canonicalize().ok()
+        == unpacked.canonicalize().ok().and_then(|u| Some(u.join(leon.strip_prefix(&unpacked).ok()?)));
+    if !direct || !leon.symlink_metadata().is_ok_and(is_program) {
         return Err(format!("{} holds no leon where a release keeps it", file.name));
     }
     // the new leon runs on this machine and is the version the manifest promised
     let ran =
         Command::new(&leon).arg("--version").env("LEON_AUTOSTART", "0").stdin(std::process::Stdio::null()).output();
-    let says = ran.map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
+    let says = ran.map(|o| String::from_utf8_lossy(&o.stdout).lines().next().unwrap_or_default().to_string());
+    let says = says.unwrap_or_default();
     if says.split_whitespace().nth(1) != Some(&release.version) {
         return Err(format!(
             "the leon in {} does not run as leon {} here (it said \"{says}\")",

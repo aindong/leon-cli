@@ -85,13 +85,89 @@ fn an_entry_with_dot_dot_is_refused() {
 
 #[test]
 fn a_symlink_that_leaves_the_directory_is_refused() {
-    for target in ["../../..", "/"] {
+    // the link alone is enough: nothing has to be written through it
+    for target in ["../../..", "/", "a/../../../.."] {
         let leon = Install::cli();
-        let archive = tarball(|tar, top| {
-            entry(tar, &format!("{top}/out"), EntryType::Symlink, target, b"");
-            entry(tar, &format!("{top}/out/symlink-evil"), EntryType::Regular, "", b"planted");
-        });
-        assert_archive_refused(&leon, archive, "link", "symlink-evil");
+        let archive = tarball(|tar, top| entry(tar, &format!("{top}/out"), EntryType::Symlink, target, b""));
+        assert_archive_refused(&leon, archive, "leaves the archive's directory", "out");
+    }
+}
+
+#[test]
+fn an_entry_written_through_a_link_is_refused() {
+    // a link that stays inside is fine; an entry whose path goes through it is not
+    let leon = Install::cli();
+    let archive = tarball(|tar, top| {
+        entry(tar, &format!("{top}/docs/"), EntryType::Directory, "", b"");
+        entry(tar, &format!("{top}/same"), EntryType::Symlink, "docs", b"");
+        entry(tar, &format!("{top}/same/through-evil"), EntryType::Regular, "", b"planted");
+    });
+    assert_archive_refused(&leon, archive, "written through a link", "through-evil");
+}
+
+#[test]
+fn an_archive_that_says_it_unpacks_to_too_much_is_refused() {
+    // the header's size is what counts: the archive is refused before the entry is written
+    let leon = Install::cli();
+    let archive = tarball(|tar, top| {
+        let mut h = tar::Header::new_gnu();
+        h.set_path(format!("{top}/huge")).unwrap();
+        h.set_mode(0o644);
+        h.set_size(2 << 30);
+        h.set_cksum();
+        tar.append(&h, &b"only a few bytes follow"[..]).unwrap();
+    });
+    let rel = Release::unsigned();
+    rel.put(&name("cli"), &archive);
+    rel.sign();
+    let before = leon.state();
+    assert_refused(&leon.update(&rel, &rel.serve(), &[]), &[&name("cli"), "unpacks to more than"]);
+    leon.assert_unchanged(before, "an archive that unpacks to too much");
+    let mut found = vec![];
+    find(&leon.home, "huge", &mut found);
+    assert!(found.is_empty(), "the entry was written: {found:?}");
+}
+
+#[test]
+fn an_archive_without_a_leon_is_refused() {
+    let top = name("cli").trim_end_matches(".tar.gz").to_string();
+    let archive = |entries: &dyn Fn(&mut Tar)| {
+        let mut tar = tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast()));
+        entries(&mut tar);
+        tar.into_inner().unwrap().finish().unwrap()
+    };
+    let leon_at = |tar: &mut Tar, path: &str| entry(tar, path, EntryType::Regular, "", &fake_leon(VERSION));
+    type Entries<'a> = &'a dyn Fn(&mut Tar);
+    let cases: [(&str, Entries); 5] = [
+        ("nothing named leon", &|tar| entry(tar, &format!("{top}/README.md"), EntryType::Regular, "", b"read me")),
+        ("a leon in another directory", &|tar| leon_at(tar, "elsewhere/leon")),
+        ("a leon that is a link", &|tar| {
+            leon_at(tar, &format!("{top}/real"));
+            entry(tar, &format!("{top}/leon"), EntryType::Symlink, "real", b"");
+        }),
+        ("a leon behind a linked directory", &|tar| {
+            leon_at(tar, "elsewhere/leon");
+            entry(tar, &top, EntryType::Symlink, "elsewhere", b"");
+        }),
+        ("a leon that is not a program", &|tar| {
+            let mut h = tar::Header::new_gnu();
+            h.set_path(format!("{top}/leon")).unwrap();
+            h.set_mode(0o644);
+            h.set_size(4);
+            h.set_cksum();
+            tar.append(&h, &b"text"[..]).unwrap();
+        }),
+    ];
+    for (what, entries) in cases {
+        let leon = Install::cli();
+        let rel = Release::unsigned();
+        rel.put(&name("cli"), &archive(entries));
+        rel.sign();
+        let before = leon.state();
+        let o = leon.update(&rel, &rel.serve(), &[]);
+        assert_eq!(o.code, 1, "{what}: {}", o.text());
+        assert!(o.err.contains("holds no leon"), "{what}: {}", o.err);
+        leon.assert_unchanged(before, what);
     }
 }
 
@@ -138,7 +214,7 @@ fn a_zip_with_a_bad_entry_is_refused() {
         zip.finish().unwrap().into_inner()
     };
     type Plant<'a> = &'a dyn Fn(&mut Zip, &Path);
-    let cases: [(&str, &str, Plant); 3] = [
+    let cases: [(&str, &str, Plant); 4] = [
         ("absolute path", "zip-abs-evil", &|zip, home| {
             zip.start_file(home.join("zip-abs-evil").to_str().unwrap(), exe).unwrap();
             zip.write_all(b"planted").unwrap();
@@ -147,9 +223,13 @@ fn a_zip_with_a_bad_entry_is_refused() {
             zip.start_file("Leon.app/../../../zip-dotdot-evil", exe).unwrap();
             zip.write_all(b"planted").unwrap();
         }),
-        ("link", "zip-symlink-evil", &|zip, _| {
-            zip.add_symlink("Leon.app/out", "../../..", exe).unwrap();
-            zip.start_file("Leon.app/out/zip-symlink-evil", exe).unwrap();
+        ("leaves the archive's directory", "zip-out", &|zip, _| {
+            zip.add_symlink("Leon.app/zip-out", "../../..", exe).unwrap();
+        }),
+        ("written through a link", "zip-through-evil", &|zip, _| {
+            zip.add_directory("Leon.app/Contents/Resources/", exe).unwrap();
+            zip.add_symlink("Leon.app/same", "Contents/Resources", exe).unwrap();
+            zip.start_file("Leon.app/same/zip-through-evil", exe).unwrap();
             zip.write_all(b"planted").unwrap();
         }),
     ];

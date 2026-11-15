@@ -11,6 +11,7 @@ use update_kit::{assert_refused, fake_leon, name, run, sha256, tarball, Install,
 fn other_tarball(rel: &Release) -> Vec<u8> {
     let leon = rel.tmp.path().join("other-leon");
     std::fs::write(&leon, fake_leon("6.6.6")).unwrap();
+    std::fs::set_permissions(&leon, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     tarball(&name("cli"), &leon)
 }
 
@@ -96,6 +97,19 @@ fn a_manifest_or_a_signature_that_never_ends_is_cut_off() {
         assert!(srv.sent() < cap + (16 << 20), "leon hung up near its cap ({cap}): the server sent {}", srv.sent());
         leon.assert_unchanged(before, "a manifest that never ends");
     }
+}
+
+#[test]
+fn a_leon_that_is_not_the_promised_version_is_refused() {
+    // signed and intact, but the leon inside says it is another version than the manifest's
+    let rel = Release::unsigned();
+    rel.put(&name("cli"), &other_tarball(&rel));
+    rel.sign();
+    let (srv, leon) = (rel.serve(), Install::cli());
+    let before = leon.state();
+    let o = leon.update(&rel, &srv, &[]);
+    assert_refused(&o, &[&name("cli"), "does not run as leon", "6.6.6"]);
+    leon.assert_unchanged(before, "a leon of another version");
 }
 
 #[test]
