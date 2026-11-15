@@ -33,8 +33,8 @@ leon.set("repeat_time", 300)
         [("ctrl+b>h", true), ("ctrl+b>x", false), ("ctrl+b>l", false), ("ctrl+b>k", true), ("ctrl+b>j", true)]
             .map(|(k, r)| (k.to_string(), r))
     );
-    assert_eq!(c.repeat_time, Some(300));
-    assert_eq!(load_src("").repeat_time, None, "unset: the client's default (500 ms)");
+    assert_eq!(c.settings.repeat_time, 300);
+    assert_eq!(load_src("").settings.repeat_time, 500, "unset: the default (500 ms)");
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn bad_repeat_options_are_refused_with_a_reason() {
         let e = errors(&c);
         assert_eq!(e.len(), 1, "{src} should be refused once: {e:?}");
         assert!(e[0].contains(word), "{src}: {:?} should name {word}", e[0]);
-        assert!(c.bindings.is_empty() && c.repeat_time.is_none(), "{src} was skipped");
+        assert!(c.bindings.is_empty() && !c.setting_sources.contains_key("repeat_time"), "{src} was skipped");
     }
-    assert_eq!(load_src(r#"leon.set("repeat_time", 0)"#).repeat_time, Some(0), "0 turns repeat off");
+    assert_eq!(load_src(r#"leon.set("repeat_time", 0)"#).settings.repeat_time, 0, "0 turns repeat off");
 }

@@ -1,5 +1,5 @@
 //! Lua on the server: the loaded `init.lua` and the methods that use it (`client.action`,
-//! `client.key`, `client.keymap`, `server.config_reload`).
+//! `client.key`, `client.keymap`, `server.config_reload`, `server.settings`).
 //!
 //! Each good load gets its own thread ("leon-lua") owning the Lua state; jobs (an action, a function
 //! binding) reach it over a channel and reply on a oneshot. Lua calls server methods in process with
@@ -123,7 +123,12 @@ fn run(rt: &Runtime, job: Job) {
 async fn reload(ctx: &Arc<Ctx>, cur: &mut Loaded) -> Result<Reloaded, ApiError> {
     let path = cur.path.clone().or_else(leon_lua::config_path).ok_or_else(|| config_error("no config path"))?;
     let (cfg, jobs) = load(ctx, path.clone()).await?;
+    let changed = cfg.settings != cur.cfg.settings;
     *cur = Loaded { path: Some(path.clone()), generation: cur.generation + 1, cfg, jobs };
+    if changed {
+        let view = serde_json::to_value(crate::settings::view(&cur.cfg)).expect("json");
+        ctx.state().emit_global("settings_changed", view);
+    }
     let km = keymap(cur);
     let mut h = std::collections::hash_map::DefaultHasher::new();
     serde_json::to_string(&(&km.bindings, &km.modes)).expect("json").hash(&mut h);
@@ -162,7 +167,7 @@ impl Ctx {
     /// setting is unknown, so nothing is typed.
     pub async fn resume_policy(&self) -> leon_lua::Resume {
         match tokio::time::timeout(Duration::from_secs(1), self.lua.read()).await {
-            Ok(loaded) => loaded.cfg.resume.unwrap_or_default(),
+            Ok(loaded) => loaded.cfg.settings.resume,
             Err(_) => {
                 eprintln!("leon: warning: the config is slow to load; restored blocks don't offer to resume");
                 leon_lua::Resume::Never
@@ -357,9 +362,21 @@ pub(crate) fn add(r: &mut Registry) {
         },
     );
     r.add_deferred(
+        "server.settings",
+        "The effective settings from init.lua (theme, font, notifications, copy_on_select, resume), \
+         defaults filled in, and where each was set. A reload that changes them emits \
+         `settings_changed` with the same object to `--all` subscribers.",
+        |ctx, _: NoParams| {
+            let ctx = ctx.clone();
+            Ok(Box::pin(async move { Ok(crate::settings::view(&ctx.lua.read().await.cfg)) })
+                as Later<crate::settings::SettingsView>)
+        },
+    );
+    r.add_deferred(
         "server.config_reload",
         "Re-read init.lua. A failed load keeps the last good config; a good one bumps the keymap \
-         generation and emits `keymap_changed`. Local socket only.",
+         generation and emits `keymap_changed`, and `settings_changed` if a setting changed. \
+         Local socket only.",
         |ctx, _: NoParams| {
             let ctx = ctx.clone();
             Ok(Box::pin(async move { reload(&ctx, &mut *ctx.lua.write().await).await }) as Later<Reloaded>)

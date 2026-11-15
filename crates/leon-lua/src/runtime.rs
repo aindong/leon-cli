@@ -319,11 +319,17 @@ impl Runtime {
     /// Run `path` top to bottom (at most [`LOAD_LIMIT`]) like [`crate::load`], keeping the state.
     pub fn load(path: &Path, host: Box<dyn Host>) -> Result<(Runtime, Config), LoadError> {
         let src = std::fs::read(path).map_err(|e| LoadError(format!("cannot read {}: {e}", path.display())))?;
+        Runtime::load_src(path, &src, host)
+    }
+
+    /// Run `src` as if it were the file at `path` (its name in messages, its folder for `require`).
+    pub fn load_src(path: &Path, src: &[u8], host: Box<dyn Host>) -> Result<(Runtime, Config), LoadError> {
         let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
         let (lua, flags, _) = new_state(dir, false, host).map_err(|e| LoadError(lua_message(e)))?;
         lua.set_memory_limit(MEMORY_LIMIT).map_err(|e| LoadError(lua_message(e)))?;
+        api::state(&lua).themes = crate::settings::themes_dir(path);
         flags.deadline.set(Some(Instant::now() + LOAD_LIMIT));
-        let r = api::exec_chunk(&lua, path, &src);
+        let r = api::exec_chunk(&lua, path, src);
         flags.deadline.set(None);
         kill_procs(&lua);
         if flags.abort.take().is_some() {

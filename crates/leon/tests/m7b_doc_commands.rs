@@ -11,8 +11,14 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// (file, the fewest `leon` calls its sh blocks must make)
-const DOCS: [(&str, usize); 5] =
-    [("README.md", 8), ("docs/agents.md", 5), ("docs/lua.md", 2), ("docs/cli.md", 5), ("docs/integrators.md", 3)];
+const DOCS: [(&str, usize); 6] = [
+    ("README.md", 8),
+    ("docs/agents.md", 5),
+    ("docs/lua.md", 2),
+    ("docs/cli.md", 5),
+    ("docs/cli/settings.md", 5),
+    ("docs/integrators.md", 3),
+];
 
 // `leon` and `leon app` open the GUI, `server run|start` would serve: skip them. A failed call
 // prints a stand-in ID so `id=$(leon run …)` gives later lines something to pass.

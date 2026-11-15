@@ -21,8 +21,8 @@ of [the architecture](../architecture.md).
   count, nothing at 0. `attention::Notifier` turns changes into notices: entering blocked or error
   (not for a block on screen while the window is key), or done after at least 30 s of working while
   the app is in the background; one per block and state a minute and four a minute in all, the rest
-  folded into one "N more" notice later; `leon.set("notify_blocked" | "notify_error" |
-  "notify_done", false)` turns a kind off (carried in `client.keymap`'s settings). Text is the
+  folded into one "N more" notice later; `leon.set("notifications.blocked" |
+  "notifications.error" | "notifications.done", false)` turns a kind off (carried in `client.keymap`'s settings). Text is the
   host › session › tab names and the record's caption with OSC 7501's hidden characters (`strip_hidden`) and line separators removed, the caption
   cut first so the state always shows,
   at most 120 chars. Notices go through `UNUserNotificationCenter` (`objc2`, already in GPUI's tree),

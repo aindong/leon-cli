@@ -9,6 +9,7 @@ mod events;
 mod hosts;
 mod layout;
 mod script;
+mod settings;
 mod skill;
 
 use std::path::PathBuf;
@@ -18,6 +19,7 @@ use clap::builder::BoolishValueParser;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use client::Fail;
+pub use settings::{ConfigCmd, ThemeCmd};
 
 #[derive(Parser)]
 #[command(name = "leon", version, about = "A fast, scriptable terminal multiplexer.", after_help = commands::EXIT_CODES)]
@@ -262,9 +264,12 @@ pub enum Cmd {
     /// List, describe and call server API methods.
     #[command(subcommand)]
     Api(ApiCmd),
-    /// Check or reload the Lua config.
+    /// Check or reload the Lua config, and get or set its settings.
     #[command(subcommand)]
     Config(ConfigCmd),
+    /// List, import and show colour themes (Ghostty and iTerm2 files). Needs no server.
+    #[command(subcommand)]
+    Theme(ThemeCmd),
     /// Run a config action on the server, or a Lua script here: `do ACTION|SCRIPT.lua|-e CODE [k=v…]`.
     Do(DoArgs),
     /// List the server's config actions.
@@ -375,17 +380,6 @@ pub struct DoArgs {
     /// ACTION or SCRIPT (unless -e or -a), then k=v arguments (values are JSON, else strings).
     #[arg(value_name = "ACTION|SCRIPT [k=v]")]
     pub words: Vec<String>,
-}
-
-#[derive(Subcommand)]
-pub enum ConfigCmd {
-    /// Load a config without applying it: print counts and diagnostics, exit 1 on error. Needs no server.
-    Check {
-        /// The config file [default: $LEON_CONFIG, else $XDG_CONFIG_HOME/leon/init.lua, else ~/.config/leon/init.lua].
-        path: Option<std::path::PathBuf>,
-    },
-    /// Re-read the config on the server; a failed load keeps the last good one (exit 1).
-    Reload,
 }
 
 #[derive(Subcommand)]

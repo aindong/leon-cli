@@ -5,13 +5,15 @@
 mod api;
 mod exec;
 pub mod keys;
+pub mod rewrite;
 mod runtime;
 mod sandbox;
 mod script;
-mod settings;
+pub mod settings;
 
 pub use runtime::{CallCtx, Host, Runtime, LOAD_LIMIT, MAX_DEPTH, TIMED_OUT};
 pub use script::{run_script, ScriptOptions, MAX_TIMERS};
+pub use settings::Settings;
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -33,20 +35,10 @@ pub struct Config {
     pub diagnostics: Vec<Diagnostic>,
     /// `leon.log` lines.
     pub logs: Vec<Diagnostic>,
-    /// `leon.set("resume", …)`; None leaves the default (`Resume::Ask`).
-    pub resume: Option<Resume>,
-    /// `leon.set("copy_on_select", true)`: the app copies a selection as it is made. None is off.
-    pub copy_on_select: Option<bool>,
-    /// `leon.set("repeat_time", ms)`: how long after a repeatable binding its keys work without the
-    /// prefix. None leaves the client's default (500 ms); 0 turns repeat off.
-    pub repeat_time: Option<u64>,
-    /// `leon.set("hint_patterns", {...})`: regular expressions hints match besides the built-in ones.
-    pub hint_patterns: Vec<String>,
-    /// `leon.set("notify_blocked" | "notify_error" | "notify_done", false)`: the app's notifications
-    /// for a block becoming blocked, erroring, or finishing a long run. None is on.
-    pub notify_blocked: Option<bool>,
-    pub notify_error: Option<bool>,
-    pub notify_done: Option<bool>,
+    /// `leon.set` calls, over the defaults.
+    pub settings: Settings,
+    /// Where each setting was last set, as `file:line`; a key left at its default has none.
+    pub setting_sources: std::collections::BTreeMap<String, String>,
 }
 
 /// What a restored block does with the resume command a program registered for itself.
@@ -178,13 +170,20 @@ pub fn config_path() -> Option<PathBuf> {
 /// Run `path` top to bottom. A bad `leon.*` call is skipped with a diagnostic; anything else
 /// that raises fails the whole load.
 pub fn load(path: &Path) -> Result<Config, LoadError> {
-    struct NoServer;
-    impl Host for NoServer {
-        fn call(&mut self, _: &str, _: Value, _: Option<std::time::Instant>) -> Result<Value, String> {
-            Err("no server".into())
-        }
-    }
     Runtime::load(path, Box::new(NoServer)).map(|(_, cfg)| cfg)
+}
+
+/// [`load`] `src` as if it were the file at `path`: what a config edit would load to.
+pub fn load_text(path: &Path, src: &str) -> Result<Config, LoadError> {
+    Runtime::load_src(path, src.as_bytes(), Box::new(NoServer)).map(|(_, cfg)| cfg)
+}
+
+struct NoServer;
+
+impl Host for NoServer {
+    fn call(&mut self, _: &str, _: Value, _: Option<std::time::Instant>) -> Result<Value, String> {
+        Err("no server".into())
+    }
 }
 
 /// The Lua error text, without mlua's "runtime error: " prefix and Lua's traceback.

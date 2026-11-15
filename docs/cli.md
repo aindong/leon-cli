@@ -396,27 +396,10 @@ leon api describe session.view
 leon api call server.status
 ```
 
-## Config
+## Config and themes
 
-### `leon config`
-
-Check or reload the Lua config (`init.lua`).
-
-### `leon config check [PATH]`
-
-Load a config without applying it: print counts and diagnostics, exit 1 if it fails or any
-`leon.*` call was skipped. Needs no server. The default path is `$LEON_CONFIG`, else
-`$XDG_CONFIG_HOME/leon/init.lua`, else `~/.config/leon/init.lua`.
-
-### `leon config reload`
-
-Re-read the config on the server. A failed load keeps the last good one and exits 1.
-
-```sh
-leon config check
-leon config check ./init.lua
-leon config reload
-```
+`leon config` (check, reload, get, set) and `leon theme` (list, import, show) are in
+[cli/settings.md](cli/settings.md).
 
 ## Server
 
