@@ -139,6 +139,8 @@ struct Tui {
     after_prefix: bool,
     /// A config sequence in progress (`ctrl+x>…`).
     pending: Vec<Chord>,
+    /// The window after a repeatable binding after the prefix ran (tmux `bind -r`).
+    repeat: leon_app::keymap::Repeat,
     /// Per block, the size this client last asked for (the size rule, docs/architecture.md).
     overlay_view: Option<(String, u64, serde_json::Value)>,
     asked: std::collections::HashMap<String, (u16, u16)>,
@@ -159,6 +161,7 @@ impl Tui {
             mode: Mode::Picker(Picker::default(), None),
             after_prefix: false,
             pending: Vec::new(),
+            repeat: Default::default(),
             asked: Default::default(),
             overlay_view: None,
             note: Arc::default(),

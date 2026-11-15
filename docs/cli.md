@@ -361,7 +361,7 @@ leon do --for 1m ./watch.lua
 
 ### `leon actions`
 
-List the server's config actions.
+Config actions, then the app's own actions.
 
 ### `leon keymap`
 

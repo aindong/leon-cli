@@ -199,6 +199,7 @@ impl Workspace {
         if let Some((_, l)) = self.term.hovered.as_ref().filter(|(b, _)| b == id) {
             add(l.start, l.end, false, Mark::Link);
         }
+        out.extend(self.mode_marks(id, c));
         out
     }
 }

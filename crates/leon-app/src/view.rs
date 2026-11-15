@@ -235,6 +235,8 @@ pub struct Workspace {
     keymap_asked: Option<Instant>,
     /// The chords of a sequence typed so far (`ctrl+b`).
     pending: Vec<Chord>,
+    /// The window after a repeatable binding ran (tmux `bind -r`).
+    repeat: keymap::Repeat,
     palette: Option<Palette>,
     /// Window ids of the tabs shown, most recent first (the switcher's order).
     recent: Vec<String>,
@@ -368,6 +370,7 @@ impl Workspace {
             inbox: Arc::default(),
             keymap_asked: None,
             pending: Vec::new(),
+            repeat: keymap::Repeat::default(),
             palette: None,
             recent: Vec::new(),
             activity: false,
@@ -479,6 +482,8 @@ impl Workspace {
 mod activity;
 #[path = "view_bars.rs"]
 mod bars;
+#[path = "view_copy.rs"]
+mod copy;
 #[path = "view_find.rs"]
 mod find;
 #[path = "view_handlers.rs"]

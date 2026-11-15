@@ -27,6 +27,8 @@ portable-pty = "0.9"
 # leon attach (M17): crossterm 0.29 comes through ratatui::crossterm, so the two agree.
 # regex-syntax: escapes a plain find query for alacritty's regex search (already in the tree through it).
 regex-syntax = "0.8"
+# regex: hint patterns (M19), the config's included (already in the tree at 1.13).
+regex = "1.13"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm_0_29"] }
 schemars = "1.2"
 serde = { version = "1", features = ["derive"] }

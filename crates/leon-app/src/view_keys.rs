@@ -9,8 +9,14 @@ impl Workspace {
     pub(super) fn key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let ks = &ev.keystroke;
         let chord = keymap::chord(ks);
+        // every key closes the repeat window; only a repeatable one opens it again
+        let mut repeat = std::mem::take(&mut self.repeat);
         if self.palette.is_some() {
             self.palette_key(ks, chord.as_ref(), window, cx);
+            cx.stop_propagation();
+            return;
+        }
+        if self.mode_key(ks, chord.as_ref(), cx) {
             cx.stop_propagation();
             return;
         }
@@ -25,6 +31,15 @@ impl Workspace {
             cx.notify();
             cx.stop_propagation();
             return;
+        }
+        if let Some(c) = chord.as_ref().filter(|_| self.pending.is_empty()) {
+            let now = Instant::now();
+            if let Some((b, prefix)) = repeat.press(c, now, |p, k| self.keymap.repeatable(p, k)) {
+                self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, now);
+                self.run_binding(b, prefix, c, window, cx);
+                cx.stop_propagation();
+                return;
+            }
         }
         if let Some(c) = &chord {
             let escape = c.key == leon_lua::keys::Key::Named("escape") && c.mods == Default::default();
@@ -43,6 +58,7 @@ impl Workspace {
                 }
                 Pressed::Run(b) => {
                     let prefix = std::mem::take(&mut self.pending);
+                    self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, Instant::now());
                     self.run_binding(b, prefix, c, window, cx);
                     cx.stop_propagation();
                     return;
@@ -151,6 +167,7 @@ impl Workspace {
                 }
             }
             "client.find.open" | "client.find.next" | "client.find.previous" => self.find_action(name, cx),
+            "client.copy_mode" | "client.hints" => self.mode_action(name, cx),
             "client.scroll.page_up" | "client.scroll.page_down" | "client.scroll.top" | "client.scroll.bottom" => {
                 self.scroll_action(name, cx)
             }
