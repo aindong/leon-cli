@@ -9,9 +9,12 @@
 # --linux ARCHES   Linux packages to build: arm64, amd64, both as arm64,amd64, or none [default: arm64,amd64]
 # --out DIR        where the files go [default: target/release-files/<version>]
 #
-# Makes Leon-<version>-macos-<arch>.zip (Leon.app, scripts/bundle.sh), per Linux arch a tarball and
-# a .deb (scripts/package-linux.sh, needs Docker), and SHA256SUMS. Runs on macOS. A set
-# CARGO_TARGET_DIR is used for the macOS build (its dependencies' cache); the source is still the clone.
+# Makes Leon-<version>-macos-<arch>.zip (Leon.app, scripts/bundle.sh), leon-<version>-<arch>-macos.tar.gz
+# (the CLI alone, laid out like the Linux tarball), per Linux arch a tarball and a .deb
+# (scripts/package-linux.sh, needs Docker), and SHA256SUMS. Runs on macOS. A set CARGO_TARGET_DIR
+# is used for the macOS build (its dependencies' cache); the source is still the clone.
+# Signing and the manifest come after: scripts/release-manifest.sh (docs/releases.md), which
+# reads the commit these files were built from out of BUILD-COMMIT, written beside them.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -23,7 +26,7 @@ while [ $# -gt 0 ]; do
     --commit) commit=${2:?--commit needs a revision}; shift 2 ;;
     --linux) linux=${2:?--linux needs arm64, amd64, arm64,amd64 or none}; shift 2 ;;
     --out) out=${2:?--out needs a directory}; shift 2 ;;
-    -h|--help) sed -n '2,15s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,18s/^# \{0,1\}//p' "$0"; exit 0 ;;
     *) echo "release.sh: unknown argument: $1 (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -73,6 +76,20 @@ ditto -c -k --keepParent "$tmp/app/Leon.app" "$zip"
 files+=("$(basename "$zip")")
 echo "release.sh: wrote $zip"
 
+# the CLI alone: the same binary with the files the Linux tarball has, for Homebrew and the updater
+cli="leon-$version-$(uname -m)-macos"
+mkdir "$tmp/$cli"
+cp "$bin" "$src/README.md" "$src/LICENSE" "$tmp/app/Leon.app/Contents/Resources/THIRD-PARTY-NOTICES.txt" "$tmp/$cli/"
+cp -R "$src/docs" "$tmp/$cli/docs"
+codesign --force --sign - "$tmp/$cli/leon" 2>/dev/null || { echo "release.sh: codesign failed on $cli/leon" >&2; exit 1; }
+# no ._ files, and no login name in the archive
+COPYFILE_DISABLE=1 tar -C "$tmp" -czf "$out/$cli.tar.gz" --numeric-owner --uid 0 --gid 0 "$cli"
+mkdir "$tmp/unpacked" && tar -C "$tmp/unpacked" -xzf "$out/$cli.tar.gz"
+got=$(LEON_AUTOSTART=0 "$tmp/unpacked/$cli/leon" --version)
+[ "$got" = "leon $version ($hash)" ] || { echo "release.sh: the tarball's leon says '$got', not 'leon $version ($hash)'" >&2; exit 1; }
+files+=("$cli.tar.gz")
+echo "release.sh: wrote $out/$cli.tar.gz"
+
 for a in ${arches[@]+"${arches[@]}"}; do
   echo "release.sh: Linux $a (scripts/package-linux.sh)"
   (cd "$src" && scripts/package-linux.sh --arch "$a")
@@ -84,5 +101,6 @@ done
 
 cd "$out"
 shasum -a 256 "${files[@]}" > SHA256SUMS
+echo "$hash" > BUILD-COMMIT # for release-manifest.sh: the manifest names this commit, whoever signs
 echo "release.sh: leon $version ($hash), in $out:"
 cat SHA256SUMS

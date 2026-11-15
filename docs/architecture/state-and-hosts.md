@@ -116,6 +116,9 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   distinct license file from the cargo registry once; it is generated per package, never committed.
   `scripts/release.sh` clones one commit into a temp dir, builds `Leon-<version>-macos-<arch>.zip`
   and both Linux arches' packages from it, and writes `SHA256SUMS`; it never tags, pushes or uploads.
+  A pushed tag runs the same scripts on GitHub, signs every file with minisign against the keys
+  pinned in `crates/leon/release-keys.pub`, and publishes the release with its manifest
+  (`docs/releases.md`).
 - **`LEON_BIN_DIR`.** Every terminal gets the server binary's directory as `LEON_BIN_DIR` and at
   the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
   `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an

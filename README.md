@@ -37,8 +37,41 @@ one needs you. It runs on macOS and Linux (the app is macOS only for now) and is
 
 ## Install
 
-There is no published release yet, so build leon from source. You need a Rust toolchain
-([rustup](https://rustup.rs)) and git.
+### Homebrew
+
+```sh
+brew install --cask aindong/leon/leon   # macOS: Leon.app, with the leon command
+brew install aindong/leon/leon          # the CLI alone, on macOS or Linux
+```
+
+Pick one: the cask's `leon` is the one inside the app. `brew upgrade` brings new releases.
+Leon.app is not notarized by Apple, so macOS will not open it while it carries the quarantine flag
+that Homebrew puts on a download. After the cask installs, and before you open the app, remove it:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Leon.app
+```
+
+### From a release
+
+Each release is at <https://github.com/aindong/leon-cli/releases/latest>: `Leon-<version>-macos-<arch>.zip`
+(Leon.app), a tarball of the CLI for macOS and for Linux, and a `.deb`, each for arm64 and x86_64.
+On macOS, unzip the app into `/Applications` and run the `xattr` command above (a file from a
+browser is quarantined too). On Linux, with the file for your machine downloaded:
+
+```sh
+dpkg -i leon_*.deb                               # Debian or Ubuntu, as root
+tar xzf leon-*-linux.tar.gz -C ~/.local          # anywhere else: unpack it,
+ln -s ~/.local/leon-*-linux/leon ~/.local/bin/   # and put its leon on your PATH
+```
+
+Every file is signed: [docs/releases.md](docs/releases.md#checking-a-download) says how to check
+one.
+
+### From source
+
+To build leon yourself you need a Rust toolchain ([rustup](https://rustup.rs)) and git. The two
+sections below build it on macOS and on Linux.
 
 ### macOS
 
@@ -91,10 +124,12 @@ ln -s ~/.local/leon-*-linux/leon ~/.local/bin/leon
 
 ### Release files
 
-`scripts/release.sh` builds, from a clean clone of one commit, the files a release will have:
-`Leon-<version>-macos-arm64.zip` (Leon.app, signed ad hoc and not notarized), a tarball and a
-`.deb` for Linux on arm64 and x86_64, and `SHA256SUMS`. It runs on macOS and needs Docker for the
-Linux packages. `leon --version` names the release and the commit it was built from.
+`scripts/release.sh` builds, from a clean clone of one commit, the files a release has:
+`Leon-<version>-macos-<arch>.zip` (Leon.app, signed ad hoc and not notarized), the CLI tarball for
+macOS, a tarball and a `.deb` for Linux on arm64 and x86_64, and `SHA256SUMS`. It runs on macOS and
+needs Docker for the Linux packages. `leon --version` names the release and the commit it was
+built from. A pushed tag does the same on GitHub, signs every file and publishes the release:
+[docs/releases.md](docs/releases.md).
 
 ## The first five commands
 
@@ -323,6 +358,7 @@ leon is at 0.1.0, not yet tagged. What has landed, milestone by milestone, is in
   language, and the compatibility promise. [docs/api.md](docs/api.md): every method.
 - [docs/architecture.md](docs/architecture.md): how it's built.
   [docs/performance.md](docs/performance.md): what it costs, measured.
+- [docs/releases.md](docs/releases.md): how a release is cut and signed, and the manifest format.
 - [CHANGELOG.md](CHANGELOG.md): what changed.
 
 ## Build and test
@@ -336,7 +372,8 @@ cargo fmt --check
 
 GPUI is built with its `runtime_shaders` feature, so you don't need Xcode's Metal toolchain. The
 terminal tests run a real shell in a PTY, and the doc tests run the commands in these docs.
-`scripts/linux-test.sh` runs the tests for everything but the app on Linux, in Docker.
+`scripts/linux-test.sh` runs the tests for everything but the app on Linux, in Docker. The release
+tests sign with a throwaway key, so they need `minisign` and `jq`.
 
 ## License
 
