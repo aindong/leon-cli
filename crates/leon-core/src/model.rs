@@ -57,7 +57,7 @@ pub struct Place {
     pub focus: bool,
 }
 
-/// The most blocks a server holds (docs/spec/core-model.md), and so the most a saved state has.
+/// The most blocks a server holds, and so the most a saved state has.
 pub const MAX_BLOCKS: usize = 1024;
 
 /// A terminal in a window. Dropping the last handle to its `terminal` hangs up the program.
@@ -98,7 +98,7 @@ pub struct State {
     pub(crate) dirty: Vec<String>,
 }
 
-/// Labels are optional, trimmed, and at most 128 characters (docs/spec.md §1).
+/// Labels are optional, trimmed, and at most 128 characters.
 pub fn clean_label(label: Option<&str>) -> Result<Option<String>, ApiError> {
     match label.map(str::trim) {
         None | Some("") => Ok(None),

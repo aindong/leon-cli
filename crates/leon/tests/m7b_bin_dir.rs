@@ -1,5 +1,5 @@
 //! Found in M7b's impact check: a terminal gets LEON_BIN_DIR (the leon binary's directory) at the
-//! front of PATH, as docs/spec.md says, so `leon` resolves inside the app even when the user's PATH
+//! front of PATH, so `leon` resolves inside the app even when the user's PATH
 //! lacks ~/.local/bin.
 
 mod support;

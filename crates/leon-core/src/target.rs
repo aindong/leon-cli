@@ -1,4 +1,4 @@
-//! Target resolution, in the order docs/spec.md §2 gives: full ID, then case-insensitive label,
+//! Target resolution, in the order docs/cli.md gives: full ID, then case-insensitive label,
 //! then 1-based position, then an ID suffix of at least 4 characters.
 
 use crate::ApiError;

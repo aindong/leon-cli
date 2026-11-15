@@ -14,7 +14,7 @@ pub struct Event {
     pub session_id: String,
     /// A server event (`session_created`, `session_destroyed`), which session-lifecycle subscribers get.
     pub server: bool,
-    /// The event in the spec's CLI JSON shape (docs/spec.md §4).
+    /// The event in its CLI JSON shape (`leon events`, docs/cli.md).
     pub body: Value,
 }
 

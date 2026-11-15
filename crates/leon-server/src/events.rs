@@ -3,8 +3,7 @@
 //! the state lock is held and the snapshot is taken under that same lock, so a client applies the
 //! snapshot, then every event with a higher seq, and misses nothing.
 //!
-//! A subscriber whose queue would pass `MAX_BACKLOG` is dropped and its queue freed (docs/spec.md
-//! §3). Queueing never waits, so a client that stops reading slows nobody else. A resumable one
+//! A subscriber whose queue would pass `MAX_BACKLOG` is dropped and its queue freed (docs/api.md). Queueing never waits, so a client that stops reading slows nobody else. A resumable one
 //! also keeps the lines it wrote last, for `session.resume` (resume.rs).
 
 use std::collections::{HashSet, VecDeque};

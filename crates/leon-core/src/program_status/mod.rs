@@ -1,4 +1,4 @@
-//! The OSC 7501 program-status protocol (docs/spec.md §5): scanner, parser, per-terminal store.
+//! The OSC 7501 program-status protocol (docs/agents.md): scanner, parser, per-terminal store.
 //!
 //! Pure: the terminal's reader feeds PTY output into a [`Tracker`], hands the pass-through bytes to
 //! the emulator, writes `reply` back to the PTY, and forwards the [`Change`]s as events.

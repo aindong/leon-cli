@@ -1,4 +1,4 @@
-//! A window's layout: a binary tree of splits with blocks at the leaves (docs/spec.md §1).
+//! A window's layout: a binary tree of splits with blocks at the leaves.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

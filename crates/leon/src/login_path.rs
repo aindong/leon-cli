@@ -1,5 +1,5 @@
-//! The login shell's PATH for the server's programs (docs/spec/cli.md: "Commands run with the login
-//! shell's env"). Leon.app opened from Finder starts the server with launchd's bare PATH, and
+//! The login shell's PATH for the server's programs (commands run with the login
+//! shell's env). Leon.app opened from Finder starts the server with launchd's bare PATH, and
 //! `leon server proxy` over ssh with sshd's, so `leon run -- cargo test` found nothing. Only PATH is
 //! taken: the rest of a login shell's environment is the shell's own business.
 

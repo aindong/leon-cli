@@ -21,7 +21,7 @@ use tokio::sync::watch;
 
 use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
 
-/// The terminal block namespace (`<ns>.terminal` in docs/spec.md).
+/// The terminal block namespace.
 #[path = "terminal_cwd.rs"]
 mod cwd;
 use cwd::{process_cwd, pwd_path, pwd_url};
@@ -420,7 +420,7 @@ impl Terminal {
 }
 
 /// Program-supplied text for events: no control, bidi or invisible characters (they would reach
-/// whoever shows the event, docs/spec.md §5), at most `MAX_TEXT` bytes.
+/// whoever shows the event, docs/agents.md), at most `MAX_TEXT` bytes.
 fn clean(s: &str) -> String {
     let mut out = String::new();
     for c in strip_hidden(s).chars() {

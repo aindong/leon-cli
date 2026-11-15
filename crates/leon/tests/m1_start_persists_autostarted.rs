@@ -1,4 +1,4 @@
-//! `server start` must make an already-running autostarted server persistent (docs/spec.md §1).
+//! `server start` must make an already-running autostarted server persistent.
 
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Output};

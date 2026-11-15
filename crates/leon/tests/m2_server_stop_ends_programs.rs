@@ -1,4 +1,4 @@
-//! Stopping the server ends every program it runs (docs/spec.md §1, "stopping ends every program"):
+//! Stopping the server ends every program it runs:
 //! the state drops when `serve` returns, and each terminal hangs up its process group.
 
 use std::os::unix::fs::PermissionsExt;

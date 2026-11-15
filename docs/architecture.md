@@ -2,7 +2,7 @@
 
 leon is a terminal multiplexer: a long-lived server owns sessions, windows (tabs), split
 layouts and terminal panes ("blocks"); clients (the macOS app, the `leon` CLI, Lua scripts,
-agents) drive it through one self-describing API. `docs/spec.md` is the interface we match.
+agents) drive it through one self-describing API.
 
 ## Crates (one Cargo workspace)
 
@@ -78,7 +78,6 @@ The decisions, in six parts:
 
 ## Verification
 
-`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (the loop's
-`the verify script` runs all three); on Linux, `scripts/linux-test.sh` (Platforms, above). Terminal
+`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`; on Linux, `scripts/linux-test.sh` (Platforms, above). Terminal
 behaviour is tested end to end: spawn a real shell in a PTY, send input, wait for the screen, assert
 on `capture`. The GUI is checked by window-only screenshots.

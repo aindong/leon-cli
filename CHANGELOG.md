@@ -5,8 +5,8 @@ Everything that changes in leon, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) through its `api_version`.
 
 0.1.0 is the first release. Its section sums up what it brings; under it, each milestone from
-[docs/roadmap.md](docs/roadmap.md) and [docs/research/next-for-leon.md](docs/research/next-for-leon.md)
-keeps its own notes, dated by when it landed on `main`. Milestones that haven't landed have no
+[docs/roadmap.md](docs/roadmap.md) keeps its own notes, dated by when it landed on `main`.
+Milestones that haven't landed have no
 section: M22b (themes and settings in the app) and the app on Linux (M15's second part; Linux has
 the server, the CLI and `leon attach`).
 
@@ -29,7 +29,7 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
-### Daily-driver polish (docs/research/daily-driver-0.1.0.md)
+### Daily-driver polish
 
 #### Added
 
@@ -116,7 +116,7 @@ The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
   x86_64, each with LICENSE and the third-party notices. `scripts/release.sh` builds them all from
   a clean checkout and prints their SHA-256 sums.
 
-### Fixed in the release audit ([docs/audit-0.1.0.md](docs/audit-0.1.0.md))
+### Fixed in the release audit
 
 - A server could open only about 80 panes when it started with a low open-file limit, which is
   what launchd gives the app: past that, new panes failed with "Too many open files". The server
@@ -129,7 +129,7 @@ The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
   splits, and a server holds at most 1024 blocks; past either, `session.new_split`,
   `session.move_block` and the like answer 400. Schemas are unchanged.
 
-### Fixed in the [daily-driver test](docs/research/daily-driver-0.1.0.md)
+### Fixed in the daily-driver test
 
 - `leon run`, `split`, `float --new` and Lua find programs on your shell's PATH (login and rc
   files), even when Leon.app started the server from Finder with launchd's bare PATH.

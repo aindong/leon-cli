@@ -1,4 +1,4 @@
-//! The report grammar (docs/spec.md §5): `pairs := pair (":" pair)*`, `pair := key "=" value`.
+//! The report grammar (docs/agents.md): `pairs := pair (":" pair)*`, `pair := key "=" value`.
 
 use base64::engine::{general_purpose::GeneralPurpose, DecodePaddingMode, GeneralPurposeConfig};
 use base64::{alphabet, Engine as _};

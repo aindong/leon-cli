@@ -1,4 +1,4 @@
-//! Report grammar: every rule and limit in docs/spec.md §5.
+//! Report grammar: every rule and limit in docs/agents.md.
 
 use base64::Engine as _;
 use leon_core::program_status::{parse, Ignored, Kind, Message, Piece, Record, Scanner, State};

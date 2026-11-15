@@ -1,4 +1,4 @@
-//! What needs the user, across every machine (docs/spec.md §5 "UI use"): the Activity list's rows
+//! What needs the user, across every machine (docs/agents.md, "Program status"): the Activity list's rows
 //! by priority, the blocked count for the badges, and which state changes become a notification.
 //! Pure: the window feeds it the models and the clock, and posts what it returns.
 

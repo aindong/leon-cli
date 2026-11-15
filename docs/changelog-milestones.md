@@ -136,7 +136,7 @@ Add session.float_block, new_floating, dock_block, unfloat_block and toggle. Win
 
 #### Changed
 
-- The spec and the reference app research now have short indexes linking their original sections.
+- The long design notes now have short indexes linking their original sections.
 
 ### M18: a promise for integrators
 

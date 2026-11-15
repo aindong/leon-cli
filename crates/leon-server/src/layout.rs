@@ -1,5 +1,5 @@
 //! `session.new_split` and the layout methods: move, swap, zoom, resize, focus. Each returns the
-//! session's `revision` (docs/spec.md §3).
+//! session's `revision` (docs/api.md).
 
 use leon_core::layout::{Direction, Side, Toward};
 use leon_core::panes::check_ratio;

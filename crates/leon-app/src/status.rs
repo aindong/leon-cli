@@ -1,4 +1,4 @@
-//! What the app shows for OSC 7501 program status (docs/spec.md §5 "UI use"): one indicator per
+//! What the app shows for OSC 7501 program status (docs/agents.md, "Program status"): one indicator per
 //! pane, tab or session, the highest-priority state among its records, and a pane caption.
 
 use leon_core::program_status::{Kind, Record, State};

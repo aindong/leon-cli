@@ -1,4 +1,4 @@
-//! Sessions saved when the server stops and restored when it starts (docs/spec.md §1). Programs
+//! Sessions saved when the server stops and restored when it starts. Programs
 //! don't survive a restart: a restored block runs a fresh login shell in its saved cwd, showing its
 //! saved text above it (restore.rs). The saved command is kept only for the record, so a restart
 //! never re-runs a command; only a resume command a program registered for itself is offered.

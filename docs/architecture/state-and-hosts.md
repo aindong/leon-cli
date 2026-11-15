@@ -100,8 +100,8 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   --version` prints the version. Rust links glibc dynamically: the binary needs glibc 2.34 or newer
   (measured on arm64 and amd64; no musl build yet).
 - **The login shell's PATH.** Leon.app opened from Finder starts the server with launchd's bare
-  PATH, and `leon server proxy` over ssh with sshd's, so programs weren't found (docs/spec/cli.md:
-  commands run with the login shell's env). `leon server run` first runs `$SHELL -i -l -c
+  PATH, and `leon server proxy` over ssh with sshd's, so programs weren't found (commands should
+  run with the login shell's env). `leon server run` first runs `$SHELL -i -l -c
   /usr/bin/env` (else the passwd entry's shell) and takes its last `PATH=` line: interactive, so a
   PATH set in `~/.zshrc` counts as in the user's tab; from the system PATH; with
   `LEON_AUTOSTART=0`, so an rc line that runs leon can't start a server whose probe runs it again;
@@ -153,8 +153,8 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
 - **Docs are tested.** `docs/cli.md` is checked against every `--help`; the `sh` blocks in the docs
   run against the real binary (a bad command line fails); `docs/lua.md`'s examples go through
   `leon config check` and `leon do -e`.
-- **Naming.** Method, action, event and flag names follow `docs/spec.md`, so scripts and agents written
-  for that interface carry over. Env vars are `LEON_*`.
+- **Naming.** Method, action, event and flag names stay as `docs/api.md` lists them, so scripts and
+  agents keep working (`docs/integrators.md#compatibility`). Env vars are `LEON_*`.
 
 - **Saved overlays (M20a).** State file version 3 adds per-window `floating` and `docked`
   arrays and permits a null tiled layout. Versions 1 and 2 still load with empty overlays.

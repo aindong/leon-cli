@@ -1,4 +1,4 @@
-//! Release audit: a server holds at most 1024 blocks (docs/spec/core-model.md), the most a saved
+//! Release audit: a server holds at most 1024 blocks, the most a saved
 //! state may have and still load. Before, the 1025th opened, the save went through, and the next
 //! start refused the whole file, losing every session.
 

@@ -24,7 +24,7 @@ impl ApiError {
     pub fn method_not_found(name: &str) -> Self {
         Self::new(404, "method_not_found", format!("no method {name}"))
     }
-    /// A query that named no target, or more than one: the CLI exits 3 for these (docs/spec.md §2).
+    /// A query that named no target, or more than one: the CLI exits 3 for these (docs/cli.md).
     pub fn is_target_error(&self) -> bool {
         matches!(self.code.as_str(), "not_found" | "session_not_found" | "ambiguous")
     }

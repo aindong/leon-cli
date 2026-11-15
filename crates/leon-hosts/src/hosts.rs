@@ -1,5 +1,5 @@
 //! The hosts list: `$LEON_STATE_DIR/hosts.json`, `{"version":1,"hosts":[{label, endpoints, icon}]}`
-//! (docs/spec.md §2, `hosts add LABEL EP… --icon`). It names the machines `-H` may type into, so it
+//! (docs/cli.md, `hosts add LABEL EP… --icon`). It names the machines `-H` may type into, so it
 //! is read only from a private dir of ours and written 0600 through a temp file and a rename.
 
 use std::io::Write;

@@ -1,6 +1,6 @@
 //! Daily-driver criterion 1 (.agent/plans/2026-11-15-daily-driver-fixes.md): a server started the
 //! way Leon.app starts it from Finder (launchd's bare PATH, no shell around it) runs programs with
-//! the login shell's PATH, as docs/spec/cli.md says ("Commands run with the login shell's env").
+//! the login shell's PATH, as commands run in a terminal would.
 
 mod support;
 

@@ -1,5 +1,5 @@
 //! `scripts/release.sh` checks its arguments before it clones or builds anything. The build itself
-//! is proven by running it (docs/audit-0.1.0.md); these are the cheap refusals.
+//! is proven by running it; these are the cheap refusals.
 
 use std::path::PathBuf;
 use std::process::Command;

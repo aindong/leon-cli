@@ -311,8 +311,8 @@ See [docs/lua.md](docs/lua.md).
   language, and the compatibility promise. [docs/api.md](docs/api.md): every method.
   [CHANGELOG.md](CHANGELOG.md): what changed.
 - [docs/recipes.md](docs/recipes.md): project and git worktree sessions as a Lua recipe.
-- [docs/architecture.md](docs/architecture.md): how it's built. [docs/spec.md](docs/spec.md): the
-  interface it matches. [docs/roadmap.md](docs/roadmap.md): what's next.
+- [docs/architecture.md](docs/architecture.md): how it's built. [docs/roadmap.md](docs/roadmap.md):
+  what's next.
 
 ## Develop
 

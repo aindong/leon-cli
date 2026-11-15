@@ -1,18 +1,10 @@
 # leon identity
 
-**11 / Original, cleaned** is leon's production identity. The user selected the original Pocket guardian over refinements A, B and C: keep its chunky square silhouette, rounded ear and mane bumps, relaxed lids, broad nose and knowing half-smile. The final render only cleans the grain and contour, smooths the gold-to-coral-to-Oxide shading, and polishes the deep maroon tile. The bottom stays broad and level; the original shallow forehead notch is retained without adding B's swoosh or pointed chin.
+leon's mark is a lion with a chunky square silhouette, rounded ear and mane bumps, relaxed lids, a broad nose and a knowing half-smile, shaded gold to coral to Oxide on a deep maroon tile.
 
 **Tagline:** Keep your work in view.
 
 ![leon hero](marketing/hero.png)
-
-## Selection and review
-
-[Original 11 beside the final master and true 32 px reductions](exploration/final-compare.png) is the current review sheet. This directly compares the user's selected thumbnail with the production icon. [Exact prompt and preparation notes](exploration/final-prompts.md) document the cleanup and vector work.
-
-![Original 11 and the cleaned production icon](exploration/final-compare.png)
-
-The [twelve-character sheet](exploration/character-directions.png) records the user's choice. The A/B/C refinement sheet and all pane-mane/glass studies remain historical and are superseded. No reference-company artwork was supplied to imagegen. Leon keeps a frontal square character, warm continuous colour and a maroon tile.
 
 ## Assets and rules
 
