@@ -14,7 +14,8 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   `leon do` scripts, and `leon_app::remote::Remote` (`leon attach`, and the app). That ssh gets its stdin, stdout and stderr and no
   other descriptor of the client's: every other one is marked close-on-exec in the forked child, because macOS marks a new
   pipe in a second step, and an ssh forked in between (by another connection's thread) held that connection's pipes, so
-  its `spawn` never returned. leon adds
+  its `spawn` never returned. A `leon.exec` program starts the same way (`leon_core::spawn::stdio_only`), so it can't hold a pane's
+  PTY that another thread is opening. leon adds
   only `-T`, no forwarding (no agent on the host, no port a config's `LocalForward` would bind) and
   the keepalives (a dead Wi-Fi link is noticed in about 45 s) and the connect timeout (a command
   started during an outage fails in 15 s, a stalled banner included); everything else comes from

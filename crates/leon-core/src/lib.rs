@@ -13,6 +13,7 @@ pub mod paths;
 pub mod program_status;
 pub mod screen;
 pub mod search;
+pub mod spawn;
 pub mod target;
 pub mod terminal;
 pub mod theme;

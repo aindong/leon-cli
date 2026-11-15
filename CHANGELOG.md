@@ -78,6 +78,9 @@ fields it doesn't know. The full policy is in
   server can't be reached: Resource temporarily unavailable`. The ssh started for one of a
   link's connections could inherit the pipes of another that was starting at the same moment,
   which then was never served. ssh now gets its stdin, stdout and stderr and nothing else.
+- A program started by `leon.exec` gets its stdin, stdout and stderr and nothing else: it could
+  hold the terminal of a pane that was opening at the same moment, which then never saw its own
+  program exit.
 
 No schema changed, so `api_version` stays `1.5.0`.
 
