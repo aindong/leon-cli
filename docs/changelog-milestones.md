@@ -285,8 +285,8 @@ Add session.float_block, new_floating, dock_block, unfloat_block and toggle. Win
 
 ### Added
 
-- OSC 7501 program status: programs report working, done, blocked or error; leon parses it per
-  the spec, sends `program_status_changed` events, and answers
+- OSC 7501 program status: programs report working, done, blocked or error; leon parses it
+  (docs/agents.md), sends `program_status_changed` events, and answers
   `leon block call … program_status`.
 
 ## M3: layout and events - 2026-11-14

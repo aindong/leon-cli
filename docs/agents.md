@@ -131,22 +131,19 @@ and each change is a `program_status_changed` event in `leon events -s SESSION`.
 
 ### The OSC 7501 format
 
-A report is one escape sequence written to the terminal; a query asks what the terminal supports:
-
-```text
-OSC 7501 ; pairs ST          report      (OSC = ESC ] = 0x1B 0x5D; ST = ESC \ or BEL 0x07)
-OSC 7501 ; ? ST              query
-reply: OSC 7501 ; ? [: states=idle,working,done,blocked,error] [: kinds=permission,question,auth] ST
-pairs := pair (":" pair)* ; pair := key "=" value ; key := [a-z]+ ; value := [A-Za-z0-9_.,+/=-]*
-id := segment ("/" segment)* ; segment := [A-Za-z0-9_.+-]{1,32}
-```
+A report is one escape sequence written to the terminal: `ESC ] 7501 ;`, then `key=value` pairs
+joined by `:`, then `BEL` (or `ESC \`). A key is lower-case letters; a value uses only letters,
+digits and `_ . , + / = -`. An `id` is up to 8 segments joined by `/`, each 1 to 32 of letters,
+digits and `_ . + -`. Sending `ESC ] 7501 ; ? BEL` asks what the terminal supports; leon answers
+`ESC ] 7501 ; ? : states=idle,working,done,blocked,error : kinds=permission,question,auth ESC \`
+(without the spaces).
 
 For example, `printf '\033]7501;state=working:progress=40\007'` says the program is 40% through.
 
-- **Keys.** `state` (required): `idle`, `working`, `done`, `blocked`, `error` or `clear`. `id`
+- **Keys.** `state` (required): `idle` (nothing to report), `working`, `done`, `blocked`, `error` or `clear`. `id`
   names a record (none is the root record; `/` makes a child). `kind` (with `blocked` only):
   `permission`, `question` or `auth`. `progress`: 0 to 100, with `working` or `blocked` (none means
-  unknown). `app`: `[A-Za-z0-9_.+-]{1,32}`, inherited from the nearest parent record. `title` and
+  unknown). `app`: `[A-Za-z0-9_.+-]{1,32}`, taken from the nearest ancestor that sets one. `title` and
   `msg`: base64 of one line of UTF-8 with no control characters.
 - **Rules.** Whitespace is trimmed, a malformed pair is skipped, an unknown key is ignored and the
   last duplicate wins. An unknown `state` or a bad `id` drops the whole report (a bad `id` never

@@ -24,7 +24,8 @@ fi
 cargo build --release -q -p leon
 leon=$repo/target/release/leon
 
-d=$(cd "$(mktemp -d)" && pwd -P) # the real path, so the app writes HOME as ~
+d=$(mktemp -d)
+d=$(cd "$d" && pwd -P) # the real path, so the app writes HOME as ~
 chmod 700 "$d"
 mkdir -m 700 -p "$d/run" "$d/state" "$d/dev/run" "$d/dev/state"
 home=$d/home
@@ -157,7 +158,7 @@ cleanup() {
   [ -n "$app_pid" ] && kill "$app_pid" 2>/dev/null || true
   here --autostart=false server stop --discard >/dev/null 2>&1 || true
   dev --autostart=false server stop --discard >/dev/null 2>&1 || true
-  rm -rf "$d"
+  rm -rf "${d:?}"
 }
 trap cleanup EXIT
 

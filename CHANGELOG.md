@@ -6,8 +6,7 @@ Everything that changes in leon, newest first. The format follows
 
 0.1.0 is the first release. Its section sums up what it brings; under it, each milestone from
 [docs/roadmap.md](docs/roadmap.md) keeps its own notes, dated by when it landed on `main`.
-Milestones that haven't landed have no
-section: M22b (themes and settings in the app) and the app on Linux (M15's second part; Linux has
+Milestones that haven't landed have no section: the app on Linux (M15's second part; Linux has
 the server, the CLI and `leon attach`).
 
 ## Reading `api_version`

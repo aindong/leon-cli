@@ -21,10 +21,14 @@ if [ "$locked" = 1 ]; then
   echo "demo-gifs: the screen is locked; a locked screen draws nothing (exit 2)"
   exit 2
 fi
+for tool in ffmpeg vhs ttyd; do
+  command -v "$tool" >/dev/null || { echo "demo-gifs: needs $tool (brew install ffmpeg vhs)" >&2; exit 1; }
+done
 cargo build --release -q -p leon
 leon=$repo/target/release/leon
 
-d=$(cd "$(mktemp -d)" && pwd -P) # the real path, so the app writes HOME as ~
+d=$(mktemp -d)
+d=$(cd "$d" && pwd -P) # the real path, so the app writes HOME as ~
 chmod 700 "$d"
 mkdir -m 700 -p "$d/run" "$d/state" "$d/cli/run" "$d/cli/state" "$d/frames"
 home=$d/home
@@ -91,13 +95,18 @@ cat >"$d/migrate.txt" <<'EOF'
   Run it on production now?
 EOF
 
-base=(env -u LEON_SESSION -u LEON_BLOCK -u ZDOTDIR HOME="$home" SHELL=/bin/zsh PATH="$home/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+# a clean env: nothing of this machine (tokens, TERM_PROGRAM, ssh agent) reaches the demo
+base=(env -i HOME="$home" SHELL=/bin/zsh PATH="$home/bin:/usr/bin:/bin:/usr/sbin:/sbin" TERM=xterm-256color LANG=en_US.UTF-8)
 here() { "${base[@]}" LEON_RUNTIME_DIR="$d/run" LEON_STATE_DIR="$d/state" LEON_CONFIG="$d/none.lua" "$leon" "$@"; }
 
 app_pid=
+rec=
 cleanup() {
+  [ -n "$rec" ] && { kill "$rec" 2>/dev/null; wait "$rec" 2>/dev/null; } || true
   [ -n "$app_pid" ] && kill "$app_pid" 2>/dev/null || true
   here --autostart=false server stop --discard >/dev/null 2>&1 || true
+  "${base[@]}" LEON_RUNTIME_DIR="$d/cli/run" LEON_STATE_DIR="$d/cli/state" "$leon" --autostart=false server stop --discard \
+    >/dev/null 2>&1 || true
   rm -rf "${d:?}"
 }
 trap cleanup EXIT
@@ -121,6 +130,7 @@ cat >"$d/state/app.json" <<EOF
 {"tab_style":"sidebar","pane_headers":true,"sidebar_width":210,"window":{"x":60,"y":60,"w":1200,"h":760},"display":$display,"collapsed_hosts":[]}
 EOF
 
+# not `here app &`: $! must be the app itself, for the keys and the window below
 "${base[@]}" LEON_RUNTIME_DIR="$d/run" LEON_STATE_DIR="$d/state" LEON_CONFIG="$d/none.lua" "$leon" app >/dev/null 2>&1 &
 app_pid=$!
 sleep 4
@@ -130,10 +140,13 @@ typ() { keys "keystroke \"$1\"" 0.3; }
 front
 here -s auth focus "$claude" >/dev/null 2>&1 || true
 sleep 1
-wid=$(swift - 2>/dev/null <<'SWIFT'
+# the window of this app_pid only: another leon app on this machine shows real sessions
+wid=$(APP_PID=$app_pid swift - 2>/dev/null <<'SWIFT'
 import CoreGraphics
+import Foundation
+let pid = Int(ProcessInfo.processInfo.environment["APP_PID"] ?? "") ?? -1
 let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as! [[String: Any]]
-let w = list.first { ($0[kCGWindowOwnerName as String] as? String) == "leon" && ($0[kCGWindowLayer as String] as? Int) == 0 }
+let w = list.first { ($0[kCGWindowOwnerPID as String] as? Int) == pid && ($0[kCGWindowLayer as String] as? Int) == 0 }
 print(w?[kCGWindowNumber as String] as? Int ?? 0)
 SWIFT
 )
@@ -165,6 +178,7 @@ keys 'keystroke "a" using {command down, shift down}' 3   # Activity: what needs
 keys 'keystroke "a" using {command down, shift down}' 1
 touch "$d/stop"
 wait "$rec"
+rec=
 kill "$app_pid" 2>/dev/null || true
 wait "$app_pid" 2>/dev/null || true
 app_pid=
@@ -199,7 +213,10 @@ Env LEON_RUNTIME_DIR "$d/cli/run"
 Env LEON_STATE_DIR "$d/cli/state"
 Env LEON_CONFIG "$d/none.lua"
 Hide
-Type "export PS1='\$ '; cd ~/src/app; clear"
+Type "exec env -i HOME='$home' SHELL=/bin/bash PATH='$home/bin:/usr/bin:/bin:/usr/sbin:/sbin' TERM=xterm-256color LANG=en_US.UTF-8 LEON_RUNTIME_DIR='$d/cli/run' LEON_STATE_DIR='$d/cli/state' LEON_CONFIG='$d/none.lua' PS1='\$ ' bash --noprofile --norc"
+Enter
+Sleep 300ms
+Type "cd ~/src/app; clear"
 Enter
 Sleep 500ms
 Show
@@ -236,6 +253,5 @@ Type "d"
 Sleep 1.8s
 EOF
 (cd "$d" && vhs demo.tape >/dev/null)
-"${base[@]}" LEON_RUNTIME_DIR="$d/cli/run" LEON_STATE_DIR="$d/cli/state" "$leon" --autostart=false server stop --discard >/dev/null 2>&1 || true
 gif -i "$d/cli.mp4" "$out/demo-cli.gif"
 echo "demo-gifs: demo-cli.gif"

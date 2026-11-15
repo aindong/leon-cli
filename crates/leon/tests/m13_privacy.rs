@@ -1,6 +1,7 @@
 //! M13 criterion 11: the docs show a neutral demo, never the machine they were made on: no image
 //! name, README text, image byte or (with macOS Vision, through scripts/ocr.swift) text read off
-//! an image holds the current user's login or this machine's host or computer name.
+//! an image (every distinct frame of a GIF, with ffmpeg) holds the current user's login or this
+//! machine's host or computer name.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -65,7 +66,25 @@ fn no_screenshot_shows_the_user_or_machine() {
         eprintln!("no swift with Vision here: the OCR check is skipped");
         return;
     }
-    let pngs: Vec<PathBuf> = images().into_iter().filter(|p| p.extension().is_some_and(|e| e == "png")).collect();
+    let mut pngs: Vec<PathBuf> = images().into_iter().filter(|p| p.extension().is_some_and(|e| e == "png")).collect();
+    // a recording's every distinct frame (mpdecimate drops repeats), when ffmpeg is here to split it
+    let frames = tempfile::tempdir().unwrap();
+    for gif in images().into_iter().filter(|p| p.extension().is_some_and(|e| e == "gif")) {
+        let name = gif.file_stem().unwrap().to_string_lossy().to_string();
+        let pattern = frames.path().join(format!("{name}-%04d.png"));
+        let split = Command::new("ffmpeg")
+            .args(["-loglevel", "error", "-i"])
+            .arg(&gif)
+            .args(["-vf", "mpdecimate", "-fps_mode", "vfr"])
+            .arg(&pattern)
+            .status();
+        if !split.is_ok_and(|s| s.success()) {
+            eprintln!("no ffmpeg here: {name}.gif's frames are not OCR'd");
+        }
+    }
+    let mut split: Vec<PathBuf> = std::fs::read_dir(frames.path()).unwrap().map(|e| e.unwrap().path()).collect();
+    split.sort();
+    pngs.extend(split);
     let mut cmd = Command::new("swift");
     cmd.arg(root().join("scripts/ocr.swift")).args(&pngs);
     let out = cmd.output().unwrap();

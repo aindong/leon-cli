@@ -13,7 +13,7 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   `session.attach_all {event_scope: session|all}` subscribe the connection and return a snapshot with
   its `seq`. `seq` is per connection and gapless; events are queued while the state lock is held and
   the snapshot is taken under it, so the snapshot sits exactly between two events. Event bodies use
-  the spec's CLI JSON shape (`session_event` → `block_event`). A connection more than 8 MiB behind
+  the CLI's JSON shape (`session_event` → `block_event`). A connection more than 8 MiB behind
   is dropped. Each call that changes a session's view bumps its `revision` once and emits one
   `session_view_changed`.
 - **Layout.** A window's tiled layout is a tree of `split` nodes (`horizontal` = side by side,
@@ -81,13 +81,13 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   frame builds a second while a keystroke's echo after a quiet spell goes at once. The watcher
   holds the terminal weakly, so watching a block never keeps its program alive.
   `dev.leon.terminal.screen` returns the same whole screen once. Colours are resolved on the
-  server with leon's one theme (shortcut until themes exist: then the client sends its palette, the
-  spec's `set_theme`). Other block methods the app uses: `write`, `resize`, `pwd`, and
+  server with leon's one theme (shortcut until themes exist: then the client sends its palette, a
+  `set_theme`). Other block methods the app uses: `write`, `resize`, `pwd`, and
   `block.event` with `event: {type: "focus"}`, which clears `done`/`error` the way arriving at a
   pane does, and `event: {type: "paste", data}`, which the server wraps by the program's
   bracketed-paste mode at that moment (the app's copy of the screen may be older). `block.watch`
-  and `dev.leon.terminal.screen` are leon's own: the spec's screen stream is `data.connect` over a
-  WebSocket, which leon doesn't serve. The app attaches only to a socket in a private dir.
+  and `dev.leon.terminal.screen` are leon's own, in place of a
+  `data.connect` screen stream over a WebSocket, which leon doesn't serve. The app attaches only to a socket in a private dir.
 - **Scrollback in the app.** Every terminal numbers its lines: `scrolled` counts the lines ever
   pushed into its scrollback, so the screen's top row is line `scrolled`, the oldest kept is
   `scrolled - history`, and appended output never renumbers a line. The count is taken per 4 KiB
@@ -120,7 +120,7 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   logical line (across wraps), trailing punctuation and an unmatched `)` trimmed; a URI over 2 KiB
   or with a control, bidi or invisible character is refused. ⌘-click opens `http(s)` at once and
   anything else only after a prompt that shows it.
-- **Mouse reporting.** `block.event` takes the spec's `mouse` (press, release, move; button;
+- **Mouse reporting.** `block.event` takes `mouse` (press, release, move; button;
   cell; shift/alt/ctrl) and `wheel` (notches) events, encoded on the server by the program's mode
   at that moment (`leon_core::mouse`), as paste is: X10 (`?9`, which alacritty doesn't parse, so a
   bounded scanner beside the OSC 7501 one follows it), 1000, 1002, 1003; SGR (1006), UTF-8 (1005)

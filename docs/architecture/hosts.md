@@ -27,7 +27,7 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   stopped. Nothing listens on TCP. An endpoint is parsed into words of `[A-Za-z0-9._-]` (or an
   IPv6 address in brackets) that can't start with `-`, a port 1–65535, and no path: anything that
   could reach ssh as an option or a shell as code is a bad command line (exit 2). The hosts list is
-  `$LEON_STATE_DIR/hosts.json` (`{"version":1,"hosts":[{label, endpoints, icon}]}`, spec §2),
+  `$LEON_STATE_DIR/hosts.json` (`{"version":1,"hosts":[{label, endpoints, icon}]}`),
   written 0600 via a temp file and a rename, read only from a private dir and a regular file of
   ours, and each endpoint is parsed again when used. With `-H`, `LEON_SESSION`/`LEON_BLOCK` are
   ignored. A link flocks `lock` in its dir while it lives; dropping it ends its accept loop (a

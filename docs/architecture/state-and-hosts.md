@@ -122,7 +122,7 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   older `leon` in `/usr/local/bin` can win there; the dir is still on PATH.
 - **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.5.0`), apart
   from the build's version. Each method doc carries `stability` (`stable`, `experimental`,
-  `internal`), and optionally `deprecated` (`since`, `replacement`, `removal`) and the spec's
+  `internal`), and optionally `deprecated` (`since`, `replacement`, `removal`) and
   `request_example`/`response_example`; all of it comes from one table,
   `leon_server::contract`, which must name every method and block method. Stable: help, server,
   sessions, windows, targets, blocks, layout, events and the terminal's `write`, `format`, `size`,

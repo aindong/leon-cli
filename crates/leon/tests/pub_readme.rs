@@ -36,7 +36,7 @@ fn readme_covers_what_a_visitor_needs() {
     }
     assert!(readme.contains("scripts/release.sh"), "says what the release script makes");
     let roadmap = readme.split("## Roadmap").nth(1).unwrap().split("\n## ").next().unwrap();
-    for limit in ["Linux", "leon attach", "Lookalike", "codex exec"] {
+    for limit in ["The app on Linux", "Two clients on one tab", "Lookalike", "codex exec"] {
         assert!(roadmap.contains(limit), "the roadmap names the known limit {limit:?}");
     }
 }

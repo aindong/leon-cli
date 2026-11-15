@@ -43,7 +43,7 @@ The icon's continuous light field moves **Gold → Amber → Coral → Oxide**, 
 
 Status accents are quieter than the retired pane colours: **Copper `#E78155`** for `● working`, **Sage `#B8C6AC`** for `✓ done`, **Wheat `#E8C77D`** for `! blocked`, and **Rose `#E28E9B`** for a real error label. Working retains its warm accent; done and blocked return to softer supporting tones. Status always includes a word and distinct symbol. The demo does not invent an error state. Iris and Lagoon are retired from production identity use.
 
-Approved text contrast: Iron/Parchment **13.40:1**, Umber/Parchment **5.98:1**, Oxide/Parchment **4.55:1**, Chalk/Iron **9.80:1**, Clay/Iron **7.62:1**. Copper, Sage, Wheat and Rose on Iron are **5.55, 8.48, 9.34 and 6.21:1** respectively. Amber/Maroon is **5.78:1**. Gold, Amber and Coral are decorative on light surfaces, not light-mode text colours. See [verification](verification.md) for measured checks.
+Approved text contrast: Iron/Parchment **13.40:1**, Umber/Parchment **5.98:1**, Oxide/Parchment **4.55:1**, Chalk/Iron **9.80:1**, Clay/Iron **7.62:1**. Copper, Sage, Wheat and Rose on Iron are **5.55, 8.48, 9.34 and 6.21:1** respectively. Amber/Maroon is **5.78:1**. Gold, Amber and Coral are decorative on light surfaces, not light-mode text colours.
 
 ## Icon sources and small sizes
 
@@ -53,7 +53,7 @@ The [optical SVG](icon/leon-small.svg) supplies the 16 pt slots at 1× and 2× a
 
 ![Native 16, 32, and 128 px icons on light and dark backgrounds](icon/size-check.png)
 
-The proof shows 16/32/128 px on Parchment and Iron, plus direct reduction versus the optical 16 px source enlarged 8×. [Leon.iconset](icon/Leon.iconset) contains all ten standard slots; [Leon.icns](icon/Leon.icns) uses Apple's native encoder. The existing bundle script already copies it. Native AppKit rendering and decoder round-trip checks are recorded in [verification.md](verification.md).
+The proof shows 16/32/128 px on Parchment and Iron, plus direct reduction versus the optical 16 px source enlarged 8×. [Leon.iconset](icon/Leon.iconset) contains all ten standard slots; [Leon.icns](icon/Leon.icns) uses Apple's native encoder. The existing bundle script already copies it.
 
 [background.svg](icon/background.svg) and [foreground.svg](icon/foreground.svg) are simplified, unmasked vector references for possible future layered work. They are not the exact layers of the rendered icon. The delivered ICNS is static; it does not claim native adaptive Liquid Glass behaviour or an Icon Composer package.
 
@@ -73,4 +73,4 @@ npm install --prefix /tmp/leon-brand-build sharp playwright
 NODE_PATH=/tmp/leon-brand-build/node_modules node brand/build-assets.cjs
 ```
 
-On macOS with Google Chrome and `iconutil`, the builder reads the committed raster master and optical SVG, then regenerates the wrapper, ten icon slots, ICNS, size proof, page embed, OG embed and both banner PNGs. It never regenerates or overwrites the canonical raster and never calls imagegen. Flat logo SVGs and banner layouts are editable sources. Historical exploration sheets are not rewritten by a production build. [FILES.md](FILES.md) lists the complete kit.
+On macOS with Google Chrome and `iconutil`, the builder reads the committed raster master and optical SVG, then regenerates the wrapper, ten icon slots, ICNS, size proof, page embed, OG embed and both banner PNGs. It never regenerates or overwrites the canonical raster and never calls imagegen. Flat logo SVGs and banner layouts are editable sources.
