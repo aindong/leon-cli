@@ -10,7 +10,7 @@ pub fn stamp(f: &mut Frame, row: usize, col: usize, text: &str, fg: u32, bg: u32
     let Some(spans) = f.rows.get_mut(row).filter(|_| col < end) else { return };
     let mut out = Vec::new();
     for s in spans.drain(..) {
-        let s_end = s.col + s.cells;
+        let s_end = s.col.saturating_add(s.cells); // `cells` comes from the server unchecked
         if s_end <= col || s.col >= end {
             out.push(s);
             continue;
