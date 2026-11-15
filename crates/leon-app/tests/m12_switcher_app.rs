@@ -20,6 +20,12 @@ fn cmd_k_then_enter_jumps_to_another_sessions_tab(cx: &mut TestAppContext) {
     s.app.call("session.focus_window", json!({ "session_id": other_sid, "window_id": w0 })).unwrap();
     cx.run_until_parked();
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.tab_titles().len()) == 1), "the first session is shown");
+    // the switcher lists the app's copy of the model, which refetches after the server's events
+    let has = |cx: &mut gpui::VisualTestContext| {
+        let rows = ws.read_with(cx, |ws, _| ws.host_rows());
+        rows.iter().flat_map(|h| &h.sessions).any(|x| x.id == other_sid && x.tabs.contains(&"rollout".to_string()))
+    };
+    assert!(shows(cx, has), "the app's model has the new tab");
 
     cx.simulate_keystrokes("cmd-k");
     assert!(ws.read_with(cx, |ws, _| ws.switcher_open()), "cmd+k opens the switcher");
