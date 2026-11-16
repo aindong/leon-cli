@@ -151,35 +151,34 @@ pub fn given_back() -> usize {
     GIVEN_BACK.load(Ordering::SeqCst)
 }
 
+// shortcut: macOS only, where the soak measured it; glibc's malloc_trim(0) would be Linux's
+#[cfg(target_os = "macos")]
 impl Drop for Listener {
     /// alacritty's `Term` drops this after both of its grids, so a pane's history has just been
-    /// freed: have the allocator hand the pages it keeps back to the system, off this thread.
+    /// freed: have the allocator hand the pages it keeps back to the system, off this thread (this
+    /// can run under the server's state lock).
     /// shortcut: relies on `Term` declaring `event_proxy` after its grids (alacritty 0.26); if an
     /// upgrade moves it, this runs first and gives back less, nothing worse.
     fn drop(&mut self) {
         if !GIVING_BACK.swap(true, Ordering::SeqCst) {
-            std::thread::spawn(|| {
+            let later = std::thread::Builder::new().name("give-back".into()).spawn(|| {
                 std::thread::sleep(Duration::from_millis(100)); // a session's other panes close too
                 GIVING_BACK.store(false, Ordering::SeqCst);
                 give_back();
             });
+            if later.is_err() {
+                GIVING_BACK.store(false, Ordering::SeqCst); // the next close tries again
+            }
         }
     }
 }
 
-/// Hand the free pages the allocator keeps back to the system.
+/// Hand the free pages the allocator keeps (every zone, as many as it can) back to the system.
+#[cfg(target_os = "macos")]
 fn give_back() {
-    #[cfg(target_os = "macos")]
-    {
-        extern "C" {
-            fn malloc_zone_pressure_relief(zone: *mut libc::c_void, goal: libc::size_t) -> libc::size_t;
-        }
-        // every zone, as much as it can
-        unsafe { malloc_zone_pressure_relief(std::ptr::null_mut(), 0) };
+    extern "C" {
+        fn malloc_zone_pressure_relief(zone: *mut libc::c_void, goal: libc::size_t) -> libc::size_t;
     }
-    #[cfg(all(target_os = "linux", target_env = "gnu"))]
-    unsafe {
-        libc::malloc_trim(0);
-    }
+    unsafe { malloc_zone_pressure_relief(std::ptr::null_mut(), 0) };
     GIVEN_BACK.fetch_add(1, Ordering::SeqCst);
 }
