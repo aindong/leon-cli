@@ -38,7 +38,7 @@ impl Workspace {
     /// and those that need the user (blocked, an error, a finish not seen yet), whose whole pane
     /// stays in view (docs/architecture/attention.md). A pane whose fade changed gets there over
     /// a drawer's slide time, or at once with Reduce Motion.
-    pub(super) fn note_fades(&mut self, shown: &Panes) {
+    pub(super) fn note_fades(&mut self, shown: &[String]) {
         let focused = self.target().map(|(_, id, _)| id);
         let targets = {
             let m = self.app.model();

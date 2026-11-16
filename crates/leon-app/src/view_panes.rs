@@ -254,7 +254,6 @@ impl Render for Workspace {
         DRAWN.with(|d| d.borrow_mut().clear());
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
-        self.note_fades(&shown);
         if self.term.find.as_ref().is_some_and(|f| !shown.contains(&f.block)) {
             self.term.find = None; // its pane left the screen
         }
@@ -272,7 +271,11 @@ impl Render for Workspace {
         self.settle(&rows);
         self.note_recent();
         let current = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
-        let body = match self.shown() {
+        // after `settle`, which may have moved to another session: the fades are aimed at the
+        // very panes this frame draws
+        let body_shown = self.shown();
+        self.note_fades(body_shown.as_ref().map_or(&[][..], |(_, ids)| ids));
+        let body = match body_shown {
             _ if self.stopped => self.render_stopped(cx).into_any_element(),
             Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
             None => self.render_empty(cx).into_any_element(),
