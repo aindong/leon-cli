@@ -6,6 +6,7 @@ pub mod copy_mode;
 pub mod embedded;
 pub mod fade;
 pub mod floats;
+pub mod glass;
 pub mod hosts;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod icons;
