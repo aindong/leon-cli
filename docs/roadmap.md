@@ -26,9 +26,12 @@ Each milestone is one run of the loop (plan, build test-first, verify, review), 
 | M20 | Floating panes and drawers | Float a pane above the tiles, dock one as a drawer, and a scratch drawer (⌘J). |
 | M21 | Projects and worktrees | Project and git worktree sessions as a Lua recipe. |
 | M22 | Themes and settings | Light and dark themes, theme import, `leon config get/set`, and the app's Settings window. |
+| M23 | Updates | `leon self-update` installs the newest signed release, or says which package manager does (docs/updates.md). The app's part is under Next. |
 
 ## Next
 
+- Updates in the app (M23's second part): Leon.app looks for a newer release at most once a day,
+  shows a quiet notice, and installs it from the command palette when asked.
 - The app on Linux.
 - Two clients on one tab: with the app and `leon attach` on the same tab, each pane takes the size
   of the client that last changed its layout, and the other client clips or pads it.

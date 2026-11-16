@@ -13,6 +13,7 @@ agents) drive it through one self-describing API.
 | `leon-lua` | Lua 5.1 (`mlua`): `init.lua` config (bindings, sequences, modes, actions), the live config `Runtime`, and `leon do` scripts (`leon.on`, `wait`, timers, `exec`). |
 | `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart, and `leon attach` (the terminal client). With no arguments it opens the app; a build without the app runs `leon attach` in a terminal and prints the help elsewhere. |
 | `leon-hosts` | Other machines: `ssh://` endpoints, the hosts list, and the `Link` that reaches a host's server over ssh. No GPUI, so the CLI and (later) the app share it. |
+| `leon-update` | The updater: fetches the signed release manifest, verifies it and the release file against the keys built in, and swaps the new leon in atomically. `leon self-update` calls it, and the app will (docs/updates.md). |
 | `leon-app` | The GPUI client (macOS for now). It attaches to the server over the socket like any client and paints the screens the server pushes, so programs outlive the app. |
 
 ## Platforms

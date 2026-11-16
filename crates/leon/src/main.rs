@@ -14,6 +14,7 @@ mod script;
 mod server;
 mod settings;
 mod skill;
+mod update;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -293,6 +294,13 @@ pub enum Cmd {
     /// Name other machines for -H, and check that they answer.
     #[command(subcommand)]
     Hosts(HostsCmd),
+    /// Update leon to the newest release: download it, check its signature, and replace this
+    /// install. A leon from Homebrew or a .deb is told how they update it. Needs no server.
+    SelfUpdate {
+        /// Only report whether a newer release exists (exit 10 if one does); change nothing.
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 #[derive(Subcommand)]

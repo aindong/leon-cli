@@ -45,6 +45,7 @@ These work with every command.
 | 2 | bad command line (`leon` with a typo suggests the nearest command) |
 | 3 | target not found or ambiguous |
 | 4 | server unreachable |
+| 10 | `self-update --check`: a newer release is available |
 | 130 | interrupted (Ctrl-C) |
 
 `leon wait` and `leon run --wait` exit with the program's own status instead.
@@ -380,8 +381,8 @@ leon -H devbox attach
 This machine's working directory means nothing on the host: with `-H`, `run`, `split` and `new`
 start in the host's home unless `--cwd` gives an absolute path there (a relative one exits 2).
 
-`leon server run|start|proxy`, `leon app`, `leon config check`, `leon skill` and `leon hosts` are
-about this machine and refuse `-H`; `leon server status` and `leon server stop` work over it.
+`leon server run|start|proxy`, `leon app`, `leon config check`, `leon skill`, `leon hosts` and
+`leon self-update` are about this machine and refuse `-H`; `leon server status` and `leon server stop` work over it.
 
 ### `leon hosts`
 
@@ -407,6 +408,12 @@ Remove hosts (exit 3 if one isn't there).
 
 Reach each host (default: every one) as a command would, and print `ok` with its leon version,
 or why not. Exit 4 if any host failed.
+
+## Updates
+
+### `leon self-update`
+
+Updates leon to the newest release; `--check` only reports (exit 10): [updates.md](updates.md).
 
 ## Agents
 

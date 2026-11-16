@@ -35,6 +35,9 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
     if let Cmd::Hosts(cmd) = cli.cmd() {
         return crate::hosts::run(cli, cmd);
     }
+    if let Cmd::SelfUpdate { check } = cli.cmd() {
+        return crate::update::run(*check);
+    }
     // Validate before connecting/autostarting: a bad local path is a usage error.
     let new_cwd = match cli.cmd() {
         Cmd::New { cwd, .. } | Cmd::Session(SessionCmd::New { cwd, .. }) if cli.host.is_some() => {
@@ -62,7 +65,8 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         | Cmd::Config(ConfigCmd::Check { .. } | ConfigCmd::Get { .. } | ConfigCmd::Set { .. })
         | Cmd::Theme(_)
         | Cmd::Skill(_)
-        | Cmd::Hosts(_) => unreachable!(),
+        | Cmd::Hosts(_)
+        | Cmd::SelfUpdate { .. } => unreachable!(),
         Cmd::Config(ConfigCmd::Reload) => crate::script::reload(&mut c, cli)?,
         Cmd::Do(args) => crate::script::run(&mut c, cli, args, &server.socket)?,
         Cmd::Actions => crate::script::actions(&mut c, cli)?,
@@ -152,6 +156,7 @@ fn local_only(cmd: &Cmd) -> Option<&'static str> {
         Cmd::Theme(_) => "theme",
         Cmd::Skill(_) => "skill",
         Cmd::Hosts(_) => "hosts",
+        Cmd::SelfUpdate { .. } => "self-update",
         _ => return None,
     })
 }
@@ -341,5 +346,6 @@ Exit codes:
   2    bad command line
   3    target not found or ambiguous
   4    server unreachable
+  10   `self-update --check`: a newer release is available
   130  interrupted (Ctrl-C)
   `wait` and `run --wait` exit with the program's own status.";

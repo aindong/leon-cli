@@ -11,7 +11,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// (file, the fewest `leon` calls its sh blocks must make)
-const DOCS: [(&str, usize); 8] = [
+const DOCS: [(&str, usize); 9] = [
     ("README.md", 8),
     ("docs/agents.md", 5),
     ("docs/lua.md", 2),
@@ -20,6 +20,7 @@ const DOCS: [(&str, usize); 8] = [
     ("docs/cli/sessions.md", 3),
     ("docs/cli/settings.md", 5),
     ("docs/integrators.md", 3),
+    ("docs/updates.md", 3),
 ];
 
 // `leon` and `leon app` open the GUI, `server run|start` would serve: skip them. A failed call
@@ -56,6 +57,9 @@ fn doc_shell_lines_parse() {
                 .env("LEON_RUNTIME_DIR", tmp.path().join("run"))
                 .env("LEON_AUTOSTART", "0")
                 .env("LEON_CONFIG", tmp.path().join("none.lua"))
+                // a documented `leon self-update` asks a closed loopback port, never the release
+                // server: it must not reach the network, let alone replace the binary under test
+                .env("LEON_RELEASE_URL", "http://127.0.0.1:9")
                 .env("DOC_LEON", env!("CARGO_BIN_EXE_leon"))
                 .env("DOC_CALLS", &calls)
                 .env("DOC_BAD", &bad)
