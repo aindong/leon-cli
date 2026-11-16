@@ -48,6 +48,13 @@ program() { # program NAME BODY: a program file for {}
   echo "$PERF_DIR/$1"
 }
 LAUNCH=("$@")
+# on any exit, also the processes the launcher listed (leon's server), before the dir goes
+external_cleanup() {
+  local p
+  [ -s "$PERF_DIR/extra-pids" ] && while read -r p; do kill "$p" 2>/dev/null || true; done <"$PERF_DIR/extra-pids"
+  perf_cleanup
+}
+trap external_cleanup EXIT
 stamp="import time,sys; print(sys.argv[1], time.clock_gettime_ns(time.CLOCK_UPTIME_RAW))"
 
 case "$measure" in

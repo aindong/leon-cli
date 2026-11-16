@@ -10,12 +10,6 @@ impl Workspace {
         if self.stopped {
             return; // nothing to type into: the notice's buttons and ⌘Q are what's left
         }
-        if self.stats.borrow().logging() {
-            if let (Some(id), Some(stamped)) = (self.target_block(), crate::input::current_event_stamp()) {
-                let cursor = self.drawn(&id).frame.cursor.map(|c| (c.line, c.col));
-                self.stats.borrow_mut().key(stamped, id, cursor);
-            }
-        }
         let ks = &match (self.native_key)() {
             Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
             None => ev.keystroke.clone(),
@@ -87,6 +81,13 @@ impl Workspace {
         }
         let Some((sid, id, f)) = self.target_screen() else { return };
         if let Some(bytes) = crate::input::key_bytes(ks, f.app_cursor) {
+            // only a key that reaches the pane is timed (LEON_FRAME_LOG): its echo moves the cursor
+            if self.stats.borrow().logging() {
+                if let Some(stamped) = crate::input::current_event_stamp() {
+                    let cursor = self.drawn(&id).frame.cursor.map(|c| (c.line, c.col));
+                    self.stats.borrow_mut().key(stamped, id.clone(), cursor);
+                }
+            }
             self.app.write(&sid, &id, &bytes);
             if self.view_top(&id).is_some() {
                 self.scroll_to(&id, None); // typing goes back to the prompt

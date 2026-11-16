@@ -24,7 +24,7 @@ struct Log {
     out: std::io::BufWriter<std::fs::File>,
     /// This frame's render start and its last pane's paint end.
     frame: Option<(u64, u64)>,
-    /// The last key (when AppKit stamped it, when `key_down` ran), its pane and that pane's cursor
+    /// The last key (when AppKit stamped it, when it was sent to the pane), the pane and that pane's cursor
     /// then: its echo is the first frame where that cursor moved.
     key: Option<(u64, u64, String, Cursor)>,
     /// The echo's frame: the key's times and that pane's paint end, logged at the next tick.
@@ -67,7 +67,7 @@ impl Stats {
         self.log.as_ref().is_some_and(|l| !l.text)
     }
 
-    /// A key AppKit stamped at `stamped` (boot clock, ns) reached `key_down` for pane `block`,
+    /// A key AppKit stamped at `stamped` (boot clock, ns) was sent to pane `block`,
     /// whose cursor is at `cursor`.
     pub(super) fn key(&mut self, stamped: u64, block: String, cursor: Option<(usize, usize)>) {
         let Some(log) = self.log.as_mut() else { return };

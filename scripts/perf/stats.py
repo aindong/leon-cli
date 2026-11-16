@@ -39,7 +39,7 @@ def keylat(ext, log):
     with open(log) as f:
         text = f.read()
     overlaps, bad = text.count("\noverlap ") + text.startswith("overlap "), text.count("badclock ")
-    out.append(summary("in app (event stamp -> key_down)", [ms(h - e) for e, h, _, _ in app]))
+    out.append(summary("in app (event stamp -> key sent to the pane)", [ms(h - e) for e, h, _, _ in app]))
     out.append(summary("in app (event stamp -> echo pane painted)", [ms(p - e) for e, _, p, _ in app]))
     out.append(summary("in app (event stamp -> next display tick)", [ms(t - e) for e, _, _, t in app]) + f", overlaps {overlaps}, bad clock {bad}")
     return out
@@ -66,8 +66,10 @@ def flood(watch, log, marks, panes=1):
     fl = [t for t, new in lines(watch, "floor") if new and begin <= t <= (current or end)]
     if fl:
         out.append(f"capture floor: an animated window of the tool's own got {len(fl) / (span / 1e9):.1f} fps over the same span")
+    # build times include the frames just after the screen became current; the rate does not
     app = [f for f in lines(log, "frame") if begin <= f[2] <= (current or end) + 100_000_000]
     out.append(summary("in app frame build (render start -> last pane painted)", [ms(e - s) for s, e, _ in app]))
+    app = [f for f in app if f[2] <= (current or end)]
     ticks = [t for _, _, t in app]
     out.append(f"in app: {len(app)} frames = {len(app) / (span / 1e9):.1f} fps; " + summary("tick gap", [ms(b - a) for a, b in zip(ticks, ticks[1:])]))
     return out

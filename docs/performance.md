@@ -204,7 +204,7 @@ the 1-minute load to fall under 3 before each step, and notes the load beside ea
 `.agent/perf/<run>/`. Two clocks, both on the boot clock (`CLOCK_UPTIME_RAW`):
 
 - **In the app**: `LEON_FRAME_LOG=PATH` (off unless set) logs each frame (render start, last pane
-  painted, the next display tick) and each key: AppKit's stamp on the event, `key_down`, the first
+  painted, the next display tick) and each key: AppKit's stamp on the event, the key sent to the pane, the first
   paint of the focused pane whose cursor moved, and the next display tick. That tick is when GPUI
   can next present, not when the frame was shown.
 - **From outside**: `winframes.swift` captures one window with ScreenCaptureKit and hashes each

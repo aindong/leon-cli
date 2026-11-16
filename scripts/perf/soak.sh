@@ -13,6 +13,7 @@ source "$(dirname "$0")/lib.sh"
 minutes=${1:-120}
 perf_screen_gate
 perf_init soak
+perf_load_gate
 perf_server
 agent="while :; do '$PERF_PY' '$PERF_ROOT/scripts/perf/agent.py' soak; sleep 1; done"
 first=
@@ -38,6 +39,7 @@ probe() { # probe WHEN: leaks and heap on both processes
 
 churn=
 after=0
+began=$(date +%s)
 for m in $(seq 0 "$minutes"); do
   t0=$(date +%s)
   if ! kill -0 "$APP_PID" 2>/dev/null || ! kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -45,7 +47,8 @@ for m in $(seq 0 "$minutes"); do
     echo "soak: the app or the server exited at minute $m" >&2
     exit 1
   fi
-  echo "$m,$(mem "$SERVER_PID" | tr ' ' ','),$(mem "$APP_PID" | tr ' ' ','),$(load1),$after" >>"$RUN/soak.csv"
+  # elapsed minutes, not the loop's count: a slow probe must not shrink the time axis
+  echo "$((($(date +%s) - began) / 60)),$(mem "$SERVER_PID" | tr ' ' ','),$(mem "$APP_PID" | tr ' ' ','),$(load1),$after" >>"$RUN/soak.csv"
   after=0
   # the end first, so a short soak still ends (and probes) on time
   if [ "$m" = "$minutes" ]; then

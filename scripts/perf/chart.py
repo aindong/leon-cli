@@ -27,7 +27,12 @@ def verdict(rows):
     out = []
     last = rows[-1]["minute"]
     for who in ("server", "app"):
-        pts = [(r["minute"] / 60, r[f"{who}_footprint_kib"] / 1024) for r in rows if r["minute"] >= last - 60 and not r["after_leaks"]]
+        # a 0 is a sample `footprint` could not read: no verdict from it
+        pts = [(r["minute"] / 60, r[f"{who}_footprint_kib"] / 1024) for r in rows
+               if r["minute"] >= last - 60 and not r["after_leaks"] and r[f"{who}_footprint_kib"] > 0]
+        if len(pts) < 10:
+            out.append(f"{who}: only {len(pts)} measured samples in the last 60 minutes: no verdict")
+            continue
         per_h = slope(pts)
         first, end = rows[0][f"{who}_footprint_kib"] / 1024, rows[-1][f"{who}_footprint_kib"] / 1024
         peak = max(r[f"{who}_footprint_kib"] for r in rows) / 1024
@@ -77,6 +82,8 @@ def selftest():
     leaky = [dict(r, server_footprint_kib=20000 + r["minute"] * 40) for r in flat]  # 2.3 MiB/h
     out = verdict(leaky)
     assert "LEAK" in out[0] and "levels off" in out[1], out
+    unread = [dict(r, app_footprint_kib=0) for r in flat]
+    assert "no verdict" in verdict(unread)[1], verdict(unread)
     print("chart selftest ok")
 
 

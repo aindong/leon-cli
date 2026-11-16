@@ -154,6 +154,7 @@ stack() {
   for k in $(seq "$n"); do
     ratio=50
     [ "$k" = 1 ] || ratio=$(((100 * (n - k + 1) + (n - k + 2) / 2) / (n - k + 2)))
+    [ "$ratio" -le 99 ] || ratio=99 # `leon split` takes 1 to 99 (from 200 panes on)
     t0=$(uptime_ns)
     prev=$("$LEON" split -s "$sid" -b "$prev" --split "$dir" --ratio "$ratio" --focus=false -- sh -c "$cmd")
     [ -n "$prev" ] || { echo "perf: split $k of $n failed" >&2; return 1; }

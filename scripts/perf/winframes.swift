@@ -250,7 +250,7 @@ func run() async {
     NSRunningApplication(processIdentifier: pid)?.activate()
     try? await Task.sleep(nanoseconds: 1_200_000_000)  // and past the re-presenting that follows
     let n = max(1, Int(args[3]) ?? 100)
-    let gap = Double(args.count > 4 ? args[4] : "50") ?? 50
+    let gap = max(0, Double(args.count > 4 ? args[4] : "50") ?? 50)
     let src = CGEventSource(stateID: .privateState)
     var missed = 0
     for i in 1...n {
@@ -278,7 +278,7 @@ func run() async {
         try? await Task.sleep(nanoseconds: 1_000_000_000)
       }
       // a random gap, so keys don't lock onto one phase of the display's refresh
-      try? await Task.sleep(nanoseconds: UInt64((gap + Double.random(in: 0..<gap)) * 1e6))
+      try? await Task.sleep(nanoseconds: UInt64((gap + (gap > 0 ? Double.random(in: 0..<gap) : 0)) * 1e6))
     }
     if missed == n { fail("no key changed the echo bar: is the window focused?") }
   }

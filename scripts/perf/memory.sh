@@ -52,8 +52,10 @@ sample "flood-before"
 done_file="$RUN/flood-done"
 times=$((gb * 10))
 "$LEON" split -s "$sid" -- sh -c "for i in \$(seq $times); do cat '$flood'; done; touch '$done_file'; exec sleep 100000" >/dev/null
+deadline=$(($(date +%s) + 60 * gb * 10)) # a minute per 100 MB is far slower than any run seen
 while [ ! -e "$done_file" ]; do
   kill -0 "$SERVER_PID" 2>/dev/null || { echo "memory: the server exited during the flood" >&2; exit 1; }
+  [ "$(date +%s)" -lt "$deadline" ] || { echo "memory: the flood did not finish in time" >&2; exit 1; }
   sample "flood-during"
   sleep 2
 done
