@@ -43,6 +43,7 @@ impl Workspace {
                 .text_color(rgb(if primary { t.chrome } else { t.title }))
                 .child(label)
         };
+        let has_actions = !notice.actions.is_empty();
         let mut row = div().mt(px(10.)).flex().flex_wrap().gap(px(8.));
         for act in notice.actions {
             let (name, label, primary) = match &act {
@@ -75,7 +76,8 @@ impl Workspace {
             .occlude()
             .text_color(rgb(t.text))
             .child(div().child(notice.text))
-            .child(row);
+            // a card with nothing to click (a step of an install) is the text alone
+            .when(has_actions, |card| card.child(row));
         Some(div().absolute().bottom(px(16.)).right(px(16.)).child(card).into_any_element())
     }
 
