@@ -40,8 +40,11 @@ of [the architecture](../architecture.md).
   the window's background, header included: `fade::theme` moves each colour of the theme toward
   `chrome`, and `fade::frame` does the same to the colours of the pane's screen before it is
   painted. The four status colours are left out, so an indicator in a faded pane keeps its
-  colour, and a pane whose own indicator is blocked, error or done (what needs the user, above;
-  done and error last only until the user arrives at the pane) is not faded at all. A pane alone
+  colour, and a pane whose own indicator is blocked, error or done (what needs the user, above)
+  is not faded at all. Blocked holds however long the user looked at it; a done or error that
+  came while the pane had the focus in the key window was seen, so it fades once the user leaves
+  (the server keeps it until they come back, for Activity and the badge), and any change while
+  they are away needs them again. A pane alone
   on screen is not faded, nor is anything while the focus is on a pane that isn't shown. The
   sidebar, the tabs and the titlebar are not panes and never fade, and the fade doesn't read
   whether the window is the key window. A pane's fade moves to a new target from where it is,

@@ -104,6 +104,10 @@ fn a_window_that_is_not_key_fades_nothing_more(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
     let (first, second) = split(&s, &ws, cx);
+    // a test window is not the key window until it is activated
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+    let was_key = cx.update(|window, _| window.is_window_active());
     let key = rests(&ws, cx, |ws| ws.pane_fade(&second) == 0. && ws.pane_fade(&first) == S);
     cx.deactivate_window();
     cx.run_until_parked();
@@ -111,6 +115,7 @@ fn a_window_that_is_not_key_fades_nothing_more(cx: &mut TestAppContext) {
     let same = rests(&ws, cx, |ws| ws.pane_fade(&second) == 0. && ws.pane_fade(&first) == S);
     let (focused_theme, window_theme) = ws.read_with(cx, |ws, _| (ws.pane_theme(&second), ws.theme()));
     s.app.stop();
+    assert!(was_key, "the test's window became the key window");
     assert!(key, "at rest in the key window");
     assert!(inactive, "the test's window stopped being the key window");
     assert!(same, "one state, not two stacked: the same fades in a window that isn't key");
