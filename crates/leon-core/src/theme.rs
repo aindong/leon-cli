@@ -94,8 +94,183 @@ pub const LIGHT: Theme = Theme {
     link: 0xB64C32,
 };
 
-/// The themes every leon has, by the name settings use.
-pub const BUILTIN: [(&str, Theme); 2] = [("leon-dark", DARK), ("leon-light", LIGHT)];
+// The themes below are leon's own, built from the brand palette (brand/README.md) in a few moods;
+// crates/leon-core/tests/themes_builtin.rs holds every one to the same contrast rules.
+
+/// A warm dark: Deep maroon under Parchment-warm text, Gold for the cursor and Amber for focus.
+pub const MAROON: Theme = Theme {
+    fg: 0xEBDCD0,
+    bg: 0x22181A,
+    cursor: 0xFFD477,
+    ansi: [
+        0x3D2B2E, 0xF07A68, 0xB5C48E, 0xF2CA72, 0x92AECB, 0xD99BBB, 0x93C9B8, 0xE8D9CF, // normal
+        0x7E6A66, 0xFF9584, 0xCFDDA8, 0xFFDD99, 0xB0C8E0, 0xEDB9D3, 0xB2E0D2, 0xFBF1E8, // bright
+    ],
+    chrome: 0x2C1F22,
+    hover: 0x3A2A2D,
+    border: 0x47353A,
+    text: 0xE8D9CF,
+    title: 0xFBF1E8,
+    muted: 0xBBA9A4,
+    accent: 0xFFB65C,
+    selected: 0x522A32,
+    brand: 0xB64C32,
+    working: 0xF48E63,
+    done: 0xB9CDA4,
+    blocked: 0xF2CF7A,
+    error: 0xF39AAB,
+    selection: 0x522A32,
+    found: 0x5E4A2A,
+    link: 0xEBAE95,
+};
+
+/// A cool dark: slate blue-grey, with leon's Amber kept for the cursor and focus.
+pub const TIDE: Theme = Theme {
+    fg: 0xD3DCE3,
+    bg: 0x161C22,
+    cursor: 0xF3A747,
+    ansi: [
+        0x2A323B, 0xEE7B72, 0x9CCB8C, 0xE3C77A, 0x7FB2E5, 0xC79DE0, 0x74C9C6, 0xCDD6DE, // normal
+        0x66727F, 0xFF978E, 0xB6E0A6, 0xF3DA98, 0x9DC8F2, 0xDAB6F0, 0x96DEDB, 0xEEF3F7, // bright
+    ],
+    chrome: 0x1E252C,
+    hover: 0x29313A,
+    border: 0x343E48,
+    text: 0xCDD6DE,
+    title: 0xEEF3F7,
+    muted: 0x9DA9B5,
+    accent: 0xF3A747,
+    selected: 0x283A4C,
+    brand: 0xB64C32,
+    working: 0xEE8A5F,
+    done: 0x9ED0A8,
+    blocked: 0xE8C77D,
+    error: 0xF2919E,
+    selection: 0x283A4C,
+    found: 0x4D4630,
+    link: 0x8EC3E6,
+};
+
+/// The high-contrast dark: near-black under Parchment, every colour brighter.
+pub const COAL: Theme = Theme {
+    fg: 0xF5F0E7,
+    bg: 0x0E0D0C,
+    cursor: 0xFFD477,
+    ansi: [
+        0x2E2B28, 0xFF7F6E, 0xB7D98F, 0xFFD877, 0x8FBCF0, 0xF0A0D0, 0x86DCCB, 0xE6DED4, // normal
+        0x8A8077, 0xFF9F92, 0xCFF0AA, 0xFFE6A3, 0xB0D2FF, 0xFFBDE3, 0xA8F0E0, 0xFFFFFF, // bright
+    ],
+    chrome: 0x171513,
+    hover: 0x24211E,
+    border: 0x3A3632,
+    text: 0xF2ECE4,
+    title: 0xFFFFFF,
+    muted: 0xC7BDB1,
+    accent: 0xFFC061,
+    selected: 0x5A2F38,
+    brand: 0xB64C32,
+    working: 0xFF9466,
+    done: 0xC6DDB2,
+    blocked: 0xFFD877,
+    error: 0xFF9BAA,
+    selection: 0x5A2F38,
+    found: 0x6A5528,
+    link: 0xF0B8A0,
+};
+
+/// A paper light: near-white with Iron ink, the brightest of the light themes.
+pub const LINEN: Theme = Theme {
+    fg: 0x2A2420,
+    bg: 0xFBF8F2,
+    cursor: 0xB64C32,
+    ansi: [
+        0x2A2420, 0xA8352A, 0x3F6B2E, 0x7A5A08, 0x245F96, 0x873A79, 0x1F6E6A, 0xD6CFC4, // normal
+        0x6A5E55, 0x8F2A20, 0x33591F, 0x634905, 0x1C4E7E, 0x702E63, 0x175A56, 0xEDE7DD, // bright
+    ],
+    chrome: 0xF1ECE3,
+    hover: 0xE5DFD5,
+    border: 0xD6CFC4,
+    text: 0x2A2420,
+    title: 0x15110E,
+    muted: 0x5E5249,
+    accent: 0x8F402D,
+    selected: 0xE2D4CD,
+    brand: 0xB64C32,
+    working: 0x933D19,
+    done: 0x455E39,
+    blocked: 0x70530D,
+    error: 0x9A3345,
+    selection: 0xE6D3C9,
+    found: 0xF5DE9E,
+    link: 0xA2432C,
+};
+
+/// A soft light: Sand under a dark Iron, less glare than Parchment.
+pub const SAND: Theme = Theme {
+    fg: 0x2B241F,
+    bg: 0xEBE3D7,
+    cursor: 0xB64C32,
+    ansi: [
+        0x3A322B, 0x9C3226, 0x3E6029, 0x6E5107, 0x275A86, 0x7C3570, 0x1E625E, 0xC9BCAA, // normal
+        0x6A5E52, 0x86281E, 0x30511F, 0x5A4204, 0x1D4A72, 0x672C5D, 0x16524E, 0xF3EDE4, // bright
+    ],
+    chrome: 0xE2D9CB,
+    hover: 0xD8CDBD,
+    border: 0xC9BCAA,
+    text: 0x3A322B,
+    title: 0x241E19,
+    muted: 0x584C42,
+    accent: 0x7E3523,
+    selected: 0xD3C2B6,
+    brand: 0xB64C32,
+    working: 0x823413,
+    done: 0x3B5530,
+    blocked: 0x5E4507,
+    error: 0x8A2A3C,
+    selection: 0xD6C4B9,
+    found: 0xE5C985,
+    link: 0x8F3A22,
+};
+
+/// A cool light: blue-grey paper with slate ink, Oxide for the cursor and focus.
+pub const MIST: Theme = Theme {
+    fg: 0x1F2A33,
+    bg: 0xF2F5F7,
+    cursor: 0xB64C32,
+    ansi: [
+        0x1F2A33, 0xB0352B, 0x3B6B2A, 0x7A5A00, 0x1F5F9E, 0x7E3C8C, 0x136C72, 0xC9D2DA, // normal
+        0x5B6873, 0x92281F, 0x2E5720, 0x614700, 0x184C80, 0x662F72, 0x0E585D, 0xE6EBEF, // bright
+    ],
+    chrome: 0xE6EBEF,
+    hover: 0xDAE1E7,
+    border: 0xC9D2DA,
+    text: 0x1F2A33,
+    title: 0x111A21,
+    muted: 0x4C5A66,
+    accent: 0x8F402D,
+    selected: 0xCFDCE8,
+    brand: 0xB64C32,
+    working: 0x963E15,
+    done: 0x3C6040,
+    blocked: 0x6B5208,
+    error: 0xA02F48,
+    selection: 0xC9DAEA,
+    found: 0xF1DD9C,
+    link: 0x1F5F99,
+};
+
+/// The themes every leon has, by the name settings use: leon's dark and light, then the dark and
+/// the light moods.
+pub const BUILTIN: [(&str, Theme); 8] = [
+    ("leon-dark", DARK),
+    ("leon-light", LIGHT),
+    ("leon-maroon", MAROON),
+    ("leon-tide", TIDE),
+    ("leon-coal", COAL),
+    ("leon-linen", LINEN),
+    ("leon-sand", SAND),
+    ("leon-mist", MIST),
+];
 
 pub fn builtin(name: &str) -> Option<Theme> {
     BUILTIN.iter().find(|(n, _)| *n == name).map(|(_, t)| *t)
