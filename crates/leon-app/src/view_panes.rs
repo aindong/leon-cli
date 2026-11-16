@@ -251,6 +251,7 @@ impl Workspace {
         self.note_focus(window);
         self.note_slides();
         self.settle_overview();
+        self.drop_unshown_thumbs();
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
         if self.term.find.as_ref().is_some_and(|f| !shown.contains(&f.block)) {

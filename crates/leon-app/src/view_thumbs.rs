@@ -191,10 +191,7 @@ impl Workspace {
         if update {
             self.overview.held = None;
         }
-        let keep: HashSet<&str> = tabs.iter().map(|t| t.2.as_str()).collect();
-        self.overview.thumbs.retain(|w, _| keep.contains(w.as_str()));
-        self.overview.refreshes.retain(|w, _| keep.contains(w.as_str()));
-        self.overview.renders.borrow_mut().retain(|w, _| keep.contains(w.as_str()));
+        self.keep_thumbs(&tabs);
         let mut drew = false;
         for (host, sid, wid) in &tabs {
             let Some((panes, stamp)) = self.thumb_spec(*host, sid, wid, look) else { continue };
@@ -230,6 +227,22 @@ impl Workspace {
         // from the poll: the window draws the new views (render makes its own as it goes)
         if drew {
             cx.notify();
+        }
+    }
+
+    /// Drop the thumbnails of tabs no longer shown: a view kept alive keeps its drawn record.
+    fn keep_thumbs(&mut self, tabs: &[(usize, String, String)]) {
+        let keep: HashSet<&str> = tabs.iter().map(|t| t.2.as_str()).collect();
+        self.overview.thumbs.retain(|w, _| keep.contains(w.as_str()));
+        self.overview.refreshes.retain(|w, _| keep.contains(w.as_str()));
+        self.overview.renders.borrow_mut().retain(|w, _| keep.contains(w.as_str()));
+    }
+
+    /// Before a frame (`prepare`): the overview closed or the hover left, so its thumbnails go.
+    pub(in crate::view) fn drop_unshown_thumbs(&mut self) {
+        if !self.overview.thumbs.is_empty() {
+            let tabs = self.thumb_tabs();
+            self.keep_thumbs(&tabs);
         }
     }
 
