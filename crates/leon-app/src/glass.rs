@@ -52,7 +52,13 @@ impl Glass {
         let chrome =
             alpha_for(&[(window.chrome, window.text, BODY), (window.chrome, window.muted, SECONDARY)], 1. - see);
         let f = crate::fade::theme(window, fade);
-        let pane = alpha_for(&[(window.bg, window.fg, BODY), (f.bg, f.fg, BODY)], 1. - see);
+        let texts = [
+            (window.bg, window.fg, BODY),
+            (window.bg, window.muted, SECONDARY),
+            (f.bg, f.fg, BODY),
+            (f.bg, f.muted, SECONDARY),
+        ];
+        let pane = alpha_for(&texts, 1. - see);
         Glass { see, chrome, pane }
     }
 
@@ -66,15 +72,15 @@ impl Glass {
         self.chrome
     }
 
-    /// The alpha of every pane: what the setting asks, or more, until `fg` reads over a white
-    /// and a black desktop as it must, faded or not.
+    /// The alpha of every pane: what the setting asks, or more, until `fg`, and the header's
+    /// `muted` caption, read over any desktop as they must, faded or not.
     pub fn pane_alpha(&self) -> f32 {
         self.pane
     }
 }
 
 /// `want`, or the least alpha above it at which each (fill, text, contrast) keeps that contrast
-/// (capped at what the text has on the fill opaque) over a white and over a black desktop.
+/// (capped at what the text has on the fill opaque) over any desktop.
 fn alpha_for(texts: &[(u32, u32, f64)], want: f32) -> f32 {
     if want >= 1. {
         return 1.;
@@ -92,7 +98,8 @@ fn alpha_for(texts: &[(u32, u32, f64)], want: f32) -> f32 {
     a
 }
 
-/// The alphas at which `text` on `fill` over `desk` is below `need`: an interval, since the fill
+/// The alphas at which `text` on `fill` over `desk` (white or black) is below `need`, or over a
+/// desktop between the two: an interval, since the fill
 /// over the desk moves steadily from the desk's colour to its own, so the contrast falls until it
 /// passes the text's lightness and then rises (to at least `need` when opaque). Found by
 /// bisection, the same for any `want`, so more translucency never asks for a more opaque fill.
@@ -125,18 +132,27 @@ fn too_low(text: u32, need: f64, fill: u32, desk: u32) -> Option<(f32, f32)> {
         }
         out
     };
-    // below 0: bad from 0 itself
-    let lo = if ok(0.) { edge(0., low) } else { -1. };
+    // below 0: bad from 0 itself. A desk on the far side of the text from the fill passes the
+    // text's lightness on its way to the fill, and until it does some grey desk matches the text.
+    let crosses = (lightness(desk) - lightness(text)) * (lightness(fill) - lightness(text)) < 0.;
+    let lo = if ok(0.) && !crosses { edge(0., low) } else { -1. };
     Some((lo, edge(1., low)))
 }
 
-/// The lower contrast of `text` on `layers` (colour, alpha; bottom first) drawn over a white and
-/// over a black desktop, blended per channel as the window server composites them (`shown`).
+/// The lowest contrast of `text` on `layers` (colour, alpha; bottom first) over any desktop,
+/// blended per channel as the window server composites them (`shown`): over white or over black,
+/// or 1 when the text's lightness lies between those two, where a grey desktop matches it.
 pub fn worst_contrast(text: u32, layers: &[(u32, f32)]) -> f64 {
-    DESKS
-        .map(|desk| contrast(text, layers.iter().fold(desk, |under, &(c, a)| mix(under, c, shown(a)))))
-        .into_iter()
-        .fold(f64::INFINITY, f64::min)
+    let [w, b] = DESKS.map(|desk| layers.iter().fold(desk, |under, &(c, a)| mix(under, c, shown(a))));
+    if (lightness(w) - lightness(text)) * (lightness(b) - lightness(text)) < 0. {
+        return 1.;
+    }
+    contrast(text, w).min(contrast(text, b))
+}
+
+/// A number that orders colours as their luminance does: the contrast with black grows with it.
+fn lightness(c: u32) -> f64 {
+    contrast(c, 0)
 }
 
 /// What the panes area fills with the panes' translucent background: the tiles and the drawers in
