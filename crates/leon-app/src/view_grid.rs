@@ -29,14 +29,20 @@ pub struct GridDrawn {
     pub theme: Theme,
 }
 
-/// A shown pane's grid view, what it was last given (when it had rendered `given` times), and
-/// the pushed screen that was from.
+/// A shown pane's grid view, what it was last given (when it had rendered `given` times), the
+/// pushed screen that was from, and the session and machine it fits the PTY on.
 pub(super) struct GridSlot {
     view: gpui::Entity<PaneGrid>,
     input: GridInput,
     given: u64,
     screen: Option<u64>,
+    sid: String,
+    app: Rc<Remote>,
 }
+
+/// Each pane's pushed-screen count, read before what it is drawn from: a push that lands after
+/// the read is one the poll still sees (`poll_grids`).
+pub(super) type Screens = HashMap<String, u64>;
 
 /// A pane's grid: one canvas that fits the PTY in prepaint and paints the frame (view_paint.rs).
 pub(super) struct PaneGrid {
@@ -102,18 +108,27 @@ impl Workspace {
     /// Give every shown pane's grid what it draws now, notifying the ones that changed; make the
     /// grids of panes that came on screen and drop those of panes that left. After `prepare`, on
     /// every notify of the workspace; it notifies only grids, never the workspace.
-    pub(super) fn sync_grids(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn sync_grids(&mut self, seen: &Screens, cx: &mut Context<Self>) {
         let shown = self.grid_panes();
         self.grids.retain(|id, _| shown.contains(id));
         self.grid_renders.borrow_mut().retain(|id, _| shown.contains(id));
         for id in &shown {
-            self.sync_grid(id, cx);
+            self.sync_grid(id, seen.get(id).copied(), cx);
         }
     }
 
-    fn sync_grid(&mut self, id: &str, cx: &mut Context<Self>) {
+    /// The pushed-screen counts now, read before `sync_pane` and the grids' inputs.
+    pub(super) fn screens_seen(&self) -> Screens {
+        self.app.model().screen_updates.clone()
+    }
+
+    fn sync_grid(&mut self, id: &str, screen: Option<u64>, cx: &mut Context<Self>) {
         let input = self.grid_input(id);
-        let screen = self.app.model().screen_updates.get(id).copied();
+        let sid = self.session_id.clone().unwrap_or_default();
+        // a pane gone to another session or machine fits its PTY there: a new grid
+        if self.grids.get(id).is_some_and(|s| s.sid != sid || !Rc::ptr_eq(&s.app, &self.app)) {
+            self.grids.remove(id);
+        }
         match self.grids.get_mut(id) {
             Some(slot) => {
                 slot.screen = screen;
@@ -130,14 +145,15 @@ impl Workspace {
                 let grid = PaneGrid {
                     input: input.clone(),
                     app: self.app.clone(),
-                    sid: self.session_id.clone().unwrap_or_default(),
+                    sid: sid.clone(),
                     block: id.to_string(),
                     stats: self.stats.clone(),
                     painted: self.term.painted.clone(),
                     renders: self.grid_renders.clone(),
                 };
                 let view = cx.new(|_| grid);
-                self.grids.insert(id.to_string(), GridSlot { view, input, given: 0, screen });
+                let app = self.app.clone();
+                self.grids.insert(id.to_string(), GridSlot { view, input, given: 0, screen, sid, app });
             }
         }
     }
@@ -146,15 +162,19 @@ impl Workspace {
     /// screen is the workspace's no longer: `signature` leaves it out). Returns whether one of
     /// them is scrolled back, whose new lines the root's pill counts.
     pub(super) fn poll_grids(&mut self, cx: &mut Context<Self>) -> bool {
-        let moved: Vec<String> = {
-            let m = self.app.model();
-            let now = |id: &String| m.screen_updates.get(id).copied();
-            self.grids.iter().filter(|(id, s)| s.screen != now(id)).map(|(id, _)| id.clone()).collect()
-        };
+        let now = self.screens_seen();
+        // another machine's grids, until the notify after a host switch drops them
+        let here = |s: &GridSlot| Rc::ptr_eq(&s.app, &self.app);
+        let moved: Vec<String> = self
+            .grids
+            .iter()
+            .filter(|(id, s)| here(s) && s.screen != now.get(*id).copied())
+            .map(|(id, _)| id.clone())
+            .collect();
         let mut scrolled = false;
         for id in moved {
             self.sync_pane(&id);
-            self.sync_grid(&id, cx);
+            self.sync_grid(&id, now.get(&id).copied(), cx);
             scrolled |= self.view_top(&id).is_some();
         }
         scrolled

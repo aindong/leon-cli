@@ -72,9 +72,7 @@ pub(super) fn terminal_canvas(
                 let cursor = frame.cursor.as_ref().map(|c| (c.line, c.col));
                 let text =
                     stats.borrow().wants_text() && frame.rows.iter().flatten().any(|s| !s.text.trim().is_empty());
-                if stats.borrow_mut().painted(&id, cursor, text) {
-                    window.on_next_frame(move |_, _| stats.borrow_mut().presented());
-                }
+                stats.borrow_mut().painted(&id, cursor, text);
             }
             painted.borrow_mut().insert(id, p);
         },

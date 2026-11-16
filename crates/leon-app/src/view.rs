@@ -331,8 +331,9 @@ impl Workspace {
         // and gives each grid its input; a pushed screen reaches its grid from the poll instead
         // (`poll_grids`). Phase 5 (the model as entities) removes this observer
         let prepare = cx.observe_self(|ws, cx| {
+            let seen = ws.screens_seen();
             ws.prepare();
-            ws.sync_grids(cx);
+            ws.sync_grids(&seen, cx);
         });
         let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
         let mut ws = Workspace {
@@ -402,8 +403,9 @@ impl Workspace {
             _appearance: appearance,
             _prepare: prepare,
         };
+        let seen = ws.screens_seen();
         ws.prepare(); // the first frame comes before any notify
-        ws.sync_grids(cx);
+        ws.sync_grids(&seen, cx);
         ws
     }
 

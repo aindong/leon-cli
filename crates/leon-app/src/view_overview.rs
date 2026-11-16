@@ -415,16 +415,15 @@ impl Workspace {
             })
     }
 
-    /// A zero-size element whose paint counts the overview's frames for `LEON_FRAME_STATS`, as a
-    /// pane's terminal does (the thumbnails are cached, so their paint doesn't always run).
+    /// A zero-size element whose paint notes an overview frame for `LEON_FRAME_STATS` (the
+    /// thumbnails are cached, so their paint doesn't always run); the root's `frame_mark` counts it.
     fn stats_mark(&self) -> impl IntoElement {
         let (stats, filled) = (self.stats.clone(), self.overview.thumbs.values().all(|s| s.filled));
         canvas(
             |_, _, _| (),
-            move |_, _, window, _| {
-                if stats.borrow().enabled && stats.borrow_mut().painted("overview", None, false) {
+            move |_, _, _, _| {
+                if stats.borrow().enabled {
                     stats.borrow_mut().overview_drawn(filled);
-                    window.on_next_frame(move |_, _| stats.borrow_mut().presented());
                 }
             },
         )

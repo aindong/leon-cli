@@ -238,6 +238,23 @@ impl Workspace {
         }
     }
 
+    /// The root's last element: its paint ends the frame for `LEON_FRAME_STATS`, whether or not a
+    /// pane's grid painted in it.
+    fn frame_mark(&self) -> impl IntoElement {
+        let stats = self.stats.clone();
+        canvas(
+            |_, _, _| (),
+            move |_, _, window, _| {
+                if stats.borrow().enabled && stats.borrow_mut().frame_end() {
+                    window.on_next_frame(move |_, _| stats.borrow_mut().presented());
+                }
+            },
+        )
+        .absolute()
+        .w(px(0.))
+        .h(px(0.))
+    }
+
     /// Before a frame: what render draws from, brought up to date with the model and the window
     /// (ADR R5). It runs after every notify of the workspace, before the frame that notify asks
     /// for (the observer in `with_hosts`), so render, which may run more often (a hover, a
@@ -355,6 +372,7 @@ impl Render for Workspace {
             .children(preview)
             // last, so it paints over the panes: GPUI paints children in order
             .children(self.render_overlay(cx).filter(|_| !self.stopped))
+            .child(self.frame_mark())
     }
 }
 
