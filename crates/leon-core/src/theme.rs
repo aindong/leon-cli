@@ -309,6 +309,35 @@ impl Theme {
         })
     }
 
+    /// Every colour moved `t` of the way to `to`'s (a theme change fading in).
+    pub fn mix(&self, to: &Theme, t: f32) -> Theme {
+        let m = |a: u32, b: u32| mix(a, b, t);
+        let mut ansi = self.ansi;
+        ansi.iter_mut().zip(to.ansi).for_each(|(a, b)| *a = m(*a, b));
+        Theme {
+            fg: m(self.fg, to.fg),
+            bg: m(self.bg, to.bg),
+            cursor: m(self.cursor, to.cursor),
+            ansi,
+            chrome: m(self.chrome, to.chrome),
+            hover: m(self.hover, to.hover),
+            border: m(self.border, to.border),
+            text: m(self.text, to.text),
+            title: m(self.title, to.title),
+            muted: m(self.muted, to.muted),
+            accent: m(self.accent, to.accent),
+            selected: m(self.selected, to.selected),
+            brand: m(self.brand, to.brand),
+            working: m(self.working, to.working),
+            done: m(self.done, to.done),
+            blocked: m(self.blocked, to.blocked),
+            error: m(self.error, to.error),
+            selection: m(self.selection, to.selection),
+            found: m(self.found, to.found),
+            link: m(self.link, to.link),
+        }
+    }
+
     /// The pane is nearer black than white.
     pub fn is_dark(&self) -> bool {
         contrast(self.bg, 0) < contrast(self.bg, 0xFFFFFF)
