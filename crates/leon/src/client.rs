@@ -149,18 +149,37 @@ pub fn spawn_server(socket: &Path, autostarted: bool, restore: bool) -> Result<(
         });
     }
     let mut child = cmd.spawn().map_err(|e| Fail::Unreachable(format!("can't start the server: {e}")))?;
-    let end = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < end {
+    wait_up(socket, &mut child, BACKSTOP)
+        .map_err(|why| Fail::Unreachable(format!("the server didn't come up{why}; see {}", log_path.display())))
+}
+
+/// How long a server that still runs may take to answer. Before it answers it execs, runs the login
+/// shell for its PATH (up to 2 s) and may wait for `server.lock` (up to 2 s), so under heavy load a
+/// short fixed wait gave up on a server that was only starting; this only stops a wedged one from
+/// hanging a script.
+const BACKSTOP: Duration = Duration::from_secs(60);
+
+/// Wait until `socket` answers. A server still starting is waited for, up to `most`; one that exited
+/// is an error at once, unless another server answers (it lost the race to that one). The error
+/// says which.
+fn wait_up(socket: &Path, child: &mut std::process::Child, most: Duration) -> Result<(), String> {
+    let end = Instant::now() + most;
+    loop {
         if UnixStream::connect(socket).is_ok() {
             return Ok(());
         }
-        // It died (bad runtime dir, or another server won the race): stop waiting.
-        if child.try_wait().ok().flatten().is_some() && UnixStream::connect(socket).is_err() {
-            break;
+        if let Ok(Some(status)) = child.try_wait() {
+            // a bad runtime dir, or another server won the race (then it answers)
+            return match UnixStream::connect(socket) {
+                Ok(_) => Ok(()),
+                Err(_) => Err(format!(": it exited ({status})")),
+            };
+        }
+        if Instant::now() >= end {
+            return Err(format!(": it is still running after {} s (pid {})", most.as_secs(), child.id()));
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    Err(Fail::Unreachable(format!("the server didn't come up; see {}", log_path.display())))
 }
 
 /// Where client commands go: this machine's socket, or another machine's through a `Link`.
@@ -205,4 +224,53 @@ pub fn connect(socket: &Path, autostart: bool) -> Result<Client, Fail> {
     }
     spawn_server(socket, true, true)?;
     Client::connect(socket).map_err(|e| Fail::Unreachable(format!("can't reach the server: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::net::UnixListener;
+
+    fn sh(script: &str) -> std::process::Child {
+        Command::new("sh").args(["-c", script]).spawn().unwrap()
+    }
+
+    #[test]
+    fn a_server_still_starting_is_waited_for() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("s.sock");
+        let mut child = sh("sleep 30");
+        // binds past the old fixed 5 s wait, as a server under heavy load did
+        let at = socket.clone();
+        let late = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(6));
+            UnixListener::bind(at).unwrap()
+        });
+        let waited = wait_up(&socket, &mut child, BACKSTOP);
+        let _ = child.kill();
+        let _ = child.wait();
+        drop(late.join());
+        assert_eq!(waited, Ok(()));
+    }
+
+    #[test]
+    fn a_server_that_exited_is_an_error_at_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut child = sh("exit 3");
+        let start = Instant::now();
+        let why = wait_up(&dir.path().join("s.sock"), &mut child, BACKSTOP).unwrap_err();
+        assert!(why.contains("it exited") && why.contains('3'), "{why}");
+        assert!(start.elapsed() < Duration::from_secs(4), "{:?}", start.elapsed());
+    }
+
+    #[test]
+    fn a_server_that_never_answers_is_an_error_at_the_backstop() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut child = sh("sleep 30");
+        let why = wait_up(&dir.path().join("s.sock"), &mut child, Duration::from_millis(300));
+        let _ = child.kill();
+        let _ = child.wait();
+        let why = why.unwrap_err();
+        assert!(why.contains("still running") && why.contains(&child.id().to_string()), "{why}");
+    }
 }
