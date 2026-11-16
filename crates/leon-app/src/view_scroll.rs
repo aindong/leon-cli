@@ -279,7 +279,7 @@ impl Workspace {
     /// to the bottom.
     pub(super) fn render_jump(&self, id: &str, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let n = self.new_lines(id)?;
-        let t = &self.theme;
+        let t = &self.pane_theme(id); // faded with its pane
         let block = id.to_string();
         let label = if n == 1 { "↓ 1 new line".to_string() } else { format!("↓ {n} new lines") };
         Some(

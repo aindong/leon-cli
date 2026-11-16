@@ -100,8 +100,9 @@ impl Workspace {
     }
 
     /// One pane's tile at `rect`: its header (always on a float or drawer, which `grab` moves when
-    /// given), its terminal, the find bar and jump labels, and the focus mark, in the pane's own
-    /// theme (faded without the focus). `kind` names it in tests (`pane-`, `float-`, `dock-`).
+    /// given), its terminal, the find bar and jump labels, and the focus mark. All but the find bar
+    /// (a control the user opened) are in the pane's own theme, faded without the focus. `kind`
+    /// names it in tests (`pane-`, `float-`, `dock-`).
     pub(super) fn pane_tile(
         &self,
         kind: &str,
