@@ -144,6 +144,7 @@ pub(super) fn reap(pid: i32) -> i32 {
 /// Times freed memory was handed back to the system (`give_back`).
 static GIVEN_BACK: AtomicUsize = AtomicUsize::new(0);
 /// A give-back is on its way: closes meanwhile ride along with it.
+#[cfg(target_os = "macos")]
 static GIVING_BACK: AtomicBool = AtomicBool::new(false);
 
 /// How many times freed memory has been handed back to the system.
