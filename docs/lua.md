@@ -8,8 +8,7 @@ leon speaks Lua 5.1 in two places:
   long-running watcher that reacts to events.
 
 Both share the `leon.*` functions below. Every example on this page is run by a test
-(`crates/leon/tests/m7b_lua_doc.rs`): the config examples through `leon config check`, the scripts
-through `leon do -e`.
+(`crates/leon/tests/m7b_lua_doc.rs`).
 
 ## Where the config lives
 
@@ -229,9 +228,8 @@ any`, and a `?` suffix for optional ones.
 
 `leon.set(name, value)` sets a setting. init.lua is the only place settings live; `leon config
 get` and `set` ([cli/settings.md](cli/settings.md)) and the app's Settings window (⌘,) read and edit
-them in place. A running app follows every one of them when the config reloads (`leon config set`,
-the Settings window and `leon config reload` all reload it). A bad value is a skipped call with a `file:line`
-message, and the setting keeps its default.
+them in place; a running app follows them on a reload. A bad value is a skipped call with a
+`file:line` message, and the setting keeps its default.
 
 | Setting | Takes | Default |
 |---|---|---|
@@ -245,9 +243,9 @@ message, and the setting keeps its default.
 | `resume` | `"ask"`, `"always"` or `"never"` | `"ask"` |
 | `fade_inactive_panes` | a number, 0 (off) to 0.8 | `0.35` |
 | `check_for_updates` | `true` or `false` ([updates.md](updates.md)) | `true` |
+| `translucency` | a number, 0 (opaque) to 0.8 | `0.3` |
 
-`theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored; an unknown name is
-an error.
+`theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored.
 
 ```lua
 leon.set("theme", { dark = "leon-dark", light = "leon-light" })
@@ -270,10 +268,6 @@ leon.set("resume", "always")
 `copy_on_select` makes the app copy a selection to the clipboard as soon as you make it, without
 ⌘C.
 
-```lua
-leon.set("copy_on_select", true)
-```
-
 `fade_inactive_panes` is how far the app fades the panes without the focus toward the window's
 background; a status indicator and a pane that needs you never fade.
 
@@ -281,8 +275,11 @@ background; a status indicator and a pane that needs you never fade.
 leon.set("fade_inactive_panes", 0)
 ```
 
-`repeat_time` is how long a repeatable binding's keys work without the prefix (above; 0 turns
-repeat off).
+`translucency` is how much of the desktop shows through the app's window, blurred and tinted by
+the theme. Over any desktop, a part where text would fall below 4.5:1 is drawn more opaque.
+Reduce Transparency and full screen are opaque, as is `leon.set("translucency", 0)`.
+
+`repeat_time` is how long a repeatable binding's keys work without the prefix (above).
 
 `hint_patterns` adds regular expressions (Rust syntax) to what the app's hints label. Hints
 (`client.hints`, ⌘⇧H) put a short label on every URL, path, git hash, UUID, `0x` number, IPv4
@@ -303,10 +300,6 @@ The app notifies you (macOS banners, only from the bundled Leon.app) when a bloc
 (`notifications.blocked`), reports an error (`notifications.error`), or finishes a run of 30 s or
 more while the app is in the background (`notifications.done`). Blocked and error don't notify for the pane you are looking at, a block notifies at most
 once a minute per state, and at most four notices go out a minute in all (the rest come as one).
-
-```lua
-leon.set("notifications.done", false)
-```
 
 The server reports the effective settings, defaults filled in and `theme` always as
 `{ dark, light }`, with `server.settings`; a reload that changes any of them sends `--all`

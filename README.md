@@ -262,12 +262,13 @@ The tab's row gets a symbol, and the pane's header gets the symbol with the prog
 
 ![The leon app: sessions in the sidebar with their tabs as rows, a tab split in three, and an agent's progress on its row and pane header](docs/images/app-status.png)
 
-With more than one pane in a tab, the panes you aren't in are drawn a little faded, so your eye
-stays on the focused one; the fade follows the focus over 120 ms (at once with Reduce Motion).
-What you are waiting for is never faded: a status symbol keeps its colour, and a pane that is
-blocked, has failed, or finished since you last looked stays at full strength. In init.lua,
-`leon.set("fade_inactive_panes", 0)` turns the fade off and a number up to 0.8 sets its strength
-(0.35 by default).
+With more than one pane in a tab, the panes you aren't in are faded, so your eye
+stays on the focused one. What you are waiting for is never faded: a status symbol keeps its
+colour, and a pane that is blocked, has failed, or finished since you last looked stays at full
+strength. `leon.set("fade_inactive_panes", N)` sets the fade, 0 (off) to 0.8.
+
+The window is translucent, tinted by the theme, and keeps text readable over any
+desktop; `leon.set("translucency", 0)` makes it opaque.
 
 ⌘K switches to any session, tab or block on any host, the most recent first, and ⌘⇧A lists what
 needs you: blocked first (with what it is waiting for), then errors, finished runs you haven't

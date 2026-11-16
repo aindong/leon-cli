@@ -13,7 +13,7 @@ the server, the CLI and `leon attach`).
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.7.0`.
+one is `1.8.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -27,6 +27,19 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+### A translucent window in Leon.app
+
+#### Added
+
+- Leon.app's window shows a blur of what is behind it, tinted by the theme: the sidebar, the
+  title bar and the gaps between panes let the most through, the panes less. Text keeps its
+  contrast over any desktop, light or dark: where the setting asks for more than that allows,
+  the app draws that part more opaque. Reduce Transparency (System Settings › Accessibility ›
+  Display) and full screen draw the window opaque.
+- `leon.set("translucency", N)` sets how much shows through, from 0 (opaque, the window as
+  before) to 0.8. `server.settings` reports `translucency`, a new result field on a stable
+  method, so `api_version` goes from `1.7.0` to `1.8.0`.
 
 ### Terminals under load
 

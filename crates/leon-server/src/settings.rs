@@ -33,6 +33,8 @@ pub struct Effective {
     pub fade_inactive_panes: f64,
     /// Leon.app looks for a newer release once a day; false, only when asked.
     pub check_for_updates: bool,
+    /// How much of the desktop shows through Leon.app's window, from 0 (opaque) to 0.8.
+    pub translucency: f64,
 }
 
 /// A theme name for each OS appearance (the same one for both unless init.lua gives two).
