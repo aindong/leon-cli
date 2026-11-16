@@ -111,8 +111,12 @@ impl Drop for Started {
     fn drop(&mut self) {
         let Some((pid, held)) = self.0.take() else { return };
         // SAFETY: only signals; unreaped, the program keeps its group ID ours.
-        unsafe { libc::kill(-pid, libc::SIGKILL) };
-        reap(pid);
+        if unsafe { libc::kill(-pid, libc::SIGKILL) } == 0 {
+            reap(pid);
+        } else {
+            // not signalled (a setuid program that changed its uid): don't block the caller on it
+            std::thread::spawn(move || reap(pid));
+        }
         lock(&held).take(); // the reads end once nothing holds the PTY's other end
     }
 }

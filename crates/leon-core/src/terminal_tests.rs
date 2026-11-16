@@ -4,27 +4,34 @@ use super::cwd::hostname;
 use super::*;
 
 thread_local! {
-    /// Whether `spawn_showing` fails at its last step on this thread, and the pid it had started.
-    static FAIL_LATE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Set: `spawn_showing` fails at its last step on this thread, once this file exists. Then the
+    /// pid it had started.
+    static FAIL_LATE: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) };
     static LATE_PID: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
 }
 
 pub(super) fn late_failure(pid: i32) -> io::Result<()> {
-    if !FAIL_LATE.get() {
-        return Ok(());
-    }
+    let Some(ready) = FAIL_LATE.take() else { return Ok(()) };
     LATE_PID.set(pid);
+    let end = std::time::Instant::now() + Duration::from_secs(10);
+    while !ready.exists() && std::time::Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(20));
+    }
     Err(io::Error::other("a late failure (test)"))
 }
 
 #[test]
 fn a_late_failure_leaves_no_program() {
-    FAIL_LATE.set(true);
-    // the sleep is in the program's process group, as whatever a shell starts is
-    let spec = Spec { command: vec!["sh".into(), "-c".into(), "sleep 30 & wait".into()], cwd: None, env: vec![] };
+    let dir = tempfile::tempdir().unwrap();
+    let ready = dir.path().join("ready");
+    FAIL_LATE.set(Some(ready.clone()));
+    // fails once the program has started something in its group, which only the group kill reaches:
+    // it ignores the hangup the session leader's death sends
+    let script = format!("trap '' HUP; sleep 30 & : > '{}'; wait", ready.display());
+    let spec = Spec { command: vec!["sh".into(), "-c".into(), script], cwd: None, env: vec![] };
     let failed = Terminal::spawn(spec, |_| {});
-    FAIL_LATE.set(false);
     assert!(failed.is_err(), "the injected failure is the caller's error");
+    assert!(ready.exists(), "the program started its sleep");
     let pid = LATE_PID.get();
     assert!(pid > 0);
     // SAFETY: signal 0 only asks whether the process (or one in the group) exists.
