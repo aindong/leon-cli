@@ -182,6 +182,10 @@ entry touches GPUI's window, view or layer.
   no badge.
 - `view_floats.rs`: `NSWorkspace.accessibilityDisplayShouldReduceMotion`. GPUI has no Reduce
   Motion setting.
+- `view_floats.rs`: `NSWorkspace.accessibilityDisplayShouldReduceTransparency` (amended
+  2026-11-17 for the translucent window). gpui-0.2.2/src has no accessibility API at all. A read
+  on the main thread, again each time the window becomes active; when it is on, the window goes
+  opaque through GPUI's own `Window::set_background_appearance`. It never drives a frame.
 
 To add one: show in GPUI's source that it has no way to do it, keep it to reads or system calls
 on the main thread, list the file here with its reason, and never use it to drive frames (R2).
