@@ -16,8 +16,6 @@ pub const PAD: f32 = 24.;
 pub const GAP: f32 = 16.;
 pub const LABEL: f32 = 28.;
 pub const HEADER: f32 = 28.;
-/// The width a card aims for: as many columns as fit at about this.
-const CARD_W: f32 = 300.;
 
 /// One machine as the overview reads it: its last model (None if it was never reached) and why it
 /// isn't connected now (`HostState::note`).
@@ -54,7 +52,6 @@ pub struct Group {
     pub host: usize,
     pub host_label: Option<String>,
     pub note: Option<String>,
-    pub session_id: Option<String>,
     pub session: Option<String>,
     pub cards: Vec<Card>,
 }
@@ -102,20 +99,12 @@ pub fn groups(machines: &[Machine], scope: &Scope, hosts: bool) -> Vec<Group> {
                 host: m.host,
                 host_label: None,
                 note: None,
-                session_id: Some(s.id.clone()),
                 session: Some(switcher::session_title(s, i)),
                 cards,
             });
         }
         if out.len() == first && (m.model.is_none() && m.note.is_some()) && *scope == Scope::All {
-            out.push(Group {
-                host: m.host,
-                host_label: None,
-                note: None,
-                session_id: None,
-                session: None,
-                cards: vec![],
-            });
+            out.push(Group { host: m.host, host_label: None, note: None, session: None, cards: vec![] });
         }
         if let Some(g) = out.get_mut(first) {
             g.host_label = hosts.then(|| m.label.to_string());
@@ -194,16 +183,11 @@ pub fn fit(groups: &[Group], width: f32, height: f32, aspect: f32) -> Layout {
     }
 }
 
-/// `layout_at` with cards of about `CARD_W`.
-pub fn layout(groups: &[Group], width: f32, aspect: f32) -> Layout {
-    layout_at(groups, width, aspect, CARD_W)
-}
-
 /// Lay the groups out `width` wide: as many columns as fit at about `card` px, each card a header
 /// over a thumbnail `aspect` (height / width) as tall as it is wide. A session's cards are a block
 /// under its label, as wide as its cards (at most every column); blocks sit side by side while
 /// they fit, and a machine's label starts a new row.
-fn layout_at(groups: &[Group], width: f32, aspect: f32, card: f32) -> Layout {
+pub fn layout_at(groups: &[Group], width: f32, aspect: f32, card: f32) -> Layout {
     let inner = (width - 2. * PAD).max(1.);
     let cols = (((inner + GAP) / (card + GAP)).floor() as usize).max(1);
     let w = ((inner - GAP * (cols - 1) as f32) / cols as f32).max(1.);

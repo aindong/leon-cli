@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 use super::*;
 
+/// The most blocks one server watches (leon-server's `MAX_WATCHED`): a longer list is refused whole.
+const MAX_WATCH: usize = 256;
 /// The least time between two refreshes of one thumbnail: at most 4 a second.
 pub const THUMB_EVERY: Duration = Duration::from_millis(250);
 
@@ -119,15 +121,16 @@ impl Workspace {
         self.overview.renders.borrow().clone()
     }
 
-    /// The tabs that have a thumbnail now: the overview's cards and the hovered tab, as
-    /// (host, session, window, greyed).
-    fn thumb_tabs(&self) -> Vec<(usize, String, String, bool)> {
-        let mut out: Vec<_> =
-            self.overview_cards().into_iter().map(|c| (c.host, c.session_id, c.window_id, c.greyed)).collect();
-        if let Some(h) = self.overview.hover.as_ref().filter(|h| h.shown) {
-            out.push((h.host, h.session_id.clone(), h.window_id.clone(), false));
-        }
-        out
+    /// The tabs that have a thumbnail now, as (host, session, window): the hovered tab, then the
+    /// overview's cards from the selected one on, so a capped watch set (`watch_screens`) keeps what
+    /// the user is looking at.
+    fn thumb_tabs(&self) -> Vec<(usize, String, String)> {
+        let mut cards = self.overview_cards();
+        let first = self.overview_selected().min(cards.len());
+        cards.rotate_left(first);
+        let hover = self.overview.hover.as_ref().filter(|h| h.shown);
+        let hover = hover.map(|h| (h.host, h.session_id.clone(), h.window_id.clone()));
+        hover.into_iter().chain(cards.into_iter().map(|c| (c.host, c.session_id, c.window_id))).collect()
     }
 
     /// What tab `wid`'s thumbnail draws now, and a stamp that moves when any of it does.
@@ -172,7 +175,9 @@ impl Workspace {
         let now = Instant::now();
         let keep: HashSet<&str> = tabs.iter().map(|t| t.2.as_str()).collect();
         self.overview.thumbs.retain(|w, _| keep.contains(w.as_str()));
-        for (host, sid, wid, _) in &tabs {
+        self.overview.refreshes.retain(|w, _| keep.contains(w.as_str()));
+        self.overview.renders.borrow_mut().retain(|w, _| keep.contains(w.as_str()));
+        for (host, sid, wid) in &tabs {
             let Some((panes, stamp)) = self.thumb_spec(*host, sid, wid, look) else { continue };
             let filled = panes.iter().all(|p| p.frame.is_some());
             match self.overview.thumbs.get_mut(wid) {
@@ -206,22 +211,32 @@ impl Workspace {
     }
 
     /// Have every machine push the screens drawn now: `shown` (the active window's panes, on the
-    /// selected machine) and each thumbnail's panes, on theirs.
+    /// selected machine) and each thumbnail's panes, on theirs, up to what a server watches.
+    /// shortcut: past `MAX_WATCH` blocks on a machine the last cards stay blank; watch only the
+    /// cards scrolled into view if that is ever seen.
     pub(in crate::view) fn watch_screens(&self, shown: &[String]) {
-        let tabs = self.thumb_tabs();
+        // a closing overview's cards are on their way out (the moving one keeps its frames)
+        let closing = self.overview.open.as_ref().is_some_and(|o| o.closing);
+        let tabs = if closing { Vec::new() } else { self.thumb_tabs() };
         for (i, remote) in self.hosts.remotes() {
             let mut ids: Vec<String> = if i == self.host { shown.to_vec() } else { Vec::new() };
+            let mut seen: HashSet<String> = ids.iter().cloned().collect();
             let m = remote.model();
-            for (_, sid, wid, _) in tabs.iter().filter(|t| t.0 == i) {
+            'tabs: for (_, sid, wid) in tabs.iter().filter(|t| t.0 == i) {
                 let Some(w) = m.session(sid).and_then(|s| s.windows.iter().find(|w| w.id == *wid)) else { continue };
                 let leaves = match (&w.zoomed, &w.layout) {
                     (Some(z), _) => vec![z.as_str()],
                     (None, Some(t)) => t.leaves(),
                     (None, None) => vec![],
                 };
-                ids.extend(
-                    leaves.into_iter().filter(|b| !ids.iter().any(|x| x == b)).map(String::from).collect::<Vec<_>>(),
-                );
+                for b in leaves {
+                    if ids.len() >= MAX_WATCH {
+                        break 'tabs;
+                    }
+                    if seen.insert(b.to_string()) {
+                        ids.push(b.to_string());
+                    }
+                }
             }
             drop(m);
             remote.watch(ids);

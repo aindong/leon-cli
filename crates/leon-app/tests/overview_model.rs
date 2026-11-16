@@ -122,7 +122,7 @@ fn the_grid_fits_the_width_and_never_overlaps() {
     let machines = [Machine { host: 0, label: "This Mac", model: Some(&here), note: None }];
     let groups = overview::groups(&machines, &Scope::All, false);
     for width in [400., 900., 1400., 2600.] {
-        let l = overview::layout(&groups, width, 0.6);
+        let l = overview::layout_at(&groups, width, 0.6, 300.);
         assert_eq!(l.cards.len(), 9);
         assert!(l.cols >= 1);
         for (i, a) in l.cards.iter().enumerate() {
@@ -146,7 +146,7 @@ fn arrows_move_along_the_order_and_between_rows_by_column() {
     let groups = overview::groups(&machines, &Scope::All, false);
     // pick a width that gives three columns: rows are [0 1 2] [3 4] | [5 6]
     let l = (300..3000)
-        .map(|w| overview::layout(&groups, w as f32, 0.6))
+        .map(|w| overview::layout_at(&groups, w as f32, 0.6, 300.))
         .find(|l| l.cols == 3)
         .expect("some width gives three columns");
     let s = |from, step| overview::step(&l.cards, from, step);
@@ -168,7 +168,7 @@ fn small_sessions_sit_side_by_side_and_a_few_tabs_fill_the_window() {
         model(vec![session("a", "api", 1), session("b", "web", 1), session("c", "docs", 1), session("d", "ops", 1)]);
     let machines = [Machine { host: 0, label: "This Mac", model: Some(&here), note: None }];
     let groups = overview::groups(&machines, &Scope::All, false);
-    let l = overview::layout(&groups, 1400., 0.6);
+    let l = overview::layout_at(&groups, 1400., 0.6, 300.);
     assert!(l.cols >= 4);
     assert!(l.cards.iter().all(|c| c.y == l.cards[0].y), "four one-tab sessions in one row: {:?}", l.cards);
     // the widest cards that fit 1060 px of height: bigger than the 300 px default, never past it

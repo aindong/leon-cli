@@ -159,6 +159,10 @@ impl Workspace {
     /// or a visible pane's header (its own state, which a blocked pane beside it would hide).
     pub(super) fn spinning(&self, rows: &[SessionRow]) -> Option<u64> {
         let working = |i: &Option<Indicator>| matches!(i, Some(Indicator::Working { .. }));
+        // the overview hides the sidebar, the tabs and the headers: only its cards spin then
+        if self.overview_shown() {
+            return self.overview_cards().iter().any(|c| working(&c.status)).then(|| self.pulse());
+        }
         let places = self.places();
         let sidebar = places.sidebar.is_some()
             && rows.iter().any(|r| working(&r.status) || r.windows.iter().any(|w| working(&w.status)));
@@ -175,8 +179,7 @@ impl Workspace {
                 m.block(id).is_some_and(|(s, b)| header(s, b) && working(&status::indicator_of(&b.newest_first())))
             })
         };
-        let cards = self.overview_shown() && self.overview_cards().iter().any(|c| working(&c.status));
-        (sidebar || tabs || headers || cards).then(|| self.pulse())
+        (sidebar || tabs || headers).then(|| self.pulse())
     }
 
     pub fn font_size(&self) -> f32 {

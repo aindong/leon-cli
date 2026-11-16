@@ -82,6 +82,20 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let h = self.overview.hover.clone().filter(|h| h.shown)?;
+        // a tab closed under the pointer sends no leave of its own (its element is gone, or another
+        // tab took its id), so its preview goes with it
+        let remote = self.hosts.machines().get(h.host).and_then(|m| m.remote()).cloned();
+        let alive = remote.is_some_and(|r| {
+            let m = r.model();
+            m.session(&h.session_id).is_some_and(|s| s.windows.iter().any(|w| w.id == h.window_id))
+        });
+        // nor does a row or tab whose list went (the sidebar hidden, the tab style switched)
+        let places = self.places();
+        let drawn = if h.sidebar { places.sidebar == Some(SidebarList::SessionsAndTabs) } else { places.top_tabs };
+        if !alive || !drawn {
+            self.overview.hover = None;
+            return None;
+        }
         self.overview.area = self.pane_area(window);
         self.refresh_thumbs(false, cx);
         let t = &self.theme;

@@ -19,7 +19,6 @@ while [ $# -gt 0 ]; do
 done
 perf_screen_gate
 perf_init overview
-ms() { awk -v a="$1" -v b="$2" 'BEGIN { printf "%.1f", (b - a) / 1e6 }'; }
 
 perf_server
 made=0

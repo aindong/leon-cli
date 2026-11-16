@@ -34,7 +34,7 @@ fields it doesn't know. The full policy is in
 
 - ⌘⇧\ (or the toolbar's grid button, or "Overview of All Tabs" in the palette) fills the window
   with every tab of every session and host as a card: its title, its status in the sidebar's
-  colours and words, and a live, scaled-down view of its panes as laid out. Arrow keys move
+  colours and Activity's words, and a live, scaled-down view of its panes as laid out. Arrow keys move
   between cards, ↩ or a click goes to the tab, typing filters by title, and esc goes back to where
   you were. ⌘\ shows only the current session's tabs. A host that isn't connected shows its last
   cards greyed, with the reason.

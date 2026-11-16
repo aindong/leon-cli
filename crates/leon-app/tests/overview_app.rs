@@ -92,6 +92,9 @@ fn enter_and_a_click_go_to_the_card_and_close(cx: &mut TestAppContext) {
     let there = |ws: &Workspace| (ws.session_id(), ws.active_window().map(|w| w.id));
     let went = shows(cx, |cx| ws.read_with(cx, |ws, _| there(ws)) == (Some(ci.clone()), Some(tests.clone())));
     assert!(went, "enter went to ci › tests: {:?}", ws.read_with(cx, |ws, _| there(ws)));
+    cx.simulate_keystrokes("cmd-shift-\\");
+    assert_eq!(ws.read_with(cx, |ws, _| ws.overview_selected()), 3, "opening again selects the current tab's card");
+    cx.simulate_keystrokes("escape");
 
     cx.simulate_keystrokes("cmd-shift-\\");
     let site = ws.read_with(cx, |ws, _| ws.overview_cards()[4].clone());
@@ -172,5 +175,20 @@ fn a_cards_status_is_the_sidebars(cx: &mut TestAppContext) {
     assert_eq!(card.status, Some(leon_app::status::Indicator::Blocked(None)));
     cx.simulate_keystrokes("cmd-shift-\\");
     assert!(drawn(cx, &format!("card-status-{tests}")), "its mark is drawn");
+    assert!(drawn(cx, &format!("card-word-{tests}")), "and its state in words");
+    assert_eq!(leon_app::attention::state_text(card.status.unwrap()), "blocked", "Activity's word for it");
+    s.app.stop();
+}
+
+#[gpui::test]
+fn the_menus_actions_still_work_while_it_is_open(cx: &mut TestAppContext) {
+    let s = setup();
+    let (ws, cx) = open(cx, &s.app);
+    cx.simulate_keystrokes("cmd-shift-\\");
+    assert!(ws.read_with(cx, |ws, _| ws.overview_open()));
+    let before = s.app.ctx().state().sessions.iter().map(|s| s.windows.len()).sum::<usize>();
+    cx.dispatch_action(leon_app::view::NewTab);
+    let made = shows(cx, |_| s.app.ctx().state().sessions.iter().map(|s| s.windows.len()).sum::<usize>() > before);
+    assert!(made, "the menu's New Tab reached the workspace under the overview");
     s.app.stop();
 }

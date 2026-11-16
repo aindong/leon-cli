@@ -9,6 +9,8 @@ use crate::overview::{self, Card, Scope, Step};
 
 #[path = "view_hover.rs"]
 mod hover;
+#[path = "view_overview_keys.rs"]
+mod keys;
 #[path = "view_thumbs.rs"]
 mod thumbs;
 use hover::Hover;
@@ -54,7 +56,8 @@ impl Workspace {
     }
 
     pub fn overview_selected(&self) -> usize {
-        self.overview.open.as_ref().map_or(0, |o| o.selected)
+        let n = self.overview_cards().len();
+        self.overview.open.as_ref().map_or(0, |o| o.selected.min(n.saturating_sub(1)))
     }
 
     pub fn overview_query(&self) -> String {
@@ -75,15 +78,13 @@ impl Workspace {
 
     /// `client.overview.toggle` (`all`) and `client.overview.session.toggle`: open the overview,
     /// or close it, back where it was.
-    pub(super) fn toggle_overview(&mut self, all: bool, cx: &mut Context<Self>) {
+    pub(super) fn toggle_overview(&mut self, action: &str, cx: &mut Context<Self>) {
+        let all = action == "client.overview.toggle";
         if self.overview_open() {
             self.close_overview(false, cx);
             return;
         }
-        let scope = match (all, self.session_id.clone()) {
-            (false, Some(session_id)) => Scope::Session { host: self.host, session_id },
-            _ => Scope::All,
-        };
+        let scope = self.overview_scope(all);
         let motion = (!self.reduce_motion()).then(|| (true, Instant::now()));
         let mut o = Overview { scope, query: String::new(), selected: 0, motion, closing: false };
         let current = self.active_window().map(|w| w.id);
@@ -99,6 +100,14 @@ impl Workspace {
         cx.notify();
     }
 
+    /// The tabs `client.overview.toggle` (`all`) or `client.overview.session.toggle` shows.
+    fn overview_scope(&self, all: bool) -> Scope {
+        match (all, self.session_id.clone()) {
+            (false, Some(session_id)) => Scope::Session { host: self.host, session_id },
+            _ => Scope::All,
+        }
+    }
+
     /// Close the overview, going to the selected card's tab when `go`; else the current tab's card
     /// is the one that moves back to the panes.
     fn close_overview(&mut self, go: bool, cx: &mut Context<Self>) {
@@ -106,13 +115,16 @@ impl Workspace {
         let current = self.active_window().map(|w| w.id);
         let reduce = self.reduce_motion();
         let Some(o) = self.overview.open.as_mut() else { return };
-        let pick = cards.get(o.selected).cloned().filter(|_| go);
-        if let Some(i) = cards.iter().position(|c| Some(&c.window_id) == current.as_ref()).filter(|_| !go) {
+        let pick = cards.get(o.selected.min(cards.len().saturating_sub(1))).cloned().filter(|_| go);
+        let here = cards.iter().position(|c| Some(&c.window_id) == current.as_ref());
+        if let Some(i) = here.filter(|_| !go) {
             o.selected = i;
         }
+        // back to a tab the filter hides: no card stands for it, so nothing moves
+        let still = reduce || (!go && here.is_none());
         o.closing = true;
-        o.motion = (!reduce).then(|| (false, Instant::now()));
-        if reduce {
+        o.motion = (!still).then(|| (false, Instant::now()));
+        if still {
             self.overview.open = None;
         }
         if let Some(c) = pick {
@@ -143,84 +155,13 @@ impl Workspace {
         crate::floats::slide(at.elapsed(), self.reduce_motion()).map(|p| (opening, p))
     }
 
-    /// A key while the overview is open: arrows move, ↩ goes, esc goes back, the rest filters. Its
-    /// own keys close it; other bindings wait until it is closed.
-    pub(super) fn overview_key(&mut self, ks: &gpui::Keystroke, chord: Option<&Chord>, cx: &mut Context<Self>) {
-        let m = &ks.modifiers;
-        let named = |name: &str| ks.key == name && !m.platform && !m.control;
-        let bound = chord.and_then(|c| match self.keymap.press(&[], c) {
-            Pressed::Run(b) => b.action,
-            _ => None,
-        });
-        if let Some(a) = bound.as_deref().filter(|a| a.starts_with("client.overview.")) {
-            let all = a == "client.overview.toggle";
-            let same = self.overview.open.as_ref().is_some_and(|o| (o.scope == Scope::All) == all);
-            if same {
-                self.close_overview(false, cx);
-            } else if let Some(o) = self.overview.open.as_mut() {
-                o.scope = match (all, self.session_id.clone()) {
-                    (false, Some(session_id)) => Scope::Session { host: self.host, session_id },
-                    _ => Scope::All,
-                };
-                o.selected = 0;
-                cx.notify();
-            }
-            return;
-        }
-        let steps = [("left", Step::Left), ("right", Step::Right), ("up", Step::Up), ("down", Step::Down)];
-        if named("escape") {
-            self.close_overview(false, cx);
-        } else if named("enter") {
-            if !self.overview_cards().is_empty() {
-                self.close_overview(true, cx);
-            }
-        } else if let Some((_, step)) = steps.iter().find(|(k, _)| named(k)) {
-            let rects = self.overview_layout().cards;
-            if let Some(o) = self.overview.open.as_mut() {
-                o.selected = overview::step(&rects, o.selected, *step);
-                let r = rects.get(o.selected).copied();
-                self.reveal(r);
-            }
-        } else if let Some(o) = self.overview.open.as_mut() {
-            if named("backspace") {
-                o.query.pop();
-            } else if let Some(typed) = ks.key_char.as_deref().filter(|_| !m.platform && !m.control) {
-                o.query.extend(typed.chars().filter(|c| !c.is_control()));
-            } else if ks.key == "space" {
-                o.query.push(' ');
-            } else {
-                return;
-            }
-            o.selected = 0;
-            self.overview.scroll.set_offset(point(px(0.), px(0.)));
-        }
-        cx.notify();
-    }
-
-    /// Scroll the grid so card rect `r` is in view.
-    fn reveal(&self, r: Option<panes::Rect>) {
-        let Some(r) = r else { return };
-        let s = &self.overview.scroll;
-        let (top, h) = (-f32::from(s.offset().y), f32::from(s.bounds().size.height));
-        if h <= 0. {
-            return;
-        }
-        let y = if r.y < top {
-            r.y - overview::PAD
-        } else if r.y + r.h > top + h {
-            r.y + r.h + overview::PAD - h
-        } else {
-            return;
-        };
-        s.set_offset(point(px(0.), px(-y.max(0.))));
-    }
-
     /// The grid as laid out for the window's width, in the pane area's shape.
-    fn overview_layout(&self) -> overview::Layout {
-        let Some(o) = self.overview.open.as_ref() else { return Default::default() };
+    /// `groups` is the one read of the models a frame uses for both: a second read could see a
+    /// session or tab more or less, and the layout's indexes would point past the groups.
+    fn overview_layout(&self, groups: &[overview::Group]) -> overview::Layout {
         let (w, h) = self.overview.area;
         let (width, height) = self.overview.window;
-        overview::fit(&self.overview_groups(o), width.max(1.), height - TITLEBAR, if w > 0. { h / w } else { 0.6 })
+        overview::fit(groups, width.max(1.), height - TITLEBAR, if w > 0. { h / w } else { 0.6 })
     }
 
     /// Drop an overview whose closing motion is over.
@@ -244,16 +185,19 @@ impl Workspace {
         self.refresh_thumbs(false, cx);
         let t = self.theme;
         let Some(o) = self.overview.open.as_ref() else { return div().into_any_element() };
-        let (query, selected) = (o.query.clone(), o.selected);
+        let (query, selected, closing) = (o.query.clone(), o.selected, o.closing);
         let session = match &o.scope {
             Scope::Session { session_id, .. } => self.rows().into_iter().find(|r| r.id == *session_id).map(|r| r.title),
             Scope::All => None,
         };
         let groups = self.overview_groups(o);
         let cards = overview::cards(&groups);
-        let l = self.overview_layout();
+        let l = self.overview_layout(&groups);
+        let selected = selected.min(cards.len().saturating_sub(1));
         let motion = self.overview_motion();
-        if motion.is_some() {
+        // while closing, ask for frames until `settle_overview` drops it: its motion can end
+        // between that read of the clock and this one
+        if motion.is_some() || closing {
             window.request_animation_frame();
         }
         let frame = self.pulse();
@@ -290,7 +234,8 @@ impl Workspace {
             if moving.as_ref() == Some(&c.window_id) {
                 continue; // drawn where it is on its way
             }
-            grid = grid.child(self.card(c, *r, (i == selected, false), frame, cx));
+            // closing, no card takes a click: the panes are coming back under the pointer
+            grid = grid.child(self.card(c, *r, (i == selected, closing), frame, cx));
         }
         if cards.is_empty() {
             grid = grid.child(
@@ -336,15 +281,14 @@ impl Workspace {
             )
             .child(self.stats_mark());
         if let Some((opening, p)) = motion {
-            let veil = if opening { 1. - p } else { p };
+            let veil = self.overview_veil();
             // the veil is drawn over the cached thumbnails, never as their opacity: a cached
             // view's paint is replayed as it was recorded
             out = out.child(
                 div().absolute().top(px(TITLEBAR)).left_0().right_0().bottom_0().bg(rgb(t.chrome)).opacity(veil),
             );
-            if let (Some(i), Some(from)) =
-                (cards.iter().position(|c| Some(&c.window_id) == moving.as_ref()), self.panes_rect(window))
-            {
+            if let Some(i) = cards.iter().position(|c| Some(&c.window_id) == moving.as_ref()) {
+                let from = self.panes_rect(window);
                 let off = f32::from(self.overview.scroll.offset().y);
                 let to = l.cards[i];
                 let to = panes::Rect { y: to.y + TITLEBAR + off, ..to };
@@ -366,10 +310,10 @@ impl Workspace {
     }
 
     /// Where the panes are drawn when the overview is closed, in the window.
-    fn panes_rect(&self, window: &Window) -> Option<panes::Rect> {
+    fn panes_rect(&self, window: &Window) -> panes::Rect {
         let (w, h) = self.pane_area(window);
         let view = window.viewport_size();
-        Some(panes::Rect { x: f32::from(view.width) - w, y: f32::from(view.height) - h, w, h })
+        panes::Rect { x: f32::from(view.width) - w, y: f32::from(view.height) - h, w, h }
     }
 
     /// One card: its header (status, title, the state in words), then its thumbnail; a click goes
@@ -417,7 +361,9 @@ impl Workspace {
                     .children(c.status.map(|s| status_mark(s, frame, t).debug_selector(move || sel(status_name))))
                     .child(div().flex_1().min_w(px(0.)).line_clamp(1).text_ellipsis().child(c.title.clone()))
                     .children(c.status.map(|s| {
+                        let word = format!("card-word-{}", c.window_id);
                         div()
+                            .debug_selector(move || sel(word))
                             .flex_none()
                             .text_size(px(SECONDARY_TEXT))
                             .text_color(rgb(s.color(t)))

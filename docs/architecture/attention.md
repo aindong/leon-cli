@@ -40,15 +40,19 @@ of [the architecture](../architecture.md).
   (⌘\: the selected session only) take the whole window: a card per tab of every machine, grouped
   under its session and, once there are hosts, its machine, in the sidebar's order. Each card has
   the tab's title, the sidebar's status (`overview::tab_statuses`, which the sidebar's rows use too)
-  in Activity's words, and a thumbnail. `overview::layout` places the cards: as many columns as fit at
-  about 300 px, in the pane area's shape. `overview::step` moves the arrow keys by order and by the
+  in Activity's words, and a thumbnail. `overview::fit` places the cards in the pane area's shape:
+  a session's cards are a block as wide as its cards, blocks sit side by side while they fit, and
+  the cards take the widest size, 640 px down to 240 px, at which everything fits the window's
+  height (past that the grid scrolls). `overview::step` moves the arrow keys by order and by the
   nearest column. ↩ or a click is `go_to`, esc changes nothing, and typing runs the palette's
   filter over the titles. A machine that isn't connected shows its last model's cards under a grey
   veil, with `HostState::note` as the reason. A machine never reached shows only its label.
   A thumbnail is a cached GPUI view (`AnyView::cached`) of the tab's tiles (`panes::tiles`, zoom
   honoured; floats and drawers are left out), painted with `paint_frame` at a scaled cell and font
   from the frames the server pushes: never faded, never fitted, so no PTY is resized. While a
-  thumbnail is up its blocks are in its machine's watch set (`watch_screens`). The poll refreshes
+  thumbnail is up its blocks are in its machine's watch set (`watch_screens`): the hovered tab's
+  first, then the cards from the selected one on, up to the 256 a server watches (past that the
+  last cards stay blank). The poll refreshes
   one only when its screens, layout, theme or font changed, at most every 250 ms (`THUMB_EVERY`),
   and notifies only that view. `signature()` leaves screens out while the overview is up, so a
   busy pane never redraws the whole window, and an idle overview draws nothing. Opening moves the
