@@ -15,7 +15,10 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   other descriptor of the client's: every other one is marked close-on-exec in the forked child, because macOS marks a new
   pipe in a second step, and an ssh forked in between (by another connection's thread) held that connection's pipes, so
   its `spawn` never returned. A `leon.exec` program starts the same way (`leon_core::spawn::stdio_only`), so it can't hold a pane's
-  PTY that another thread is opening. leon adds
+  PTY that another thread is opening. A pane's program starts the same way as well: leon opens the PTY
+  with `portable-pty` but forks and execs the program itself (`terminal_start.rs`), since
+  portable-pty's spawn closes every descriptor past stderr, std's exec-error pipe among them, and
+  a failed exec then aborted in the pane instead of failing `block.create`. leon adds
   only `-T`, no forwarding (no agent on the host, no port a config's `LocalForward` would bind) and
   the keepalives (a dead Wi-Fi link is noticed in about 45 s) and the connect timeout (a command
   started during an outage fails in 15 s, a stalled banner included); everything else comes from

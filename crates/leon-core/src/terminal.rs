@@ -16,7 +16,7 @@ use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Point};
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, MasterPty, PtySize};
 use tokio::sync::watch;
 
 use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
@@ -30,6 +30,8 @@ mod process;
 use process::{reap, wait_exit, Registered};
 #[path = "terminal_reading.rs"]
 mod reading;
+#[path = "terminal_start.rs"]
+mod start;
 #[path = "terminal_status.rs"]
 mod status;
 #[path = "terminal_view.rs"]
@@ -208,26 +210,16 @@ impl Terminal {
         let notify: Notify = Arc::new(notify);
         let size = PtySize { rows: ROWS, cols: COLS, pixel_width: 0, pixel_height: 0 };
         let pair = native_pty_system().openpty(size).map_err(pty)?;
-        let mut cmd = if spec.command.is_empty() {
-            CommandBuilder::new_default_prog()
-        } else {
-            CommandBuilder::from_argv(spec.command.iter().map(Into::into).collect())
-        };
-        if let Some(dir) = &spec.cwd {
-            // portable-pty silently falls back to $HOME for a missing dir; refuse instead.
-            if !dir.is_dir() {
-                return Err(io::Error::new(io::ErrorKind::NotFound, format!("no directory {}", dir.display())));
-            }
-            cmd.cwd(dir);
+        // portable-pty silently falls back to $HOME for a missing dir; refuse instead.
+        if let Some(dir) = spec.cwd.as_ref().filter(|d| !d.is_dir()) {
+            return Err(io::Error::new(io::ErrorKind::NotFound, format!("no directory {}", dir.display())));
         }
-        for (k, v) in &spec.env {
-            cmd.env(k, v);
-        }
-        let command = if spec.command.is_empty() { vec![cmd.get_shell()] } else { spec.command };
-        let start_cwd = spec.cwd;
-        let child = pair.slave.spawn_command(cmd).map_err(pty)?;
+        let tty = pair.master.tty_name().ok_or_else(|| io::Error::other("the PTY has no name"))?;
+        let child = start::start(&spec, &tty)?;
         drop(pair.slave); // the child holds the only slave fd, so its exit ends our reads
-        let pid = child.process_id().map_or(0, |p| p as i32);
+        let pid = child.id() as i32;
+        let command = if spec.command.is_empty() { vec![start::shell(&spec)] } else { spec.command };
+        let start_cwd = spec.cwd;
 
         let reader = pair.master.try_clone_reader().map_err(pty)?;
         // Write through our own dup of the master: portable-pty's writer types "\n" + EOF when dropped,
