@@ -86,6 +86,22 @@ of [the architecture](../architecture.md).
   draws nothing. `leon.set("fade_inactive_panes", N)` is the strength, 0 (off) to 0.8; the
   default, 0.35, is the strongest step at which body text keeps 4.5:1 on leon-dark and
   leon-light. The app reads it from `server.settings`. `leon attach` doesn't fade.
+- **The translucent window.** `leon.set("translucency", N)` (0 to 0.8, default 0.3) asks GPUI for
+  a blurred window background (`Window::set_background_appearance`, an `NSVisualEffectView`
+  under the content that the system composites, so a desktop changing behind the window draws
+  nothing in leon) and draws the window's own colours with alpha (`glass.rs`). GPUI's renderer
+  adds alpha where fills overlap, so each pixel gets one translucent fill at most: the root fills
+  nothing, and the sidebar, the title bar, the panes area's gaps (`glass::gaps`, the area less
+  the rounded tiles) and each tile fill themselves. Each alpha is what the setting asks, or
+  more where text would read worse over a pure white or a pure black desktop than it must: body
+  text on a pane 4.5:1, `text` on the chrome 4.5:1 and `muted` 3:1, each capped at what the
+  theme gives it opaque, so an imported low-contrast theme is never made worse and a faded pane
+  keeps its fade's contrast (it is drawn more opaque). leon-dark reaches that floor at about
+  0.25, leon-light at about 0.45. An inactive window keeps its blur (GPUI's effect view stays
+  active). The window is opaque, exactly as before, in full screen, with Reduce Transparency on
+  (read when the window becomes active) and at 0. Floats and overlays (the palette, the overview, the
+  find bar) stay opaque: they sit over other content. A program's own background colours are
+  opaque; only default-background cells show through.
 - **`leon notify`.** `dev.leon.terminal.report_status {state, title, msg}` (experimental) builds an
   OSC 7501 report (title and msg base64) and runs it through the same parser and store as PTY
   output, so every limit applies; text the parser would drop is refused (400) instead. `leon notify`
