@@ -28,6 +28,19 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### Terminals under load
+
+#### Fixed
+
+- A program that writes and exits at once (`printf`, `pwd`) no longer leaves an empty pane when the
+  machine is busy. On macOS a program's exit waits only about 0.6 s for its output to be read,
+  then drops it; leon now keeps the PTY open until the program has exited, so the exit waits for
+  leon to read it.
+- A program's exit is reported after the output already read from it is on the screen, also when
+  the end of its output is slow to come.
+- Opening a pane no longer fails now and then with "failed to openpty" while other programs open
+  and close terminals: macOS's "open it again" answer is now followed.
+
 ### The overview in Leon.app
 
 #### Added
