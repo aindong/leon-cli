@@ -3,7 +3,9 @@
 
 # A failure stays a failure: no retries, and every test runs however many fail.
 [profile.ci]
-test-threads = 3 # the macOS runner's cores, as `cargo test` already uses inside one binary
+# Twice the macOS runner's 3 cores: most tests wait on a PTY, a socket or a timeout, not the CPU.
+# At 3, the 1045 tests' 868 s of running took 335 s.
+test-threads = 6
 retries = 0
 fail-fast = false
 
