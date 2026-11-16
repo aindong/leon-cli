@@ -237,6 +237,18 @@ than in alacritty's parser (fixed since: docs/performance-cat.md). A keystroke's
 display tick), then shown about two display frames later: GPUI draws on the display link and
 presents through a three-drawable Metal layer.
 
+## The overview with 50 tabs
+
+`scripts/perf/overview.sh [--runs N] [--tabs N]` makes 50 tabs in 10 sessions, opens the
+overview (⌘⇧\) through System Events and reads `LEON_FRAME_LOG`'s `overview` and
+`overview-filled` lines: from the key's AppKit stamp to the display tick after the first overview
+frame, and after the first frame in which every card has its tab's screen (the server pushes each
+tab's screen once the overview watches it). It fails when the filled median reaches 100 ms. Two
+runs of five opens on the machine above, at a load of 10.5 and 8.7 (an upper bound): first frame
+p50 16.1 / 17.1 ms, every card filled p50 32.5 / 33.8 ms (max 46.2 ms); frames while open take
+1 to 3 ms to build (max 7.5 ms), since each thumbnail is a cached view that draws again only when
+its screen changes.
+
 ## A big `cat`
 
 The parse path's speed-up for a flood of text and colour, with its numbers: docs/performance-cat.md.

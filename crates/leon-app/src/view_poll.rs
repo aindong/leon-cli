@@ -62,6 +62,7 @@ impl Workspace {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         }
         self.poll_attention(cx);
+        self.refresh_thumbs(true, cx);
         self.stats.borrow_mut().report(); // and on the tick, for the last frames before a quiet spell
         self.refresh_keymap(false, cx);
         let now = self.signature();
@@ -95,6 +96,7 @@ impl Workspace {
                 due.push(WAITED_TICK);
             }
             due.extend(self.find_rerun_in());
+            due.extend(self.thumbs_due()); // a thumbnail's refresh `THUMB_EVERY` held back
         }
         due.extend(self.notifier.due().map(|t| t.saturating_duration_since(now)));
         due.extend(self.hosts.next_retry().map(|t| t.saturating_duration_since(now)));

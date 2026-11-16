@@ -24,6 +24,8 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("client.tab.previous", "Previous Tab"),
     ("client.sidebar.toggle", "Toggle Sidebar"),
     ("client.sidebar.activity.toggle", "Show or Hide Activity"),
+    ("client.overview.toggle", "Overview of All Tabs"),
+    ("client.overview.session.toggle", "Overview of This Session"),
     ("client.tab_style.toggle", "Toggle Tab Style"),
     ("client.pane_header.reveal", "Show or Hide Pane Headers"),
     ("client.font.increase", "Increase Font Size"),

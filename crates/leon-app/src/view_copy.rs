@@ -45,8 +45,12 @@ impl Workspace {
     }
 
     /// A key while copy mode or hints are on: true when it was theirs (all but ⌘ chords). A mode
-    /// whose pane is no longer the target has ended.
+    /// whose pane is no longer the target has ended. The overview, while open, takes every key.
     pub(super) fn mode_key(&mut self, ks: &gpui::Keystroke, chord: Option<&Chord>, cx: &mut Context<Self>) -> bool {
+        if self.overview_open() {
+            self.overview_key(ks, chord, cx);
+            return true;
+        }
         let target = self.target_block();
         if let Some(old) = self.term.copy.as_ref().map(|c| c.block.clone()).filter(|b| Some(b) != target.as_ref()) {
             self.exit_copy(&old);

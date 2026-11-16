@@ -158,11 +158,6 @@ pub fn drawn() -> HashSet<String> {
 // Truncating text cells use `line_clamp(1)`, not `whitespace_nowrap`: GPUI 0.2.2 caches a no-wrap
 // text's size from its first layout (before its width is known) and never adds the ellipsis.
 
-/// A GPUI rectangle as a settings frame.
-fn frame(b: Bounds<Pixels>) -> chrome::Frame {
-    chrome::Frame { x: b.origin.x.into(), y: b.origin.y.into(), w: b.size.width.into(), h: b.size.height.into() }
-}
-
 /// Where the app keeps its settings: `$LEON_STATE_DIR/app.json` (next to the server's sessions).
 pub fn settings_path() -> Option<PathBuf> {
     leon_core::paths::state_dir().map(|d| d.join("app.json"))
@@ -248,6 +243,7 @@ pub struct Workspace {
     floats: floats_view::FloatUi,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
+    overview: overview_view::OverviewUi,
     /// Leon.app's updates (view_update.rs): the notice, and the look for a release.
     updates: Arc<crate::updates::Updater>,
     /// Look on its own (the app; a test only when it asks), once the settings say whether to.
@@ -329,7 +325,7 @@ impl Workspace {
         // the window's frame and display are kept with the settings, and saved when the app quits
         // or the window closes (closing drops the workspace before the quit it asks for)
         let bounds = cx.observe_window_bounds(window, |ws, window, cx| {
-            ws.settings.window = Some(frame(window.window_bounds().get_bounds()));
+            ws.settings.window = Some(state::frame(window.window_bounds().get_bounds()));
             ws.settings.display = window.display(cx).map(|d| u32::from(d.id()));
         });
         let quit = cx.on_app_quit(|ws, _| {
@@ -388,6 +384,7 @@ impl Workspace {
             term,
             floats: Default::default(),
             fade: Default::default(),
+            overview: Default::default(),
             updates,
             updates_auto: false,
             check_for_updates: None,
@@ -481,6 +478,8 @@ mod menus;
 mod model;
 #[path = "view_overlay.rs"]
 mod overlay;
+#[path = "view_overview.rs"]
+mod overview_view;
 #[path = "view_paint.rs"]
 mod paint;
 #[path = "view_panes.rs"]

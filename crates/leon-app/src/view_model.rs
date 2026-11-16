@@ -18,13 +18,7 @@ impl Workspace {
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                // each block read once: per window per block would be a million a poll at the caps
-                let mut by_window = std::collections::HashMap::<&str, Option<Indicator>>::new();
-                for b in &s.blocks {
-                    let shown = status::indicator_of(&b.newest_first());
-                    let w = by_window.entry(&b.window_id).or_default();
-                    *w = status::aggregate([*w, shown]);
-                }
+                let by_window = crate::overview::tab_statuses(s);
                 let windows: Vec<WindowRow> = s
                     .windows
                     .iter()
@@ -165,6 +159,10 @@ impl Workspace {
     /// or a visible pane's header (its own state, which a blocked pane beside it would hide).
     pub(super) fn spinning(&self, rows: &[SessionRow]) -> Option<u64> {
         let working = |i: &Option<Indicator>| matches!(i, Some(Indicator::Working { .. }));
+        // the overview hides the sidebar, the tabs and the headers: only its cards spin then
+        if self.overview_shown() {
+            return self.overview_cards().iter().any(|c| working(&c.status)).then(|| self.pulse());
+        }
         let places = self.places();
         let sidebar = places.sidebar.is_some()
             && rows.iter().any(|r| working(&r.status) || r.windows.iter().any(|w| working(&w.status)));
@@ -193,7 +191,9 @@ impl Workspace {
     /// and panes hidden by a zoom don't count).
     pub fn signature(&self) -> u64 {
         let mut h = DefaultHasher::new();
-        let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
+        // with the overview up its thumbnails redraw themselves (`refresh_thumbs`), never the window
+        let shown = self.shown().map(|(_, ids)| ids).filter(|_| !self.overview_shown()).unwrap_or_default();
+        self.overview_shown().hash(&mut h);
         for (host, remote) in self.hosts.remotes() {
             let m = remote.model();
             host.hash(&mut h);

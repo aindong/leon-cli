@@ -66,7 +66,6 @@ impl Workspace {
         };
         let mut out =
             div().debug_selector(|| sel("panes-area".into())).flex_1().relative().overflow_hidden().bg(rgb(t.chrome));
-        self.app.watch(terms.clone()); // only what is on screen is pushed
         for p in &l.panes {
             if terms.contains(&p.block_id) {
                 out = out.child(self.pane_tile("pane", &p.block_id, p.rect, None, &tiling, cx));
@@ -248,6 +247,7 @@ impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.note_focus(window);
         self.note_slides();
+        self.settle_overview();
         DRAWN.with(|d| d.borrow_mut().clear());
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
@@ -273,19 +273,36 @@ impl Render for Workspace {
         let body_shown = self.shown();
         self.note_fades(body_shown.as_ref().map_or(&[][..], |(_, ids)| ids));
         self.drew_frame();
-        let body = match body_shown {
-            _ if self.stopped => self.render_stopped(cx).into_any_element(),
-            Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
-            None => self.render_empty(cx).into_any_element(),
+        // only what is drawn is pushed: the panes on screen, and every thumbnail's (view_overview.rs);
+        // the panes stay watched under the overview, so they are current when it closes, even when
+        // a filter hid their card
+        let on_screen = body_shown.as_ref().map(|(_, ids)| ids.clone()).unwrap_or_default();
+        if !self.stopped {
+            self.watch_screens(&on_screen);
+        }
+        let preview = self.render_preview(window, cx).filter(|_| !self.stopped);
+        // the overview takes the sidebar's and the panes' place, in the same root as they are, so
+        // the menu's actions and the window's listeners still reach the workspace
+        let main: Vec<gpui::AnyElement> = if self.overview_shown() && !self.stopped {
+            vec![self.render_overview(window, cx)]
+        } else {
+            let body = match body_shown {
+                _ if self.stopped => self.render_stopped(cx).into_any_element(),
+                Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
+                None => self.render_empty(cx).into_any_element(),
+            };
+            let column = div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .min_w(px(0.))
+                .when(self.titlebar_shown() && !self.stopped, |d| d.child(self.render_titlebar(current, cx)))
+                .child(body);
+            // a stopped server's sessions are gone: nothing of them stays drawn
+            let sidebar =
+                self.places().sidebar.filter(|_| !self.stopped).map(|list| self.render_sidebar(&rows, list, cx));
+            sidebar.map(IntoElement::into_any_element).into_iter().chain([column.into_any_element()]).collect()
         };
-        let places = self.places();
-        let column = div()
-            .flex_1()
-            .flex()
-            .flex_col()
-            .min_w(px(0.))
-            .when(self.titlebar_shown() && !self.stopped, |d| d.child(self.render_titlebar(current, cx)))
-            .child(body);
         div()
             .key_context("Workspace")
             .track_focus(&self.focus)
@@ -318,11 +335,10 @@ impl Render for Workspace {
             .font_family(".SystemUIFont")
             .text_size(px(UI_TEXT))
             .text_color(rgb(self.theme.text))
-            // a stopped server's sessions are gone: nothing of them stays drawn
-            .children(places.sidebar.filter(|_| !self.stopped).map(|list| self.render_sidebar(&rows, list, cx)))
-            .child(column)
+            .children(main)
             .children(self.render_stale(window))
             .children(self.render_update(cx).filter(|_| !self.stopped))
+            .children(preview)
             // last, so it paints over the panes: GPUI paints children in order
             .children(self.render_overlay(cx).filter(|_| !self.stopped))
     }

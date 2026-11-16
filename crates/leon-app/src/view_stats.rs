@@ -31,6 +31,19 @@ struct Log {
     echoed: Option<(u64, u64, u64)>,
     /// Whether a pane with text was drawn yet (start-up: the first prompt).
     text: bool,
+    /// The overview opened at this stamp: its first frame, then the one with every thumbnail's
+    /// screen, are logged at their display tick (`overview`, `overview-filled`).
+    overview: Option<Opening>,
+}
+
+/// The overview opening: when, whether a frame of it was painted since the last tick, whether
+/// one had every thumbnail's screen, and whether its first frame is logged yet.
+#[derive(Clone, Copy, Default)]
+struct Opening {
+    at: u64,
+    painted: bool,
+    filled: bool,
+    logged: bool,
 }
 
 /// A pane's cursor (line, column), if shown.
@@ -52,8 +65,14 @@ impl Stats {
     }
 
     fn with(stats: bool, log: Option<std::fs::File>) -> Stats {
-        let log =
-            log.map(|f| Log { out: std::io::BufWriter::new(f), frame: None, key: None, echoed: None, text: false });
+        let log = log.map(|f| Log {
+            out: std::io::BufWriter::new(f),
+            frame: None,
+            key: None,
+            echoed: None,
+            text: false,
+            overview: None,
+        });
         Stats { enabled: stats || log.is_some(), log, ..Stats::default() }
     }
 
@@ -115,6 +134,26 @@ impl Stats {
         start.is_some()
     }
 
+    /// The overview opened, on the key AppKit stamped at `stamped` (now when unknown). Said on
+    /// stderr under `LEON_FRAME_STATS`, so scripts/idle-frames.sh knows it opened.
+    pub(super) fn overview_opened(&mut self, stamped: Option<u64>) {
+        if !self.enabled {
+            return;
+        }
+        eprintln!("leon overview: open");
+        if let Some(log) = self.log.as_mut() {
+            log.overview = Some(Opening { at: stamped.unwrap_or_else(uptime_ns), ..Opening::default() });
+        }
+    }
+
+    /// An overview frame was painted; `filled` when every thumbnail had its screen.
+    pub(super) fn overview_drawn(&mut self, filled: bool) {
+        if let Some(o) = self.log.as_mut().and_then(|l| l.overview.as_mut()) {
+            o.painted = true;
+            o.filled |= filled;
+        }
+    }
+
     /// The display tick after the frame was submitted (not when it was presented: the drawable
     /// queue and the window server come after this).
     pub(super) fn presented(&mut self) {
@@ -125,6 +164,17 @@ impl Stats {
         }
         if let Some((stamped, handler, paint)) = log.echoed.take() {
             let _ = writeln!(log.out, "key {stamped} {handler} {paint} {now}");
+        }
+        if let Some(o) = log.overview.as_mut().filter(|o| o.painted) {
+            if !o.logged {
+                let _ = writeln!(log.out, "overview {} {now}", o.at);
+                o.logged = true;
+            }
+            o.painted = false;
+            if o.filled {
+                let _ = writeln!(log.out, "overview-filled {} {now}", o.at);
+                log.overview = None;
+            }
         }
         let _ = log.out.flush();
     }

@@ -33,6 +33,7 @@ macro_rules! icons {
 icons! {
     Sidebar => "sidebar",
     Command => "command",
+    Grid => "grid",
     Plus => "plus",
     SplitRight => "split-right",
     SplitDown => "split-down",

@@ -164,6 +164,7 @@ impl Workspace {
                 self.activity = !self.activity;
                 cx.notify();
             }
+            "client.overview.toggle" | "client.overview.session.toggle" => self.toggle_overview(name, cx),
             "client.tab_style.toggle" => self.toggle_tab_style(cx),
             "client.settings" => self.open_settings(cx),
             "client.pane_header.reveal" => self.toggle_pane_headers(cx),

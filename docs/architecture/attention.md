@@ -35,6 +35,38 @@ of [the architecture](../architecture.md).
   needs, so a bare `leon app` binary logs once and posts nothing. The center's delegate queues a
   clicked notice's host label, session and block and wakes every window's poll; the window that knows the pane goes there (the folded
   notice opens Activity).
+- **The overview and hover previews** (`overview.rs`, `view_overview.rs`).
+  `client.overview.toggle` (⌘⇧\, the toolbar's grid button) and `client.overview.session.toggle`
+  (⌘\: the selected session only) take the whole window: a card per tab of every machine, grouped
+  under its session and, once there are hosts, its machine, in the sidebar's order. Each card has
+  the tab's title, the sidebar's status (`overview::tab_statuses`, which the sidebar's rows use too)
+  in Activity's words, and a thumbnail. `overview::fit` places the cards in the pane area's shape:
+  a session's cards are a block as wide as its cards, blocks sit side by side while they fit, and
+  the cards take the widest size, 640 px down to 240 px, at which everything fits the window's
+  height (past that the grid scrolls). `overview::step` moves the arrow keys by order and by the
+  nearest column. ↩ or a click is `go_to`, esc changes nothing, and typing runs the palette's
+  filter over the titles. A machine that isn't connected shows its last model's cards under a grey
+  veil, with `HostState::note` as the reason. A machine never reached shows only its label.
+  A thumbnail is a cached GPUI view (`AnyView::cached`) of the tab's tiles (`panes::tiles`, zoom
+  honoured; floats and drawers are left out), painted with `paint_frame` at a scaled cell and font
+  from the frames the server pushes: never faded, never fitted, so no PTY is resized. While a
+  thumbnail is up its blocks are in its machine's watch set (`watch_screens`): the hovered tab's
+  first, then the cards from the selected one on, up to the 256 a server watches (past that the
+  last cards get no thumbnail). The poll refreshes
+  one only when its screens, layout, theme or font changed, at most every 250 ms (`THUMB_EVERY`),
+  and gives it a new view, which draws, while every other card's view replays its cached paint
+  (a new view, not a notify of the old one: on CI's runner a notified cached view was not always
+  drawn again). `signature()` leaves screens out while the
+  overview is up, so a busy pane's screen never redraws the window on its own, and an idle
+  overview draws nothing. Opening moves the
+  current tab's card from the pane area to its place over a drawer's slide (`floats::slide`,
+  120 ms), and closing moves the chosen card back. The rest of the grid shows through a veil drawn
+  over the thumbnails, never as their opacity, since a cached view replays its paint as recorded.
+  Reduce Motion skips both. Resting on a tab in the titlebar or a tab row in the sidebar for
+  400 ms (`HOVER_DELAY`) shows the same thumbnail in a hover preview under the tab or beside the
+  row. Entering another tab within 150 ms of leaving one moves the preview at once, and leaving
+  hides it. `LEON_FRAME_STATS` says `leon overview: open`, and `LEON_FRAME_LOG` logs the opening's
+  first frame and the first frame with every thumbnail's screen (`overview`, `overview-filled`).
 - **Fading the panes without the focus.** With two or more panes on screen the app draws every
   pane but the focused one (`floats::target`, so a focused float or drawer counts) blended toward
   the window's background, header included: `fade::theme` moves each colour of the theme toward

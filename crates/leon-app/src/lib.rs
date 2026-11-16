@@ -15,6 +15,7 @@ pub mod keymap;
 pub mod look;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod notify;
+pub mod overview;
 pub mod palette;
 pub mod panes;
 pub mod remote;
