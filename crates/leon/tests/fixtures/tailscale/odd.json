@@ -1,0 +1,45 @@
+{
+  "BackendState": "Running",
+  "Self": {
+    "DNSName": "mymac.example-tailnet.ts.net.",
+    "UserID": 1001
+  },
+  "Peer": {
+    "k1": {
+      "DNSName": "bad name.example-tailnet.ts.net.",
+      "OS": "linux",
+      "Online": true
+    },
+    "k2": {
+      "DNSName": "-oProxyCommand=touch$IFS/tmp/x.example-tailnet.ts.net.",
+      "OS": "linux",
+      "Online": true
+    },
+    "k3": {
+      "DNSName": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example-tailnet.ts.net.",
+      "OS": "linux",
+      "Online": true
+    },
+    "k4": {
+      "DNSName": "weird.example-tailnet.ts.net.",
+      "OS": "li\u001b]0;pwned\u0007nux\u202e",
+      "Online": true,
+      "sshHostKeys": "not-a-list"
+    },
+    "k5": {
+      "DNSName": "semi;colon.example-tailnet.ts.net.",
+      "OS": "linux",
+      "Online": true
+    },
+    "k6": {
+      "DNSName": "box.t@evil.example.",
+      "OS": "linux",
+      "Online": true
+    }
+  },
+  "User": {
+    "1001": {
+      "LoginName": "me@example.com"
+    }
+  }
+}

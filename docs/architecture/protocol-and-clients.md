@@ -56,9 +56,8 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   events with `session.list`, `session.view`, `session.list_blocks` and `program_status` rather
   than by applying events one by one. The window shows the active tab's whole split tree; keys go
   to the zoomed block, else the focused one. The view redraws when the reader thread wakes it, and only when something drawn changed. Idle, it
-  does nothing: a timer runs only while something timed is pending (a slide or fade, the spinner,
-  a find re-run, a host retry), stopping once the window stops drawing (hidden); the keymap is
-  asked for once a second.
+  does nothing: a timer runs only while something timed is pending (a host retry; a slide, fade,
+  spinner or find re-run, but not while hidden); the keymap is asked for once a second.
 - **Screen transport.** `block.watch {block_ids}` on a connection replaces the set of blocks whose
   screens it gets; the app watches only the panes on screen. Each screen line is
   `{"screen":{block_id, full, lines, cols, rows:[{line, spans, backgrounds}], cursor, app_cursor,
@@ -78,7 +77,8 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   row keeps at most `cols` spans and backgrounds inside the line, each span at most a cell's text
   per column. Per watched block a task waits on the
   terminal's change counter (a `tokio::sync::watch`) and only marks it dirty; the connection loop
-  builds the frame under the terminal's lock, between replies and events, so nothing queues per
+  copies the screen under the terminal's lock and builds the frame from the copy without it (the
+  parse thread waits only for the copy), between replies and events, so nothing queues per
   connection beyond "dirty": a slow reader gets fewer, newer screens, never a backlog, and is
   never dropped for them. One block's screens are at least 2 ms apart, so a flood costs at most 500
   frame builds a second while a keystroke's echo after a quiet spell goes at once. The watcher
@@ -149,7 +149,8 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   goes to the pane. **Sizes:** the server has no `own_block` yet, so the rule is the client's own
   size: the TUI resizes a pane only when its own layout of that pane changes (attach, host resize,
   split, zoom, the pane coming back on screen), never because another client resized it, and clips or pads a screen of another
-  size. The app re-fits whenever a screen's size differs from its pane, so while both show the
+  size. The app fits only the panes on screen (a font change too; a hidden one when it is shown),
+  and re-fits whenever a screen's size differs from its pane, so while both show the
   same tab the app's size wins. **The host terminal** is put back (raw mode off, alt screen left,
   cursor shown, bracketed paste off) on detach, errors, a panic (hook), and SIGHUP, SIGTERM,
   SIGINT, SIGQUIT: those are blocked in every thread (after any server autostart, so the server

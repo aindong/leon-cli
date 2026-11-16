@@ -23,6 +23,8 @@ gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "r
 futures = "0.3"
 clap = { version = "4.6", features = ["derive", "env"] }
 libc = "0.2"
+# memchr: the parse path's search for ESC and newlines (already in the tree through regex).
+memchr = "2"
 mlua = { version = "0.12", features = ["lua51", "vendored", "serialize"] }
 portable-pty = "0.9"
 # leon attach (M17): crossterm 0.29 comes through ratatui::crossterm, so the two agree.

@@ -228,12 +228,11 @@ pub struct Workspace {
     window_active: bool,
     font_size: f32,
     /// init.lua's settings as drawn (`look.rs`); the theme for the OS appearance now (`dark`),
-    /// and the terminal font. `refit` fits every pane again at the next render (a new font).
+    /// and the terminal font.
     look: Look,
     dark: bool,
     theme: Theme,
     font_family: SharedString,
-    refit: bool,
     /// The config the local server loaded, from its keymap: where the theme files and the
     /// Settings window's init.lua are.
     config_path: Option<PathBuf>,
@@ -382,7 +381,6 @@ impl Workspace {
             font_family: look.font_family.clone().into(),
             look,
             dark,
-            refit: false,
             config_path: None,
             settings_window: None,
             epoch: Instant::now(),

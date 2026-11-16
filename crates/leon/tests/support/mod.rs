@@ -5,6 +5,7 @@
 
 pub mod host;
 pub mod remote;
+pub mod tailscale;
 
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
@@ -30,6 +31,8 @@ impl Env {
             // never the developer's own init.lua; tests that want a config set LEON_CONFIG again
             .env("LEON_CONFIG", self.dir.path().join("no-init.lua"))
             .env("SHELL", "/bin/sh")
+            // never this machine's Tailscale: tests that want one put support::tailscale's fake on PATH
+            .env("LEON_TAILSCALE", self.dir.path().join("no-tailscale"))
             .env_remove("LEON_SESSION")
             .env_remove("LEON_BLOCK")
             .env_remove("LEON_SERVER")

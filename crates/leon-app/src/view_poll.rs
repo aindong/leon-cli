@@ -111,3 +111,75 @@ impl Workspace {
         }
     }
 }
+
+/// The keymap and settings the poll and the tick fetch from the server.
+impl Workspace {
+    /// Ask the server for its keymap, off the UI thread (a reload holds the config for up to 5 s):
+    /// on the 1 s `tick`, else only for the first time or after a reload. Apply a reply whose
+    /// generation moved, and then the settings of that reload (every reload moves the generation,
+    /// and `settings_changed` only comes with one).
+    pub(super) fn refresh_keymap(&mut self, tick: bool, cx: &mut Context<Self>) {
+        let settings = lock(&self.inbox).settings.take();
+        // one asked for under an older generation may come after a newer one: it is dropped
+        if let Some((_, settings)) = settings.filter(|(g, _)| *g == self.keymap.generation) {
+            self.apply_settings(&settings);
+            cx.notify();
+        }
+        let reply = {
+            let mut inbox = lock(&self.inbox);
+            let due = tick || self.keymap_asked.is_none();
+            if due && !inbox.asking {
+                inbox.asking = true;
+                self.keymap_asked = Some(Instant::now());
+                let (back, wake, known) = (self.inbox.clone(), self.wake.clone(), self.keymap.generation);
+                self.hosts.local().spawn("client.keymap", json!({}), move |r| {
+                    let news = r.as_ref().is_ok_and(|km| km["generation"].as_u64() != Some(known));
+                    let mut inbox = lock(&back);
+                    inbox.asking = false;
+                    inbox.reply = r.ok();
+                    drop(inbox);
+                    if news {
+                        wake();
+                    }
+                });
+            }
+            inbox.reply.take()
+        };
+        if let Some(km) = reply.filter(|km| km["generation"].as_u64() != Some(self.keymap.generation)) {
+            self.use_keymap(&km);
+            let (back, generation, wake) = (self.inbox.clone(), self.keymap.generation, self.wake.clone());
+            self.hosts.local().spawn("server.settings", json!({}), move |r| {
+                let mut inbox = lock(&back);
+                // a slow reply asked for under an older generation never replaces a newer one
+                if let (Ok(s), true) = (r, inbox.settings.as_ref().is_none_or(|(g, _)| *g <= generation)) {
+                    inbox.settings = Some((generation, s));
+                    drop(inbox);
+                    wake();
+                }
+            });
+            cx.notify();
+        }
+    }
+
+    fn use_keymap(&mut self, km: &Value) {
+        self.keymap = Keymap::app(km);
+        // a relative path is the server's, from its own working directory: not one to use here
+        let path = km["path"].as_str().map(PathBuf::from).filter(|p| p.is_absolute());
+        self.config_path = path.or_else(leon_lua::config_path);
+    }
+
+    /// Fetch the keymap and the settings and apply them now, waiting for the server (tests, and
+    /// nothing on a hot path).
+    pub fn sync_keymap(&mut self) {
+        if let Ok(km) = self.hosts.local().call("client.keymap", json!({})) {
+            self.use_keymap(&km);
+        }
+        if let Ok(settings) = self.hosts.local().call("server.settings", json!({})) {
+            self.apply_settings(&settings);
+        }
+    }
+}
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}

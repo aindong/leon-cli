@@ -211,19 +211,20 @@ leon hosts add devbox ssh://me@devbox.example.com
 leon -H devbox run -c /home/me/app -- make test   # runs on the devbox, in its /home/me/app
 leon -H devbox attach               # its sessions, in this terminal
 leon hosts check
+leon hosts add --tailscale          # from your tailnet (Tailscale SSH: no keys)
 ```
 
 A dropped Wi-Fi link is retried for a minute: `leon events` and the app resume without losing or
-repeating an event, and `leon attach` says it is reconnecting, then reconnects and redraws. Keys
+repeating an event, and `leon attach` says so, then reconnects and redraws. Keys
 typed while the link is stalled or down arrive whole or not at all, and the status bar says how many
-were not sent (a stall that starts mid-word, within a second of the last reply, can still catch the
-keys already on their way). Use ssh keys or an agent, because each connection is its own ssh session.
+were not sent (keys sent as a stall starts may land). Use ssh keys or an agent: each
+connection is its own ssh session.
 
 The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
 and tabs and a dot for its connection. A remote pane works like a local one, with the host's name in
 its header; New Session, New Tab and splits act on the machine of the focused pane, and the palette
-has New Session on each machine and Add Host… (a label, then an `ssh://` endpoint). Click a host's
-label to fold it away. The app's ssh never asks for a password. A host that needs one says
+has New Session on each machine and Add Host… (your tailnet's machines, or a label, then an
+`ssh://` endpoint). Click a host's label to fold it away. The app's ssh never asks for a password. A host that needs one says
 `needs login: run leon hosts check devbox in a terminal`; do that once (accept the host key, unlock
 your key), and the app's next try gets in. While a link is down the host's panes keep their last
 screens under a "reconnecting" note.
@@ -311,7 +312,7 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘, | Settings: the theme for dark and for light mode, font, notifications, copy on select; each change is written to init.lua |
 | ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
 | ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
-| ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
+| ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (shown panes) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
 
 These are defaults. A `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`

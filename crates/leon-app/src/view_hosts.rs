@@ -1,6 +1,7 @@
 //! The window's machines: which host the selection is on, each host's label in the sidebar (a dot
 //! for its state, a note while it isn't connected), the stale overlay over a reconnecting host's
-//! panes, New Session on a host, and the Add Host prompt in the palette.
+//! panes, New Session on a host, and the Add Host prompt in the palette (the tailnet's machines,
+//! when Tailscale runs here, then a label and an endpoint).
 
 use super::*;
 use crate::hosts::Machine;
@@ -9,8 +10,12 @@ use crate::palette::Item;
 /// What the palette asks for.
 #[derive(Clone)]
 pub(super) enum Ask {
+    /// Pick one of the tailnet's machines (the query searches them), or go on to a typed host.
+    Tailnet,
     HostLabel,
-    HostEndpoint { label: String },
+    HostEndpoint {
+        label: String,
+    },
 }
 
 /// A machine as the sidebar shows it.
@@ -22,6 +27,8 @@ pub struct HostRow {
     pub note: Option<String>,
     pub collapsed: bool,
     pub sessions: Vec<HostSession>,
+    /// `tailnet: LOGIN` for a machine on this machine's tailnet.
+    pub tailnet: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +52,7 @@ impl Workspace {
             .map(|(h, m)| {
                 let state = m.state();
                 HostRow {
+                    tailnet: self.tailnet_line(m),
                     note: state.note(&m.label),
                     state,
                     collapsed: self.host_collapsed(&m.label),
@@ -147,7 +155,14 @@ impl Workspace {
         .collect()
     }
 
-    /// A machine's label: a dot for its state, the name, and under it a note while not connected.
+    /// What the sidebar says about a host on the tailnet: who you are there.
+    fn tailnet_line(&self, m: &Machine) -> Option<String> {
+        let tailnet = self.hosts.tailnet()?.ok()?;
+        tailnet.machine_for(m.host.as_ref()?).map(|_| tailnet.identity())
+    }
+
+    /// A machine's label: a dot for its state, the name, and under it who you are on the tailnet,
+    /// and a note while not connected.
     pub(super) fn host_label(&self, h: usize, m: &Machine, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &self.theme;
         let state = m.state();
@@ -195,6 +210,17 @@ impl Workspace {
                     })
                     .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.toggle_host(&label, cx))),
             )
+            .children(self.tailnet_line(m).map(|line| {
+                div()
+                    .debug_selector(|| sel(format!("host-tailnet-{h}")))
+                    .pl(px(20.))
+                    .pr(px(6.))
+                    .text_size(px(SECONDARY_TEXT))
+                    .text_color(rgb(t.muted))
+                    .line_clamp(1)
+                    .text_ellipsis()
+                    .child(line)
+            }))
             .children(state.note(&m.label).map(|note| {
                 div()
                     .debug_selector(|| sel(format!("host-note-{h}")))
@@ -254,15 +280,79 @@ impl Workspace {
         )
     }
 
-    /// Open the palette asking for a new host's label.
-    pub(super) fn ask_host(&mut self, cx: &mut Context<Self>) {
-        self.palette = Some(Palette {
-            query: String::new(),
-            selected: 0,
-            ask: Some((Ask::HostLabel, None)),
-            switch: false,
-            note: None,
+    /// Add Host…: the tailnet's machines when Tailscale is here (`{"tailnet": NAME}` adds one,
+    /// `{"label": TEXT}` goes on to a typed host with that label), else the prompt for a label.
+    pub(super) fn ask_host(&mut self, args: Option<&Value>, cx: &mut Context<Self>) {
+        if let Some(name) = args.and_then(|a| a["tailnet"].as_str()) {
+            let query = args.and_then(|a| a["query"].as_str()).unwrap_or_default().to_string();
+            return self.add_tailnet(name, query, cx);
+        }
+        let typed = args.and_then(|a| a["label"].as_str()).map(String::from);
+        let ask = match typed.is_none() && self.hosts.read_tailnet() {
+            true => Ask::Tailnet,
+            false => Ask::HostLabel,
+        };
+        let query = typed.clone().unwrap_or_default();
+        self.palette = Some(Palette { query, selected: 0, ask: Some((ask, None)), switch: false, note: None });
+        if typed.is_some_and(|t| !t.is_empty()) {
+            return self.ask_enter(cx); // the label typed into the tailnet's search
+        }
+        cx.notify();
+    }
+
+    /// The tailnet step's rows for the query: the machines that match, then a typed host.
+    pub(super) fn tailnet_items(&self, query: &str) -> Vec<Item> {
+        let tailnet = self.hosts.tailnet().and_then(Result::ok);
+        let machines = tailnet.as_ref().map_or(&[][..], |t| &t.machines[..]);
+        // searched by name only (an action's name would match every row)
+        let rows: Vec<Item> = machines
+            .iter()
+            .map(|m| Item {
+                name: m.dns.clone(),
+                title: m.shown(),
+                keywords: vec![],
+                shortcut: Some(m.marks()),
+                args: Some(json!({ "tailnet": m.dns, "query": query })),
+            })
+            .collect();
+        let mut items: Vec<Item> = crate::palette::filter(&rows, query)
+            .into_iter()
+            .map(|i| Item { name: "client.host.add".into(), ..rows[i].clone() })
+            .collect();
+        items.push(Item {
+            name: "client.host.add".into(),
+            title: "Another host by its ssh address…".into(),
+            keywords: vec![],
+            shortcut: None,
+            args: Some(json!({ "label": query.trim() })),
         });
+        items
+    }
+
+    /// Add the tailnet's machine `name` as `leon hosts add --tailscale` does; a refusal reopens the
+    /// step with the reason and the search it was picked from.
+    fn add_tailnet(&mut self, name: &str, query: String, cx: &mut Context<Self>) {
+        let added = (|| {
+            let tailnet = self.hosts.tailnet().ok_or("no tailnet status yet")??;
+            let m = tailnet.find(name)?;
+            let host = tailnet.entry(m, None)?;
+            if self.hosts.index_of(&host.label).is_some() {
+                return Err(format!("{} {:?} already", leon_hosts::hosts::TAKEN, host.label));
+            }
+            let mut list = leon_hosts::hosts::load()?;
+            leon_hosts::hosts::add(&mut list, host.clone()).and_then(|()| leon_hosts::hosts::save(&list))?;
+            Ok::<_, String>(host)
+        })();
+        match added {
+            Ok(host) => {
+                self.palette = None;
+                self.hosts.add(host);
+            }
+            Err(e) => {
+                let ask = Some((Ask::Tailnet, Some(e)));
+                self.palette = Some(Palette { query, selected: 0, ask, switch: false, note: None });
+            }
+        }
         cx.notify();
     }
 
@@ -270,6 +360,15 @@ impl Workspace {
     pub(super) fn ask_rows(&self) -> Option<(String, String)> {
         let (ask, refused) = self.palette.as_ref()?.ask.as_ref()?;
         let (prompt, hint) = match ask {
+            Ask::Tailnet => {
+                let line = match self.hosts.tailnet() {
+                    None => "Looking for your tailnet's machines…".to_string(),
+                    Some(Ok(t)) if t.machines.is_empty() => "No other machines on your tailnet".to_string(),
+                    Some(Ok(t)) => format!("Machines on your tailnet ({})", t.identity()),
+                    Some(Err(e)) => e,
+                };
+                ("Search your tailnet…", line)
+            }
             Ask::HostLabel => ("Host label…", "A label for the host: letters, digits, . _ - (devbox)".to_string()),
             Ask::HostEndpoint { label } => {
                 ("ssh://[user@]host[:port]…", format!("How ssh reaches {label}: ssh://me@devbox.example.com"))
@@ -292,6 +391,7 @@ impl Workspace {
             }
         };
         match ask.clone() {
+            Ask::Tailnet => {} // a row is picked like an action (palette_key)
             // one in the window but no longer in the file (removed from the CLI) is taken too
             Ask::HostLabel if self.hosts.index_of(&typed).is_some() => {
                 *refused = Some(format!("{} {typed:?} already", leon_hosts::hosts::TAKEN));

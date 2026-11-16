@@ -1,9 +1,7 @@
-//! Review (skeptic): a font change gives a hidden float the rows it gets when shown, even with pane
-//! headers off (a float always draws its header).
+//! Review (skeptic): a hidden float keeps its size through a font change and fits the font when
+//! shown, even with pane headers off (a float always draws its header).
 
 mod m20b_support;
-
-use std::time::{Duration, Instant};
 
 use gpui::TestAppContext;
 use leon_app::embedded;
@@ -30,18 +28,20 @@ fn a_hidden_float_fits_the_font_with_headers_off(cx: &mut TestAppContext) {
 
     app.call("session.toggle", json!({ "session_id": sid, "label": "notes" })).unwrap();
     assert!(shows(cx, |cx| !drawn(cx, &format!("float-{id}"))), "hidden");
+    let tile = term(&app, &first_tile(&app, &sid));
+    let tile_before = tile.size();
     act(&ws, cx, "client.font.increase");
-    assert!(eventually(|| t.size() != shown_small), "the hidden float was resized with the font");
-    let hidden = t.size();
+    assert!(shows(cx, |_| tile.size() != tile_before), "the shown tile follows the font");
+    let kept = t.size();
 
     app.call("session.toggle", json!({ "session_id": sid, "label": "notes" })).unwrap();
     assert!(shows(cx, |cx| drawn(cx, &format!("float-{id}"))), "shown again");
-    // the shown float's canvas refits it; give that a moment to land
-    let end = Instant::now() + Duration::from_secs(2);
-    while Instant::now() < end && t.size() == hidden {
-        cx.run_until_parked();
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    assert_eq!(t.size(), hidden, "the size the hidden float got from the font change vs its size when shown");
+    let fitted = shows(cx, |_| t.size() != shown_small);
+    let got = t.size();
     app.stop();
+    assert_eq!(kept, shown_small, "a hidden float keeps its size through a font change");
+    assert!(
+        fitted && got.0 < shown_small.0 && got.1 < shown_small.1,
+        "shown, it fits the bigger font: {shown_small:?} -> {got:?}"
+    );
 }

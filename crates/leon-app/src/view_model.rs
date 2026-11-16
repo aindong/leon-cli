@@ -228,7 +228,8 @@ impl Workspace {
         self.find_due().hash(&mut h);
         self.activity_signature(&mut h);
         self.updates.generation().hash(&mut h);
-        // each header draws its own pane's state, which its tab's may hide
+        self.hosts.tailnet_reads().hash(&mut h); // Add Host…'s list and the hosts' tailnet lines
+                                                 // each header draws its own pane's state, which its tab's may hide
         for id in &shown {
             let state = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
             (state, self.header_caption(id), self.pane_title(id)).hash(&mut h);

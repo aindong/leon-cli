@@ -18,6 +18,7 @@ pub fn open_with<'a>(
     app: &Rc<Embedded>,
     settings: Option<PathBuf>,
 ) -> (Entity<Workspace>, &'a mut VisualTestContext) {
+    no_tailscale();
     cx.update(view::init);
     let app = app.clone();
     let (ws, vcx) = cx.add_window_view(move |window, cx| {

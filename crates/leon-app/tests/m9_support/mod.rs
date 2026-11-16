@@ -41,7 +41,13 @@ pub fn setup_with_config(init_lua: &str) -> Setup {
     Setup { dir, app }
 }
 
+/// Never this machine's Tailscale: Add Host… reads the tailnet when a client is found.
+pub fn no_tailscale() {
+    std::env::set_var("LEON_TAILSCALE", "/nonexistent/tailscale");
+}
+
 pub fn open<'a>(cx: &'a mut TestAppContext, app: &Rc<Embedded>) -> (Entity<Workspace>, &'a mut VisualTestContext) {
+    no_tailscale();
     cx.update(view::init);
     let app = app.clone();
     let (ws, vcx) = cx.add_window_view(move |window, cx| {
@@ -122,4 +128,35 @@ pub fn settle(t: &Terminal) {
             (last, since) = (t.generation(), Instant::now());
         }
     }
+}
+
+/// A second session the app has heard of but doesn't show: (its id, its first tab's block).
+pub fn hidden_session(app: &Embedded, ws: &Entity<Workspace>, cx: &mut VisualTestContext) -> (String, String) {
+    let sid = app.call("session.create", serde_json::json!({ "label": "hidden" })).unwrap()["session_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let tab = app.call("session.new_window", serde_json::json!({ "session_id": sid })).unwrap();
+    let block = tab["block_id"].as_str().unwrap().to_string();
+    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.pane_title(&block).is_some())), "the app heard of the session");
+    (sid, block)
+}
+
+/// Whether `t` keeps `size` for 500 ms while the window runs (a resize lands in a few ms).
+pub fn stays(cx: &mut VisualTestContext, t: &Terminal, size: (u16, u16)) -> bool {
+    let end = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < end {
+        cx.run_until_parked();
+        if t.size() != size {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    t.size() == size
+}
+
+/// What `leon config set KEY VALUE` does: rewrite init.lua, then reload the running server.
+pub fn config_set(s: &Setup, key: &str, value: serde_json::Value) {
+    leon_lua::rewrite::write_setting(&s.dir.path().join("init.lua"), key, &value).unwrap();
+    s.app.call("server.config_reload", serde_json::json!({})).unwrap();
 }

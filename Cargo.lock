@@ -3345,6 +3345,7 @@ dependencies = [
  "alacritty_terminal",
  "base64",
  "libc",
+ "memchr",
  "portable-pty",
  "regex",
  "regex-syntax",

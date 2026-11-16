@@ -216,7 +216,7 @@ ssh -T me@devbox leon server proxy
 Spawn that command, write request lines to its stdin and read replies and events from its stdout.
 ssh runs the proxy as your user on the host, which is what the server's same-user check needs.
 `leon -H` does the same with a few safety options (no forwarding, keepalives), described in
-[cli.md](cli.md#hosts). When the link drops, resume the event stream as above.
+[cli/hosts.md](cli/hosts.md). When the link drops, resume the event stream as above.
 
 ## Compatibility
 

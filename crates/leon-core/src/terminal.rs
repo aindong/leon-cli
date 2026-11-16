@@ -37,6 +37,7 @@ mod status;
 #[path = "terminal_view.rs"]
 mod view;
 use reading::{Reading, Reported};
+pub use view::Escapes;
 
 pub const NAMESPACE: &str = "dev.leon.terminal";
 pub const ROWS: u16 = 24;
@@ -250,7 +251,7 @@ impl Terminal {
         let mut emulator = Term::new(config, &Size { rows: ROWS, cols: COLS }, listener);
         let mut parser: Processor = Processor::new();
         let scrolled = Arc::new(AtomicUsize::new(0));
-        view::feed(&mut emulator, &mut parser, shown, &scrolled);
+        view::feed(&mut emulator, &mut parser, &mut Escapes::default(), shown, &scrolled);
         let term = Arc::new(Mutex::new(emulator));
         let tracker = Arc::new(Mutex::new(Tracker::default()));
 

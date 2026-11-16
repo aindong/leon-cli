@@ -211,7 +211,10 @@ fn serve(conn: UnixStream, s: &Arc<Shared>) {
     let _ = errors.recv_timeout(std::time::Duration::from_secs(1));
     if child.wait().is_ok_and(|st| st.code() == Some(127)) {
         let name = &s.name;
-        let why = format!("leon isn't on {name}'s PATH or in ~/.local/bin: install leon on {name}");
+        let why = format!(
+            "leon isn't on {name}'s PATH or in ~/.local/bin: install leon on {name} (brew install aindong/leon/leon, \
+             or a release tarball: https://github.com/aindong/leon-cli#from-a-release)"
+        );
         eprintln!("leon: {why}");
         s.failed(why);
     }
