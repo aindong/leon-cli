@@ -31,9 +31,14 @@ fn env_then_path_then_the_app_bundle() {
     assert_eq!(locate(none.as_deref(), path(&[&other, &bin]).as_deref(), &[&bundle]), Some(bundle.clone()));
     exe(&bin.join("tailscale"));
     assert_eq!(locate(none.as_deref(), path(&[&other, &bin]).as_deref(), &[&bundle]), Some(bin.join("tailscale")));
-    // LEON_TAILSCALE wins, even when it names nothing (then Tailscale "isn't installed")
+    // LEON_TAILSCALE wins: a path that is there, a bare name (run from PATH), or, naming nothing,
+    // no client at all (Tailscale "isn't installed")
+    let env = bundle.clone().into_os_string();
+    assert_eq!(locate(Some(&env), path(&[&bin]).as_deref(), &[]), Some(bundle.clone()));
+    let env = OsString::from("my-tailscale");
+    assert_eq!(locate(Some(&env), path(&[&bin]).as_deref(), &[&bundle]), Some("my-tailscale".into()));
     let env = OsString::from("/nowhere/tailscale");
-    assert_eq!(locate(Some(&env), path(&[&bin]).as_deref(), &[&bundle]), Some("/nowhere/tailscale".into()));
+    assert_eq!(locate(Some(&env), path(&[&bin]).as_deref(), &[&bundle]), None);
     // an empty one is unset
     assert_eq!(locate(Some(&OsString::new()), path(&[&bin]).as_deref(), &[]), Some(bin.join("tailscale")));
     // none at all

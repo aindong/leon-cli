@@ -22,13 +22,15 @@ const MOST_BYTES: u64 = 8 << 20;
 const MOST_PEERS: usize = 4096;
 const DEADLINE: Duration = Duration::from_secs(3);
 
-/// The client to run: `env` (`$LEON_TAILSCALE`) when set, else an executable `tailscale` in an
-/// absolute PATH entry, else the first bundle that exists.
+/// The client to run: `env` (`$LEON_TAILSCALE`) when set (none if it names a path that isn't
+/// there), else an executable `tailscale` in an absolute PATH entry, else the first bundle that
+/// exists.
 pub fn locate(env: Option<&OsStr>, path: Option<&OsStr>, bundles: &[&Path]) -> Option<PathBuf> {
-    if let Some(e) = env.filter(|e| !e.is_empty()) {
-        return Some(PathBuf::from(e));
-    }
     let runnable = |p: &Path| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0);
+    if let Some(e) = env.filter(|e| !e.is_empty()).map(Path::new) {
+        // a bare name is looked up on PATH when it runs
+        return (e.components().count() == 1 && !e.is_absolute() || runnable(e)).then(|| e.to_path_buf());
+    }
     let on_path = path
         .map(|p| std::env::split_paths(p).collect::<Vec<_>>())
         .unwrap_or_default()
@@ -141,14 +143,15 @@ pub fn ssh_advice(label: &str) -> String {
     )
 }
 
-/// Read the tailnet from the client leon finds (`locate` with this process's env).
-pub fn status() -> Result<Tailnet, String> {
+/// The client leon would run: `locate` with this process's env.
+pub fn client() -> Option<PathBuf> {
     let bundles: Vec<&Path> = BUNDLES.iter().map(Path::new).collect();
-    let env = std::env::var_os("LEON_TAILSCALE");
-    let path = std::env::var_os("PATH");
-    let Some(program) = locate(env.as_deref(), path.as_deref(), &bundles) else {
-        return Err(not_installed());
-    };
+    locate(std::env::var_os("LEON_TAILSCALE").as_deref(), std::env::var_os("PATH").as_deref(), &bundles)
+}
+
+/// Read the tailnet from the client leon finds.
+pub fn status() -> Result<Tailnet, String> {
+    let program = client().ok_or_else(not_installed)?;
     parse(&run(&program)?)
 }
 
