@@ -290,7 +290,7 @@ impl Workspace {
             if moving.as_ref() == Some(&c.window_id) {
                 continue; // drawn where it is on its way
             }
-            grid = grid.child(self.card(c, *r, i == selected, frame, cx));
+            grid = grid.child(self.card(c, *r, (i == selected, false), frame, cx));
         }
         if cards.is_empty() {
             grid = grid.child(
@@ -356,20 +356,10 @@ impl Workspace {
                     w: lerp(from.w, to.w),
                     h: lerp(from.h, to.h),
                 };
-                out = out.child(
-                    div()
-                        .debug_selector(|| sel("overview-moving".into()))
-                        .absolute()
-                        .left(px(r.x))
-                        .top(px(r.y))
-                        .w(px(r.w))
-                        .h(px(r.h))
-                        .rounded(px(6.))
-                        .overflow_hidden()
-                        .border_1()
-                        .border_color(rgb(t.accent))
-                        .children(self.thumb_view(&cards[i].window_id)),
-                );
+                // the card itself, header and all, on its way
+                let card = self.card(&cards[i], r, (true, true), frame, cx);
+                out =
+                    out.child(div().debug_selector(|| sel("overview-moving".into())).absolute().inset_0().child(card));
             }
         }
         out.into_any_element()
@@ -384,7 +374,14 @@ impl Workspace {
 
     /// One card: its header (status, title, the state in words), then its thumbnail; a click goes
     /// to its tab.
-    fn card(&self, c: &Card, r: panes::Rect, selected: bool, frame: u64, cx: &mut Context<Self>) -> impl IntoElement {
+    fn card(
+        &self,
+        c: &Card,
+        r: panes::Rect,
+        (selected, moving): (bool, bool),
+        frame: u64,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let t = &self.theme;
         let wid = c.window_id.clone();
         let (name, status_name) = (format!("card-{wid}"), format!("card-status-{wid}"));
@@ -430,19 +427,22 @@ impl Workspace {
             .child(div().flex_1().relative().children(self.thumb_view(&c.window_id)))
             // a machine that isn't connected: its last screens, greyed (a veil, as above)
             .when(c.greyed, |d| d.child(div().absolute().size_full().bg(rgb(t.chrome)).opacity(0.55)))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |ws, _, _, cx| {
-                    let cards = ws.overview_cards();
-                    if let (Some(i), Some(o)) =
-                        (cards.iter().position(|c| c.window_id == pick), ws.overview.open.as_mut())
-                    {
-                        o.selected = i;
-                        ws.close_overview(true, cx);
-                    }
-                    cx.stop_propagation();
-                }),
-            )
+            // a card on its way takes no click: the one under the pointer is what the veil shows
+            .when(!moving, |d| {
+                d.on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |ws, _, _, cx| {
+                        let cards = ws.overview_cards();
+                        if let (Some(i), Some(o)) =
+                            (cards.iter().position(|c| c.window_id == pick), ws.overview.open.as_mut())
+                        {
+                            o.selected = i;
+                            ws.close_overview(true, cx);
+                        }
+                        cx.stop_propagation();
+                    }),
+                )
+            })
     }
 
     /// A zero-size element whose paint counts the overview's frames for `LEON_FRAME_STATS`, as a
