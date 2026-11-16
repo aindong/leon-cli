@@ -193,40 +193,41 @@ impl Workspace {
         self.overview.thumbs.retain(|w, _| keep.contains(w.as_str()));
         self.overview.refreshes.retain(|w, _| keep.contains(w.as_str()));
         self.overview.renders.borrow_mut().retain(|w, _| keep.contains(w.as_str()));
+        let mut drew = false;
         for (host, sid, wid) in &tabs {
             let Some((panes, stamp)) = self.thumb_spec(*host, sid, wid, look) else { continue };
             let filled = panes.iter().all(|p| p.frame.is_some());
-            match self.overview.thumbs.get_mut(wid) {
-                None => {
-                    let thumb = Thumb {
-                        window_id: wid.clone(),
-                        panes,
-                        theme: self.theme,
-                        family: self.font_family.clone(),
-                        font_size: self.font_size,
-                        renders: self.overview.renders.clone(),
-                    };
-                    let copy = thumb.panes.clone();
-                    let view = cx.new(|_| thumb);
-                    let slot = Slot { view, panes: copy, theme: self.theme, stamp, at: now, filled };
-                    self.overview.thumbs.insert(wid.clone(), slot);
-                }
-                Some(slot) if update && slot.stamp != stamp && (!slot.filled || now - slot.at >= THUMB_EVERY) => {
-                    let (theme, family, pt) = (self.theme, self.font_family.clone(), self.font_size);
-                    (slot.panes, slot.theme) = (panes.clone(), theme);
-                    slot.view.update(cx, |t, cx| {
-                        (t.panes, t.theme, t.family, t.font_size) = (panes, theme, family, pt);
-                        cx.notify();
-                    });
-                    (slot.stamp, slot.at, slot.filled) = (stamp, now, filled);
-                    *self.overview.refreshes.entry(wid.clone()).or_default() += 1;
-                }
-                Some(slot) if update && slot.stamp != stamp => {
-                    let at = slot.at + THUMB_EVERY;
+            let slot = self.overview.thumbs.get(wid);
+            let due = slot.is_none_or(|s| update && s.stamp != stamp && (!s.filled || now - s.at >= THUMB_EVERY));
+            if !due {
+                if let Some(s) = slot.filter(|s| update && s.stamp != stamp) {
+                    let at = s.at + THUMB_EVERY;
                     self.overview.held = Some(self.overview.held.map_or(at, |h| h.min(at)));
                 }
-                Some(_) => {}
+                continue;
             }
+            if slot.is_some() {
+                *self.overview.refreshes.entry(wid.clone()).or_default() += 1;
+            }
+            // a refreshed thumbnail is a new view: it has no cached paint, so it draws, while
+            // every other card's view replays its own; nothing rests on GPUI telling a cached
+            // view it was notified
+            let thumb = Thumb {
+                window_id: wid.clone(),
+                panes: panes.clone(),
+                theme: self.theme,
+                family: self.font_family.clone(),
+                font_size: self.font_size,
+                renders: self.overview.renders.clone(),
+            };
+            let view = cx.new(|_| thumb);
+            let slot = Slot { view, panes, theme: self.theme, stamp, at: now, filled };
+            self.overview.thumbs.insert(wid.clone(), slot);
+            drew |= update;
+        }
+        // from the poll: the window draws the new views (render makes its own as it goes)
+        if drew {
+            cx.notify();
         }
     }
 
