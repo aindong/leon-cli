@@ -347,10 +347,9 @@ impl Remote {
     /// run Lua for up to 30 s, which must not stall the UI. `done` gets the reply on that thread.
     pub fn spawn(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
         let (socket, method) = (self.shared.socket.clone(), method.to_string());
+        let wait = leon_core::secs_from_env("LEON_SPAWN_WAIT_SECS", SPAWN_TIMEOUT); // tests shorten it
         std::thread::spawn(move || {
-            done(
-                Conn::open(&socket, Some(SPAWN_TIMEOUT)).map_err(unreachable).and_then(|mut c| c.call(&method, params)),
-            )
+            done(Conn::open(&socket, Some(wait)).map_err(unreachable).and_then(|mut c| c.call(&method, params)))
         });
     }
 

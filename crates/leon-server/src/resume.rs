@@ -19,6 +19,11 @@ use crate::{Ctx, Registry};
 
 /// How long a dropped stream waits for its client.
 pub const HOLD: Duration = Duration::from_secs(60);
+
+/// How long a client retries a dropped link: `HOLD`, or `LEON_LINK_HOLD_SECS` (tests).
+pub fn link_hold() -> Duration {
+    leon_core::secs_from_env("LEON_LINK_HOLD_SECS", HOLD)
+}
 /// How many bytes of written lines a resumable stream keeps.
 pub const KEEP: usize = 1 << 20;
 

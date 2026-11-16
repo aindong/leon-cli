@@ -69,7 +69,7 @@ pub fn run(target: Option<&str>, prefix: Option<&str>, autostart: bool, server: 
     let signals = host::block_signals();
     // over a link, a drop is retried for as long as the host keeps a dropped stream
     let remote = match server.link {
-        Some(_) => Remote::connect_retrying(&server.socket, leon_server::resume::HOLD),
+        Some(_) => Remote::connect_retrying(&server.socket, leon_server::resume::link_hold()),
         None => Remote::connect(&server.socket),
     }
     .map_err(|e| {

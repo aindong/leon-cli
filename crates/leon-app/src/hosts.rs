@@ -210,7 +210,7 @@ fn connect(host: &Host) -> Result<(Remote, Link), HostState> {
     let endpoint = host.endpoint().map_err(HostState::Unreachable)?;
     let link = Link::open(&host.label, &endpoint, true).map_err(|e| HostState::Unreachable(e.to_string()))?;
     link.never_prompt(); // no terminal to answer in: ssh fails instead, and the row says so
-    match Remote::connect_retrying(link.socket(), leon_server::resume::HOLD) {
+    match Remote::connect_retrying(link.socket(), leon_server::resume::link_hold()) {
         Ok(r) => Ok((r, link)),
         Err(e) => Err(classify(link.last_error().unwrap_or(e))),
     }
