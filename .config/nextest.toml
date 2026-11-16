@@ -1,0 +1,14 @@
+# cargo-nextest, for the macOS CI job (.github/workflows/ci.yml): it runs tests from different
+# binaries at once, each in its own process. `cargo test` (the local gate) doesn't read this file.
+
+# A failure stays a failure: no retries, and every test runs however many fail.
+[profile.ci]
+test-threads = 3 # the macOS runner's cores, as `cargo test` already uses inside one binary
+retries = 0
+fail-fast = false
+
+# Runs `cargo build --release` on every core (a release leon in its own target dir): it gets the
+# machine to itself, as it had under `cargo test`, so tests with deadlines never run beside it.
+[[profile.ci.overrides]]
+filter = "binary_id(leon::update_release_build)"
+threads-required = "num-test-threads"
