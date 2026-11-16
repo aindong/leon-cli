@@ -1,0 +1,16 @@
+title agent: --errors flag
+task 429s from the rate limiter never show up in the error rate. Fix that.
+wait_go
+working 15 reading logtally.py
+read logtally.py
+read tests/test_tally.py
+spin 1.8 Thinking
+say is_error() counts only 5xx: a 429 or 401 never counts.
+say I can add --errors 4xx (404 stays out: a typo, not a failure).
+ask question Count every 4xx except 404 as an error?
+working 50 editing logtally.py
+diff 1 6
+apply 1
+working 75 running the tests
+test tests below python3 runtests.py
+done --errors 4xx is in: 20 tests pass. Errors: 0.39% → 0.90%.

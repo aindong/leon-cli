@@ -1,0 +1,17 @@
+title agent: pagination
+task Add pagination to GET /books: limit, offset and a "next" link.
+wait_go
+working 10 reading the code
+read shelf/app.py
+read shelf/store.py
+spin 1.6 Thinking
+say GET /books returns every row. I'll page it in the handler:
+say limit (1 to 100, default 20), offset, and "next".
+working 45 editing shelf/app.py
+nap 0.6
+diff 1 9
+apply 1
+working 70 running the tests
+wait_go shelf-tests
+test tests below python3 runtests.py
+done Pagination is in, and all 24 tests pass.
