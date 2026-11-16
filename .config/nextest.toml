@@ -3,14 +3,25 @@
 
 # A failure stays a failure: no retries, and every test runs however many fail.
 [profile.ci]
-# Twice the macOS runner's 3 cores: most tests wait on a PTY, a socket or a timeout, not the CPU.
-# At 3, the 1045 tests' 868 s of running took 335 s.
-test-threads = 6
+# The macOS runner's 3 cores. The suite fills them: at 6 the tests' total time went from 868 s
+# to 1420 s and the run took 306 s instead of 335 s, and a 100 ms check failed.
+test-threads = 3
 retries = 0
 fail-fast = false
 
-# Runs `cargo build --release` on every core (a release leon in its own target dir): it gets the
-# machine to itself, as it had under `cargo test`, so tests with deadlines never run beside it.
+# These get the machine to themselves, as each had under `cargo test` (one binary at a time):
+# - update_release_build runs `cargo build --release` (a release leon in its own target dir),
+#   which takes every core.
+# - the rest assert that something on this machine takes under 50 to 500 ms: a window call over
+#   a flooding or stalled link (hard_flood_link failed at 137 to 191 ms beside five other tests,
+#   run 43790698240), the sidebar's rows, composing a screen, and status reports' CPU.
 [[profile.ci.overrides]]
-filter = "binary_id(leon::update_release_build)"
+filter = """
+binary_id(leon::update_release_build)
+| binary_id(leon::hard_flood_link)
+| binary_id(leon::m16b_slow_link)
+| (binary_id(leon-app::hard_remote_conn) & test(=sidebar_rows_read_each_block_once))
+| binary_id(leon-app::hard_compose_cost)
+| binary_id(leon-core::osc7501_review_store_cpu)
+"""
 threads-required = "num-test-threads"
