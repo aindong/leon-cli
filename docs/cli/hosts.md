@@ -80,7 +80,8 @@ for another one, add the host by hand: `leon hosts add devbox ssh://me@devbox.ex
   keys to set up. For one without it, leon says so: run `tailscale set --ssh` on that machine, or
   set up an ssh key for it. Then run `leon hosts check LABEL` once in a terminal, which accepts
   the host key, or shows the sign-in link Tailscale SSH asks for when its policy says to check.
-- **Finding Tailscale.** `LEON_TAILSCALE` names the program if set; else `tailscale` on `PATH`;
+- **Finding Tailscale.** `LEON_TAILSCALE` names the program if set (a path that isn't there
+  means no Tailscale); else `tailscale` on `PATH`;
   else, on macOS, `/Applications/Tailscale.app/Contents/MacOS/Tailscale`.
 - **No Tailscale.** Not installed, stopped or signed out, `--tailscale` says so in one line and
   exits 1; everything else works as before.

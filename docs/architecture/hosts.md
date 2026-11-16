@@ -118,7 +118,8 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   matching the endpoint's host to a peer's MagicDNS name or address; nothing about Tailscale is
   stored. `leon hosts list` and the app read the status only when there are hosts, and the app off its
   UI thread, at start and when Add Host… opens.
-- **Finding the client.** `$LEON_TAILSCALE` names it (like `LEON_SSH`, for tests and odd installs);
+- **Finding the client.** `$LEON_TAILSCALE` names it (like `LEON_SSH`, for tests and odd installs;
+  a path that isn't there means no client, so a test can never fall through to the real one);
   else an executable `tailscale` in an absolute `PATH` entry; else, on macOS,
   `/Applications/Tailscale.app/Contents/MacOS/Tailscale`, the app's binary, which acts as the CLI
   when given arguments (the Mac app doesn't put `tailscale` on `PATH`). On Linux the packages put

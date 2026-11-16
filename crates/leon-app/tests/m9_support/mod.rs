@@ -41,7 +41,13 @@ pub fn setup_with_config(init_lua: &str) -> Setup {
     Setup { dir, app }
 }
 
+/// Never this machine's Tailscale: Add Host… reads the tailnet when a client is found.
+pub fn no_tailscale() {
+    std::env::set_var("LEON_TAILSCALE", "/nonexistent/tailscale");
+}
+
 pub fn open<'a>(cx: &'a mut TestAppContext, app: &Rc<Embedded>) -> (Entity<Workspace>, &'a mut VisualTestContext) {
+    no_tailscale();
     cx.update(view::init);
     let app = app.clone();
     let (ws, vcx) = cx.add_window_view(move |window, cx| {
