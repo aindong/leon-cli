@@ -56,8 +56,9 @@ of [the architecture](../architecture.md).
   one only when its screens, layout, theme or font changed, at most every 250 ms (`THUMB_EVERY`),
   and gives it a new view, which draws, while every other card's view replays its cached paint
   (a new view, not a notify of the old one: on CI's runner a notified cached view was not always
-  drawn again). `signature()` leaves screens out while the
-  overview is up, so a busy pane's screen never redraws the window on its own, and an idle
+  drawn again). `signature()` leaves screens out (a pushed
+  screen redraws only its pane's grid, `view_grid.rs`), so a busy pane's screen never redraws
+  the window on its own, and an idle
   overview draws nothing. Opening moves the
   current tab's card from the pane area to its place over a drawer's slide (`floats::slide`,
   120 ms), and closing moves the chosen card back. The rest of the grid shows through a veil drawn

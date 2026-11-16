@@ -28,7 +28,7 @@ mod cwd;
 use cwd::{process_cwd, pwd_path, pwd_url};
 #[path = "terminal_process.rs"]
 mod process;
-use process::{reap, wait_exit, Registered};
+use process::{reap, wait_exit, Registered, Started};
 #[path = "terminal_reading.rs"]
 mod reading;
 #[path = "terminal_start.rs"]
@@ -237,6 +237,7 @@ impl Terminal {
         let child = start::start(&spec, &tty)?;
         drop(pair.slave);
         let pid = child.id() as i32;
+        let started = Started::new(pid, held.clone());
         let command = if spec.command.is_empty() { vec![start::shell(&spec)] } else { spec.command };
         let start_cwd = spec.cwd;
 
@@ -299,6 +300,8 @@ impl Terminal {
             reading.run(reader, at_eof, &*to_reader);
             drop(parsed);
         });
+        #[cfg(test)]
+        tests::late_failure(pid)?;
         let exited = Arc::new(Mutex::new(false));
         let done = exited.clone();
         let release = held.clone();
@@ -317,6 +320,7 @@ impl Terminal {
             parsed_by_then(&eof, &drained, &read, &parsed_bytes, DRAIN_WAIT);
             notify(Notice::Exited(status));
         });
+        started.disarm(); // the exit thread waits for, reaps and lets go from here on
         Ok(Terminal {
             term,
             tracker,

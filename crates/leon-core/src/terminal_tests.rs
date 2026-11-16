@@ -3,6 +3,46 @@ use std::sync::mpsc;
 use super::cwd::hostname;
 use super::*;
 
+thread_local! {
+    /// Set: `spawn_showing` fails at its last step on this thread, once this file exists. Then the
+    /// pid it had started.
+    static FAIL_LATE: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) };
+    static LATE_PID: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+}
+
+pub(super) fn late_failure(pid: i32) -> io::Result<()> {
+    let Some(ready) = FAIL_LATE.take() else { return Ok(()) };
+    LATE_PID.set(pid);
+    let end = std::time::Instant::now() + Duration::from_secs(10);
+    while !ready.exists() && std::time::Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    Err(io::Error::other("a late failure (test)"))
+}
+
+#[test]
+fn a_late_failure_leaves_no_program() {
+    let dir = tempfile::tempdir().unwrap();
+    let ready = dir.path().join("ready");
+    FAIL_LATE.set(Some(ready.clone()));
+    // fails once the program has started something in its group, which only the group kill reaches:
+    // it ignores the hangup the session leader's death sends
+    let script = format!("trap '' HUP; sleep 30 & : > '{}'; wait", ready.display());
+    let spec = Spec { command: vec!["sh".into(), "-c".into(), script], cwd: None, env: vec![] };
+    let failed = Terminal::spawn(spec, |_| {});
+    assert!(failed.is_err(), "the injected failure is the caller's error");
+    assert!(ready.exists(), "the program started its sleep");
+    let pid = LATE_PID.get();
+    assert!(pid > 0);
+    // SAFETY: signal 0 only asks whether the process (or one in the group) exists.
+    assert_ne!(unsafe { libc::kill(pid, 0) }, 0, "the program {pid} still runs, or was never reaped");
+    let end = std::time::Instant::now() + Duration::from_secs(5);
+    while unsafe { libc::kill(-pid, 0) } == 0 {
+        assert!(std::time::Instant::now() < end, "a process of the program's group {pid} still runs");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 fn spawn(command: &[&str]) -> (Terminal, mpsc::Receiver<i32>) {
     let (tx, rx) = mpsc::channel();
     let spec = Spec { command: command.iter().map(|s| s.to_string()).collect(), cwd: None, env: vec![] };

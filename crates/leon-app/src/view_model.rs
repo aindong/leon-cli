@@ -186,9 +186,9 @@ impl Workspace {
         self.font_size
     }
 
-    /// Changes worth a redraw: every session's view (its revision moves with layout, focus, zoom
-    /// and labels) and the screen of every pane on screen (only those are watched, so hidden tabs
-    /// and panes hidden by a zoom don't count).
+    /// Changes worth redrawing the window: every session's view (its revision moves with layout,
+    /// focus, zoom and labels), statuses, titles and settings. Not the panes' screens: a pushed
+    /// screen redraws its own grid (`poll_grids`).
     pub fn signature(&self) -> u64 {
         let mut h = DefaultHasher::new();
         // with the overview up its thumbnails redraw themselves (`refresh_thumbs`), never the window
@@ -202,12 +202,6 @@ impl Workspace {
                 for w in &s.windows {
                     (&w.id, &w.label).hash(&mut h);
                 }
-            }
-        }
-        {
-            let m = self.app.model();
-            for id in &shown {
-                (id, m.screen_updates.get(id)).hash(&mut h);
             }
         }
         for m in self.hosts.machines() {
