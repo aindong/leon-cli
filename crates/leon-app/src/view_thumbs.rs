@@ -126,11 +126,24 @@ impl Workspace {
     /// the user is looking at.
     fn thumb_tabs(&self) -> Vec<(usize, String, String)> {
         let mut cards = self.overview_cards();
-        let first = self.overview_selected().min(cards.len());
+        let first = self.overview.open.as_ref().map_or(0, |o| o.selected).min(cards.len());
         cards.rotate_left(first);
         let hover = self.overview.hover.as_ref().filter(|h| h.shown);
         let hover = hover.map(|h| (h.host, h.session_id.clone(), h.window_id.clone()));
-        hover.into_iter().chain(cards.into_iter().map(|c| (c.host, c.session_id, c.window_id))).collect()
+        // only as many as each machine's watch set holds: a tab past it would draw blank anyway,
+        // and a server listing thousands of tabs mustn't cost a thumbnail each
+        let machines = self.hosts.machines();
+        let mut used: HashMap<usize, usize> = HashMap::new();
+        used.insert(self.host, self.shown().map_or(0, |(_, ids)| ids.len()));
+        let fits = |(host, sid, wid): &(usize, String, String)| {
+            let Some(remote) = machines.get(*host).and_then(|m| m.remote()) else { return false };
+            let m = remote.model();
+            let Some(w) = m.session(sid).and_then(|s| s.windows.iter().find(|w| w.id == *wid)) else { return false };
+            let n = if w.zoomed.is_some() { 1 } else { w.layout.as_ref().map_or(0, |t| t.leaves().len()) };
+            let u = used.entry(*host).or_default();
+            (*u + n <= MAX_WATCH).then(|| *u += n).is_some()
+        };
+        hover.into_iter().chain(cards.into_iter().map(|c| (c.host, c.session_id, c.window_id))).filter(fits).collect()
     }
 
     /// What tab `wid`'s thumbnail draws now, and a stamp that moves when any of it does.
@@ -224,8 +237,8 @@ impl Workspace {
 
     /// Have every machine push the screens drawn now: `shown` (the active window's panes, on the
     /// selected machine) and each thumbnail's panes, on theirs, up to what a server watches.
-    /// shortcut: past `MAX_WATCH` blocks on a machine the last cards stay blank; watch only the
-    /// cards scrolled into view if that is ever seen.
+    /// shortcut: past `MAX_WATCH` blocks on a machine the last cards have no thumbnail; watch only
+    /// the cards scrolled into view if that is ever seen.
     pub(in crate::view) fn watch_screens(&self, shown: &[String]) {
         // a closing overview's cards are on their way out (the moving one keeps its frames)
         let closing = self.overview.open.as_ref().is_some_and(|o| o.closing);
@@ -234,22 +247,16 @@ impl Workspace {
             let mut ids: Vec<String> = if i == self.host { shown.to_vec() } else { Vec::new() };
             let mut seen: HashSet<String> = ids.iter().cloned().collect();
             let m = remote.model();
-            'tabs: for (_, sid, wid) in tabs.iter().filter(|t| t.0 == i) {
+            for (_, sid, wid) in tabs.iter().filter(|t| t.0 == i) {
                 let Some(w) = m.session(sid).and_then(|s| s.windows.iter().find(|w| w.id == *wid)) else { continue };
                 let leaves = match (&w.zoomed, &w.layout) {
                     (Some(z), _) => vec![z.as_str()],
                     (None, Some(t)) => t.leaves(),
                     (None, None) => vec![],
                 };
-                for b in leaves {
-                    if ids.len() >= MAX_WATCH {
-                        break 'tabs;
-                    }
-                    if seen.insert(b.to_string()) {
-                        ids.push(b.to_string());
-                    }
-                }
+                ids.extend(leaves.into_iter().filter(|b| seen.insert(b.to_string())).map(String::from));
             }
+            ids.truncate(MAX_WATCH); // `thumb_tabs` kept within it; this holds it if a tab grew since
             drop(m);
             remote.watch(ids);
         }

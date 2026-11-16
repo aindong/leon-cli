@@ -6,8 +6,22 @@ mod m10b_support;
 
 use std::sync::Arc;
 
-use gpui::TestAppContext;
+use std::time::{Duration, Instant};
+
+use gpui::{TestAppContext, VisualTestContext};
 use m10b_support::*;
+
+/// `shows`, with the test clock moving too: a thumbnail's refresh that `THUMB_EVERY` held back
+/// is a timer on it, which real time alone never fires in a test window.
+fn ticks(cx: &mut VisualTestContext, mut pred: impl FnMut(&mut VisualTestContext) -> bool) -> bool {
+    let end = Instant::now() + Duration::from_secs(20);
+    while !pred(cx) && Instant::now() < end {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    pred(cx)
+}
 
 #[gpui::test]
 fn a_card_draws_each_pane_of_its_tab_and_resizes_none(cx: &mut TestAppContext) {
@@ -28,7 +42,7 @@ fn a_card_draws_each_pane_of_its_tab_and_resizes_none(cx: &mut TestAppContext) {
     act(&ws, cx, "client.overview.toggle");
     for id in &ids {
         let pane = format!("card-pane-{}-{id}", w.id);
-        assert!(shows(cx, |cx| drawn(cx, &pane)), "{pane}: each pane of the split tab is drawn");
+        assert!(ticks(cx, |cx| drawn(cx, &pane)), "{pane}: each pane of the split tab is drawn");
     }
     let watched = ws.read_with(cx, |ws, _| ws.watching());
     for id in ids.iter().chain(leaves(&other).iter()) {
@@ -59,12 +73,19 @@ fn thumbnails_are_never_faded(cx: &mut TestAppContext) {
     let ready = |cx: &mut gpui::VisualTestContext| {
         ws.read_with(cx, |ws, _| ids.iter().all(|id| ws.thumb_pane(&w.id, id).is_some()))
     };
-    assert!(shows(cx, ready), "the card has both panes' screens");
+    assert!(ticks(cx, ready), "the card has both panes' screens");
     for id in &ids {
-        let (frame, theme) = ws.read_with(cx, |ws, _| ws.thumb_pane(&w.id, id).unwrap());
+        let (_, theme) = ws.read_with(cx, |ws, _| ws.thumb_pane(&w.id, id).unwrap());
         assert_eq!(theme, ws.read_with(cx, |ws, _| ws.theme()), "{id} is drawn in the window's theme");
-        let pushed = ws.read_with(cx, |ws, _| ws.screen(id)).expect("its screen is held");
-        assert!(Arc::ptr_eq(&frame, &pushed), "{id} is drawn from the screen as pushed, not a faded copy");
+        // the screen as pushed, once the thumbnail caught up with it (a shell still drawing its
+        // prompt pushes a new one), never a faded copy
+        let same = |cx: &mut VisualTestContext| {
+            ws.read_with(cx, |ws, _| {
+                let thumb = ws.thumb_pane(&w.id, id).map(|(f, _)| f);
+                thumb.zip(ws.screen(id)).is_some_and(|(f, pushed)| Arc::ptr_eq(&f, &pushed))
+            })
+        };
+        assert!(ticks(cx, same), "{id} is drawn from the screen as pushed, not a faded copy");
     }
     s.app.stop();
 }

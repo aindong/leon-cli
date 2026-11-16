@@ -52,7 +52,7 @@ of [the architecture](../architecture.md).
   from the frames the server pushes: never faded, never fitted, so no PTY is resized. While a
   thumbnail is up its blocks are in its machine's watch set (`watch_screens`): the hovered tab's
   first, then the cards from the selected one on, up to the 256 a server watches (past that the
-  last cards stay blank). The poll refreshes
+  last cards get no thumbnail). The poll refreshes
   one only when its screens, layout, theme or font changed, at most every 250 ms (`THUMB_EVERY`),
   and notifies only that view. `signature()` leaves screens out while the overview is up, so a
   busy pane never redraws the whole window, and an idle overview draws nothing. Opening moves the
