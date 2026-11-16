@@ -169,3 +169,32 @@ fn shown_text_is_on_the_screen_before_the_program() {
     let t = Terminal::spawn_showing(spec, b"before\r\nthe program", |_| {}).unwrap();
     assert_eq!(t.text(true), "before\nthe program");
 }
+
+#[test]
+fn the_output_written_just_before_exit_is_kept() {
+    // Feeding a long restored scrollback holds back the first read, as a starved server does: the
+    // program writes and exits before anything reads its PTY (macOS then drops it after ~0.6 s).
+    let shown: String = (0..1_000_000).map(|i| format!("restored line {i}\r\n")).collect();
+    let spec = Spec { command: vec!["printf".into(), "END".into()], cwd: None, env: vec![] };
+    let (tx, exits) = mpsc::channel();
+    let tx = Mutex::new(tx);
+    let t = Terminal::spawn_showing(spec, shown.as_bytes(), move |n| {
+        if let Notice::Exited(_) = n {
+            lock(&tx).send(()).unwrap();
+        }
+    })
+    .unwrap();
+    exits.recv_timeout(Duration::from_secs(30)).unwrap();
+    let text = t.text(true);
+    assert!(text.ends_with("END"), "the program's output is gone: {:?}", &text[text.len() - 40..]);
+}
+
+#[test]
+fn openpty_reissues_only_eredriveopen() {
+    // portable-pty's `bail!("failed to openpty: {:?}", io::Error::last_os_error())`
+    let failed = |code: i32| format!("failed to openpty: {:?}", io::Error::from_raw_os_error(code));
+    assert!(reissue(&failed(-6)), "{}", failed(-6));
+    for code in [libc::EMFILE, libc::ENXIO, libc::EAGAIN, -60] {
+        assert!(!reissue(&failed(code)), "{}", failed(code));
+    }
+}

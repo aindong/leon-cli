@@ -14,6 +14,7 @@ pub(super) struct Reading {
     pub(super) changes: Arc<watch::Sender<u64>>,
     pub(super) scrolled: Arc<AtomicUsize>,
     pub(super) x10: Arc<AtomicBool>,
+    pub(super) held: Held,
 }
 
 /// The last pwd and title a program reported.
@@ -46,8 +47,10 @@ impl Reading {
     /// notifying.
     pub(super) fn run(self, mut reader: Box<dyn Read + Send>, at_eof: mpsc::Sender<()>, notify: &dyn Fn(Notice)) {
         let (tx, reads) = mpsc::sync_channel::<Vec<u8>>(QUEUED_READS);
+        let held = self.held.clone();
         std::thread::spawn(move || {
             let _at_eof = at_eof; // dropped when reading ends
+            let _release = Release(held); // nothing reads now, so the program's exit mustn't wait
             let mut buf = vec![0u8; READ_SIZE];
             loop {
                 match reader.read(&mut buf) {

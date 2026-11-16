@@ -2,9 +2,10 @@
 //! thread so the screen and scrollback can be read back at any time. The reader also tracks OSC
 //! 7501 program status and reports title, pwd, bell and status changes; the waiter reports the exit.
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::os::fd::FromRawFd;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc;
@@ -16,7 +17,7 @@ use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Point};
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
-use portable_pty::{native_pty_system, MasterPty, PtySize};
+use portable_pty::{native_pty_system, MasterPty, PtyPair, PtySize};
 use tokio::sync::watch;
 
 use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
@@ -61,6 +62,8 @@ const QUEUED_READS: usize = 64;
 const READ_SIZE: usize = 16 << 10;
 /// Queued reads are parsed together up to this many bytes, one lock and one report per batch.
 const BATCH: usize = 64 << 10;
+/// How many times a PTY open is issued while the kernel asks for it again (`open_pty`).
+const OPEN_TRIES: usize = 5;
 
 /// What a terminal reports, from its reader and waiter threads. Per batch of PTY reads (what
 /// arrived while the last batch was parsed, up to `BATCH` bytes) there is at most one title, one
@@ -78,6 +81,17 @@ pub enum Notice {
 }
 
 type Notify = Arc<dyn Fn(Notice) + Send + Sync>;
+/// Our own fd on the PTY's slave (`spawn_showing`), until something lets go of it.
+type Held = Arc<Mutex<Option<File>>>;
+
+/// Lets go of the held slave fd when dropped.
+struct Release(Held);
+
+impl Drop for Release {
+    fn drop(&mut self) {
+        lock(&self.0).take();
+    }
+}
 
 /// What to run.
 pub struct Spec {
@@ -210,14 +224,20 @@ impl Terminal {
     ) -> io::Result<Terminal> {
         let notify: Notify = Arc::new(notify);
         let size = PtySize { rows: ROWS, cols: COLS, pixel_width: 0, pixel_height: 0 };
-        let pair = native_pty_system().openpty(size).map_err(pty)?;
+        let pair = open_pty(size)?;
         // portable-pty silently falls back to $HOME for a missing dir; refuse instead.
         if let Some(dir) = spec.cwd.as_ref().filter(|d| !d.is_dir()) {
             return Err(io::Error::new(io::ErrorKind::NotFound, format!("no directory {}", dir.display())));
         }
         let tty = pair.master.tty_name().ok_or_else(|| io::Error::other("the PTY has no name"))?;
+        // On macOS an exit that closes the PTY's last slave fd waits ~0.6 s for its output to be
+        // read, then throws it away: a starved reader missed a fast program's whole output. With
+        // ours open the exit waits for the reads. Let go once the program has exited, or when the
+        // reads end (nothing would read what the exit waits for).
+        let held: Held =
+            Arc::new(Mutex::new(Some(OpenOptions::new().read(true).custom_flags(libc::O_NOCTTY).open(&tty)?)));
         let child = start::start(&spec, &tty)?;
-        drop(pair.slave); // the child holds the only slave fd, so its exit ends our reads
+        drop(pair.slave);
         let pid = child.id() as i32;
         let command = if spec.command.is_empty() { vec![start::shell(&spec)] } else { spec.command };
         let start_cwd = spec.cwd;
@@ -271,6 +291,7 @@ impl Terminal {
             changes: generation.clone(),
             scrolled: scrolled.clone(),
             x10: Arc::default(),
+            held: held.clone(),
         };
         let x10 = reading.x10.clone();
         let to_reader = notify.clone();
@@ -281,8 +302,10 @@ impl Terminal {
         });
         let exited = Arc::new(Mutex::new(false));
         let done = exited.clone();
+        let release = held.clone();
         std::thread::spawn(move || {
             wait_exit(pid);
+            lock(&release).take(); // the reads end once whatever it left behind lets go too
             let status = {
                 let mut done = lock(&done);
                 // The zombie still holds the group ID, so this reaches only what the program left behind.
@@ -423,6 +446,24 @@ fn clean(s: &str) -> String {
         out.push(c);
     }
     out
+}
+
+/// `openpty`, issued again when macOS's `/dev/ptmx` open fails with xnu's internal EREDRIVEOPEN
+/// (-6, "reissue the open"), which leaks out while other processes open and close PTYs.
+fn open_pty(size: PtySize) -> io::Result<PtyPair> {
+    let mut tries = 1;
+    loop {
+        match native_pty_system().openpty(size) {
+            Err(e) if tries < OPEN_TRIES && reissue(&e.to_string()) => tries += 1,
+            opened => return opened.map_err(pty),
+        }
+    }
+}
+
+/// Whether portable-pty's error is that -6. Its text is all there is: the errno is gone by now
+/// (formatting "Unknown error: -6" sets another).
+fn reissue(error: &str) -> bool {
+    error.contains("Os { code: -6,")
 }
 
 fn pty(e: impl std::fmt::Display) -> io::Error {
