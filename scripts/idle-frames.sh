@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# idle-frames.sh: an idle leon app draws nothing. Runs the release app with frame stats on, a
-# private runtime and state dir and an idle /bin/sh for 6 s. Passes only if stats appear while the first
-# frames draw (t < 3 s), the app is still alive at the end, and no stats line appears after 3 s.
+# idle-frames.sh [--overview]: an idle leon app draws nothing. Runs the release app with frame stats
+# on, a private runtime and state dir and an idle /bin/sh for 6 s. Passes only if stats appear while
+# the first frames draw (t < 3 s), the app is still alive at the end, and no stats line appears after
+# 3 s. With --overview it then sends ⌘⇧\ through System Events (the terminal running this needs
+# Accessibility), requires the app's own word that the overview opened, and the same 3 s of quiet.
 set -euo pipefail
+overview=false
+[ "${1:-}" = --overview ] && overview=true
 cd "$(dirname "$0")/.."
 # A locked screen marks every window occluded and GPUI stops drawing, so "no frames" would prove nothing.
 locked=$(swift - 2>/dev/null <<'SWIFT' || echo 0
@@ -38,3 +42,17 @@ late=$(grep -c '^leon frames' "$log" || true)
 [ "$late" -eq "$early" ] || fail "an idle app drew frames after 3 s ($early lines, then $late)"
 echo "idle-frames: ok ($early stats line(s) while starting, none while idle)"
 grep '^leon frames' "$log"
+if $overview; then
+  osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true" >/dev/null
+  sleep 0.5
+  osascript -e 'tell application "System Events" to keystroke "\\" using {command down, shift down}'
+  sleep 3
+  grep -q '^leon overview: open' "$log" || fail "the overview didn't open (no 'leon overview: open' line)"
+  early=$(grep -c '^leon frames' "$log" || true)
+  [ "$early" -gt "$late" ] || fail "no frames were drawn when the overview opened"
+  sleep 3
+  kill -0 "$pid" 2>/dev/null || fail "the app exited"
+  late=$(grep -c '^leon frames' "$log" || true)
+  [ "$late" -eq "$early" ] || fail "an idle overview drew frames after 3 s ($early lines, then $late)"
+  echo "idle-frames: ok with the overview open (none while idle)"
+fi
