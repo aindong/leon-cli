@@ -95,19 +95,11 @@ poll. `yes | head` stays at the limit of `head` itself.
 
 ## After merging main (the app and the Lua runtime)
 
-The merge brought M6's per-batch `generation` counter for the renderer and M5b's config thread
-into the server (the bench pins `LEON_CONFIG` to a missing file, so no `init.lua` runs). Four
-alternating rounds against the last pre-merge commit, in both orders, on a machine with a load
-average of 4 to 12:
-
-| | `cat` 100 MB (4 rounds) | `yes \| head` 100 MB | input latency p50 | round trip p50 |
-|---|---|---|---|---|
-| before the merge | 112.5, 111.1, 105.7, 108.9 MB/s | 2.5 MB/s | 0.024, 0.023, 0.038, 0.024 ms | 0.005–0.007 ms |
-| after the merge | 100.7, 109.9, 109.1, 116.7 MB/s | 2.3–2.5 MB/s | 0.030, 0.036, 0.029, 0.023 ms | 0.005–0.007 ms |
-
-Both builds' medians are about 110 MB/s for `cat`. Whichever build ran first in a round did
-better (the pre-merge build ran first in rounds 1 and 2, the merged build in rounds 3 and 4), so
-the spread is the machine's load, not the merge; nothing moved.
+The merge brought M6's per-batch `generation` counter and M5b's config thread into the server.
+Four alternating rounds against the last pre-merge commit (load 4 to 12): `cat` about 110 MB/s
+for both builds (100.7 to 116.7), `yes | head` 2.3 to 2.5 MB/s, input latency p50 0.023 to
+0.038 ms, round trip 0.005 to 0.007 ms. Whichever build ran first in a round did better, so the
+spread is the machine's load, not the merge.
 
 ## M10: the attached app
 
@@ -203,13 +195,53 @@ What keeps a slow link from stalling the window:
 - **A half-dead link is noticed in about 15 s** (the watchdog's ping), not ssh's 45 s, and the
   stream resumes on new transports; m16b_slow_link checks that within 25 s.
 
+## The app end to end (scripts/perf)
+
+The bench stops at the app's screen model. `scripts/perf/` measures the app itself, under load,
+with one command each; every run starts its own release leon with private `LEON_RUNTIME_DIR`,
+`LEON_STATE_DIR`, `LEON_CONFIG` and `HOME` (`/bin/sh`, whose prompt is a coloured bar), waits for
+the 1-minute load to fall under 3 before each step, and notes the load beside each number in
+`.agent/perf/<run>/`. Two clocks, both on the boot clock (`CLOCK_UPTIME_RAW`):
+
+- **In the app**: `LEON_FRAME_LOG=PATH` (off unless set) logs each frame (render start, last pane
+  painted, the next display tick) and each key: AppKit's stamp on the event, the key sent to the pane, the first
+  paint of the focused pane whose cursor moved, and the next display tick. That tick is when GPUI
+  can next present, not when the frame was shown.
+- **From outside**: `winframes.swift` captures one window with ScreenCaptureKit and hashes each
+  frame, so only changed frames count. It posts synthetic keys to a pid and times each to the
+  first frame whose echo bar (`echo.py` flips it red and green per key) has that key's colour:
+  key posted to frame composited, which is all of the app's path plus the window server's. Not
+  seen: scan-out. The floor is a window of the tool's own that repaints the moment a key arrives.
+  `external.sh` runs these outside measurements on any terminal given as a launch command.
+
+Apple M6 (12 cores), macOS 27, a 60 Hz display, release build, load 2 to 4.5 (a remote-desktop
+session was streaming the screen, which slows every outside number the same way):
+
+| Measurement | Command | Result |
+|---|---|---|
+| key to pixel, idle / one pane flooding / eight panes busy | `keylat.sh` | in app, painted: p50 11.9 / 12.4 / 14.9 ms, p99 20.8 / 20.4 / 25.1 ms; outside: p50 50.3 / 49.7 / 51.9 ms, p99 66.6 / 65.1 / 71.8 ms; floor p50 18.8 ms |
+| a 50 ms echo delay | `keylat.sh --loads idle --delay 50` | in app +54 ms, outside +48 ms: both clocks see it |
+| `cat` 100 MB of text and colour, 1 / 8 panes | `flood.sh` | 55.5 / 57.3 frames a second shown (the capture's own floor 54.7 / 55.6), none missed; frame build p50 1.0 / 1.4 ms; screen current 46 ms after the last byte |
+| start-up to the prompt drawn, no server / server up | `startup.sh` | 159 / 154 ms (window on screen 188 / 190 ms); `leon run --wait -- true` 13 ms; `leon server start` 32 ms |
+| memory (footprint) | `memory.sh` | server 7.3 MiB idle, +0.53 MiB a pane, +20.7 MiB per 10,000 lines of scrollback in an 80-column pane; app 137 MiB, +0.06 MiB a pane; a 1 GB flood peaks the app at 163 MiB and it is back to 135 MiB within 30 s |
+| CPU with 12 idle panes: still / one pane working / app hidden | `idle-cpu.sh` | server 0.08% of a core in each; app 2.3% / 6.6% / 1.9%, 80 / 58 / 32 wake-ups a second |
+| 25 and 100 panes, 50 sessions, 10 tabs | `scale.sh` | 100 panes made in 1.4 s, the 100th split as fast as the first (9 ms, the CLI's own start included); 60 frames a second with all 100 printing, frame build p50 5.1 ms; server 88 MiB; a session 11 ms |
+| 2-hour agent soak: 12 agents in 4 sessions, a session made and killed and an attach client every minute | `soak.sh 120` | app 162 to 180 MiB throughout (+1.2 MiB/h over the last hour); server 354 to 432 MiB, then 667 to 896 MiB after the 9 hidden panes were fitted to the window's width at minute 48 (their 10,000-line histories now 213 columns); its live heap was the same at minutes 60 and 120 (748 MB, +448 bytes), so the footprint's sawtooth is freed memory the allocator keeps; `leaks` found none in the server and 56 small AppKit objects (2.5 KB) in the app |
+
+Where the time goes, from `sample`: the app polls its model every 8 ms (`POLL`) even when nothing
+changed or it is hidden, and a pulsing status indicator re-lays out the whole window on each of
+its frames. During a flood the server's parse thread spends more time in leon's own passes over
+the bytes (the slice scans in `terminal_view::feed`, the X10 mouse scanner, the OSC 7501 scanner)
+than in alacritty's parser. A keystroke's echo is painted 12 ms after the key (most of it waiting for the next
+display tick), then shown about two display frames later: GPUI draws on the display link and
+presents through a three-drawable Metal layer.
+
 ## Not measured yet
 
 - tmux, because it isn't installed here. The bench's tmux path drives tmux through a process per
   command (`send-keys`, `capture-pane`, `list-sessions`), as a shell script would, so its round
   trip and latency include process start-up. Its throughput is timed until the writer finishes,
   not until tmux has drawn the output.
-- Latency through a real shell's line editor, and GPUI's paint in the keystroke number (the
-  display's next frame comes after the measured point).
+- Latency through a real shell's line editor (`echo.py` is a raw-mode echo).
 - A real network link: the link number above has no network in it. Over Wi-Fi or a VPN each
   keystroke adds one network round trip (the write out, the pushed screen back).

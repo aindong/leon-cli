@@ -41,6 +41,23 @@ pub fn retext(ks: Keystroke, key_code: u16, characters: &str) -> Keystroke {
     Keystroke { key, key_char: Some(characters.to_string()), ..ks }
 }
 
+/// When the event AppKit is dispatching now was stamped, in nanoseconds of the boot clock
+/// (NSEvent's `timestamp`). Main thread only.
+pub fn current_event_stamp() -> Option<u64> {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+    let cls = AnyClass::get(c"NSApplication")?;
+    unsafe {
+        let app: *mut AnyObject = msg_send![cls, sharedApplication];
+        let ev: *mut AnyObject = if app.is_null() { return None } else { msg_send![app, currentEvent] };
+        if ev.is_null() {
+            return None;
+        }
+        let stamped: f64 = msg_send![ev, timestamp];
+        Some((stamped * 1e9) as u64)
+    }
+}
+
 /// The key code and text of the key event AppKit is dispatching now (`[NSApp currentEvent]`):
 /// GPUI calls `key_down` from inside it. Main thread only (the real app's).
 pub fn current_key_event() -> Option<(u16, String)> {
