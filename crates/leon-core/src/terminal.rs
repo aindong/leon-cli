@@ -17,7 +17,7 @@ use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Point};
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
-use portable_pty::{native_pty_system, MasterPty, PtyPair, PtySize};
+use portable_pty::{MasterPty, PtySize};
 use tokio::sync::watch;
 
 use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
@@ -62,8 +62,6 @@ const QUEUED_READS: usize = 64;
 const READ_SIZE: usize = 16 << 10;
 /// Queued reads are parsed together up to this many bytes, one lock and one report per batch.
 const BATCH: usize = 64 << 10;
-/// How many times a PTY open is issued while the kernel asks for it again (`open_pty`).
-const OPEN_TRIES: usize = 5;
 
 /// What a terminal reports, from its reader and waiter threads. Per batch of PTY reads (what
 /// arrived while the last batch was parsed, up to `BATCH` bytes) there is at most one title, one
@@ -224,7 +222,7 @@ impl Terminal {
     ) -> io::Result<Terminal> {
         let notify: Notify = Arc::new(notify);
         let size = PtySize { rows: ROWS, cols: COLS, pixel_width: 0, pixel_height: 0 };
-        let pair = open_pty(size)?;
+        let pair = start::open_pty(size)?;
         // portable-pty silently falls back to $HOME for a missing dir; refuse instead.
         if let Some(dir) = spec.cwd.as_ref().filter(|d| !d.is_dir()) {
             return Err(io::Error::new(io::ErrorKind::NotFound, format!("no directory {}", dir.display())));
@@ -316,17 +314,7 @@ impl Terminal {
                 reap(pid)
             };
             drop(child); // reaped above; dropping std's Child neither waits nor kills
-            if eof.recv_timeout(DRAIN_WAIT) == Err(mpsc::RecvTimeoutError::Disconnected) {
-                let _ = drained.recv(); // a bounded backlog: it finishes
-            } else {
-                // Still no EOF (a job holds the PTY, or the reader is behind): what was read by now
-                // is parsed first. Polled: the parser has no per-batch signal for a plain thread.
-                let read = read.load(Ordering::SeqCst);
-                let tick = Duration::from_millis(5);
-                while parsed_bytes.load(Ordering::SeqCst) < read
-                    && drained.recv_timeout(tick) == Err(mpsc::RecvTimeoutError::Timeout)
-                {}
-            }
+            parsed_by_then(&eof, &drained, &read, &parsed_bytes, DRAIN_WAIT);
             notify(Notice::Exited(status));
         });
         Ok(Terminal {
@@ -457,22 +445,23 @@ fn clean(s: &str) -> String {
     out
 }
 
-/// `openpty`, issued again when macOS's `/dev/ptmx` open fails with xnu's internal EREDRIVEOPEN
-/// (-6, "reissue the open"), which leaks out while other processes open and close PTYs.
-fn open_pty(size: PtySize) -> io::Result<PtyPair> {
-    let mut tries = 1;
-    loop {
-        match native_pty_system().openpty(size) {
-            Err(e) if tries < OPEN_TRIES && reissue(&e.to_string()) => tries += 1,
-            opened => return opened.map_err(pty),
-        }
+/// Wait for what the exit report needs: the PTY's EOF and every read parsed, or, when no EOF comes
+/// within `wait` (a job holds the PTY, or the reader is behind), what was read by then parsed.
+fn parsed_by_then(
+    eof: &mpsc::Receiver<()>,
+    drained: &mpsc::Receiver<()>,
+    read: &AtomicU64,
+    parsed: &AtomicU64,
+    wait: Duration,
+) {
+    if eof.recv_timeout(wait) == Err(mpsc::RecvTimeoutError::Disconnected) {
+        let _ = drained.recv(); // a bounded backlog: it finishes
+        return;
     }
-}
-
-/// Whether portable-pty's error is that -6. Its text is all there is: the errno is gone by now
-/// (formatting "Unknown error: -6" sets another).
-fn reissue(error: &str) -> bool {
-    error.contains("Os { code: -6,")
+    let read = read.load(Ordering::SeqCst);
+    // polled: the parser has no per-batch signal for a plain thread; it ends if the parser does
+    let tick = Duration::from_millis(5);
+    while parsed.load(Ordering::SeqCst) < read && drained.recv_timeout(tick) == Err(mpsc::RecvTimeoutError::Timeout) {}
 }
 
 fn pty(e: impl std::fmt::Display) -> io::Error {

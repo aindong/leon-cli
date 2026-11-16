@@ -102,8 +102,9 @@ fn cwd_follows_the_shell_then_osc7_then_the_start_dir() {
 
 #[test]
 fn the_exit_is_reported_after_the_last_output_is_on_the_screen() {
-    // Small enough to sit in the read queue whole while the parser can't run.
-    let script = "head -c 20000 /dev/zero | tr '\\0' y; printf END";
+    // Small enough to sit in the read queue whole while the parser can't run. It starts on our
+    // word, once the parser is held: a busy machine could otherwise parse it all first.
+    let script = "stty -echo; echo ready; read go; head -c 20000 /dev/zero | tr '\\0' y; printf END";
     let spec = Spec { command: vec!["sh".into(), "-c".into(), script.into()], cwd: None, env: vec![] };
     let (tx, exits) = mpsc::channel();
     let tx = Mutex::new(tx);
@@ -113,7 +114,10 @@ fn the_exit_is_reported_after_the_last_output_is_on_the_screen() {
         }
     })
     .unwrap();
+    screen_until(&t, |s| s.contains("ready"));
     let parsing = lock(&t.term); // the parser blocks; the reader goes on queueing
+    let before = t.output_bytes();
+    t.write(b"\r").unwrap();
     let end = std::time::Instant::now() + Duration::from_secs(10);
     while !t.has_exited() {
         assert!(std::time::Instant::now() < end, "the program didn't exit");
@@ -121,11 +125,11 @@ fn the_exit_is_reported_after_the_last_output_is_on_the_screen() {
     }
     std::thread::sleep(DRAIN_WAIT + Duration::from_millis(300)); // past the EOF wait, too
     assert!(exits.try_recv().is_err(), "the exit was reported while its output was still unparsed");
-    assert_eq!(t.output_bytes(), 0, "nothing parsed while the emulator was locked");
+    assert_eq!(t.output_bytes(), before, "nothing parsed while the emulator was locked");
     drop(parsing);
     exits.recv_timeout(Duration::from_secs(10)).unwrap();
     assert!(t.text(true).ends_with("END"), "the last output is on the screen by the exit report");
-    assert_eq!(t.output_bytes(), 20_003, "every byte counted");
+    assert_eq!(t.output_bytes() - before, 20_003, "every byte counted");
 }
 
 #[test]
@@ -193,29 +197,32 @@ fn the_output_written_just_before_exit_is_kept() {
 fn openpty_reissues_only_eredriveopen() {
     // portable-pty's `bail!("failed to openpty: {:?}", io::Error::last_os_error())`
     let failed = |code: i32| format!("failed to openpty: {:?}", io::Error::from_raw_os_error(code));
-    assert!(reissue(&failed(-6)), "{}", failed(-6));
+    assert!(start::reissue(&failed(-6)), "{}", failed(-6));
     for code in [libc::EMFILE, libc::ENXIO, libc::EAGAIN, -60] {
-        assert!(!reissue(&failed(code)), "{}", failed(code));
+        assert!(!start::reissue(&failed(code)), "{}", failed(code));
     }
 }
 
 #[test]
-fn the_exit_waits_for_what_was_read_when_the_eof_wait_runs_out() {
-    // One line per read (the pauses): the parser's batch, the queue and the reader's own send hold
-    // them all. With the parser held, the reader is left sending the last line, never reads the
-    // EOF, and the EOF wait runs out; what was read must still be parsed before the report.
-    let lines = QUEUED_READS + 2;
-    let script = format!("i=0; while [ $i -lt {lines} ]; do printf '%d\\n' $i; sleep 0.02; i=$((i+1)); done");
-    let (t, exits) = spawn(&["sh", "-c", &script]);
-    let parsing = lock(&t.term);
-    let end = std::time::Instant::now() + Duration::from_secs(30);
-    while !t.has_exited() {
-        assert!(std::time::Instant::now() < end, "the program didn't exit");
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    std::thread::sleep(DRAIN_WAIT + Duration::from_millis(300)); // past the EOF wait
-    assert!(exits.try_recv().is_err(), "the exit was reported while its output was still unparsed");
-    drop(parsing);
-    exits.recv_timeout(Duration::from_secs(10)).unwrap();
-    assert!(t.text(true).ends_with(&format!("\n{}", lines - 1)), "{:?}", t.text(true));
+fn with_no_eof_the_exit_report_waits_for_what_was_read() {
+    // No EOF (the reader is behind, or a job holds the PTY): 10 bytes read, none parsed yet.
+    let (_at_eof, eof) = mpsc::channel::<()>();
+    let (parser, drained) = mpsc::channel::<()>();
+    let (read, parsed) = (Arc::new(AtomicU64::new(10)), Arc::new(AtomicU64::new(0)));
+    let (done, reported) = mpsc::channel();
+    let (r, p) = (read.clone(), parsed.clone());
+    std::thread::spawn(move || {
+        parsed_by_then(&eof, &drained, &r, &p, Duration::from_millis(50));
+        done.send(()).unwrap();
+    });
+    assert!(reported.recv_timeout(Duration::from_millis(500)).is_err(), "reported before the parse");
+    read.store(20, Ordering::SeqCst); // read after the EOF wait ran out: not waited for
+    parsed.store(10, Ordering::SeqCst);
+    reported.recv_timeout(Duration::from_secs(10)).expect("still waiting once it was parsed");
+
+    // A parser that ended has parsed all it ever will.
+    let (_at_eof, eof) = mpsc::channel::<()>();
+    let (_, drained) = mpsc::channel::<()>();
+    parsed_by_then(&eof, &drained, &AtomicU64::new(10), &AtomicU64::new(0), Duration::from_millis(50));
+    drop(parser);
 }

@@ -2,7 +2,7 @@
 //! the link under a point. alacritty follows wrapped lines and wide characters for all three; this
 //! maps its points to numbers that stay put as output arrives.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Boundary, Column, Line, Point, Side};
@@ -43,7 +43,9 @@ pub struct Query {
 }
 
 pub const MAX_MATCHES: usize = 10_000;
-/// Find stops here and says `truncated`: it holds the terminal's lock, and output waits.
+/// Find stops after this much of its own CPU time and says `truncated`: it holds the terminal's
+/// lock, and output waits. CPU time, not the clock: on a busy machine a short find waited longer
+/// than this for the CPU and came back cut short.
 const MAX_FIND_TIME: Duration = Duration::from_millis(300);
 /// Longer links are refused: a program could otherwise hand the app any amount of text to show.
 pub const MAX_URI: usize = 2048;
@@ -138,13 +140,13 @@ pub fn find<T>(term: &Term<T>, scrolled: usize, q: &Query) -> Result<Found, Stri
     let limit = q.limit.min(MAX_MATCHES);
     let end = Point::new(term.bottommost_line(), term.last_column());
     let mut from = Point::new(term.topmost_line(), Column(0));
-    let started = Instant::now();
+    let started = thread_cpu();
     while let Some(m) = term.regex_search_right(&mut regex, from, end) {
         if *m.start() < from {
             break; // it wrapped around to the top
         }
         // the terminal's lock is held: a pattern that rescans long lines gets cut off
-        if found.matches.len() == limit || started.elapsed() > MAX_FIND_TIME {
+        if found.matches.len() == limit || thread_cpu().saturating_sub(started) > MAX_FIND_TIME {
             found.truncated = true;
             break;
         }
@@ -306,4 +308,27 @@ fn detected<T>(term: &Term<T>, p: Point) -> Option<(String, Point, Point)> {
         from = m.end().add(term, Boundary::Grid, 1);
     }
     None
+}
+
+/// The CPU time this thread has used.
+fn thread_cpu() -> Duration {
+    let mut t = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    // SAFETY: writes the calling thread's CPU clock into a local.
+    unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut t) };
+    Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_find_budget_counts_work_not_waiting() {
+        let start = super::thread_cpu();
+        std::thread::sleep(super::MAX_FIND_TIME);
+        assert!(super::thread_cpu() - start < super::MAX_FIND_TIME / 10, "waiting counted as work");
+        let busy = std::time::Instant::now();
+        while busy.elapsed() < super::MAX_FIND_TIME / 3 {
+            std::hint::black_box(0);
+        }
+        assert!(super::thread_cpu() > start, "work didn't count");
+    }
 }
