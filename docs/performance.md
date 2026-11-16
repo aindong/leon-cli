@@ -232,38 +232,13 @@ Where the time goes, from `sample`: the app polls its model every 8 ms (`POLL`) 
 changed or it is hidden, and a pulsing status indicator re-lays out the whole window on each of
 its frames. During a flood the server's parse thread spent more time in leon's own passes over
 the bytes (the slice scans in `terminal_view::feed`, the X10 mouse scanner, the OSC 7501 scanner)
-than in alacritty's parser (fixed since: "A big `cat`" below). A keystroke's echo is painted 12 ms after the key (most of it waiting for the next
+than in alacritty's parser (fixed since: docs/performance-cat.md). A keystroke's echo is painted 12 ms after the key (most of it waiting for the next
 display tick), then shown about two display frames later: GPUI draws on the display link and
 presents through a three-drawable Metal layer.
 
 ## A big `cat`
 
-`flood.sh`'s `cat` of 100 MB of text and colour ran at 81 MB/s, another terminal's at 131. leon's
-own passes over the output cost more than alacritty's parse, and the parse thread waited 23% of
-its time for the lock while the screen push built frames under it. The changes:
-
-- One scanner (`terminal::Escapes`) follows the X10 mouse mode and the history clears together,
-  in place of a byte loop and two `windows()` searches per 4 KiB slice. It and the OSC 7501
-  scanner jump from ESC to ESC with `memchr` and step over an `ESC x` or `ESC [ x` that starts
-  nothing they follow (most of a flood's escapes are SGR). The OSC scanner no longer copies what
-  it passes through. A history clear split across two slices is now found.
-- A screen push copies the screen under the lock and builds the frame after it; building rows
-  had also been O(columns²) (`push_cell` counted each span's chars once per cell).
-- Tests: each escape split at every byte inside 5,000 bytes of text; 2,000 random streams split
-  at random against the old scanner, and against the OSC scanner fed a byte at a time.
-
-Release builds, base `9b56116` and the branch alternating, one pane, the app showing it:
-
-| | `flood.sh` 100 MB | screen current after | frames shown | bench `cat` (no ESC) | load |
-|---|---|---|---|---|---|
-| base | 79.5, 79.7 MB/s | 38.7, 55.2 ms | 56.3, 56.5 fps, none missed | 111.0 MB/s | 2.6 to 3.5 |
-| branch | 115.2, 114.2 MB/s | 46.5, 46.3 ms | 55.8, 55.3 fps, none missed | 118.3 MB/s | 2.6 to 3.5 |
-
-`cat` is 44% faster, still short of 131 MB/s. The parse thread now
-waits for the lock 2 to 3% of its time, and leon's own scans are about a tenth of its samples. The
-rest is alacritty's: printing (a fifth), resetting each row that scrolls in (a sixth; more in
-wider panes), SGR and vte's UTF-8 checks. At load 32 the gap is wider (base 16 MB/s, branch 79):
-every lock handover then waits for a CPU.
+The parse path's speed-up for a flood of text and colour, with its numbers: docs/performance-cat.md.
 
 ## Not measured yet
 
