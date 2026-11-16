@@ -126,7 +126,7 @@ impl Workspace {
     /// the user is looking at.
     fn thumb_tabs(&self) -> Vec<(usize, String, String)> {
         let mut cards = self.overview_cards();
-        let first = self.overview.open.as_ref().map_or(0, |o| o.selected).min(cards.len());
+        let first = self.overview.open.as_ref().map_or(0, |o| o.at(&cards));
         cards.rotate_left(first);
         let hover = self.overview.hover.as_ref().filter(|h| h.shown);
         let hover = hover.map(|h| (h.host, h.session_id.clone(), h.window_id.clone()));
@@ -182,6 +182,7 @@ impl Workspace {
     pub(in crate::view) fn refresh_thumbs(&mut self, update: bool, cx: &mut Context<Self>) {
         let tabs = self.thumb_tabs();
         if tabs.is_empty() && self.overview.thumbs.is_empty() {
+            self.overview.held = None; // nothing left to refresh: no due time for the poll either
             return;
         }
         let look = self.look_stamp();

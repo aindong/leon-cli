@@ -20,11 +20,28 @@ use thumbs::Slot;
 pub(super) struct Overview {
     scope: Scope,
     query: String,
+    /// The selected card: its tab, and where it was (what's left in its place if the tab goes).
+    chosen: Option<String>,
     selected: usize,
     /// Moving in (true) or out, since when; the card that moves is the selected one.
     motion: Option<(bool, Instant)>,
     /// Closing: shown only until its motion ends.
     closing: bool,
+    /// Scroll the selected card into view at the next render (on opening, once the grid's size is known).
+    reveal: bool,
+}
+
+impl Overview {
+    /// The selected card's place in `cards`: its tab's, wherever that is now, so a tab closing or
+    /// opening before it doesn't move the selection to another tab.
+    fn at(&self, cards: &[Card]) -> usize {
+        let here = self.chosen.as_ref().and_then(|w| cards.iter().position(|c| c.window_id == *w));
+        here.unwrap_or(self.selected).min(cards.len().saturating_sub(1))
+    }
+
+    fn choose(&mut self, i: usize, cards: &[Card]) {
+        (self.selected, self.chosen) = (i, cards.get(i).map(|c| c.window_id.clone()));
+    }
 }
 
 #[derive(Default)]
@@ -58,8 +75,8 @@ impl Workspace {
     }
 
     pub fn overview_selected(&self) -> usize {
-        let n = self.overview_cards().len();
-        self.overview.open.as_ref().map_or(0, |o| o.selected.min(n.saturating_sub(1)))
+        let cards = self.overview_cards();
+        self.overview.open.as_ref().map_or(0, |o| o.at(&cards))
     }
 
     pub fn overview_query(&self) -> String {
@@ -88,12 +105,11 @@ impl Workspace {
         }
         let scope = self.overview_scope(all);
         let motion = (!self.reduce_motion()).then(|| (true, Instant::now()));
-        let mut o = Overview { scope, query: String::new(), selected: 0, motion, closing: false };
+        let mut o =
+            Overview { scope, query: String::new(), chosen: None, selected: 0, motion, closing: false, reveal: true };
         let current = self.active_window().map(|w| w.id);
-        o.selected = overview::cards(&self.overview_groups(&o))
-            .iter()
-            .position(|c| Some(&c.window_id) == current.as_ref())
-            .unwrap_or(0);
+        let cards = overview::cards(&self.overview_groups(&o));
+        o.choose(cards.iter().position(|c| Some(&c.window_id) == current.as_ref()).unwrap_or(0), &cards);
         self.overview.open = Some(o);
         self.overview.hover = None;
         self.overview.scroll.set_offset(point(px(0.), px(0.)));
@@ -117,10 +133,10 @@ impl Workspace {
         let current = self.active_window().map(|w| w.id);
         let reduce = self.reduce_motion();
         let Some(o) = self.overview.open.as_mut() else { return };
-        let pick = cards.get(o.selected.min(cards.len().saturating_sub(1))).cloned().filter(|_| go);
+        let pick = cards.get(o.at(&cards)).cloned().filter(|_| go);
         let here = cards.iter().position(|c| Some(&c.window_id) == current.as_ref());
         if let Some(i) = here.filter(|_| !go) {
-            o.selected = i;
+            o.choose(i, &cards);
         }
         // back to a tab the filter hides: no card stands for it, so nothing moves
         let still = reduce || (!go && here.is_none());
@@ -187,7 +203,7 @@ impl Workspace {
         self.refresh_thumbs(false, cx);
         let t = self.theme;
         let Some(o) = self.overview.open.as_ref() else { return div().into_any_element() };
-        let (query, selected, closing) = (o.query.clone(), o.selected, o.closing);
+        let (query, closing) = (o.query.clone(), o.closing);
         let session = match &o.scope {
             Scope::Session { session_id, .. } => self.rows().into_iter().find(|r| r.id == *session_id).map(|r| r.title),
             Scope::All => None,
@@ -195,7 +211,16 @@ impl Workspace {
         let groups = self.overview_groups(o);
         let cards = overview::cards(&groups);
         let l = self.overview_layout(&groups);
-        let selected = selected.min(cards.len().saturating_sub(1));
+        let (selected, reveal) = (o.at(&cards), o.reveal);
+        if reveal {
+            // the current tab's card in view on opening: below the fold, scroll down to it
+            if let Some(o) = self.overview.open.as_mut() {
+                o.reveal = false;
+            }
+            let h = self.overview.window.1 - TITLEBAR;
+            let y = l.cards.get(selected).map_or(0., |r| (r.y + r.h + overview::PAD - h).max(0.));
+            self.overview.scroll.set_offset(point(px(0.), px(-y)));
+        }
         let motion = self.overview_motion();
         // while closing, ask for frames until `settle_overview` drops it: its motion can end
         // between that read of the clock and this one
@@ -384,7 +409,7 @@ impl Workspace {
                         if let (Some(i), Some(o)) =
                             (cards.iter().position(|c| c.window_id == pick), ws.overview.open.as_mut())
                         {
-                            o.selected = i;
+                            o.choose(i, &cards);
                             ws.close_overview(true, cx);
                         }
                         cx.stop_propagation();

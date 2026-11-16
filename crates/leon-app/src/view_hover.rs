@@ -91,7 +91,11 @@ impl Workspace {
         });
         // nor does a row or tab whose list went (the sidebar hidden, the tab style switched)
         let places = self.places();
-        let drawn = if h.sidebar { places.sidebar == Some(SidebarList::SessionsAndTabs) } else { places.top_tabs };
+        // the titlebar draws only the selected session's tabs: another session's preview is gone
+        let drawn = match h.sidebar {
+            true => places.sidebar == Some(SidebarList::SessionsAndTabs),
+            false => places.top_tabs && self.session_id.as_deref() == Some(h.session_id.as_str()),
+        };
         if !alive || !drawn {
             self.overview.hover = None;
             return None;

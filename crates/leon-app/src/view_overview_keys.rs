@@ -25,16 +25,18 @@ impl Workspace {
             if self.overview.open.as_ref().is_some_and(|o| o.scope == scope) {
                 self.close_overview(false, cx);
             } else if let Some(o) = self.overview.open.as_mut() {
-                (o.scope, o.selected) = (scope, 0);
+                (o.scope, o.selected, o.chosen) = (scope, 0, None);
                 self.overview.scroll.set_offset(point(px(0.), px(0.)));
                 cx.notify();
             }
             return;
         }
-        // tabs can close (or a host's model shrink) under the overview: stay on a card
-        let n = self.overview_cards().len();
+        // tabs can close (or a host's model shrink) under the overview: stay on the chosen card,
+        // or on one in its place
+        let cards = self.overview_cards();
         if let Some(o) = self.overview.open.as_mut() {
-            o.selected = o.selected.min(n.saturating_sub(1));
+            let at = o.at(&cards);
+            o.choose(at, &cards);
         }
         let steps = [("left", Step::Left), ("right", Step::Right), ("up", Step::Up), ("down", Step::Down)];
         if named("escape") {
@@ -47,8 +49,9 @@ impl Workspace {
             let groups = self.overview.open.as_ref().map(|o| self.overview_groups(o)).unwrap_or_default();
             let rects = self.overview_layout(&groups).cards;
             if let Some(o) = self.overview.open.as_mut() {
-                o.selected = overview::step(&rects, o.selected, *step);
-                let r = rects.get(o.selected).copied();
+                let at = overview::step(&rects, o.at(&cards), *step);
+                o.choose(at, &cards);
+                let r = rects.get(at).copied();
                 self.reveal(r);
             }
         } else if let Some(o) = self.overview.open.as_mut() {
@@ -63,7 +66,7 @@ impl Workspace {
             } else {
                 return;
             }
-            o.selected = 0;
+            (o.selected, o.chosen) = (0, None);
             self.overview.scroll.set_offset(point(px(0.), px(0.)));
         }
         cx.notify();

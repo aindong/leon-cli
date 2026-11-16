@@ -49,10 +49,11 @@ done
 perf_note "end"
 awk '/^overview / { printf "open %.1f\n", ($3 - $2) / 1e6 } /^overview-filled / { printf "filled %.1f\n", ($3 - $2) / 1e6 }' \
   "$RUN/frames.log" >"$RUN/results.txt"
-median() { sort -n | awk '{ v[NR] = $1 } END { if (NR) print v[int((NR + 1) / 2)]; else print "none" }'; }
+median() { sort -n | awk '{ v[NR] = $1 } END { if (!NR) print "none"; else if (NR % 2) print v[(NR + 1) / 2]; else printf "%.1f\n", (v[NR / 2] + v[NR / 2 + 1]) / 2 }'; }
 open=$(awk '$1 == "open" { print $2 }' "$RUN/results.txt" | median)
 filled=$(awk '$1 == "filled" { print $2 }' "$RUN/results.txt" | median)
 n=$(grep -c '^filled' "$RUN/results.txt" || true)
 echo "overview, $tabs tabs, $n of $runs runs: first frame p50 $open ms, every card filled p50 $filled ms (load $(load1); files in $RUN)"
-[ "$n" -ge 1 ] || { echo "overview: no run filled every card" >&2; exit 1; }
+# an open that never filled is a failure, not a sample left out
+[ "$n" -eq "$runs" ] || { echo "overview: FAIL, only $n of $runs opens filled every card" >&2; exit 1; }
 awk -v f="$filled" 'BEGIN { exit !(f < 100) }' || { echo "overview: FAIL, filled took $filled ms (limit 100)" >&2; exit 1; }
