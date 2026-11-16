@@ -167,8 +167,14 @@ fn allowed(url: &str) -> Result<Host, String> {
     };
     let (scheme, rest) = url.split_once("://").ok_or_else(refuse)?;
     let name = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    // user@host: what looks like the host is a user name
-    if name.is_empty() || name.contains('@') || url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+    // user@host: what looks like the host is a user name. Only ASCII: no release server has
+    // another name, curl may map fullwidth letters to plain ones, and a bidi mark in an address
+    // must not reach a message
+    if name.is_empty()
+        || name.contains('@')
+        || !url.is_ascii()
+        || url.chars().any(|c| c.is_whitespace() || c.is_control())
+    {
         return Err(refuse());
     }
     // "[v6]" or "host", then nothing or ":port"
@@ -188,15 +194,18 @@ fn allowed(url: &str) -> Result<Host, String> {
 }
 
 /// The host is this machine as curl would read it: a loopback or unspecified address (in v6 too,
-/// and v4 inside v6), `localhost` and the names under it, or an IPv4 address in one of the short
-/// forms curl takes and IpAddr doesn't (`127.1`, `2130706433`, `0x7f000001`), which no release
-/// server is.
+/// and v4 inside v6), a host with a `%` in it (a v6 zone, `[::1%25lo0]`, or an escaped name),
+/// `localhost` and the names under it, or an IPv4 address in one of the short forms curl takes
+/// and IpAddr doesn't (`127.1`, `2130706433`, `0x7f000001`). A name that DNS resolves here is not
+/// caught: the release's signature is what makes the answer safe.
 fn local(bare: &str) -> bool {
     let name = bare.trim_end_matches('.').to_ascii_lowercase();
     let here = |v4: std::net::Ipv4Addr| v4.is_loopback() || v4.is_unspecified();
     match name.parse::<IpAddr>() {
         Ok(IpAddr::V4(v4)) => here(v4),
-        Ok(IpAddr::V6(v6)) => v6.is_loopback() || v6.is_unspecified() || v6.to_ipv4_mapped().is_some_and(here),
+        Ok(IpAddr::V6(v6)) => v6.is_loopback() || v6.is_unspecified() || v6.to_ipv4().is_some_and(here),
+        // a v6 zone, or a name in %-escapes that curl decodes: no release server writes either
+        Err(_) if name.contains('%') => true,
         Err(_) if name == "localhost" || name.ends_with(".localhost") => true,
         // a name whose last label is a number is an IPv4 address to a URL parser
         Err(_) => name.rsplit('.').next().is_some_and(|last| {
@@ -240,6 +249,11 @@ mod tests {
             "https://127.1/x",
             "https://2130706433/x",
             "https://0x7f000001/x",
+            "https://[::1%25lo0]:8443/x",
+            "https://[fe80::1%25lo0]/x",
+            "https://[::127.0.0.1]/x",
+            "https://%6c%6fcalhost/x",
+            "https://127.0.0.%31/x",
         ] {
             let to = allowed(local).unwrap();
             assert!(!redirect_allowed(false, &to), "a release server may not send leon to {local}");
@@ -271,6 +285,8 @@ mod tests {
             "127.0.0.1/x",
             "https:///x",
             "https://example.com/x y",
+            "https://\u{ff4c}\u{ff4f}\u{ff43}\u{ff41}\u{ff4c}\u{ff48}\u{ff4f}\u{ff53}\u{ff54}/x", // fullwidth localhost
+            "https://github.com/\u{202e}x", // a bidi override, which would reach a notice
             "",
         ] {
             assert!(allowed(bad).is_err(), "{bad}");
