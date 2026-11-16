@@ -74,11 +74,11 @@ SH
 
 perf_cleanup() {
   local p
-  for p in "${PERF_PIDS[@]}"; do
+  for p in ${PERF_PIDS[@]+"${PERF_PIDS[@]}"}; do
     kill "$p" 2>/dev/null || true
   done
   "$LEON" --autostart=false server stop >/dev/null 2>&1 || true
-  for p in "${PERF_PIDS[@]}"; do
+  for p in ${PERF_PIDS[@]+"${PERF_PIDS[@]}"}; do
     wait "$p" 2>/dev/null || true
   done
   rm -rf "${PERF_DIR:?}"

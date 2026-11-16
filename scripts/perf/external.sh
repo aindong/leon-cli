@@ -62,15 +62,20 @@ case "$measure" in
       quit
       w=$(awk '/^window / {print $2; exit}' "$RUN/$i-watch.txt")
       p=$(awk '/^frame / { if (!seen++ && $3 >= 1) { print -1; exit } if ($3 >= 1) { print $2; exit } }' "$RUN/$i-watch.txt")
-      [ "${p:-0}" = -1 ] && p=0 # drawn before the capture began: no number for this run
-      echo "$t0 ${w:-0} ${p:-0}" >>"$RUN/results.txt"
+      bound=0
+      if [ "${p:-0}" = -1 ]; then # drawn before the capture began: the capture's start is a bound
+        p=$(awk '/^start / {print $2; exit}' "$RUN/$i-watch.txt") bound=1
+      fi
+      echo "$t0 ${w:-0} ${p:-0} $bound" >>"$RUN/results.txt"
     done
     "$PERF_PY" - "$RUN/results.txt" <<'PY' | tee "$RUN/summary.txt"
 import sys, statistics as st
 rows = [list(map(int, l.split())) for l in open(sys.argv[1])]
 for i, what in ((1, "launch -> window on screen"), (2, "launch -> prompt drawn")):
     xs = [(r[i] - r[0]) / 1e6 for r in rows if r[i] > 0]
-    print(f"{what}: median {st.median(xs):.0f} ms, min {min(xs):.0f}, max {max(xs):.0f} (n={len(xs)})" if xs else f"{what}: never seen")
+    bound = sum(r[3] for r in rows) if i == 2 else 0
+    note = f"; in {bound} runs the prompt was already drawn when the capture began, so those are upper bounds" if bound else ""
+    print(f"{what}: median {st.median(xs):.0f} ms, min {min(xs):.0f}, max {max(xs):.0f} (n={len(xs)}{note})" if xs else f"{what}: never seen")
 PY
     ;;
   keylat)
