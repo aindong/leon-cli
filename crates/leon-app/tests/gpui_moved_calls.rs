@@ -128,7 +128,8 @@ fn tabs_selected_from_the_cli_are_the_most_recent(cx: &mut TestAppContext) {
     let rows = ws.read_with(cx, |ws, _| ws.switcher_rows());
     let at = |label: &str| rows.iter().position(|r| r.contains(label));
     s.app.stop();
-    assert!(at("tab-c") < at("tab-b") && at("tab-b").is_some(), "tab-c, then tab-b: {rows:?}");
+    let (c, b) = (at("tab-c").expect("tab-c is listed"), at("tab-b").expect("tab-b is listed"));
+    assert!(c < b, "tab-c, then tab-b: {rows:?}");
 }
 
 /// `watch_screens`: a tab the CLI makes and selects has its pane's screen pushed.

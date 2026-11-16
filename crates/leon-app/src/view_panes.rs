@@ -271,7 +271,8 @@ impl Workspace {
         for id in &shown {
             self.sync_pane(id);
         }
-        if self.find_due() {
+        // a window drawing nothing (hidden, covered) asks the server again once it draws (`next_poll`)
+        if self.find_due() && self.undrawn < 2 {
             self.run_find();
         }
         let rows = self.rows();
