@@ -78,6 +78,25 @@ fn find_matches_render_its_grid(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn stepping_to_the_next_match_renders_its_grid(cx: &mut TestAppContext) {
+    let s = setup();
+    let (ws, cx) = open(cx, &s.app);
+    let script = "stty -echo; printf 'zq-one\\nzq-two\\n'; sleep 100";
+    let id = tab_running(&s, &ws, cx, script, "zq-two");
+    cx.simulate_keystrokes("cmd-f z q -");
+    assert!(
+        shows(cx, |cx| ws.read_with(cx, |ws, _| ws.find_status()) == Some((2, 2))),
+        "two matches, the newest current"
+    );
+    let before = ws.read_with(cx, |ws, _| ws.grid_drew(&id)).map(|d| d.marks);
+    let drew = renders_again(&ws, cx, &id, |cx| cx.simulate_keystrokes("enter"));
+    let status = ws.read_with(cx, |ws, _| ws.find_status());
+    s.app.stop();
+    assert_eq!(status, Some((1, 2)), "enter stepped to the other match");
+    assert!(drew.is_some_and(|d| Some(d.marks) == before), "the grid drew the current match moved");
+}
+
+#[gpui::test]
 fn the_cmd_hover_link_renders_its_grid(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
@@ -112,8 +131,8 @@ fn hints_render_its_grid(cx: &mut TestAppContext) {
     let drew = renders_again(&ws, cx, &id, |cx| act(&ws, cx, "client.hints"));
     let labels = ws.read_with(cx, |ws, _| ws.hint_labels(&id));
     s.app.stop();
-    assert!(!labels.is_empty(), "hints are on");
-    assert!(drew.is_some(), "the grid drew the labels");
+    let label = labels.first().map(|(l, _)| l.clone()).expect("hints are on");
+    assert!(drew.is_some_and(|d| d.text.contains(&label)), "the grid drew the label {label:?}");
 }
 
 #[gpui::test]

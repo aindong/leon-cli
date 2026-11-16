@@ -29,10 +29,12 @@ pub struct GridDrawn {
     pub theme: Theme,
 }
 
-/// A shown pane's grid view, what it was last given, and the pushed screen that was from.
+/// A shown pane's grid view, what it was last given (when it had rendered `given` times), and
+/// the pushed screen that was from.
 pub(super) struct GridSlot {
     view: gpui::Entity<PaneGrid>,
     input: GridInput,
+    given: u64,
     screen: Option<u64>,
 }
 
@@ -117,6 +119,7 @@ impl Workspace {
                 slot.screen = screen;
                 if slot.input != input {
                     slot.input = input.clone();
+                    slot.given = self.grid_renders.borrow().get(id).copied().unwrap_or(0);
                     slot.view.update(cx, |g, cx| {
                         g.input = input;
                         cx.notify();
@@ -134,7 +137,7 @@ impl Workspace {
                     renders: self.grid_renders.clone(),
                 };
                 let view = cx.new(|_| grid);
-                self.grids.insert(id.to_string(), GridSlot { view, input, screen });
+                self.grids.insert(id.to_string(), GridSlot { view, input, given: 0, screen });
             }
         }
     }
@@ -177,9 +180,11 @@ impl Workspace {
         self.grid_renders.borrow().clone()
     }
 
-    /// What pane `id`'s grid was last given to draw, while it has one.
+    /// What pane `id`'s grid drew last: its input, once it rendered after being given it.
     pub fn grid_drew(&self, id: &str) -> Option<GridDrawn> {
-        let i = &self.grids.get(id)?.input;
+        let slot = self.grids.get(id)?;
+        let renders = self.grid_renders.borrow().get(id).copied().unwrap_or(0);
+        let i = (renders > slot.given).then_some(&slot.input)?;
         Some(GridDrawn {
             text: i.frame.text(),
             marks: i.marks.len(),
