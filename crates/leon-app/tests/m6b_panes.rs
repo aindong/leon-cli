@@ -361,10 +361,12 @@ fn signature_follows_every_visible_pane_and_nothing_hidden(cx: &mut TestAppConte
     settle(&ta);
     settle(&tb);
 
-    let before = sig(cx);
+    // a pushed screen redraws its own grid, not the window (GPUI phase 2, ADR R4)
+    let grid = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.grid_renders().get(&a).copied().unwrap_or(0));
+    let before = grid(cx);
     ta.write(b"echo unfocused\r").unwrap();
     wait_text(&ta, |x| has_line(x, "unfocused"));
-    assert!(changes(cx, &sig, before), "output in a visible, unfocused pane redraws");
+    assert!(changes(cx, &grid, before), "output in a visible, unfocused pane redraws its grid");
 
     let before = sig(cx);
     cx.simulate_keystrokes("cmd-shift-enter"); // zooms b, hiding a

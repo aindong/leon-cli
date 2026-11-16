@@ -37,7 +37,7 @@ pub(super) enum Mark {
 }
 
 /// Columns `from..=to` of view row `row`, drawn as `mark`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct CellMark {
     pub(super) row: usize,
     pub(super) from: usize,

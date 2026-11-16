@@ -13,11 +13,8 @@ pub(super) struct Shown {
 
 /// What every tile of one frame shares.
 pub(super) struct Tiling {
-    pub(super) sid: String,
-    pub(super) active: bool,
     pub(super) target: Option<String>,
     pub(super) several: bool,
-    pub(super) stats: Rc<RefCell<Stats>>,
 }
 
 impl Workspace {
@@ -46,7 +43,6 @@ impl Workspace {
         w: &leon_core::Window,
         terms: Panes,
         window: &Window,
-        stats: Rc<RefCell<Stats>>,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let t = &self.theme;
@@ -67,11 +63,8 @@ impl Workspace {
             shift(&mut d.split);
         }
         let tiling = Tiling {
-            sid: self.session_id.clone().unwrap_or_default(),
-            active: window.is_window_active(),
             target: target(w).map(str::to_string),
             several: l.panes.len() + placed.docks.len() + placed.floats.len() > 1,
-            stats,
         };
         let mut out =
             div().debug_selector(|| sel("panes-area".into())).flex_1().relative().overflow_hidden().bg(rgb(t.chrome));
@@ -123,16 +116,7 @@ impl Workspace {
         let t = &self.pane_theme(id);
         let focused = tiling.target.as_deref() == Some(id);
         let id = id.to_string();
-        let view = self.drawn(&id);
-        let marks = self.pane_marks(&id, &view);
-        let canvas = terminal_canvas(
-            self.app.clone(),
-            (tiling.sid.clone(), id.clone()),
-            (crate::fade::frame(view.frame, t.chrome, self.pane_fade(&id)), marks),
-            tiling.active && focused,
-            (self.font_family.clone(), self.font_size, *t),
-            (tiling.stats.clone(), self.term.painted.clone()),
-        );
+        let canvas = self.grid_element(&id);
         let headers = self.settings.pane_headers || kind != "pane";
         let finding = self.term.find.as_ref().is_some_and(|f| f.block == id);
         let on_link = self.term.hovered.as_ref().is_some_and(|(b, _)| *b == id);
@@ -318,7 +302,7 @@ impl Render for Workspace {
         } else {
             let body = match body_shown {
                 _ if self.stopped => self.render_stopped(cx).into_any_element(),
-                Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
+                Some((w, terms)) => self.render_panes(&w, terms, window, cx).into_any_element(),
                 None => self.render_empty(cx).into_any_element(),
             };
             let column = div()
