@@ -13,6 +13,11 @@ fn screen(spec: Spec, input: &str, done: &str) -> String {
     if !input.is_empty() {
         t.write(input.as_bytes()).unwrap();
     }
+    until(&t, done)
+}
+
+/// Wait until `t`'s screen holds `done`; returns the screen.
+fn until(t: &Terminal, done: &str) -> String {
     let end = Instant::now() + Duration::from_secs(10);
     loop {
         let text = t.text(true);
@@ -69,10 +74,15 @@ fn a_pane_starts_as_before() {
 echo "cwd=$(pwd -P)"
 [ -t 0 ] && [ -t 1 ] && [ -t 2 ] && echo stdio=tty
 (exec 3</dev/tty) 2>/dev/null && echo ctty=yes
-echo started"#);
+echo "tty=$(tty)"
+echo started; exec sleep 30"#);
     spec.cwd = Some(cwd.clone());
     spec.env = vec![("LEON_TEST_SPEC".into(), "spec".into())];
-    let text = screen(spec, "", "started");
+    let t = Terminal::spawn(spec, |_| {}).unwrap();
+    let text = until(&t, "started");
+    // SAFETY: getsid only reads; the pane's program is still running (sleep 30).
+    let (sid, pid) = (unsafe { libc::getsid(t.pid()) }, t.pid());
+    assert_eq!(sid, pid, "the program leads its own session");
     let shell = std::env::var("SHELL").unwrap_or_default();
     assert!(text.contains("env=server/spec shell="), "{text}");
     if !shell.is_empty() {
@@ -81,6 +91,7 @@ echo started"#);
     assert!(text.contains(&format!("cwd={}", cwd.display())), "{text}");
     assert!(text.contains("stdio=tty"), "the PTY is stdin, stdout and stderr: {text}");
     assert!(text.contains("ctty=yes"), "the PTY is the controlling terminal: {text}");
+    assert!(text.contains("tty=/dev/"), "`tty` names the PTY: {text}");
 }
 
 #[test]

@@ -141,10 +141,14 @@ fn access(p: &Path, mode: libc::c_int) -> bool {
 }
 
 /// The caller's message for a failed exec: the program and the OS's reason, and for a script the
-/// interpreter its `#!` line names, which is what the reason is about.
+/// interpreter its `#!` line names when the reason is that something is missing (the file exists).
 fn failed(path: &Path, e: io::Error) -> io::Error {
     let mut b = Vec::new();
-    let _ = std::fs::File::open(path).and_then(|f| f.take(256).read_to_end(&mut b));
+    if e.raw_os_error() == Some(libc::ENOENT) {
+        // non-blocking: an executable FIFO would wait for a writer, under the server's state lock
+        let file = OpenOptions::new().read(true).custom_flags(libc::O_NONBLOCK).open(path);
+        let _ = file.and_then(|f| f.take(256).read_to_end(&mut b));
+    }
     let head = b.strip_prefix(b"#!").and_then(|b| {
         let line = b.split(|c| *c == b'\n').next()?;
         Some(String::from_utf8_lossy(line).split_whitespace().next()?.to_string())
@@ -162,7 +166,7 @@ fn failed(path: &Path, e: io::Error) -> io::Error {
 /// # Safety
 /// Only open, read and close, on a stack buffer.
 unsafe fn is_script(prog: &CString) -> bool {
-    let fd = libc::open(prog.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC);
+    let fd = libc::open(prog.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NONBLOCK);
     if fd < 0 {
         return false;
     }
