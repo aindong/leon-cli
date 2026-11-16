@@ -28,6 +28,14 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### Output throughput
+
+#### Changed
+
+- A big `cat` of text and colour is 44% faster (80 to 115 MB/s on the perf harness's 100 MB
+  file): leon's own scans of the output skip what they don't follow, and the screen push no longer
+  holds the terminal's lock while it builds a frame (docs/performance-cat.md).
+
 ### Updates in Leon.app
 
 #### Added

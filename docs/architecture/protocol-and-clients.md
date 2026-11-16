@@ -76,7 +76,8 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   row keeps at most `cols` spans and backgrounds inside the line, each span at most a cell's text
   per column. Per watched block a task waits on the
   terminal's change counter (a `tokio::sync::watch`) and only marks it dirty; the connection loop
-  builds the frame under the terminal's lock, between replies and events, so nothing queues per
+  copies the screen under the terminal's lock and builds the frame from the copy without it (the
+  parse thread waits only for the copy), between replies and events, so nothing queues per
   connection beyond "dirty": a slow reader gets fewer, newer screens, never a backlog, and is
   never dropped for them. One block's screens are at least 2 ms apart, so a flood costs at most 500
   frame builds a second while a keystroke's echo after a quiet spell goes at once. The watcher

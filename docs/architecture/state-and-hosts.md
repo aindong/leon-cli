@@ -72,7 +72,9 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
 - **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of
   up to 16 KiB); the parser thread feeds what has queued, up to 64 KiB, to the OSC 7501 tracker and
   the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread
-  stalled the program while it parsed (docs/performance.md).
+  stalled the program while it parsed (docs/performance.md). Leon's own scans of the output (OSC
+  7501, the X10 mouse mode, history clears) jump from ESC to ESC with `memchr` and step over the
+  escapes they don't follow, so most bytes are looked at only by alacritty.
 - **One server per socket.** A server holds `server.lock` beside its socket (an flock) for its
   whole life, and a starting one takes it with `LOCK_NB`. Finding it held, it waits up to 2 s for
   the lock or for the socket to answer, then exits; it never unlinks a socket while the lock is

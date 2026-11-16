@@ -230,11 +230,15 @@ session was streaming the screen, which slows every outside number the same way)
 
 Where the time goes, from `sample`: the app polls its model every 8 ms (`POLL`) even when nothing
 changed or it is hidden, and a pulsing status indicator re-lays out the whole window on each of
-its frames. During a flood the server's parse thread spends more time in leon's own passes over
+its frames. During a flood the server's parse thread spent more time in leon's own passes over
 the bytes (the slice scans in `terminal_view::feed`, the X10 mouse scanner, the OSC 7501 scanner)
-than in alacritty's parser. A keystroke's echo is painted 12 ms after the key (most of it waiting for the next
+than in alacritty's parser (fixed since: docs/performance-cat.md). A keystroke's echo is painted 12 ms after the key (most of it waiting for the next
 display tick), then shown about two display frames later: GPUI draws on the display link and
 presents through a three-drawable Metal layer.
+
+## A big `cat`
+
+The parse path's speed-up for a flood of text and colour, with its numbers: docs/performance-cat.md.
 
 ## Not measured yet
 

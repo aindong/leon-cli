@@ -16,6 +16,7 @@ serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 libc.workspace = true
+memchr.workspace = true
 # only tokio::sync (a terminal's change counter is a watch channel); no runtime here
 tokio.workspace = true
 
