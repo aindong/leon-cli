@@ -211,13 +211,14 @@ leon hosts add devbox ssh://me@devbox.example.com
 leon -H devbox run -c /home/me/app -- make test   # runs on the devbox, in its /home/me/app
 leon -H devbox attach               # its sessions, in this terminal
 leon hosts check
-leon hosts add --tailscale          # pick from your tailnet; Tailscale SSH needs no keys
+leon hosts add --tailscale          # from your tailnet (Tailscale SSH: no keys)
 ```
 
 A dropped Wi-Fi link is retried for a minute: `leon events` and the app resume without losing or
-repeating an event, and `leon attach` says it is reconnecting, then reconnects and redraws. Keys
+repeating an event, and `leon attach` says so, then reconnects and redraws. Keys
 typed while the link is stalled or down arrive whole or not at all, and the status bar says how many
-were not sent. Use ssh keys or an agent, because each connection is its own ssh session.
+were not sent (keys sent as a stall starts may land). Use ssh keys or an agent: each
+connection is its own ssh session.
 
 The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
 and tabs and a dot for its connection. A remote pane works like a local one, with the host's name in
