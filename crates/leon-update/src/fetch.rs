@@ -55,7 +55,7 @@ fn fetch(
     let mut began_local = None;
     for _ in 0..=MAX_REDIRECTS {
         let host = allowed(&url)?;
-        if !redirect_allowed(*began_local.get_or_insert(host.loopback), &host) {
+        if !redirect_allowed(*began_local.get_or_insert(host.local), &host) {
             return Err(format!(
                 "refusing a redirect to {}: a release server may not send leon to this machine's own address",
                 url.escape_debug()
@@ -66,12 +66,12 @@ fn fetch(
         // reach the pipe as they arrive, so what is on disk is what was received. -g: braces and
         // brackets in an address are characters, not curl's patterns for many addresses.
         // -f: an error page is not a body, so it is neither read nor counted against the limit.
-        curl.args(["-q", "-sS", "-N", "-g", "-f", "--proto", if host.loopback { "=http" } else { "=https" }])
+        curl.args(["-q", "-sS", "-N", "-g", "-f", "--proto", if host.plain { "=http" } else { "=https" }])
             .args(["--connect-timeout", &cfg.timeout.to_string(), "--max-time", &max_time.to_string()])
             .args(["--speed-limit", "1", "--speed-time", &cfg.timeout.to_string()])
             // Accept is the one header curl adds that a request can do without
             .args(["-A", AGENT, "-H", "Accept:", "-o", "-", "-w", "%{stderr}\n%{http_code} %{redirect_url}\n"]);
-        if host.loopback {
+        if host.local {
             curl.args(["--noproxy", "*"]); // a proxy is for other machines
         }
         curl.args(["--", &url]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -151,7 +151,10 @@ fn failure(code: Option<i32>, url: &str, host: &str, what: &str, said: &str, tim
 struct Host {
     /// `host[:port]`, for messages.
     name: String,
-    loopback: bool,
+    /// Plain http, to a loopback address given as a number: the one exception to https.
+    plain: bool,
+    /// This machine, by any spelling (`local`), whatever the scheme.
+    local: bool,
 }
 
 /// The transport rule, applied to every address before anything connects to it: HTTPS, or plain
@@ -176,18 +179,37 @@ fn allowed(url: &str) -> Result<Host, String> {
     };
     let port_ok = port.is_empty() || port.strip_prefix(':').is_some_and(|p| p.parse::<u16>().is_ok());
     let loopback = port_ok && bare.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback());
+    let (name, local) = (name.to_string(), local(bare));
     match scheme {
-        "https" => Ok(Host { name: name.to_string(), loopback: false }),
-        "http" if loopback => Ok(Host { name: name.to_string(), loopback: true }),
+        "https" => Ok(Host { name, plain: false, local }),
+        "http" if loopback => Ok(Host { name, plain: true, local }),
         _ => Err(refuse()),
     }
 }
 
-/// A chain of requests that began at a loopback address (a test, a local mirror) may stay there.
-/// One that began anywhere else may never be sent to this machine: a redirect to
-/// `http://127.0.0.1:…` would be a request of the server's choosing to a local service.
+/// The host is this machine as curl would read it: a loopback or unspecified address (in v6 too,
+/// and v4 inside v6), `localhost` and the names under it, or an IPv4 address in one of the short
+/// forms curl takes and IpAddr doesn't (`127.1`, `2130706433`, `0x7f000001`), which no release
+/// server is.
+fn local(bare: &str) -> bool {
+    let name = bare.trim_end_matches('.').to_ascii_lowercase();
+    let here = |v4: std::net::Ipv4Addr| v4.is_loopback() || v4.is_unspecified();
+    match name.parse::<IpAddr>() {
+        Ok(IpAddr::V4(v4)) => here(v4),
+        Ok(IpAddr::V6(v6)) => v6.is_loopback() || v6.is_unspecified() || v6.to_ipv4_mapped().is_some_and(here),
+        Err(_) if name == "localhost" || name.ends_with(".localhost") => true,
+        // a name whose last label is a number is an IPv4 address to a URL parser
+        Err(_) => name.rsplit('.').next().is_some_and(|last| {
+            !last.is_empty() && (last.bytes().all(|b| b.is_ascii_digit()) || last.starts_with("0x"))
+        }),
+    }
+}
+
+/// A chain of requests that began at this machine (a test, a local mirror) may stay there. One
+/// that began anywhere else may never be sent to it, over http or https: a redirect to
+/// `https://127.0.0.1:…` would be a request of the server's choosing to a local service.
 fn redirect_allowed(began_local: bool, to: &Host) -> bool {
-    began_local || !to.loopback
+    began_local || !to.local
 }
 
 #[cfg(test)]
@@ -201,7 +223,31 @@ mod tests {
         assert!(redirect_allowed(true, &github));
         assert!(redirect_allowed(false, &github), "https to https: what GitHub does");
         assert!(!redirect_allowed(false, &local), "https to loopback http");
-        assert!(!allowed("https://127.0.0.1/x").unwrap().loopback, "an https loopback address is not the exception");
+        assert!(!allowed("https://127.0.0.1/x").unwrap().plain, "an https loopback address is not the exception");
+    }
+
+    #[test]
+    fn no_redirect_from_afar_to_any_loopback() {
+        for local in [
+            "https://127.0.0.1/x",
+            "https://127.0.0.1:8443/x",
+            "https://[::1]/x",
+            "https://[::ffff:127.0.0.1]/x",
+            "https://localhost/x",
+            "https://LocalHost./x",
+            "https://api.localhost/x",
+            "https://0.0.0.0/x",
+            "https://127.1/x",
+            "https://2130706433/x",
+            "https://0x7f000001/x",
+        ] {
+            let to = allowed(local).unwrap();
+            assert!(!redirect_allowed(false, &to), "a release server may not send leon to {local}");
+            assert!(redirect_allowed(true, &to), "a chain that began here may stay here: {local}");
+        }
+        for afar in ["https://github.com/x", "https://objects.githubusercontent.com/x", "https://8.8.8.8/x"] {
+            assert!(redirect_allowed(false, &allowed(afar).unwrap()), "{afar}");
+        }
     }
 
     #[test]
@@ -210,8 +256,8 @@ mod tests {
         {
             assert!(allowed(ok).is_ok(), "{ok}");
         }
-        assert!(allowed("http://127.0.0.1/x").unwrap().loopback);
-        assert!(!allowed("https://127.0.0.1/x").unwrap().loopback, "https is never the loopback exception");
+        assert!(allowed("http://127.0.0.1/x").unwrap().plain);
+        assert!(!allowed("https://127.0.0.1/x").unwrap().plain, "https is never the loopback exception");
         for bad in [
             "http://example.com/x",
             "http://localhost/x", // a name: it resolves wherever the resolver says
