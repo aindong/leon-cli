@@ -245,7 +245,8 @@ The parse path's speed-up for a flood of text and colour, with its numbers: docs
 
 The app's `leaks` (`MallocStackLogging=1`, release build, agents reporting status) are all
 allocated under GPUI 0.2.2, none in leon's code: 44 objects (2.8 KB) after 6 minutes, a few more
-an hour. leon carries no patched GPUI for 2.5 KB; these are the fixes, ready to send upstream.
+an hour (56, 2.5 KB, after the 2-hour soak). leon carries no patched GPUI for that; these are the
+fixes, ready to send upstream.
 
 - `src/platform/mac/open_type.rs`, `apply_features_and_fallbacks`: the arrays from
   `generate_feature_array` and `generate_fallback_array` come from `CFArrayCreateMutable` (the
@@ -256,6 +257,7 @@ an hour. leon carries no patched GPUI for 2.5 KB; these are the fixes, ready to 
   `NSString::alloc(nil).init_str(...)` (owned) and never released; `start_display_link` calls it
   at every key-window and occlusion change. Fix:
   `let screen_number_key: id = NSString::alloc(nil).init_str("NSScreenNumber").autorelease();`
+  `MacWindow::display` makes the same key the same way; the same `.autorelease()` fixes it.
 
 ## Not measured yet
 

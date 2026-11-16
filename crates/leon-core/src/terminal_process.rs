@@ -168,7 +168,9 @@ impl Drop for Listener {
                 give_back();
             });
             if later.is_err() {
-                GIVING_BACK.store(false, Ordering::SeqCst); // the next close tries again
+                // no thread to spare: give back here, so the closes that rode along aren't missed
+                GIVING_BACK.store(false, Ordering::SeqCst);
+                give_back();
             }
         }
     }
@@ -180,6 +182,8 @@ fn give_back() {
     extern "C" {
         fn malloc_zone_pressure_relief(zone: *mut libc::c_void, goal: libc::size_t) -> libc::size_t;
     }
+    // SAFETY: a null zone means every zone; the call takes the allocator's own locks and touches
+    // no Rust memory.
     unsafe { malloc_zone_pressure_relief(std::ptr::null_mut(), 0) };
     GIVEN_BACK.fetch_add(1, Ordering::SeqCst);
 }
