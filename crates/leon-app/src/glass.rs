@@ -11,6 +11,8 @@ use crate::theme::{contrast, mix, Theme};
 
 /// Body text keeps this contrast over any desktop (WCAG AA), or its opaque contrast if lower.
 pub const BODY: f64 = 4.5;
+/// A tile's corner radius: `pane_tile` rounds by it, and the gaps go round it.
+pub const TILE_RADIUS: f32 = 6.;
 /// The desktops checked: white and black, the extremes any desktop lies between.
 const DESKS: [u32; 2] = [u32::MAX >> 8, 0];
 /// Secondary text on the chrome (session labels, shortcuts) keeps this much.
@@ -135,6 +137,18 @@ pub fn worst_contrast(text: u32, layers: &[(u32, f32)]) -> f64 {
         .map(|desk| contrast(text, layers.iter().fold(desk, |under, &(c, a)| mix(under, c, shown(a)))))
         .into_iter()
         .fold(f64::INFINITY, f64::min)
+}
+
+/// What the panes area fills with the panes' translucent background: the tiles and the drawers in
+/// place that `shown` keeps. A drawer sliding out is drawn opaque, like a float: the tiles took its
+/// room back as it started (`floats::place`), so it slides over them.
+pub fn see_through_tiles(
+    l: &crate::panes::Layout,
+    placed: &crate::floats::Placed,
+    shown: impl Fn(&str) -> bool,
+) -> Vec<Rect> {
+    let tiles = l.panes.iter().filter(|p| shown(&p.block_id)).map(|p| p.rect);
+    tiles.chain(placed.docks.iter().filter(|d| !d.leaving && shown(&d.block_id)).map(|d| d.rect)).collect()
 }
 
 /// A piece of gap outside a tile's rounded corner: what of the ring around `center` from

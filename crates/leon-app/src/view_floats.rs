@@ -115,7 +115,9 @@ impl Workspace {
     ) -> Div {
         for d in placed.docks.iter().filter(|d| terms.contains(&d.block_id)) {
             let tile = self.pane_tile("dock", &d.block_id, d.rect, None, tiling, cx);
-            out = out.child(if d.leaving { tile } else { tile.occlude() });
+            // sliding out over the tiles: opaque, so no pixel gets two translucent fills (glass.rs)
+            let opaque = || self.pane_fill("float", &self.pane_theme(&d.block_id));
+            out = out.child(if d.leaving { tile.bg(opaque()) } else { tile.occlude() });
             let Some(h) = d.handle else { continue };
             let grab = Grab::Dock { side: d.side, size: d.size, area };
             let across = d.side != DockSide::Bottom;

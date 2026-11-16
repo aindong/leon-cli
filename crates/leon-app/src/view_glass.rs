@@ -6,10 +6,8 @@
 use gpui::{quad, AnyWindowHandle, BorderStyle, ContentMask, Hsla, WindowBackgroundAppearance as Bg};
 
 use super::*;
-use crate::glass::{gaps, Gaps, Glass};
+use crate::glass::{gaps, see_through_tiles, Gaps, Glass, TILE_RADIUS};
 
-/// A tile's corner radius (`pane_tile`'s `rounded`): the gaps go round it.
-const TILE_RADIUS: f32 = 6.;
 /// How many backgrounds asked for the log keeps (tests read it; it changes only with a setting).
 const KEEP: usize = 16;
 
@@ -111,9 +109,7 @@ impl Workspace {
     /// The panes area's chrome: all of it when opaque; when translucent, only what the tiles and
     /// drawers in `l` and `placed` leave (they fill themselves), corners included.
     pub(super) fn render_gaps(&self, l: &panes::Layout, placed: &floats::Placed, terms: &Panes) -> impl IntoElement {
-        let mut tiles: Vec<panes::Rect> =
-            l.panes.iter().filter(|p| terms.contains(&p.block_id)).map(|p| p.rect).collect();
-        tiles.extend(placed.docks.iter().filter(|d| terms.contains(&d.block_id)).map(|d| d.rect));
+        let tiles = see_through_tiles(l, placed, |id| terms.iter().any(|t| t == id));
         let (color, translucent) = (self.chrome_fill(), self.glass.glass.translucent());
         canvas(
             |_, _, _| (),
