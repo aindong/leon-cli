@@ -68,6 +68,7 @@ fn the_workspace_render_calls_no_model_work() {
     let body = &src[start..];
     let body = &body[..body[1..].find("\nimpl ").map_or(body.len(), |i| i + 1)];
     let calls = [
+        "prepare(",
         "note_focus(",
         "note_slides(",
         "settle_overview(",
