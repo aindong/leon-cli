@@ -7,6 +7,9 @@
 # 3. scrollback: 5 panes each printing 10,000 lines of 67 bytes (leon keeps 10,000 lines a pane)
 # 4. a flood of GB gigabytes (`cat` of the 100 MB flood file, 10 times a GB) in the shown pane:
 #    sampled every 2 s during it, then 5, 30 and 60 s after it ends
+# 5. a font change with hidden sessions: 3 sessions the app doesn't show, each with 3 tabs printing
+#    10,000 lines, then `leon config set font.size 15`: sampled once the shown pane has fewer
+#    columns (the app fits only the panes on screen; each resize reallocates a pane's history)
 # Each line of samples.txt: "<step> <server rss> <server footprint> <app rss> <app footprint> <load>".
 source "$(dirname "$0")/lib.sh"
 gb=1
@@ -64,6 +67,32 @@ for after in 5 30 60; do
   last=$after
   sample "flood-after-${after}s"
 done
+perf_load_gate
+cols() { "$LEON" --json block call -s "$1" -b "$2" size | "$PERF_PY" -c 'import json,sys; print(json.load(sys.stdin)["cols"])'; }
+shown=$(first_block "$sid")
+hidden=()
+for h in 1 2 3; do
+  hs=$("$LEON" new "hidden-$h")
+  hidden+=("$hs")
+  for i in 1 2 3; do
+    hb=$("$LEON" run -s "$hs" -- "$PERF_PY" "$PERF_ROOT/scripts/perf/agent.py" fill 10000)
+  done
+done
+settle
+sample "font-before"
+was=$(cols "$sid" "$shown")
+hidden_was=$(cols "${hidden[2]}" "$hb")
+"$LEON" config set font.size 15 >/dev/null
+deadline=$(($(date +%s) + 20))
+while :; do
+  now=$(cols "$sid" "$shown")
+  [ "$now" -lt "$was" ] && break
+  [ "$(date +%s)" -lt "$deadline" ] || { echo "memory: the app never fitted the shown pane to the new font" >&2; exit 1; }
+  sleep 0.2
+done
+settle
+sample "font-after"
+echo "font: shown pane $was -> $(cols "$sid" "$shown") columns, a hidden pane $hidden_was -> $(cols "${hidden[2]}" "$hb")" | tee "$RUN/font.txt"
 perf_note "end"
 "$PERF_PY" - "$RUN/samples.txt" <<'PY' | tee "$RUN/summary.txt"
 import sys
@@ -86,9 +115,11 @@ per = [(rows["panes+50"][i] - rows["idle"][i]) / 50 for i in range(4)]
 print(f"per extra pane (50): server rss {per[0]:.0f} KiB, footprint {per[1]:.0f} KiB; app rss {per[2]:.0f} KiB, footprint {per[3]:.0f} KiB")
 d = [(rows["scroll-5x10k"][i] - rows["scroll-before"][i]) / 5 for i in range(4)]
 print(f"per 10,000 lines of scrollback: server footprint {d[1] / 1024:.1f} MiB (rss {d[0] / 1024:.1f}), app footprint {d[3] / 1024:.1f} MiB")
+f = [rows["font-after"][i] - rows["font-before"][i] for i in range(4)]
 show("flood-before", "before the flood")
 if during:
     print(f"during the flood (peak of {len(during)} samples): server footprint {mib(max(v[1] for v in during))}, app footprint {mib(max(v[3] for v in during))}")
 for a in (5, 30, 60):
     show(f"flood-after-{a}s", f"{a} s after the flood")
+print(f"font change (2 shown panes, 9 hidden ones of 10,000 lines): server footprint {f[1] / 1024:+.1f} MiB (rss {f[0] / 1024:+.1f}), app footprint {f[3] / 1024:+.1f} MiB")
 PY

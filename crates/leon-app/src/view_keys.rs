@@ -167,9 +167,9 @@ impl Workspace {
             "client.tab_style.toggle" => self.toggle_tab_style(cx),
             "client.settings" => self.open_settings(cx),
             "client.pane_header.reveal" => self.toggle_pane_headers(cx),
-            "client.font.increase" => self.set_font_size(self.font_size + 1., window, cx),
-            "client.font.decrease" => self.set_font_size(self.font_size - 1., window, cx),
-            "client.font.reset" => self.set_font_size(self.look.font_size, window, cx),
+            "client.font.increase" => self.set_font_size(self.font_size + 1., cx),
+            "client.font.decrease" => self.set_font_size(self.font_size - 1., cx),
+            "client.font.reset" => self.set_font_size(self.look.font_size, cx),
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,

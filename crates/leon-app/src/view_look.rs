@@ -36,18 +36,16 @@ impl Workspace {
         self.config_path.clone().or_else(leon_lua::config_path)
     }
 
-    /// Draw with a `server.settings` reply: its themes resolved, its font (fitting every pane to
-    /// a new one at the next render).
+    /// Draw with a `server.settings` reply: its themes resolved, its font (a new one only: the panes
+    /// on screen fit it on the next frame).
     pub(super) fn apply_settings(&mut self, reply: &Value) {
         let themes = self.config_path().map(|p| leon_lua::settings::themes_dir(&p)).unwrap_or_default();
         let look = Look::resolve(&reply["settings"], &themes);
         if look.font_size != self.look.font_size {
             self.font_size = look.font_size.clamp(FONT_SIZES.0, FONT_SIZES.1);
-            self.refit = true;
         }
         if look.font_family != self.look.font_family {
             self.font_family = look.font_family.clone().into();
-            self.refit = true;
         }
         self.look = look;
         self.use_theme();

@@ -1,4 +1,5 @@
-//! M9 criterion 6: cmd+= / cmd+- / cmd+0 change the font size of every pane, and the PTYs follow.
+//! M9 criterion 6: cmd+= / cmd+- / cmd+0 change the font size of every pane, and the PTYs follow:
+//! the panes on screen at once, a hidden tab when it is shown.
 
 mod m9_support;
 
@@ -21,6 +22,7 @@ fn font_size_keys_resize_every_pane(cx: &mut TestAppContext) {
     let hidden = term(&s.app, tab["block_id"].as_str().unwrap());
     cx.simulate_keystrokes("cmd-1");
     cx.run_until_parked();
+    let h = hidden.size();
 
     cx.simulate_keystrokes("cmd-=");
     cx.run_until_parked();
@@ -29,12 +31,10 @@ fn font_size_keys_resize_every_pane(cx: &mut TestAppContext) {
     for (b, a) in bigger.iter().zip(&start) {
         assert!(b.0 < a.0 && b.1 < a.1, "a bigger font gives fewer rows and columns: {a:?} -> {b:?}");
     }
-    // the hidden tab already has the size it gets when shown
-    let h = hidden.size();
-    assert_ne!(h, (24, 80), "the hidden tab was resized");
+    // the hidden tab keeps its size until it is shown
+    assert_eq!(hidden.size(), h, "a hidden tab keeps its size through a font change");
     cx.simulate_keystrokes("cmd-2");
-    cx.run_until_parked();
-    assert_eq!(hidden.size(), h, "a hidden tab resizes with the font, before it is shown");
+    assert!(shows(cx, |_| hidden.size() != h), "shown, the tab fits the font");
     cx.simulate_keystrokes("cmd-1");
     cx.run_until_parked();
 

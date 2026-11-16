@@ -312,7 +312,7 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘, | Settings: the theme for dark and for light mode, font, notifications, copy on select; each change is written to init.lua |
 | ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
 | ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
-| ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
+| ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (shown panes) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
 
 These are defaults. A `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`

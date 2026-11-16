@@ -247,9 +247,6 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.note_focus(window);
-        if std::mem::take(&mut self.refit) {
-            self.set_font_size(self.font_size, window, cx); // a new font from init.lua
-        }
         self.note_slides();
         DRAWN.with(|d| d.borrow_mut().clear());
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
