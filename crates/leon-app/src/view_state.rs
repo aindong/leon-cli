@@ -86,4 +86,21 @@ impl Workspace {
     pub fn screen_text(&self, block_id: &str) -> Option<String> {
         self.app.model().screens.get(block_id).map(|f| f.text())
     }
+
+    /// The target block and its screen (an empty one until the first arrives: keys typed by then
+    /// still go to the program).
+    pub(super) fn target_screen(&self) -> Option<(String, String, Arc<render::Frame>)> {
+        let (sid, id, _) = self.target()?;
+        let f = self.app.model().screens.get(&id).cloned().unwrap_or_default();
+        Some((sid, id, f))
+    }
+
+    /// (session id, target block id, whether it is zoomed) of the selected session's active window.
+    pub(super) fn target(&self) -> Option<(String, String, bool)> {
+        let sid = self.session_id.clone()?;
+        let m = self.app.model();
+        let s = m.session(&sid)?;
+        let w = s.windows.get(s.active)?;
+        Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
+    }
 }

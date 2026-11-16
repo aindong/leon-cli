@@ -37,6 +37,7 @@ use crate::render::{self, Frame};
 use crate::status::{self, Indicator};
 use crate::switcher;
 use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
+use sections_view::{HeaderInput, HostLabel, SidebarInput, TitleBarInput};
 
 actions!(
     leon,
@@ -87,6 +88,7 @@ const KEYMAP_POLL: Duration = Duration::from_secs(1);
 use crate::floats::target;
 
 /// What one render needs from the model, copied out under the state lock.
+#[derive(Clone, PartialEq, Debug)]
 struct SessionRow {
     /// Which machine it is on (`Hosts` index; 0 is This Mac).
     host: usize,
@@ -97,6 +99,7 @@ struct SessionRow {
     status: Option<Indicator>,
 }
 
+#[derive(Clone, PartialEq, Debug)]
 struct WindowRow {
     id: String,
     title: String,
@@ -232,6 +235,16 @@ pub struct Workspace {
     /// Each shown pane's grid view (view_grid.rs), and how often each rendered.
     grids: HashMap<String, grid_view::GridSlot>,
     grid_renders: Rc<RefCell<HashMap<String, u64>>>,
+    /// The sidebar, title bar and headers as views (view_sections.rs), and how often each rendered.
+    sections: HashMap<String, sections_view::SectionSlot>,
+    section_renders: Rc<RefCell<HashMap<String, u64>>>,
+    /// The spinners' clock, whether a shown indicator works, and the root observing it while it
+    /// draws one itself (the overview's cards).
+    pulse: gpui::Entity<pulse_view::Pulse>,
+    pulse_wanted: bool,
+    pulse_root: Option<Subscription>,
+    /// The pane under the mouse: its header shows its controls.
+    hovered_pane: Option<String>,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
     overview: overview_view::OverviewUi,
@@ -318,6 +331,7 @@ impl Workspace {
         let bounds = cx.observe_window_bounds(window, |ws, window, cx| {
             ws.settings.window = Some(state::frame(window.window_bounds().get_bounds()));
             ws.settings.display = window.display(cx).map(|d| u32::from(d.id()));
+            cx.notify(); // the headers' titles are cut to the panes' widths
         });
         let quit = cx.on_app_quit(|ws, _| {
             ws.save_settings();
@@ -328,12 +342,13 @@ impl Workspace {
             ws.set_appearance(look_view::is_dark(window.appearance()), cx)
         });
         // shortcut: every notify of the workspace brings what render draws from up to date (R5),
-        // and gives each grid its input; a pushed screen reaches its grid from the poll instead
-        // (`poll_grids`). Phase 5 (the model as entities) removes this observer
-        let prepare = cx.observe_self(|ws, cx| {
+        // and gives each grid and section its input; a pushed screen reaches its grid from the poll
+        // instead (`poll_grids`). Phase 5 (the model as entities) removes this observer
+        let prepare = cx.observe_in(&cx.entity(), window, |ws, _, window, cx| {
             let seen = ws.screens_seen();
             ws.prepare();
             ws.sync_grids(&seen, cx);
+            ws.sync_sections(window, cx);
         });
         let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
         let mut ws = Workspace {
@@ -387,6 +402,12 @@ impl Workspace {
             floats: Default::default(),
             grids: HashMap::new(),
             grid_renders: Rc::default(),
+            sections: HashMap::new(),
+            section_renders: Rc::default(),
+            pulse: cx.new(|_| pulse_view::Pulse::new()),
+            pulse_wanted: false,
+            pulse_root: None,
+            hovered_pane: None,
             fade: Default::default(),
             overview: Default::default(),
             updates,
@@ -406,47 +427,8 @@ impl Workspace {
         let seen = ws.screens_seen();
         ws.prepare(); // the first frame comes before any notify
         ws.sync_grids(&seen, cx);
+        ws.sync_sections(window, cx);
         ws
-    }
-
-    /// The target block and its screen (an empty one until the first arrives: keys typed by then
-    /// still go to the program).
-    fn target_screen(&self) -> Option<(String, String, Arc<render::Frame>)> {
-        let (sid, id, _) = self.target()?;
-        let f = self.app.model().screens.get(&id).cloned().unwrap_or_default();
-        Some((sid, id, f))
-    }
-
-    /// (session id, target block id, whether it is zoomed) of the selected session's active window.
-    fn target(&self) -> Option<(String, String, bool)> {
-        let sid = self.session_id.clone()?;
-        let m = self.app.model();
-        let s = m.session(&sid)?;
-        let w = s.windows.get(s.active)?;
-        Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
-    }
-
-    /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
-    /// killed from the CLI, or its host went away) hands over to the session now in its place.
-    fn settle(&mut self, rows: &[SessionRow]) {
-        if let Some(i) = rows.iter().position(|r| Some(&r.id) == self.session_id.as_ref()) {
-            self.selected_at = i;
-            self.use_host(rows[i].host);
-            return;
-        }
-        self.selected_at = self.selected_at.min(rows.len().saturating_sub(1));
-        self.session_id = rows.get(self.selected_at).map(|r| r.id.clone());
-        self.use_host(rows.get(self.selected_at).map_or(0, |r| r.host));
-    }
-
-    /// Run a layout method on the selected session; redraw.
-    fn call(&mut self, method: &str, mut params: serde_json::Value, cx: &mut Context<Self>) {
-        let Some(sid) = self.session_id.clone() else { return };
-        params["session_id"] = json!(sid);
-        self.app.act_later(method, params, drop);
-        let rows = self.rows();
-        self.settle(&rows);
-        cx.notify();
     }
 }
 
@@ -478,6 +460,10 @@ mod hosts_view;
 mod keys;
 #[path = "view_look.rs"]
 mod look_view;
+#[path = "view_pulse.rs"]
+mod pulse_view;
+#[path = "view_sections.rs"]
+mod sections_view;
 #[path = "view_start.rs"]
 mod start;
 #[path = "view_state.rs"]
@@ -486,6 +472,7 @@ pub(crate) use bars::Tip;
 pub use drawn_view::{drawing, drawn, sel};
 pub use grid_view::GridDrawn;
 pub use look_view::is_dark;
+pub use pulse_view::Pulse;
 pub use start::{init, install, quits, run};
 #[path = "view_menus.rs"]
 mod menus;

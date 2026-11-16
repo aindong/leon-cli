@@ -34,6 +34,10 @@ pub fn open_with<'a>(
 /// keeps a selector's bounds after its element is gone, so the view's own record says what's drawn.
 pub fn at(cx: &mut VisualTestContext, sel: &str) -> Option<Bounds<Pixels>> {
     cx.run_until_parked();
+    // then a frame that draws every view, and nothing after it: GPUI notes an element's bounds only
+    // when it prepaints, and a cached view reused from the last frame prepaints none of its
+    // elements (GPUI phase 3). The update draws as it ends, with no task run in between.
+    cx.update(|window, _| window.refresh());
     if !view::drawn().contains(sel) {
         return None;
     }

@@ -130,6 +130,8 @@ pub struct Model {
     pub screens: HashMap<String, Arc<Frame>>,
     /// Per block, how many screen updates came: what a redraw check compares.
     pub screen_updates: HashMap<String, u64>,
+    /// How many times the sessions were fetched (each `refresh`, on any thread).
+    pub fetches: u64,
 }
 
 impl Model {
@@ -213,6 +215,7 @@ impl Shared {
         }
         // screens go with the watch set (`Remote::watch`), not here: a refetch can skip a session
         m.sessions = sessions;
+        m.fetches += 1;
         drop(m);
         drop(c);
         self.bump();

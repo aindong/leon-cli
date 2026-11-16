@@ -10,34 +10,30 @@ const ROW: f32 = 30.;
 const LABEL: f32 = 24.;
 
 impl Workspace {
-    pub(super) fn render_sidebar(
-        &self,
-        rows: &[SessionRow],
-        list: SidebarList,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let t = &self.theme;
+    /// Drawn from `input` (view_sections.rs).
+    pub(super) fn render_sidebar(&self, input: &SidebarInput, cx: &mut Context<Self>) -> impl IntoElement {
+        let (t, rows, list) = (&input.theme, &input.rows, input.list);
         let frame = self.pulse();
         let mut items = div().flex().flex_col().gap(px(1.)).px(px(8.)).pt(px(4.));
-        let machines = self.hosts.machines();
+        let machines = &input.hosts;
         // with hosts, each machine's label goes before its sessions (rows come in machine order)
         let activity = list == SidebarList::Activity;
-        let grouped = self.grouped() && !activity;
+        let grouped = input.grouped && !activity;
         let mut labelled = 0;
         for (i, row) in rows.iter().enumerate().filter(|_| !activity) {
             while grouped && labelled <= row.host {
-                items = items.child(self.host_label(labelled, &machines[labelled], cx));
+                items = items.child(self.host_label(labelled, &machines[labelled], t, cx));
                 labelled += 1;
             }
-            if grouped && self.host_collapsed(&machines[row.host].label) {
+            if grouped && machines[row.host].collapsed {
                 continue;
             }
-            let selected = self.session_id.as_deref() == Some(row.id.as_str());
+            let selected = input.selected.as_deref() == Some(row.id.as_str());
             if list == SidebarList::SessionsOnly {
                 items = items.child(self.session_row(i, row, selected, frame, cx));
                 continue;
             }
-            let open = !self.collapsed.contains(&row.id);
+            let open = !input.collapsed.contains(&row.id);
             items = items.child(self.session_label(i, row, open, frame, cx));
             if !open {
                 continue;
@@ -93,13 +89,13 @@ impl Workspace {
             items = items.child(div().h(px(6.)));
         }
         while grouped && labelled < machines.len() {
-            items = items.child(self.host_label(labelled, &machines[labelled], cx));
+            items = items.child(self.host_label(labelled, &machines[labelled], t, cx));
             labelled += 1;
         }
         if activity {
-            items = self.render_activity(cx);
+            items = self.render_activity(&input.activity, input.width, t, cx);
         }
-        let width = self.settings.sidebar_width;
+        let width = input.width;
         div()
             .id("sidebar")
             .debug_selector(|| sel("sidebar".into()))

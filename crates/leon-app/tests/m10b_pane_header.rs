@@ -8,6 +8,9 @@ use m10b_support::*;
 
 #[gpui::test]
 fn each_pane_has_a_header_above_its_terminal(cx: &mut TestAppContext) {
+    // a shell that sets no title of its own (a login zsh's prompt may name the window user@host),
+    // so the header names the program
+    std::env::set_var("SHELL", "/bin/sh");
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
     cx.simulate_keystrokes("cmd-d");

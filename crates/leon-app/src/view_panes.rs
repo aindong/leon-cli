@@ -35,6 +35,21 @@ impl Workspace {
         Some((w, ids))
     }
 
+    /// Each pane of window `w` with its rect's size and kind (`pane`, `dock`, `float`), as
+    /// `render_panes` lays them out (a slide moves a drawer, never resizes it).
+    pub(super) fn pane_rects(
+        &self,
+        w: &leon_core::Window,
+        window: &Window,
+    ) -> Vec<(String, panes::Rect, &'static str)> {
+        let placed = self.placed(w, self.pane_area(window));
+        let t = placed.tiles;
+        let l = w.layout.as_ref().map(|tree| panes::tiles(tree, w.zoomed.as_deref(), (t.w, t.h))).unwrap_or_default();
+        let tiles = l.panes.into_iter().map(|p| (p.block_id, p.rect, "pane"));
+        let docks = placed.docks.into_iter().map(|d| (d.block_id, d.rect, "dock"));
+        tiles.chain(docks).chain(placed.floats.into_iter().map(|f| (f.block_id, f.rect, "float"))).collect()
+    }
+
     /// The active window's panes, placed by `panes::tiles` in the pane area (the window less the
     /// sidebar and the titlebar row, so the size is known now, not a frame late) less its
     /// drawers, then the drawers and floats over them (`render_overlays`).
@@ -124,15 +139,26 @@ impl Workspace {
         let header = headers.then(|| match grab {
             Some(g) => div()
                 .on_mouse_down(MouseButton::Left, self.grab_listener(&id, g, cx))
-                .child(self.render_header(&id, focused, rect.w, cx))
+                .child(self.header_section(&id, rect.w, cx))
                 .into_any_element(),
-            None => self.render_header(&id, focused, rect.w, cx).into_any_element(),
+            None => self.header_section(&id, rect.w, cx),
         });
         let name = format!("{kind}-{id}");
         div()
             .id(SharedString::from(name.clone()))
             .debug_selector(|| sel(name))
             .group(SharedString::from(format!("pane-{id}")))
+            .on_hover({
+                let id = id.clone();
+                cx.listener(move |ws, on: &bool, _, cx| {
+                    if *on {
+                        ws.hovered_pane = Some(id.clone());
+                    } else if ws.hovered_pane.as_ref() == Some(&id) {
+                        ws.hovered_pane = None;
+                    }
+                    cx.notify();
+                })
+            })
             .absolute()
             .left(px(rect.x))
             .top(px(rect.y))
@@ -153,7 +179,7 @@ impl Workspace {
                         .left_0()
                         .right_0()
                         .bg(rgb(t.bg))
-                        .child(self.render_header(&id, focused, rect.w, cx)),
+                        .child(self.header_section(&id, rect.w, cx)),
                 )
             })
             .child(self.terminal_area(&id, on_link, cx).child(canvas))
@@ -303,13 +329,11 @@ impl Render for Workspace {
             active: window.is_window_active(),
             app: self.app.clone(),
         };
-        cx.defer_in(window, move |ws, _, _| ws.drew_frame(showed));
+        cx.defer_in(window, move |ws, _, cx| ws.drew_frame(showed, cx));
         let stats = self.stats.clone();
         if stats.borrow().enabled {
             stats.borrow_mut().render_start = Some(Instant::now());
         }
-        let rows = self.rows();
-        let current = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
         let body_shown = self.shown();
         let preview = self.render_preview(window, cx).filter(|_| !self.stopped);
         // the overview takes the sidebar's and the panes' place, in the same root as they are, so
@@ -327,12 +351,11 @@ impl Render for Workspace {
                 .flex()
                 .flex_col()
                 .min_w(px(0.))
-                .when(self.titlebar_shown() && !self.stopped, |d| d.child(self.render_titlebar(current, cx)))
+                .when(self.titlebar_shown() && !self.stopped, |d| d.child(self.titlebar_section(cx)))
                 .child(body);
             // a stopped server's sessions are gone: nothing of them stays drawn
-            let sidebar =
-                self.places().sidebar.filter(|_| !self.stopped).map(|list| self.render_sidebar(&rows, list, cx));
-            sidebar.map(IntoElement::into_any_element).into_iter().chain([column.into_any_element()]).collect()
+            let sidebar = self.places().sidebar.filter(|_| !self.stopped).map(|_| self.sidebar_section(cx));
+            sidebar.into_iter().chain([column.into_any_element()]).collect()
         };
         div()
             .key_context("Workspace")

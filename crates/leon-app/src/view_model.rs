@@ -155,33 +155,6 @@ impl Workspace {
         (self.epoch.elapsed().as_millis() / SPIN.as_millis()) as u64
     }
 
-    /// The pulse's frame while a working indicator is drawn: in the sidebar's rows, the top tabs,
-    /// or a visible pane's header (its own state, which a blocked pane beside it would hide).
-    pub(super) fn spinning(&self, rows: &[SessionRow]) -> Option<u64> {
-        let working = |i: &Option<Indicator>| matches!(i, Some(Indicator::Working { .. }));
-        // the overview hides the sidebar, the tabs and the headers: only its cards spin then
-        if self.overview_shown() {
-            return self.overview_cards().iter().any(|c| working(&c.status)).then(|| self.pulse());
-        }
-        let places = self.places();
-        let sidebar = places.sidebar.is_some()
-            && rows.iter().any(|r| working(&r.status) || r.windows.iter().any(|w| working(&w.status)));
-        let selected = rows.iter().filter(|r| Some(&r.id) == self.session_id.as_ref());
-        let tabs = places.top_tabs && selected.flat_map(|r| &r.windows).any(|w| working(&w.status));
-        let headers = {
-            let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
-            let m = self.app.model();
-            // a float's or drawer's header shows even with headers off
-            let header = |s: &crate::remote::Session, b: &crate::remote::Block| {
-                self.settings.pane_headers || s.overlays.get(&b.window_id).is_some_and(|o| o.contains(&b.id))
-            };
-            shown.iter().any(|id| {
-                m.block(id).is_some_and(|(s, b)| header(s, b) && working(&status::indicator_of(&b.newest_first())))
-            })
-        };
-        (sidebar || tabs || headers).then(|| self.pulse())
-    }
-
     pub fn font_size(&self) -> f32 {
         self.font_size
     }
@@ -214,7 +187,6 @@ impl Workspace {
             r.status.hash(&mut h);
             r.windows.iter().for_each(|w| (w.status, &w.title).hash(&mut h));
         }
-        self.spinning(&rows).hash(&mut h);
         (self.sidebar, self.font_size.to_bits(), self.pending.len(), self.palette.is_some()).hash(&mut h);
         let st = &self.settings;
         (st.tab_style, st.pane_headers, st.sidebar_width.to_bits()).hash(&mut h);
