@@ -206,13 +206,14 @@ on the main thread, list the file here with its reason, and never use it to driv
 ## Consequences
 
 - Where the app is today (each moved by the refactor's phases): one `Render` for the whole
-  window (`view_panes.rs`, `impl Render for Workspace`; R1, R3); model work in `render`
-  (`sync_pane`, `run_find`, `settle`, the focus event; R5); a poll that hashes everything drawn
+  window (`view_panes.rs`, `impl Render for Workspace`; R1, R3); the model work `render` did
+  (`sync_pane`, `run_find`, `settle`, the focus event) runs in `prepare`, an observer of every
+  notify of the workspace, until the views and entities take it over (phases 2 and 5; R5); a poll that hashes everything drawn
   and notifies the whole window (`view_poll.rs`; R4); slides, fades and the spinner clocked by
   that poll (R6); keys for the palette, find and modes handled by hand inside one `key_down`
   under one focus handle (R9); no `InputHandler`, so no input method (R9); every call to This
   Mac's server waits on the main thread, since its `Remote` has no queue (`Remote::enqueue`):
-  actions, each key's write, `fit` in prepaint and `watch` in render (R5, R8).
+  actions, each key's write, `fit` in prepaint and `watch` in `prepare` (R8).
 - Already in line: panes paint through `canvas` (R7); std threads only in GPUI-free modules,
   reaching the UI through a wake channel (R8); tests on `TestAppContext` (R10); GPUI from
   crates.io unpatched (R11). The overview (PR #19, open) adds the first cached views, its
