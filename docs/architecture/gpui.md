@@ -111,6 +111,11 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   cached view unless that view was notified, and a hash over everything costs every view on
   every change. Check: review, and for each input a view draws from, a test that changing it
   renders the view again.
+  Stop-gap until phase 5 (the model as entities): the sidebar, title bar and pane headers are
+  cached views that render through the workspace (`ws.update`, the helpers as they are) and
+  hold a typed input of exactly what their helper reads; the workspace notifies one when its
+  input changed, and in debug builds its render checks the stored input against a fresh one.
+  It goes when the views observe the model's entities instead.
 - **R5. `render`, `prepaint` and `paint` only draw.** No server calls, fetches, model changes,
   focus events or I/O in them; that work happens where the state changes (an event, an action,
   the reader's wake). The one exception is an element fitting its own content, as a pane's grid
