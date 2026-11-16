@@ -255,7 +255,7 @@ impl Shot {
         let content = term.renderable_content();
         let (lines, cols) = (term.screen_lines(), term.columns());
         let mut cells = Vec::with_capacity(lines * cols);
-        cells.extend(content.display_iter.map(|c| Indexed { point: c.point, cell: c.cell.clone() }));
+        cells.extend(content.display_iter.map(|c| Indexed { point: c.point, cell: drawn(c.cell) }));
         Shot {
             lines,
             cols,
@@ -267,6 +267,15 @@ impl Shot {
             history: term.grid().history_size(),
         }
     }
+}
+
+/// `cell` as a frame draws it, sharing nothing with the emulator: a shared mark store would make
+/// the emulator's next mark on the cell copy all of them (alacritty keeps any number).
+fn drawn(cell: &Cell) -> Cell {
+    let mut out = Cell { c: cell.c, fg: cell.fg, bg: cell.bg, flags: cell.flags, extra: None };
+    let marks = cell.zerowidth().into_iter().flatten().copied().filter(|&c| !is_bidi_control(c));
+    marks.take(MAX_MARKS).for_each(|m| out.push_zerowidth(m));
+    out
 }
 
 /// The frame of `shot`, as `frame` builds it.

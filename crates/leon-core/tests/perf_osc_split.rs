@@ -122,6 +122,9 @@ fn random_splits_give_what_one_byte_at_a_time_gives() {
         for _ in 0..rng.below(300) {
             if rng.below(8) == 0 {
                 stream.push(rng.next() as u8);
+            } else if rng.below(40) == 0 {
+                // a run long enough to go out uncopied
+                stream.extend(std::iter::repeat_n(b'x', 900 + rng.below(400)));
             } else {
                 stream.extend_from_slice(TOKENS[rng.below(TOKENS.len())]);
             }
