@@ -154,3 +154,9 @@ pub fn stays(cx: &mut VisualTestContext, t: &Terminal, size: (u16, u16)) -> bool
     }
     t.size() == size
 }
+
+/// What `leon config set KEY VALUE` does: rewrite init.lua, then reload the running server.
+pub fn config_set(s: &Setup, key: &str, value: serde_json::Value) {
+    leon_lua::rewrite::write_setting(&s.dir.path().join("init.lua"), key, &value).unwrap();
+    s.app.call("server.config_reload", serde_json::json!({})).unwrap();
+}

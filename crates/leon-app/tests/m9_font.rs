@@ -32,7 +32,7 @@ fn font_size_keys_resize_every_pane(cx: &mut TestAppContext) {
         assert!(b.0 < a.0 && b.1 < a.1, "a bigger font gives fewer rows and columns: {a:?} -> {b:?}");
     }
     // the hidden tab keeps its size until it is shown
-    assert_eq!(hidden.size(), h, "a hidden tab keeps its size through a font change");
+    assert!(stays(cx, &hidden, h), "a hidden tab keeps its size through a font change");
     cx.simulate_keystrokes("cmd-2");
     assert!(shows(cx, |_| hidden.size() != h), "shown, the tab fits the font");
     cx.simulate_keystrokes("cmd-1");

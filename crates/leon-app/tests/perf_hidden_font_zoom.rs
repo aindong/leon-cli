@@ -22,11 +22,11 @@ fn a_pane_a_zoom_covers_fits_the_font_when_the_zoom_ends(cx: &mut TestAppContext
 
     cx.simulate_keystrokes("cmd-=");
     assert!(shows(cx, |_| zoomed.size() != before), "the zoomed pane follows the font");
-    let kept = covered.size();
+    let kept = stays(cx, &covered, split);
     cx.simulate_keystrokes("cmd-shift-enter");
     let fitted = shows(cx, |_| covered.size() != split);
     let got = covered.size();
     s.app.stop();
-    assert_eq!(kept, split, "a pane a zoom covers keeps its size through a font change");
+    assert!(kept, "a pane a zoom covers keeps its size through a font change");
     assert!(fitted && got.0 < split.0 && got.1 < split.1, "unzoomed, it fits the bigger font: {split:?} -> {got:?}");
 }

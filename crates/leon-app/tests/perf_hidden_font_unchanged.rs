@@ -16,8 +16,7 @@ fn an_unchanged_font_refits_nothing(cx: &mut TestAppContext) {
     assert_eq!(hidden.size(), (24, 80), "a pane never shown has the server's default size");
 
     // a reload that changes the theme and leaves the font
-    leon_lua::rewrite::write_setting(&s.dir.path().join("init.lua"), "theme", &json!("leon-light")).unwrap();
-    s.app.call("server.config_reload", json!({})).unwrap();
+    config_set(&s, "theme", json!("leon-light"));
     ws.update(cx, |ws, cx| {
         ws.sync_keymap();
         cx.notify();

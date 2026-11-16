@@ -2,15 +2,8 @@
 mod m9_support;
 use gpui::TestAppContext;
 use leon_app::theme::{DARK, LIGHT};
-use leon_lua::rewrite::write_setting;
 use m9_support::*;
-use serde_json::{json, Value};
-
-/// What `leon config set KEY VALUE` does: rewrite init.lua, then reload the running server.
-fn config_set(s: &Setup, key: &str, value: Value) {
-    write_setting(&s.dir.path().join("init.lua"), key, &value).unwrap();
-    s.app.call("server.config_reload", json!({})).unwrap();
-}
+use serde_json::json;
 
 #[gpui::test]
 fn settings_apply_live(cx: &mut TestAppContext) {

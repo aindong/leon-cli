@@ -36,7 +36,7 @@ fn font_back_leaves_a_pane_a_zoom_covers_at_its_size(cx: &mut TestAppContext) {
     cx.run_until_parked();
     cx.simulate_keystrokes("cmd-0");
     cx.run_until_parked();
-    let kept = t.size();
+    let kept = stays(cx, &t, at_bigger);
     cx.simulate_keystrokes("cmd-shift-enter");
     let back = shows(cx, |_| t.size() == before);
     let after = t.size();
@@ -45,6 +45,6 @@ fn font_back_leaves_a_pane_a_zoom_covers_at_its_size(cx: &mut TestAppContext) {
         bigger && at_bigger.0 < before.0 && at_bigger.1 < before.1,
         "unzoomed, it fits the bigger font: {before:?} -> {at_bigger:?}"
     );
-    assert_eq!(kept, at_bigger, "covered, it keeps its size through cmd-0");
+    assert!(kept, "covered, it keeps its size through cmd-0");
     assert!(back, "unzoomed after cmd-0, it has its first size again: {before:?} vs {after:?}");
 }

@@ -15,8 +15,7 @@ fn a_font_from_init_lua_fits_only_the_shown_panes(cx: &mut TestAppContext) {
     assert!(shows(cx, |_| shown.size() != (24, 80)), "the shown pane was fitted");
     let before = shown.size();
 
-    leon_lua::rewrite::write_setting(&s.dir.path().join("init.lua"), "font.size", &json!(15)).unwrap();
-    s.app.call("server.config_reload", json!({})).unwrap();
+    config_set(&s, "font.size", json!(15));
     ws.update(cx, |ws, cx| {
         ws.sync_keymap();
         cx.notify();
