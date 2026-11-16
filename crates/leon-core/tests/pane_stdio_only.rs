@@ -68,9 +68,9 @@ fn a_pane_sees_no_descriptor_another_thread_holds() {
 fn a_pane_starts_as_before() {
     let dir = tempfile::tempdir().unwrap();
     let cwd = dir.path().canonicalize().unwrap();
-    // SAFETY: set before this test starts any program; no other test reads it.
-    unsafe { std::env::set_var("LEON_TEST_FROM_SERVER", "server") };
-    let mut spec = sh(r#"echo "env=$LEON_TEST_FROM_SERVER/$LEON_TEST_SPEC shell=$SHELL"
+    // HOME as the server has it: setting a variable here would race the tests that read the env
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut spec = sh(r#"echo "env=$HOME/$LEON_TEST_SPEC shell=$SHELL"
 echo "cwd=$(pwd -P)"
 [ -t 0 ] && [ -t 1 ] && [ -t 2 ] && echo stdio=tty
 (exec 3</dev/tty) 2>/dev/null && echo ctty=yes
@@ -84,7 +84,7 @@ echo started; exec sleep 30"#);
     let (sid, pid) = (unsafe { libc::getsid(t.pid()) }, t.pid());
     assert_eq!(sid, pid, "the program leads its own session");
     let shell = std::env::var("SHELL").unwrap_or_default();
-    assert!(text.contains("env=server/spec shell="), "{text}");
+    assert!(text.contains(&format!("env={home}/spec shell=")), "{text}");
     if !shell.is_empty() {
         assert!(text.contains(&format!("shell={shell}")), "SHELL is the server's: {text}");
     }

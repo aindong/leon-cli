@@ -6,7 +6,7 @@
 
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -229,6 +229,9 @@ pub struct Workspace {
     /// Scrollback, selection, find and links per pane.
     term: scroll::TermUi,
     floats: floats_view::FloatUi,
+    /// Each shown pane's grid view (view_grid.rs), and how often each rendered.
+    grids: HashMap<String, grid_view::GridSlot>,
+    grid_renders: Rc<RefCell<HashMap<String, u64>>>,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
     /// The translucent window (view_glass.rs).
@@ -330,10 +333,14 @@ impl Workspace {
             ws.set_appearance(look_view::is_dark(window.appearance()), cx);
             ws.update_glass(window, cx)
         });
-        // shortcut: every notify of the workspace brings what render draws from up to date (R5);
-        // phase 2 moves `sync_pane` to each pane's grid view, which a child's notify won't reach
-        // here, and phase 5 (the model as entities) removes this observer
-        let prepare = cx.observe_self(|ws, _| ws.prepare());
+        // shortcut: every notify of the workspace brings what render draws from up to date (R5),
+        // and gives each grid its input; a pushed screen reaches its grid from the poll instead
+        // (`poll_grids`). Phase 5 (the model as entities) removes this observer
+        let prepare = cx.observe_self(|ws, cx| {
+            let seen = ws.screens_seen();
+            ws.prepare();
+            ws.sync_grids(&seen, cx);
+        });
         let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
         let mut ws = Workspace {
             app,
@@ -384,6 +391,8 @@ impl Workspace {
             focus_event: None,
             term,
             floats: Default::default(),
+            grids: HashMap::new(),
+            grid_renders: Rc::default(),
             fade: Default::default(),
             glass: glass_view::GlassUi::new(window.window_handle()),
             overview: Default::default(),
@@ -401,40 +410,12 @@ impl Workspace {
             _appearance: appearance,
             _prepare: prepare,
         };
+        let seen = ws.screens_seen();
         ws.prepare(); // the first frame comes before any notify
+        ws.sync_grids(&seen, cx);
         ws.note_reduce_transparency();
         ws.update_glass(window, cx);
         ws
-    }
-
-    /// The target block and its screen (an empty one until the first arrives: keys typed by then
-    /// still go to the program).
-    fn target_screen(&self) -> Option<(String, String, Arc<render::Frame>)> {
-        let (sid, id, _) = self.target()?;
-        let f = self.app.model().screens.get(&id).cloned().unwrap_or_default();
-        Some((sid, id, f))
-    }
-
-    /// (session id, target block id, whether it is zoomed) of the selected session's active window.
-    fn target(&self) -> Option<(String, String, bool)> {
-        let sid = self.session_id.clone()?;
-        let m = self.app.model();
-        let s = m.session(&sid)?;
-        let w = s.windows.get(s.active)?;
-        Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
-    }
-
-    /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
-    /// killed from the CLI, or its host went away) hands over to the session now in its place.
-    fn settle(&mut self, rows: &[SessionRow]) {
-        if let Some(i) = rows.iter().position(|r| Some(&r.id) == self.session_id.as_ref()) {
-            self.selected_at = i;
-            self.use_host(rows[i].host);
-            return;
-        }
-        self.selected_at = self.selected_at.min(rows.len().saturating_sub(1));
-        self.session_id = rows.get(self.selected_at).map(|r| r.id.clone());
-        self.use_host(rows.get(self.selected_at).map_or(0, |r| r.host));
     }
 
     /// Run a layout method on the selected session; redraw.
@@ -466,6 +447,8 @@ mod find;
 mod floats_view;
 #[path = "view_glass.rs"]
 mod glass_view;
+#[path = "view_grid.rs"]
+mod grid_view;
 #[path = "view_handlers.rs"]
 mod handlers;
 #[path = "view_header.rs"]
@@ -482,6 +465,7 @@ mod start;
 mod state;
 pub(crate) use bars::Tip;
 pub use drawn_view::{drawing, drawn, sel};
+pub use grid_view::GridDrawn;
 pub use look_view::is_dark;
 pub use start::{init, install, quits, run};
 #[path = "view_menus.rs"]

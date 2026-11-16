@@ -61,6 +61,9 @@ impl Workspace {
         }
         self.poll_hosts();
         let replied = self.poll_terms();
+        // a pushed screen redraws its pane's grid alone; the root only for a pane scrolled back,
+        // whose "↓ N new lines" it counts
+        let scrolled = self.poll_grids(cx);
         if let Some(text) = self.term.clip.take() {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         }
@@ -69,7 +72,7 @@ impl Workspace {
         self.stats.borrow_mut().report(); // and on the tick, for the last frames before a quiet spell
         self.refresh_keymap(false, cx);
         let now = self.signature();
-        if now != self.seen || self.sliding() || self.fading() || replied {
+        if now != self.seen || self.sliding() || self.fading() || replied || scrolled {
             self.seen = now;
             self.polls.1 += 1;
             self.undrawn = self.undrawn.saturating_add(1);
