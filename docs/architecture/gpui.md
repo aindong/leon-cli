@@ -117,6 +117,10 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   asks the server for its size from `prepaint` (Zed's terminal element does the same). Why: a
   cached view's `render` does not run, so work done there stops happening; a dirty one runs it
   every frame. And a `cx.notify()` made while drawing asks for no frame, so its change waits.
+  Bookkeeping about the frame itself (that one was drawn) may be scheduled from `render` with
+  `cx.defer_in`, never model work or I/O: it runs once `Window::draw` returns, outside the draw
+  phase, on macOS and on the test platform (`Window::defer`, `window.rs:1541`; `flush_effects`,
+  `app.rs:1201`), where `window.on_next_frame` never runs (`platform/test/window.rs:235`).
   Check: review.
 - **R6. Animate through GPUI.** A transition with a fixed length (a slide, a fade) uses
   `with_animation` or `request_animation_frame` in the view that moves; a slow periodic change
@@ -216,5 +220,10 @@ on the main thread, list the file here with its reason, and never use it to driv
 - The refactor costs more types (an entity per pane, sidebar, title bar, overlay) and state
   that moves out of `Workspace` behind `Entity` handles; tests that read `Workspace` fields read
   the child entities instead.
+- Until the model is entities (phase 5), `render` reads the live model the reader thread writes
+  off the UI thread. A frame drawn between that write and the poll's wake (a hover refresh, a
+  resize, the display link first) shows a model the workspace has not reconciled yet, for one
+  frame: a destroyed selected session as the empty window, a row just scrolled into history
+  blank in a pane scrolled back. Phase 5's entities, changed only on the main thread, close it.
 - What GPUI itself costs stays until an upgrade: the display link's idle ticks while the window
   is visible, and a key's echo waiting for the next tick. Neither is patched (R11).
