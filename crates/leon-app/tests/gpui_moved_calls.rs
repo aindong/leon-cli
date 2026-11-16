@@ -49,7 +49,12 @@ fn a_drawer_hidden_from_the_cli_slides(cx: &mut TestAppContext) {
     let id = view_window(&s.app, &sid)["docked"][0]["block_id"].as_str().unwrap().to_string();
     let dock = format!("dock-{id}");
     assert!(shows(cx, |cx| drawn(cx, &dock)), "the drawer shows");
-    assert!(shows(cx, |cx| !ws.read_with(cx, |ws, _| ws.sliding())), "its first slide ends");
+    // a slide ends on the poll's own timer, which runs on the test clock: move it with real time
+    let rested = |cx: &mut gpui::VisualTestContext| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(10));
+        !ws.read_with(cx, |ws, _| ws.sliding())
+    };
+    assert!(shows(cx, rested), "its first slide ends");
     toggle(false);
     let slid = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.sliding()));
     s.app.stop();
