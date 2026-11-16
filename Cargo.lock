@@ -3330,6 +3330,7 @@ dependencies = [
  "leon-hosts",
  "leon-lua",
  "leon-server",
+ "leon-update",
  "objc2",
  "serde",
  "serde_json",
