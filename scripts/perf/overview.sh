@@ -49,7 +49,7 @@ done
 perf_note "end"
 awk '/^overview / { printf "open %.1f\n", ($3 - $2) / 1e6 } /^overview-filled / { printf "filled %.1f\n", ($3 - $2) / 1e6 }' \
   "$RUN/frames.log" >"$RUN/results.txt"
-median() { sort -n | awk '{ v[NR] = $1 } END { if (!NR) print "none"; else if (NR % 2) print v[(NR + 1) / 2]; else printf "%.1f\n", (v[NR / 2] + v[NR / 2 + 1]) / 2 }'; }
+median() { sort -n | awk '{ v[NR] = $1 } END { if (!NR) print "none"; else if (NR % 2) print v[(NR + 1) / 2]; else printf "%.2f\n", (v[NR / 2] + v[NR / 2 + 1]) / 2 }'; }
 open=$(awk '$1 == "open" { print $2 }' "$RUN/results.txt" | median)
 filled=$(awk '$1 == "filled" { print $2 }' "$RUN/results.txt" | median)
 n=$(grep -c '^filled' "$RUN/results.txt" || true)
