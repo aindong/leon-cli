@@ -67,9 +67,15 @@ pub(super) fn terminal_canvas(
         },
         move |bounds, (frame, cell_w, line_h, size, id), window, cx| {
             let p = scroll::Painted { origin: bounds.origin, cell: (cell_w, line_h), size };
-            painted.borrow_mut().insert(id, p);
             paint_frame(&frame, &marks, &theme, bounds, (cell_w, line_h), (&family, font_size), active, window, cx);
-            stats.borrow_mut().painted();
+            if stats.borrow().enabled {
+                let cursor = frame.cursor.as_ref().map(|c| (c.line, c.col));
+                let text = frame.rows.iter().flatten().any(|s| !s.text.trim().is_empty());
+                if stats.borrow_mut().painted(&id, cursor, text) {
+                    window.on_next_frame(move |_, _| stats.borrow_mut().presented());
+                }
+            }
+            painted.borrow_mut().insert(id, p);
         },
     )
     .size_full()

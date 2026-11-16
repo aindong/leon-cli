@@ -10,6 +10,12 @@ impl Workspace {
         if self.stopped {
             return; // nothing to type into: the notice's buttons and ⌘Q are what's left
         }
+        if self.stats.borrow().enabled {
+            if let (Some(id), Some(stamped)) = (self.target_block(), crate::input::current_event_stamp()) {
+                let cursor = self.drawn(&id).frame.cursor.map(|c| (c.line, c.col));
+                self.stats.borrow_mut().key(stamped, id, cursor);
+            }
+        }
         let ks = &match (self.native_key)() {
             Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
             None => ev.keystroke.clone(),
