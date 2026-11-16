@@ -105,3 +105,41 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   ids (shortcut). The palette lists New Session on each connected machine (`session.new {host}`)
   and Add Host… (`client.host.add`): a label, then an endpoint, each checked as `leon hosts add`
   checks them (`leon_hosts::hosts::add`), and saved through the hosts API.
+
+## Tailscale
+
+- **Discovery, not a new kind of host.** `leon hosts add --tailscale` and the app's Add Host… read
+  the local client's `tailscale status --json`, the only Tailscale command leon runs (no `up`,
+  `set` or `login`: leon never changes the user's Tailscale). A chosen machine is written to
+  `hosts.json` as an ordinary host (label: the first label of its MagicDNS name; endpoint:
+  `ssh://` and that name, or its first Tailscale address, IPv4 first, when
+  `CurrentTailnet.MagicDNSEnabled` is false), so links, resume, attach and the sidebar don't know
+  where it came from. Who a host is on the tailnet is worked out each time it is shown, by
+  matching the endpoint's host to a peer's MagicDNS name or address; nothing about Tailscale is
+  stored. `leon hosts list` and the app read the status only when there are hosts, and the app off its
+  UI thread, at start and when Add Host… opens.
+- **Finding the client.** `$LEON_TAILSCALE` names it (like `LEON_SSH`, for tests and odd installs);
+  else an executable `tailscale` in an absolute `PATH` entry; else, on macOS,
+  `/Applications/Tailscale.app/Contents/MacOS/Tailscale`, the app's binary, which acts as the CLI
+  when given arguments (the Mac app doesn't put `tailscale` on `PATH`). On Linux the packages put
+  it on `PATH`.
+- **The status is another program's output.** It is read with stdin and stderr closed, no
+  descriptor of ours (`stdio_only`), at most 8 MiB and within 3 s on a thread that is abandoned at
+  the deadline (a child of the client holding the pipe can't hang leon), then the client is
+  killed. It is parsed as plain JSON with every field optional: a field of the wrong type counts as
+  missing, at most 4096 peers are kept, and every string shown goes through `shown_text`. A peer's
+  name becomes a host only through `check_label` and the `Endpoint` parser, the same checks a typed
+  host gets, so a name with spaces, `;` or a leading `-` is refused. Not running (`BackendState`
+  other than `Running`), not installed, or failing is one line, and nothing else changes.
+- **Tailscale SSH.** A peer runs it when the status lists its `sshHostKeys` (Tailscale fills that
+  only then); it answers on port 22 with the tailnet identity, so the existing ssh path connects
+  without keys. For a peer without it, leon says to run `tailscale set --ssh` there or set up an ssh
+  key, at once, instead of failing later with ssh's error. The first connection still needs the
+  host key accepted (the app's ssh never prompts), so leon says to run `leon hosts check LABEL`
+  once; a policy that asks for a browser check prints "To authenticate, visit …", which the app
+  sorts as needing a login. Seeding `known_hosts` from `sshHostKeys` would skip that step, but it
+  trusts the status with host keys, so it is not done.
+- **leon on the other side.** A host without `leon` exits 127 from the fixed remote command, and
+  the link says how to install it there (Homebrew, or a release tarball) instead of ssh's words.
+- **Nothing listens.** This is still ssh: a server listening on the tailnet would be leon's first
+  network listener, and is a separate decision.

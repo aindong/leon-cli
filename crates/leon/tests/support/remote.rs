@@ -136,7 +136,9 @@ impl Remote {
     pub fn vars(&self) -> Vec<(String, String)> {
         let c = self.cmd();
         c.get_envs()
-            .filter(|(k, _)| k.to_str().is_some_and(|k| k == "LEON_SSH" || k.starts_with("FAKE_")))
+            .filter(|(k, _)| {
+                k.to_str().is_some_and(|k| k == "LEON_SSH" || k == "LEON_TAILSCALE" || k.starts_with("FAKE_"))
+            })
             .map(|(k, v)| (k.to_string_lossy().into_owned(), v.unwrap().to_string_lossy().into_owned()))
             .collect()
     }
