@@ -28,6 +28,9 @@ pub struct Effective {
     pub hint_patterns: Vec<String>,
     /// What a restored block does with its program's resume command: `ask`, `always` or `never`.
     pub resume: String,
+    /// How far the app fades the panes without the focus toward the window's background, from 0
+    /// (off) to 0.8.
+    pub fade_inactive_panes: f64,
 }
 
 /// A theme name for each OS appearance (the same one for both unless init.lua gives two).

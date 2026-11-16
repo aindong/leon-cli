@@ -35,6 +35,25 @@ of [the architecture](../architecture.md).
   needs, so a bare `leon app` binary logs once and posts nothing. The center's delegate queues a
   clicked notice's host label, session and block and wakes every window's poll; the window that knows the pane goes there (the folded
   notice opens Activity).
+- **Fading the panes without the focus.** With two or more panes on screen the app draws every
+  pane but the focused one (`floats::target`, so a focused float or drawer counts) blended toward
+  the window's background, header included: `fade::theme` moves each colour of the theme toward
+  `chrome`, and `fade::frame` does the same to the colours of the pane's screen before it is
+  painted. The four status colours are left out, so an indicator in a faded pane keeps its
+  colour, and a pane whose own indicator is blocked, error or done (what needs the user, above)
+  is not faded at all. Blocked holds however long the user looked at it; a done or error that
+  came while the pane had the focus in the key window was seen, so it fades once the user leaves
+  (the server keeps it until they come back, for Activity and the badge), and any change while
+  they are away needs them again. A pane alone
+  on screen is not faded, nor is anything while the focus is on a pane that isn't shown. The
+  sidebar, the tabs and the titlebar are not panes and never fade, and the fade doesn't read
+  whether the window is the key window. A pane's fade moves to a new target from where it is,
+  over a drawer's slide (`floats::SLIDE`, 120 ms, eased out; at once with Reduce Motion), so a
+  focus that moves on mid-fade never jumps; a pane seen for the first time is drawn in place.
+  The poll redraws only while a fade is on its way (`Workspace::fading`), so an idle app still
+  draws nothing. `leon.set("fade_inactive_panes", N)` is the strength, 0 (off) to 0.8; the
+  default, 0.35, is the strongest step at which body text keeps 4.5:1 on leon-dark and
+  leon-light. The app reads it from `server.settings`. `leon attach` doesn't fade.
 - **`leon notify`.** `dev.leon.terminal.report_status {state, title, msg}` (experimental) builds an
   OSC 7501 report (title and msg base64) and runs it through the same parser and store as PTY
   output, so every limit applies; text the parser would drop is refused (400) instead. `leon notify`

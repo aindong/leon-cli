@@ -243,6 +243,7 @@ message, and the setting keeps its default.
 | `repeat_time` | milliseconds, 0 (off) to 10000 | `500` |
 | `hint_patterns` | a list of regular expressions, at most 32 | `{}` |
 | `resume` | `"ask"`, `"always"` or `"never"` | `"ask"` |
+| `fade_inactive_panes` | a number, 0 (off) to 0.8 | `0.35` |
 
 `theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored; an unknown name is
 an error.
@@ -267,14 +268,21 @@ leon.set("resume", "always")
 ```
 
 `copy_on_select` makes the app copy a selection to the clipboard as soon as you make it, without
-⌘C. The app reads it with the keymap, so a reload takes effect within a second.
+⌘C.
 
 ```lua
 leon.set("copy_on_select", true)
 ```
 
-`repeat_time` is how long, in milliseconds, a repeatable binding's keys work without the prefix
-(above; 0 to 10000, default 500, 0 turns repeat off).
+`fade_inactive_panes` is how far the app fades the panes without the focus toward the window's
+background; a status indicator and a pane that needs you never fade.
+
+```lua
+leon.set("fade_inactive_panes", 0)
+```
+
+`repeat_time` is how long a repeatable binding's keys work without the prefix (above; 0 turns
+repeat off).
 
 `hint_patterns` adds regular expressions (Rust syntax) to what the app's hints label. Hints
 (`client.hints`, ⌘⇧H) put a short label on every URL, path, git hash, UUID, `0x` number, IPv4
@@ -293,8 +301,7 @@ or `q` leaves.
 
 The app notifies you (macOS banners, only from the bundled Leon.app) when a block becomes blocked
 (`notifications.blocked`), reports an error (`notifications.error`), or finishes a run of 30 s or
-more while the app is in the background (`notifications.done`). Each defaults to `true`; set it to
-`false` to turn that kind off. Blocked and error don't notify for the pane you are looking at, a block notifies at most
+more while the app is in the background (`notifications.done`). Blocked and error don't notify for the pane you are looking at, a block notifies at most
 once a minute per state, and at most four notices go out a minute in all (the rest come as one).
 
 ```lua
@@ -406,7 +413,7 @@ print("timed out:", slow.timed_out)
 | `leon.unbind(key)` | config | Remove a key's bindings; returns the count. |
 | `leon.mode(name[, {exclusive, prefix}])` | config | Declare a mode; `prefix` (one key) is `leon attach`'s for the `attach` mode. |
 | `leon.bindings([filter])`, `leon.modes()` | config | List bindings and modes made so far. |
-| `leon.set(name, value)` | config | A setting (Settings, above): `theme`, `font.family`, `font.size`, `notifications.*`, `copy_on_select`, `repeat_time`, `hint_patterns`, `resume`. |
+| `leon.set(name, value)` | config | One of the [settings](#settings). |
 | `leon.action{name, title, run, description?, args?}` | both | Define an action. |
 | `leon.invoke(name[, args])` | both | Run an action (nested at most 16 deep). |
 | `leon.session.<method>(params)` | both | Call a session method; fills `session_id`. |

@@ -39,6 +39,12 @@ impl Indicator {
         })
     }
 
+    /// The user is wanted here: blocked, an error, or a finish they haven't seen yet
+    /// (docs/architecture/attention.md). Working needs nobody.
+    pub fn needs_user(self) -> bool {
+        !matches!(self, Indicator::Working { .. })
+    }
+
     pub fn color(self, t: &Theme) -> u32 {
         match self {
             Indicator::Working { .. } => t.working,

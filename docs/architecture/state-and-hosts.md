@@ -131,7 +131,7 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
   `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an
   older `leon` in `/usr/local/bin` can win there; the dir is still on PATH.
-- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.5.0`), apart
+- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.6.0`), apart
   from the build's version. Each method doc carries `stability` (`stable`, `experimental`,
   `internal`), and optionally `deprecated` (`since`, `replacement`, `removal`) and
   `request_example`/`response_example`; all of it comes from one table,

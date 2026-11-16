@@ -67,7 +67,7 @@ The decisions, in six parts:
   scrollback, selection, find, links and mouse reporting, `leon attach`, the app keymap and look,
   and the agent skill.
 - [Switching and attention](architecture/attention.md): the session switcher, Activity, the
-  badges, notifications and `leon notify`.
+  badges, notifications, the fade of the panes without the focus, and `leon notify`.
 - [Repeat keys, copy mode and hints](architecture/keys-copy-hints.md): repeatable bindings in the
   app and `leon attach`, the app's copy mode and hints, and why `leon attach` has no copy mode.
 - [Floats and drawers in the app](architecture/floats.md): the shared client's overlays, where

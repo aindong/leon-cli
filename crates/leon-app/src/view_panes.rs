@@ -100,8 +100,9 @@ impl Workspace {
     }
 
     /// One pane's tile at `rect`: its header (always on a float or drawer, which `grab` moves when
-    /// given), its terminal, the find bar and jump labels, and the focus mark. `kind` names it in
-    /// tests (`pane-`, `float-`, `dock-`).
+    /// given), its terminal, the find bar and jump labels, and the focus mark. All but the find bar
+    /// (a control the user opened) are in the pane's own theme, faded without the focus. `kind`
+    /// names it in tests (`pane-`, `float-`, `dock-`).
     pub(super) fn pane_tile(
         &self,
         kind: &str,
@@ -111,7 +112,7 @@ impl Workspace {
         tiling: &Tiling,
         cx: &mut Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
-        let t = &self.theme;
+        let t = &self.pane_theme(id);
         let focused = tiling.target.as_deref() == Some(id);
         let id = id.to_string();
         let view = self.drawn(&id);
@@ -119,9 +120,9 @@ impl Workspace {
         let canvas = terminal_canvas(
             self.app.clone(),
             (tiling.sid.clone(), id.clone()),
-            (view.frame, marks),
+            (crate::fade::frame(view.frame, t.chrome, self.pane_fade(&id)), marks),
             tiling.active && focused,
-            (self.font_family.clone(), self.font_size, self.theme),
+            (self.font_family.clone(), self.font_size, *t),
             (tiling.stats.clone(), self.term.painted.clone()),
         );
         let headers = self.settings.pane_headers || kind != "pane";
@@ -270,7 +271,11 @@ impl Render for Workspace {
         self.settle(&rows);
         self.note_recent();
         let current = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
-        let body = match self.shown() {
+        // after `settle`, which may have moved to another session: the fades are aimed at the
+        // very panes this frame draws
+        let body_shown = self.shown();
+        self.note_fades(body_shown.as_ref().map_or(&[][..], |(_, ids)| ids));
+        let body = match body_shown {
             _ if self.stopped => self.render_stopped(cx).into_any_element(),
             Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
             None => self.render_empty(cx).into_any_element(),

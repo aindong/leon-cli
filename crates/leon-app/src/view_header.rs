@@ -17,7 +17,7 @@ impl Workspace {
         width: f32,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &self.theme;
+        let t = &self.pane_theme(id); // faded with its pane, but for the status colours
         let shown = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
         let caption = self.header_caption(id);
         let frame = self.pulse();
