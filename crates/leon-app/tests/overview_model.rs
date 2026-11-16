@@ -161,3 +161,24 @@ fn arrows_move_along_the_order_and_between_rows_by_column() {
     assert_eq!(s(6, Step::Down), 6);
     assert_eq!(s(1, Step::Up), 1);
 }
+
+#[test]
+fn small_sessions_sit_side_by_side_and_a_few_tabs_fill_the_window() {
+    let here =
+        model(vec![session("a", "api", 1), session("b", "web", 1), session("c", "docs", 1), session("d", "ops", 1)]);
+    let machines = [Machine { host: 0, label: "This Mac", model: Some(&here), note: None }];
+    let groups = overview::groups(&machines, &Scope::All, false);
+    let l = overview::layout(&groups, 1400., 0.6);
+    assert!(l.cols >= 4);
+    assert!(l.cards.iter().all(|c| c.y == l.cards[0].y), "four one-tab sessions in one row: {:?}", l.cards);
+    // the widest cards that fit 1060 px of height: bigger than the 300 px default, never past it
+    let f = overview::fit(&groups, 2000., 1060., 0.6);
+    assert!(f.height <= 1060., "{}", f.height);
+    assert!(f.cards[0].w > 400., "a few tabs get big cards: {:?}", f.cards[0]);
+    // many tabs: the smallest cards, and the grid scrolls
+    let many = model((0..20).map(|i| session(&format!("s{i}"), "s", 5)).collect());
+    let machines = [Machine { host: 0, label: "This Mac", model: Some(&many), note: None }];
+    let groups = overview::groups(&machines, &Scope::All, false);
+    let f = overview::fit(&groups, 1400., 800., 0.6);
+    assert!(f.height > 800. && f.cards[0].w >= 240., "100 tabs scroll at the smallest cards");
+}

@@ -82,6 +82,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let h = self.overview.hover.clone().filter(|h| h.shown)?;
+        self.overview.area = self.pane_area(window);
         self.refresh_thumbs(false, cx);
         let t = &self.theme;
         let (aw, ah) = self.overview.area;

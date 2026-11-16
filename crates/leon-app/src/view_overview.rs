@@ -33,8 +33,10 @@ pub(super) struct OverviewUi {
     refreshes: HashMap<String, u64>,
     renders: Rc<RefCell<HashMap<String, u64>>>,
     scroll: gpui::ScrollHandle,
-    /// The pane area's size at the last render: what a thumbnail lays its tab out in.
+    /// The pane area's and the window's size at the last render: what a thumbnail lays its tab
+    /// out in, and what the grid fills.
     area: (f32, f32),
+    window: (f32, f32),
     hover: Option<Hover>,
     hover_gen: u64,
     /// When a shown preview was last hidden by leaving its tab.
@@ -217,8 +219,8 @@ impl Workspace {
     fn overview_layout(&self) -> overview::Layout {
         let Some(o) = self.overview.open.as_ref() else { return Default::default() };
         let (w, h) = self.overview.area;
-        let width = w + if self.places().sidebar.is_some() { self.settings.sidebar_width } else { 0. };
-        overview::layout(&self.overview_groups(o), width.max(1.), if w > 0. { h / w } else { 0.6 })
+        let (width, height) = self.overview.window;
+        overview::fit(&self.overview_groups(o), width.max(1.), height - TITLEBAR, if w > 0. { h / w } else { 0.6 })
     }
 
     /// Drop an overview whose closing motion is over.
@@ -237,6 +239,8 @@ impl Workspace {
     /// labels and cards; the moving card and the veil over them while it opens or closes.
     pub(super) fn render_overview(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::AnyElement {
         self.overview.area = self.pane_area(window);
+        let view = window.viewport_size();
+        self.overview.window = (f32::from(view.width), f32::from(view.height));
         self.refresh_thumbs(false, cx);
         let t = self.theme;
         let Some(o) = self.overview.open.as_ref() else { return div().into_any_element() };
@@ -275,7 +279,7 @@ impl Workspace {
                     .text_size(px(SECONDARY_TEXT))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(rgb(t.muted))
-                    .child(text)
+                    .child(div().flex_none().max_w(px(r.w)).line_clamp(1).text_ellipsis().child(text))
                     .children(
                         note.map(|n| div().font_weight(FontWeight::NORMAL).line_clamp(1).text_ellipsis().child(n)),
                     ),

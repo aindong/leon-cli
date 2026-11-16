@@ -178,32 +178,66 @@ pub struct Layout {
     pub cols: usize,
 }
 
-/// Lay the groups out `width` wide: as many columns as fit at about `CARD_W`, each card a header
-/// over a thumbnail `aspect` (height / width) as tall as it is wide.
+/// The card widths `fit` tries, widest first.
+const CARD_WS: (f32, f32) = (640., 240.);
+
+/// The grid at the widest card that lets everything fit `height` (the window less its titlebar),
+/// down to `CARD_WS.1`, below which it scrolls: a few tabs fill the window, many scroll.
+pub fn fit(groups: &[Group], width: f32, height: f32, aspect: f32) -> Layout {
+    let mut card = CARD_WS.0;
+    loop {
+        let l = layout_at(groups, width, aspect, card);
+        if l.height <= height || card <= CARD_WS.1 {
+            return l;
+        }
+        card -= 20.;
+    }
+}
+
+/// `layout_at` with cards of about `CARD_W`.
 pub fn layout(groups: &[Group], width: f32, aspect: f32) -> Layout {
+    layout_at(groups, width, aspect, CARD_W)
+}
+
+/// Lay the groups out `width` wide: as many columns as fit at about `card` px, each card a header
+/// over a thumbnail `aspect` (height / width) as tall as it is wide. A session's cards are a block
+/// under its label, as wide as its cards (at most every column); blocks sit side by side while
+/// they fit, and a machine's label starts a new row.
+fn layout_at(groups: &[Group], width: f32, aspect: f32, card: f32) -> Layout {
     let inner = (width - 2. * PAD).max(1.);
-    let cols = (((inner + GAP) / (CARD_W + GAP)).floor() as usize).max(1);
+    let cols = (((inner + GAP) / (card + GAP)).floor() as usize).max(1);
     let w = ((inner - GAP * (cols - 1) as f32) / cols as f32).max(1.);
     let h = HEADER + w * aspect;
     let mut l = Layout { cols, ..Layout::default() };
-    let mut y = PAD;
+    // the row of blocks being filled: its top, the next free column, and its tallest block
+    let (mut y, mut col, mut band) = (PAD, 0, 0.);
     for (gi, g) in groups.iter().enumerate() {
+        let span = g.cards.len().clamp(1, cols);
+        if col > 0 && (g.host_label.is_some() || col + span > cols) {
+            (y, col, band) = (y + band, 0, 0.);
+        }
         if g.host_label.is_some() {
             l.labels.push((Rect { x: PAD, y, w: inner, h: LABEL }, gi, true));
             y += LABEL;
         }
+        let x = PAD + col as f32 * (w + GAP);
+        let mut top = y;
         if g.session.is_some() {
-            l.labels.push((Rect { x: PAD, y, w: inner, h: LABEL }, gi, false));
-            y += LABEL;
+            l.labels.push((Rect { x, y: top, w: span as f32 * (w + GAP) - GAP, h: LABEL }, gi, false));
+            top += LABEL;
         }
         for (i, _) in g.cards.iter().enumerate() {
-            let (row, col) = (i / cols, i % cols);
-            l.cards.push(Rect { x: PAD + col as f32 * (w + GAP), y: y + row as f32 * (h + GAP), w, h });
+            let (row, c) = (i / cols, i % cols);
+            l.cards.push(Rect { x: x + c as f32 * (w + GAP), y: top + row as f32 * (h + GAP), w, h });
         }
         let rows = g.cards.len().div_ceil(cols);
-        y += rows as f32 * (h + GAP) + if rows == 0 { GAP } else { 0. };
+        band = f32::max(band, top - y + rows as f32 * (h + GAP) + if rows == 0 { GAP } else { 0. });
+        col += span;
+        if col >= cols {
+            (y, col, band) = (y + band, 0, 0.);
+        }
     }
-    l.height = y + PAD - GAP;
+    l.height = y + band + PAD - GAP;
     l
 }
 
