@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 import select
 import shutil
@@ -41,7 +42,9 @@ class WatchTest(unittest.TestCase):
                 services = json.loads((pathlib.Path(d) / "services.json").read_text())
                 services[0]["status"] = "down"
                 time.sleep(0.05)  # a new mtime, even on a coarse clock
-                (pathlib.Path(d) / "services.json").write_text(json.dumps(services))
+                tmp = pathlib.Path(d) / "services.json.tmp"  # replaced whole: the watcher never reads half a file
+                tmp.write_text(json.dumps(services))
+                os.replace(tmp, pathlib.Path(d) / "services.json")
                 self.assertIn("rebuilt", self.line(proc))
                 page = (pathlib.Path(d) / "site" / "index.html").read_text()
                 self.assertIn(f'<span>{services[0]["name"]}</span><span class="down">', page)

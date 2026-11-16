@@ -13,7 +13,10 @@ def parse(line):
         parts = parts[1:]
     if len(parts) < 4 or not parts[2].isdigit() or not parts[3].endswith("ms"):
         return None
-    return parts[0], parts[1].split("?")[0], int(parts[2]), float(parts[3][:-2])
+    try:
+        return parts[0], parts[1].split("?")[0], int(parts[2]), float(parts[3][:-2])
+    except ValueError:  # "badms": not a duration
+        return None
 
 
 def percentile(sorted_values, p):
@@ -75,10 +78,12 @@ def render(t, top=5, color=True):
 
 
 def follow(path, top):
-    lines = []
+    lines, partial = [], ""
     with open(path) as f:
         while True:
-            lines.extend(f.readlines())
+            chunk = partial + f.read()
+            *done, partial = chunk.split("\n")  # a line still being written waits for the next read
+            lines.extend(done)
             sys.stdout.write("\033[H\033[2J" + time.strftime("%H:%M:%S  ") + path + "\n\n")
             sys.stdout.write(render(tally(lines), top) + "\n")
             sys.stdout.flush()

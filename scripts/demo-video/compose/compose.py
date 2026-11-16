@@ -197,6 +197,9 @@ def stills(mode, raw, cue_path, outdir, times, cut=None):
         p = ps[pi]
         src = next(decode(raw, p[1] + pt, 1.0)) if p[0] == "take" else None
         img = piece_frame(R, L, p, pt, src, ot)
+        if soft(mode, pi) and pt < XFADE:  # as render_chunk does
+            before = last_frame(R, L, raw, ps[pi - 1], ot - pt - 1 / FPS)
+            img = Image.blend(before, img, ease((pt + 1 / FPS) / (XFADE + 1 / FPS)))
         img.save(Path(outdir) / f"{mode}-{ot:06.2f}.png")
 
 

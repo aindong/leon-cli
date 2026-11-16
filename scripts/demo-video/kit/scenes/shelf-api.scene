@@ -14,4 +14,4 @@ apply 1
 working 70 running the tests
 wait_go shelf-tests
 test tests below python3 runtests.py
-done Pagination is in, and all 24 tests pass.
+done Pagination is in, and all 25 tests pass.

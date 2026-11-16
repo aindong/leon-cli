@@ -24,6 +24,9 @@ class ParseTest(unittest.TestCase):
     def test_a_leading_time_is_skipped(self):
         self.assertEqual(logtally.parse("20:18:01 GET /books 200 3ms")[1:3], ("/books", 200))
 
+    def test_a_bad_number_is_none(self):
+        self.assertIsNone(logtally.parse("GET /books 200 badms"))
+
     def test_junk_is_none(self):
         self.assertIsNone(logtally.parse("hello world"))
         self.assertIsNone(logtally.parse("GET /x abc 1ms"))

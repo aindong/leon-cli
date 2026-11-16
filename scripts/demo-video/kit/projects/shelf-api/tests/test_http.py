@@ -58,6 +58,9 @@ class HttpTest(ApiCase):
         self.assertEqual(code, 201)
         self.assertEqual(self.call(f"/books/{body['id']}")[1]["title"], "New")
 
+    def test_post_of_a_json_list_is_400(self):
+        self.assertEqual(self.call("/books", "POST", [])[0], 400)
+
     def test_post_without_a_title_is_400(self):
         self.assertEqual(self.call("/books", "POST", {"author": "Writer"})[0], 400)
 

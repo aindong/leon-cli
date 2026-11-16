@@ -46,6 +46,8 @@ def make_handler(store, log=print):
             if parts == ["books"] and method == "POST":
                 n = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(n) or b"{}")
+                if not isinstance(body, dict):
+                    raise ValueError("the body must be a JSON object")
                 book = store.add(body.get("title"), body.get("author"), body.get("year"),
                                  body.get("shelf", "unsorted"))
                 return self.send_json(201, book)

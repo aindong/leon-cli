@@ -28,8 +28,12 @@ def main():
     while True:
         time.sleep(0.3)
         for p in SOURCES:
-            if p.stat().st_mtime != seen[p]:
-                seen[p] = p.stat().st_mtime
+            try:
+                mtime = p.stat().st_mtime
+            except FileNotFoundError:  # mid-save by an editor that replaces the file: next poll
+                continue
+            if mtime != seen[p]:
+                seen[p] = mtime
                 try:
                     import importlib
                     importlib.reload(build)

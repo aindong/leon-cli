@@ -41,7 +41,10 @@ now() {
   if [ -n "${CUE_ONLY:-}" ]; then echo "$vt"; else python3 -c "import time; print(round(time.time() - $t0, 3))"; fi
 }
 jstr() { local s=${1//\\/\\\\}; s=${s//\"/\\\"}; printf '"%s"' "$s"; }
-cue() { printf '{"t": %s, %s}\n' "$(now)" "$1" >>"$cuefile"; }
+cue() { # outside a take (setup, check) there is no clock and nothing to record
+  [ -n "${t0:-}" ] || [ -n "${CUE_ONLY:-}" ] || return 0
+  printf '{"t": %s, %s}\n' "$(now)" "$1" >>"$cuefile"
+}
 spend() { vt=$(python3 -c "print(round($vt + $1, 3))"); } # a replayed step's usual length
 guest() { ssh $(ssh_opts) "demo@$(cat "$work/.ip")" "bash kit/guest.sh $(printf "%q " "$@")"; }
 # g STEP…: guest.sh in the VM as demo (one ssh connection, reused, so beats land on time)

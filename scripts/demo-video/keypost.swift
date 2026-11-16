@@ -56,7 +56,7 @@ case (3, "combo"):
     default: print("keypost: unknown modifier \(m)"); exit(2)
     }
   }
-  if let base = shifted[Character(key)] { key = String(base); flags.insert(.maskShift) }
+  if key.count == 1, let base = shifted[Character(key)] { key = String(base); flags.insert(.maskShift) }
   guard let c = code(key) else { print("keypost: no key \(key)"); exit(2) }
   post(c, flags)
 case (3, "key"):
