@@ -24,7 +24,9 @@ fn a_pane_focused_from_the_cli_has_its_done_cleared(cx: &mut TestAppContext) {
     let (w, _) = window(&s.app, &ws, cx);
     let [a, b] = <[String; 2]>::try_from(leaves(&w)).unwrap();
     s.app.call("session.focus_block", json!({ "session_id": sid, "block_id": a })).unwrap();
-    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.target_block()) == Some(a.clone())));
+    // a frame drew a focused (its focus mark), not only the model having it: an arrival is what a
+    // drawn frame showed, so b's focus later is one
+    assert!(shows(cx, |cx| drawn(cx, &format!("focus-edge-{a}"))), "a frame drew a focused");
     run_until(&term(&s.app, &b), r"printf '\033]7501;state=done\007'; echo d-sent", "d-sent");
     let states = |id: &str| term(&s.app, id).program_status().into_iter().map(|(_, r)| r.state).collect::<Vec<_>>();
     assert!(shows(cx, |_| states(&b) == vec![State::Done]), "b reports done while a has the focus");

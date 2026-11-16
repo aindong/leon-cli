@@ -6,7 +6,7 @@
 
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -229,6 +229,9 @@ pub struct Workspace {
     /// Scrollback, selection, find and links per pane.
     term: scroll::TermUi,
     floats: floats_view::FloatUi,
+    /// Each shown pane's grid view (view_grid.rs), and how often each rendered.
+    grids: HashMap<String, grid_view::GridSlot>,
+    grid_renders: Rc<RefCell<HashMap<String, u64>>>,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
     overview: overview_view::OverviewUi,
@@ -324,10 +327,14 @@ impl Workspace {
         let appearance = cx.observe_window_appearance(window, |ws, window, cx| {
             ws.set_appearance(look_view::is_dark(window.appearance()), cx)
         });
-        // shortcut: every notify of the workspace brings what render draws from up to date (R5);
-        // phase 2 moves `sync_pane` to each pane's grid view, which a child's notify won't reach
-        // here, and phase 5 (the model as entities) removes this observer
-        let prepare = cx.observe_self(|ws, _| ws.prepare());
+        // shortcut: every notify of the workspace brings what render draws from up to date (R5),
+        // and gives each grid its input; a pushed screen reaches its grid from the poll instead
+        // (`poll_grids`). Phase 5 (the model as entities) removes this observer
+        let prepare = cx.observe_self(|ws, cx| {
+            let seen = ws.screens_seen();
+            ws.prepare();
+            ws.sync_grids(&seen, cx);
+        });
         let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
         let mut ws = Workspace {
             app,
@@ -378,6 +385,8 @@ impl Workspace {
             focus_event: None,
             term,
             floats: Default::default(),
+            grids: HashMap::new(),
+            grid_renders: Rc::default(),
             fade: Default::default(),
             overview: Default::default(),
             updates,
@@ -394,7 +403,9 @@ impl Workspace {
             _appearance: appearance,
             _prepare: prepare,
         };
+        let seen = ws.screens_seen();
         ws.prepare(); // the first frame comes before any notify
+        ws.sync_grids(&seen, cx);
         ws
     }
 
@@ -455,6 +466,8 @@ mod fade_view;
 mod find;
 #[path = "view_floats.rs"]
 mod floats_view;
+#[path = "view_grid.rs"]
+mod grid_view;
 #[path = "view_handlers.rs"]
 mod handlers;
 #[path = "view_header.rs"]
@@ -471,6 +484,7 @@ mod start;
 mod state;
 pub(crate) use bars::Tip;
 pub use drawn_view::{drawing, drawn, sel};
+pub use grid_view::GridDrawn;
 pub use look_view::is_dark;
 pub use start::{init, install, quits, run};
 #[path = "view_menus.rs"]
