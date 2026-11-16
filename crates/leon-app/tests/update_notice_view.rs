@@ -10,8 +10,15 @@ use leon_app::updates::{How, Phase};
 use leon_app::view::Workspace;
 use m10b_support::*;
 
-const CONTROLS: [&str; 6] =
-    ["update-install", "update-notes", "update-dismiss", "update-copy", "update-restart", "update-settings"];
+const CONTROLS: [&str; 7] = [
+    "update-install",
+    "update-notes",
+    "update-dismiss",
+    "update-copy",
+    "update-restart",
+    "update-settings",
+    "update-page",
+];
 
 fn show(ws: &Entity<Workspace>, cx: &mut VisualTestContext, phase: Phase) -> Vec<&'static str> {
     ws.read_with(cx, |ws, _| ws.updater().set_phase(phase));
@@ -37,7 +44,9 @@ fn each_phase_draws_its_controls(cx: &mut TestAppContext) {
     assert_eq!(show(&ws, cx, working), Vec::<&str>::new(), "no controls while it works");
     assert_eq!(show(&ws, cx, Phase::Done { version: "9.9.9".into() }), ["update-dismiss", "update-restart"]);
     let refused = Phase::Failed("can't replace /x/Leon.app: Operation not permitted (os error 1)".into());
-    assert_eq!(show(&ws, cx, refused), ["update-dismiss", "update-settings"]);
+    assert_eq!(show(&ws, cx, refused), ["update-dismiss", "update-settings", "update-page"]);
+    let failed = Phase::Failed("could not connect to github.com".into());
+    assert_eq!(show(&ws, cx, failed), ["update-dismiss", "update-page"]);
     assert!(!cx.has_pending_prompt(), "never a modal");
     s.app.stop();
 }

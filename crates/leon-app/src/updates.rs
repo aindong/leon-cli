@@ -153,6 +153,10 @@ struct Inner {
     saved: Saved,
     /// A look or an install is running.
     busy: bool,
+    /// Check for Updates came while the daily look ran: that look's answer is an asked one.
+    asked: bool,
+    /// The version this run installed: it waits for a restart, and no look replaces its notice.
+    installed: Option<String>,
     generation: u64,
     last_error: Option<String>,
 }
@@ -181,7 +185,16 @@ impl Updater {
     pub fn new(store: Option<PathBuf>, find: Find, wake: Wake) -> Updater {
         let saved = store.as_deref().and_then(|p| std::fs::read(p).ok());
         let saved = saved.and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
-        let inner = Inner { phase: Phase::Idle, release: None, saved, busy: false, generation: 0, last_error: None };
+        let inner = Inner {
+            phase: Phase::Idle,
+            release: None,
+            saved,
+            busy: false,
+            asked: false,
+            installed: None,
+            generation: 0,
+            last_error: None,
+        };
         Updater { inner: Arc::new(Mutex::new(inner)), store, find, wake }
     }
 
@@ -197,7 +210,7 @@ impl Updater {
             return;
         }
         let mut i = self.lock();
-        if i.busy || !due(i.saved.checked_at, now) {
+        if i.busy || i.installed.is_some() || !due(i.saved.checked_at, now) {
             return;
         }
         i.saved.checked_at = Some(now);
@@ -208,9 +221,23 @@ impl Updater {
 
     /// Check for Updates: a look now, whose answer the notice shows whatever it is.
     pub fn check_now(&self) {
-        if self.lock().busy {
+        let mut i = self.lock();
+        if i.busy {
+            // an install shows its own steps; the daily look running now answers this check
+            if !matches!(i.phase, Phase::Working { .. }) {
+                (i.asked, i.phase) = (true, Phase::Checking);
+                i.generation += 1;
+                drop(i);
+                (self.wake)();
+            }
             return;
         }
+        // installed already: what there is to say is that it waits for a restart
+        if let Some(version) = i.installed.clone() {
+            drop(i);
+            return self.set_phase(Phase::Done { version });
+        }
+        drop(i);
         self.set_phase(Phase::Checking);
         self.spawn(Job::Look { asked: true });
     }
@@ -274,14 +301,35 @@ impl Updater {
 
     fn spawn(&self, job: Job) {
         self.lock().busy = true;
-        let (inner, find, wake) = (self.inner.clone(), self.find.clone(), self.wake.clone());
+        let (inner, find, wake, store) = (self.inner.clone(), self.find.clone(), self.wake.clone(), self.store.clone());
         let run = move || {
-            run(&inner, &find, &wake, job);
-            lock(&inner).busy = false;
+            // a bug in a job ends it like a failure, never with the updater stuck on busy
+            let job = std::panic::AssertUnwindSafe(|| run(&inner, &find, &wake, store.as_deref(), job));
+            let last = std::panic::catch_unwind(job)
+                .unwrap_or_else(|_| Some(Phase::Failed("the update stopped on an error in leon".into())));
+            // the job's answer and the end of `busy` in one step: an Install clicked the moment
+            // the notice shows is taken, not dropped as "busy"
+            {
+                let mut i = lock(&inner);
+                if let Some(Phase::Done { version }) = &last {
+                    i.installed = Some(version.clone());
+                }
+                if let Some(last) = last {
+                    i.phase = last;
+                }
+                (i.busy, i.asked) = (false, false);
+                i.generation += 1;
+            }
+            wake();
         };
         if let Err(e) = std::thread::Builder::new().name("leon-update".into()).spawn(run) {
             eprintln!("leon: can't start the update thread: {e}");
-            self.lock().busy = false;
+            let mut i = self.lock();
+            i.busy = false;
+            if matches!(i.phase, Phase::Checking | Phase::Working { .. }) {
+                i.phase = Phase::Failed(format!("can't start the update thread: {e}"));
+                i.generation += 1;
+            }
         }
     }
 }
@@ -294,39 +342,43 @@ enum Job {
     Install(Arc<Release>),
 }
 
-/// One job, on the update thread.
-fn run(inner: &Mutex<Inner>, find: &Find, wake: &Wake, job: Job) {
+/// One job, on the update thread. Returns the phase it ends in, which `spawn` shows; None leaves
+/// the notice as it is (a look of the app's own speaks only when it finds a release).
+fn run(inner: &Mutex<Inner>, find: &Find, wake: &Wake, store: Option<&Path>, job: Job) -> Option<Phase> {
     let cfg = Config::load();
     let target = find();
     // one line in the log; shown in the window only when the user asked for what failed
     let failed = |what: &str, why: String, shown: bool| {
         eprintln!("leon: the update {what} failed: {why}");
         lock(inner).last_error = Some(why.clone());
-        set(inner, wake, if shown { Phase::Failed(why) } else { Phase::Idle });
+        shown.then_some(Phase::Failed(why))
     };
     match job {
         Job::Look { asked } => {
             let found = target.and_then(|t| leon_update::check(&cfg, &t).map(|c| (c, t)));
-            let phase = match found {
+            // Check for Updates may have joined this look while it ran
+            let asked = asked || lock(inner).asked;
+            let (check, t) = match found {
+                Ok(found) => found,
                 Err(why) => return failed("check", why, asked),
-                Ok((Check::Available(release), t)) => {
+            };
+            match check {
+                Check::Available(release) => {
                     let how = how(&t);
+                    let mut i = lock(inner);
+                    // asked for, a dismissed release is shown again: the user wants the answer
+                    if asked && i.saved.dismissed.as_ref() == Some(&release.version) {
+                        i.saved.dismissed = None;
+                        save(store, &i.saved);
+                    }
                     let phase =
                         Phase::Available { version: release.version.clone(), notes: release.notes_url.clone(), how };
-                    let mut i = lock(inner);
-                    if matches!(i.phase, Phase::Done { .. }) {
-                        return; // installed already: the release found is the one waiting for a restart
-                    }
                     i.release = Some(Arc::new(release));
-                    drop(i);
-                    phase
+                    Some(phase)
                 }
-                Ok((Check::UpToDate { .. }, _)) if asked => Phase::UpToDate(cfg.version().to_string()),
-                Ok((Check::NoRelease, _)) if asked => Phase::NoRelease,
-                Ok(_) => Phase::Idle,
-            };
-            if !matches!(lock(inner).phase, Phase::Done { .. }) {
-                set(inner, wake, phase);
+                Check::UpToDate { .. } if asked => Some(Phase::UpToDate(cfg.version().to_string())),
+                Check::NoRelease if asked => Some(Phase::NoRelease),
+                _ => None,
             }
         }
         Job::Install(release) => {
@@ -337,7 +389,7 @@ fn run(inner: &Mutex<Inner>, find: &Find, wake: &Wake, job: Job) {
                 leon_update::install(&cfg, &release, &t, &mut say)
             });
             match installed {
-                Ok(()) => set(inner, wake, Phase::Done { version }),
+                Ok(()) => Some(Phase::Done { version }),
                 Err(why) => failed("install", why, true),
             }
         }

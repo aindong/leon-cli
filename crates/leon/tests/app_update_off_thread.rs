@@ -32,7 +32,8 @@ fn the_check_runs_on_the_updaters_own_thread() {
     let k = Kit::new();
     let u = k.updater();
     u.daily(true, T0);
-    until("the notice", 30, || u.notice().is_some());
+    // the notice shows a moment before the wake that says so
+    until("the notice and its wake", 30, || u.notice().is_some() && !k.woken_on.lock().unwrap().is_empty());
     let on = k.woken_on.lock().unwrap().clone();
     assert!(!on.is_empty(), "the check woke the app when it was done");
     let here = std::thread::current().name().unwrap_or("").to_string();

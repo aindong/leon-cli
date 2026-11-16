@@ -67,6 +67,8 @@ fn a_check_killed_midway_still_counts_as_the_days() {
     assert_eq!(k.manifests(), 1, "the time was kept before the check: {:?}", k.srv.asked());
 }
 
+// a release build looks on its own whatever the environment: this is a debug build's rule
+#[cfg(debug_assertions)]
 #[test]
 fn a_debug_build_checks_on_its_own_only_when_pointed_at_a_release_server() {
     let k = Kit::new();

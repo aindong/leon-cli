@@ -8,7 +8,7 @@ mod app_update_kit;
 mod release_kit;
 mod update_kit;
 
-use app_update_kit::{after, until, Kit, T0};
+use app_update_kit::{until, Kit, T0};
 use leon_app::updates::DAY;
 use update_kit::VERSION;
 
@@ -22,11 +22,11 @@ fn dismiss_is_per_version() {
     assert!(u.notice().is_none(), "dismissed");
     drop(u);
 
-    // the next day, the same release: still dismissed
+    // the next day, the same release: still dismissed (the look's end wakes the app)
+    let woken = k.woken_on.lock().unwrap().len();
     let u = k.updater();
     u.daily(true, T0 + DAY);
-    until("the second check", 30, || k.manifests() == 2);
-    after(1);
+    until("the second check to end", 30, || k.manifests() == 2 && k.woken_on.lock().unwrap().len() > woken);
     assert!(u.notice().is_none(), "{VERSION} stays dismissed: {:?}", u.notice().map(|n| n.text));
     drop(u);
 

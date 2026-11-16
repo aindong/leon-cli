@@ -2,6 +2,7 @@
 //! is not a modal and takes no focus: the keys stay with the workspace.
 
 use super::*;
+use crate::palette::Item;
 use crate::updates::{Act, Find, Updater, APP_MANAGEMENT, RELEASES};
 
 /// How often a running app asks whether its daily look is due (it is, once a day).
@@ -81,6 +82,29 @@ impl Workspace {
         Some(div().absolute().bottom(px(16.)).right(px(16.)).child(card).into_any_element())
     }
 
+    /// The palette's rows for what the notice offers now, past Install (always a row): the
+    /// keyboard's way to every button on it.
+    pub(super) fn update_items(&self) -> Vec<Item> {
+        let acts = self.updates.notice().map(|n| n.actions).unwrap_or_default();
+        let item = |(name, title): (&str, &str)| Item {
+            name: name.into(),
+            title: title.into(),
+            keywords: vec!["update".into()],
+            shortcut: None,
+            args: None,
+        };
+        acts.iter().filter_map(palette_row).map(item).collect()
+    }
+
+    /// `client.update.<what>` for one of the notice's buttons: what that button does, if the
+    /// notice has it now.
+    pub(super) fn update_named(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let acts = self.updates.notice().map(|n| n.actions).unwrap_or_default();
+        if let Some(act) = acts.into_iter().find(|a| palette_row(a).is_some_and(|(n, _)| n == name)) {
+            self.update_act(&act, window, cx);
+        }
+    }
+
     fn update_act(&mut self, act: &Act, window: &mut Window, cx: &mut Context<Self>) {
         match act {
             Act::Install => self.run_action("client.update.install", None, "update_notice", window, cx),
@@ -101,4 +125,17 @@ impl Workspace {
             self.start_again(cx);
         }
     }
+}
+
+/// A notice's button as a palette row (action name, title); Install has a row of its own.
+fn palette_row(act: &Act) -> Option<(&'static str, &'static str)> {
+    Some(match act {
+        Act::Install => return None,
+        Act::Notes(_) => ("client.update.notes", "Open the Release Notes"),
+        Act::Copy(_) => ("client.update.copy", "Copy the Update Command"),
+        Act::Restart => ("client.update.restart", "Restart to Finish the Update"),
+        Act::AppManagement => ("client.update.settings", "Open App Management Settings"),
+        Act::ReleasePage => ("client.update.page", "Open the Release Page"),
+        Act::Dismiss => ("client.update.dismiss", "Dismiss the Update Notice"),
+    })
 }

@@ -26,7 +26,9 @@ fn install_shows_each_step_then_restart() {
     let start = Instant::now();
     u.install();
     assert!(start.elapsed() < Duration::from_millis(500), "install() waited for the download");
-    until("installed", 60, || u.notice().is_some_and(|n| n.text.contains("installed")));
+    // the notice shows a moment before the wake that records it
+    let recorded = || k.seen.lock().unwrap().last().is_some_and(|t| t.contains("installed"));
+    until("installed", 60, recorded);
     let n = u.notice().unwrap();
     assert!(n.text.contains(&format!("leon {VERSION} is installed")) && n.text.contains("next launch"), "{}", n.text);
     assert!(n.actions.contains(&Act::Restart), "{:?}", n.actions);
