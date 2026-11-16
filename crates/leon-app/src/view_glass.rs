@@ -19,13 +19,23 @@ pub(super) struct GlassUi {
     reduce_transparency: Option<bool>,
     /// Reduce Transparency when last asked (on activation: it is changed in System Settings).
     reduced: bool,
+    /// The server's settings have been applied: until then the setting isn't known, and a
+    /// window set to 0 must never show the desktop, so it is opaque.
+    known: bool,
     /// The workspace's window, for a look from where there is no window at hand.
     window: AnyWindowHandle,
 }
 
 impl GlassUi {
     pub(super) fn new(window: AnyWindowHandle) -> Self {
-        GlassUi { glass: Glass::OPAQUE, set: Vec::new(), reduce_transparency: None, reduced: false, window }
+        GlassUi {
+            glass: Glass::OPAQUE,
+            set: Vec::new(),
+            reduce_transparency: None,
+            reduced: false,
+            known: false,
+            window,
+        }
     }
 }
 
@@ -60,7 +70,8 @@ impl Workspace {
     /// the window's activation (back from System Settings), bounds (full screen), appearance (the
     /// theme), and after a settings reload (`glass_later`). GPUI is asked only for a change.
     pub fn update_glass(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let see = if self.glass.reduced || window.is_fullscreen() { 0. } else { self.look.translucency };
+        let see =
+            if !self.glass.known || self.glass.reduced || window.is_fullscreen() { 0. } else { self.look.translucency };
         let glass = Glass::new(&self.theme, see, self.look.fade);
         let bg = if glass.translucent() { Bg::Blurred } else { Bg::Opaque };
         if self.glass.set.last() != Some(&bg) {
@@ -77,8 +88,9 @@ impl Workspace {
     }
 
     /// [`Workspace::update_glass`] once this update is over, through the window's handle: a
-    /// settings reload comes from the poll, which has no window.
-    pub(super) fn glass_later(&self, cx: &mut Context<Self>) {
+    /// settings reload, applied just before, comes from the poll, which has no window.
+    pub(super) fn glass_later(&mut self, cx: &mut Context<Self>) {
+        self.glass.known = true;
         let (handle, this) = (self.glass.window, cx.entity().downgrade());
         cx.defer(move |cx| {
             let _ = handle.update(cx, |_, window, cx| this.update(cx, |ws, cx| ws.update_glass(window, cx)));

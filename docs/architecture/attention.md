@@ -94,9 +94,10 @@ of [the architecture](../architecture.md).
   adds alpha where fills overlap, so each pixel gets one translucent fill at most: the root fills
   nothing, and the sidebar, the title bar, the panes area's gaps (`glass::gaps`, the area less
   the rounded tiles) and each tile fill themselves. Each alpha is what the setting asks, or
-  more where text would read worse over a pure white or a pure black desktop than it must: body
-  text on a pane 4.5:1, `text` on the chrome 4.5:1 and `muted` 3:1, each capped at what the
-  theme gives it opaque, so an imported low-contrast theme is never made worse. The maths lets
+  more where text would read worse over some desktop than it must (white, black, or the grey
+  between them that matches the text): body text on a pane 4.5:1, a pane header's `muted`
+  caption 3:1, `text` on the chrome 4.5:1 and `muted` 3:1, each capped at what the theme gives
+  it opaque, so an imported low-contrast theme is never made worse. The maths lets
   a quarter more of the desktop through than the alpha says (`SEE_GAIN`: measured on screen, the
   window server shows about a fifth more). Every pane gets one alpha, enough for the theme
   faded by `fade_inactive_panes` too, so a faded pane keeps its fade's contrast and the focused
@@ -104,8 +105,9 @@ of [the architecture](../architecture.md).
   leon-dark) and the chrome carries the translucency (0.82 on leon-dark, 0.79 on leon-light,
   where the floor stops each from 0.2 up). An inactive window keeps its blur (GPUI's effect view stays
   active). The window is opaque, exactly as before, in full screen, with Reduce Transparency on
-  (read when the window becomes active) and at 0. Floats and overlays (the palette, the overview, the
-  find bar) stay opaque: they sit over other content. A program's own background colours are
+  (read when the window becomes active), at 0, and until the server's settings first arrive.
+  Floats, a drawer sliding out (over tiles that took its room back) and overlays (the palette,
+  the overview, the find bar) stay opaque: they sit over other content. A program's own background colours are
   opaque; only default-background cells show through.
 - **`leon notify`.** `dev.leon.terminal.report_status {state, title, msg}` (experimental) builds an
   OSC 7501 report (title and msg base64) and runs it through the same parser and store as PTY
