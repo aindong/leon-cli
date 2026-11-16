@@ -38,7 +38,9 @@ jobs:
       - run: |
           curl -fsSL -o "$RUNNER_TEMP/nextest.tar.gz" https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.150/cargo-nextest-0.9.150-universal-apple-darwin.tar.gz
           echo "82a759b4d218d38359424196ab244c470e8f7c7d149c814fbbeef4d67c3c301a  $RUNNER_TEMP/nextest.tar.gz" | shasum -a 256 -c
-          tar -xzf "$RUNNER_TEMP/nextest.tar.gz" -C "${CARGO_HOME:-$HOME/.cargo}/bin"
+          mkdir "$RUNNER_TEMP/nextest"
+          tar -xzf "$RUNNER_TEMP/nextest.tar.gz" -C "$RUNNER_TEMP/nextest"
+          echo "$RUNNER_TEMP/nextest" >> "$GITHUB_PATH"
       - run: cargo nextest run --profile ci --workspace
       - run: cargo test --doc --no-fail-fast # nextest doesn't run doc-tests
 
