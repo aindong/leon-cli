@@ -272,6 +272,7 @@ impl Render for Workspace {
         // very panes this frame draws
         let body_shown = self.shown();
         self.note_fades(body_shown.as_ref().map_or(&[][..], |(_, ids)| ids));
+        self.drew_frame();
         let body = match body_shown {
             _ if self.stopped => self.render_stopped(cx).into_any_element(),
             Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),

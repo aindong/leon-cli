@@ -129,6 +129,15 @@ impl Workspace {
         })
     }
 
+    /// How long until a find with output it hasn't searched may run again (the poll's clock).
+    pub(super) fn find_rerun_in(&self) -> Option<Duration> {
+        let f = self.term.find.as_ref().filter(|f| !f.query.is_empty())?;
+        let unseen = self.app.model().screen_updates.get(&f.block).copied() != f.seen;
+        // already due: the next poll redraws, whose render runs it (a hidden window stops asking,
+        // `next_poll`); one clock read, so the subtraction can't underflow
+        unseen.then(|| RERUN.saturating_sub(f.ran.elapsed()))
+    }
+
     fn step_find(&mut self, forward: bool) {
         let Some(f) = self.term.find.as_mut().filter(|f| !f.matches.is_empty()) else { return };
         let n = f.matches.len();
