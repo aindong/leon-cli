@@ -27,6 +27,7 @@ mod cwd;
 use cwd::{process_cwd, pwd_path, pwd_url};
 #[path = "terminal_process.rs"]
 mod process;
+pub use process::given_back;
 use process::{reap, wait_exit, Registered};
 #[path = "terminal_reading.rs"]
 mod reading;
