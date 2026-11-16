@@ -111,19 +111,10 @@ struct Palette {
     ask: Option<(hosts_view::Ask, Option<String>)>,
     /// The session switcher (⌘K): places to go instead of actions.
     switch: bool,
-    /// Why the last ⌘↩ couldn't split (a row of another machine), or a theme wasn't kept.
+    /// Why the last ⌘↩ couldn't split (another machine's row), or a theme wasn't kept.
     note: Option<String>,
-    /// The theme list (Change Theme…): every theme, the selected one drawn until the list closes.
+    /// The theme list: every theme; the selected one is drawn while it is open.
     themes: Option<Vec<(String, Theme)>>,
-}
-
-/// The last `client.keymap` reply, handed over from the runtime thread that fetched it.
-#[derive(Default)]
-struct KeymapInbox {
-    asking: bool,
-    reply: Option<Value>,
-    /// The `server.settings` reply asked for when the keymap's generation moved to the one given.
-    settings: Option<(u64, Value)>,
 }
 
 /// The blocks on screen, in leaf order.
@@ -181,7 +172,7 @@ pub struct Workspace {
     /// When the poll looks next without a wake (None: only a wake).
     planned: Option<Instant>,
     keymap: Keymap,
-    inbox: Arc<Mutex<KeymapInbox>>,
+    inbox: Arc<Mutex<poll_view::KeymapInbox>>,
     keymap_asked: Option<Instant>,
     /// The chords of a sequence typed so far (`ctrl+b`).
     pending: Vec<Chord>,
@@ -214,7 +205,7 @@ pub struct Workspace {
     /// and the terminal font.
     look: Look,
     dark: bool,
-    /// The colours this frame draws with (a theme change fading in: `themes`).
+    /// The colours this frame draws with (`themes`: a change fading in).
     theme: Theme,
     themes: theme_view::ThemeUi,
     font_family: SharedString,

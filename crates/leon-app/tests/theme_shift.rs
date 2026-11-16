@@ -26,6 +26,8 @@ fn frame(ws: &Entity<Workspace>, cx: &mut VisualTestContext, pane: &str, at: Ins
     ws.read_with(cx, |ws, _| {
         let fade = ws.pane_fade(pane);
         assert_eq!(ws.pane_theme(pane), leon_app::fade::theme(&ws.drawn_theme(), fade), "the tile draws it");
+        // the pane's grid is a cached view of its own: it drew this frame's colours too
+        assert_eq!(ws.grid_drew(pane).map(|g| g.theme), Some(ws.pane_theme(pane)), "the grid drew it");
         (ws.drawn_theme(), ws.theme_shifting(), fade)
     })
 }
