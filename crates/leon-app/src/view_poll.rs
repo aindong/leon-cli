@@ -80,7 +80,7 @@ impl Workspace {
     /// The soonest timed thing pending, never sooner than `POLL`; None when only a wake can bring
     /// news. Slides, fades, the spinner, the waited times and a find's re-run only matter on
     /// screen: once a second redraw asked for is not drawn (hidden, covered), they wait for the
-    /// next frame, whose render wakes the poll again.
+    /// next frame, which wakes the poll again (`drew_frame`).
     pub(super) fn next_poll(&self) -> Option<Duration> {
         let now = Instant::now();
         let mut due = Vec::new();
@@ -103,8 +103,9 @@ impl Workspace {
         due.into_iter().min().map(|d| d.max(POLL))
     }
 
-    /// From render: a frame was drawn, and the poll looks again at once if this frame started
-    /// something timed sooner than it planned for (a slide, a fade, the spinner, the Activity list).
+    /// After a frame was drawn (render defers it): the poll looks again at once if the state that
+    /// frame drew has something timed due sooner than it planned for (a slide, a fade, the spinner,
+    /// the Activity list), as after a hidden spell, when the poll stopped its clocks.
     pub(super) fn drew_frame(&mut self) {
         self.undrawn = 0;
         let Some(d) = self.next_poll() else { return };

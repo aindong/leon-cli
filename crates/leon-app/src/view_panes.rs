@@ -241,15 +241,16 @@ impl Workspace {
             self.app.send_then("block.event", event, drop); // a pane already gone is fine
         }
     }
-}
 
-impl Render for Workspace {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.renders += 1;
+    /// Before a frame: what render draws from, brought up to date with the model and the window
+    /// (ADR R5). It runs after every notify of the workspace, before the frame that notify asks
+    /// for (the observer in `with_hosts`), so render, which may run more often (a hover, a
+    /// resize), only draws. It takes no `cx`: it can't notify, which would run it again.
+    pub(super) fn prepare(&mut self, window: &Window) {
+        self.prepares += 1;
         self.note_focus(window);
         self.note_slides();
         self.settle_overview();
-        DRAWN.with(|d| d.borrow_mut().clear());
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
         if self.term.find.as_ref().is_some_and(|f| !shown.contains(&f.block)) {
@@ -261,26 +262,36 @@ impl Render for Workspace {
         if self.find_due() {
             self.run_find();
         }
+        let rows = self.rows();
+        self.settle(&rows);
+        self.note_recent();
+        // after `settle`, which may have moved to another session: the fades are aimed at the
+        // very panes the frame draws
+        let on_screen = self.shown().map(|(_, ids)| ids).unwrap_or_default();
+        self.note_fades(&on_screen);
+        // only what is drawn is pushed: the panes on screen, and every thumbnail's (view_overview.rs);
+        // the panes stay watched under the overview, so they are current when it closes, even when
+        // a filter hid their card
+        if !self.stopped {
+            self.watch_screens(&on_screen);
+        }
+    }
+}
+
+impl Render for Workspace {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        drawing(cx);
+        self.renders += 1;
+        // after the frame: undrawn redraws back to none, and the poll woken if this frame's state
+        // has something timed due sooner than it planned for (ADR R5, frame bookkeeping)
+        cx.defer_in(window, |ws, _, _| ws.drew_frame());
         let stats = self.stats.clone();
         if stats.borrow().enabled {
             stats.borrow_mut().render_start = Some(Instant::now());
         }
         let rows = self.rows();
-        self.settle(&rows);
-        self.note_recent();
         let current = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
-        // after `settle`, which may have moved to another session: the fades are aimed at the
-        // very panes this frame draws
         let body_shown = self.shown();
-        self.note_fades(body_shown.as_ref().map_or(&[][..], |(_, ids)| ids));
-        self.drew_frame();
-        // only what is drawn is pushed: the panes on screen, and every thumbnail's (view_overview.rs);
-        // the panes stay watched under the overview, so they are current when it closes, even when
-        // a filter hid their card
-        let on_screen = body_shown.as_ref().map(|(_, ids)| ids.clone()).unwrap_or_default();
-        if !self.stopped {
-            self.watch_screens(&on_screen);
-        }
         let preview = self.render_preview(window, cx).filter(|_| !self.stopped);
         // the overview takes the sidebar's and the panes' place, in the same root as they are, so
         // the menu's actions and the window's listeners still reach the workspace

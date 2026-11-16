@@ -49,6 +49,11 @@ impl Workspace {
         self.renders
     }
 
+    /// How many times what render draws from was brought up to date (`prepare`).
+    pub fn prepares(&self) -> u64 {
+        self.prepares
+    }
+
     /// How many history fetches the panes asked for, one already out included.
     pub fn fetches(&self) -> u64 {
         self.term.fetches
