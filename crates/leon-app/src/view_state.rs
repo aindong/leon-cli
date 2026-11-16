@@ -44,6 +44,16 @@ impl Workspace {
         self.polls
     }
 
+    /// How many times the window rendered.
+    pub fn renders(&self) -> u64 {
+        self.renders
+    }
+
+    /// How many history fetches the panes asked for, one already out included.
+    pub fn fetches(&self) -> u64 {
+        self.term.fetches
+    }
+
     pub fn sidebar_visible(&self) -> bool {
         self.sidebar
     }

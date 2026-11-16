@@ -252,6 +252,8 @@ pub struct Remote {
     queue: Option<Sender<Job>>,
     /// Per block: the size last asked for and the size the screen had then (`fit`).
     asked: Mutex<HashMap<String, Asked>>,
+    /// Calls the app made into this remote: each call, queued job, spawn and watch (tests).
+    asks: AtomicU64,
 }
 
 impl Remote {
@@ -320,7 +322,7 @@ impl Remote {
                 Some(tx)
             }
         };
-        Ok(Remote { shared, queue, asked: Mutex::default() })
+        Ok(Remote { shared, queue, asked: Mutex::default(), asks: AtomicU64::new(0) })
     }
 
     /// The model as last received. Hold it briefly: the reader thread waits for it.
@@ -332,6 +334,7 @@ impl Remote {
     /// connection that failed (the server closed it, a reply never came) is replaced for the next
     /// call; this one is not sent again, since it may have been done.
     pub fn call(&self, method: &str, params: Value) -> Result<Value, ApiError> {
+        self.asks.fetch_add(1, Ordering::Relaxed);
         self.shared.call(method, params)
     }
 
@@ -346,6 +349,7 @@ impl Remote {
     /// Run a method on a connection of its own without waiting: config actions and key bindings
     /// run Lua for up to 30 s, which must not stall the UI. `done` gets the reply on that thread.
     pub fn spawn(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
+        self.asks.fetch_add(1, Ordering::Relaxed);
         let (socket, method) = (self.shared.socket.clone(), method.to_string());
         let wait = leon_core::secs_from_env("LEON_SPAWN_WAIT_SECS", SPAWN_TIMEOUT); // tests shorten it
         std::thread::spawn(move || {
@@ -384,6 +388,7 @@ impl Remote {
     /// others' screens go too: they would go stale, and `fit` must not trust them; the server
     /// sends a whole screen when one is watched again.
     pub fn watch(&self, ids: Vec<String>) {
+        self.asks.fetch_add(1, Ordering::Relaxed);
         let mut watched = lock(&self.shared.watched);
         if *watched != ids {
             if let Err(e) = self.shared.send_watch(&ids) {
@@ -395,6 +400,11 @@ impl Remote {
             drop(m);
             *watched = ids;
         }
+    }
+
+    /// How many calls the app made into this remote (`asks`): a `watch` that changes nothing counts.
+    pub fn asks(&self) -> u64 {
+        self.asks.load(Ordering::Relaxed)
     }
 
     /// The blocks whose screens the server pushes now.

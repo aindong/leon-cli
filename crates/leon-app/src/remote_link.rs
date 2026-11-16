@@ -178,6 +178,7 @@ impl Remote {
 
     fn enqueue(&self, method: &str, params: Value, refresh: bool, done: Option<Done>) {
         if let Some(queue) = &self.queue {
+            self.asks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let _ = queue.send(Job { method: method.to_string(), params, refresh, done });
             return;
         }

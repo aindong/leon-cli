@@ -187,6 +187,8 @@ pub struct Workspace {
     /// How many times the poll has run, and asked for a redraw (tests: it runs when woken or when
     /// something timed is due).
     polls: (u64, u64),
+    /// How many times the window rendered (tests: what a frame did, R5).
+    renders: u64,
     /// Redraws the poll asked for since the last frame was drawn: a window that is hidden or
     /// covered draws none, and from the second the poll stops the clocks only a frame shows.
     undrawn: u8,
@@ -310,8 +312,7 @@ impl Workspace {
         let woke = wake.clone();
         app.on_change(move || woke());
         crate::notify::on_click(&wake);
-        let mut term = scroll::TermUi::default();
-        term.wake = Some(wake.clone());
+        let term = scroll::TermUi { wake: Some(wake.clone()), ..Default::default() };
         let updates =
             Arc::new(crate::updates::Updater::new(None, Arc::new(leon_update::Target::running), wake.clone()));
         let hosts = Hosts::new(app.clone(), hosts, wake.clone());
@@ -353,6 +354,7 @@ impl Workspace {
             stats: Rc::new(RefCell::new(stats)),
             seen: 0,
             polls: (0, 0),
+            renders: 0,
             undrawn: 0,
             planned: None,
             keymap: Keymap::app(&json!({})),

@@ -245,6 +245,7 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.renders += 1;
         self.note_focus(window);
         self.note_slides();
         self.settle_overview();
