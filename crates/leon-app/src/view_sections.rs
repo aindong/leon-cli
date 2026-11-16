@@ -109,8 +109,8 @@ impl Input {
 }
 
 /// What outside the UI thread an input was read under: every machine's model fetches (a reader
-/// thread rewrites the sessions), the hosts' states (their link threads) and the clock's second
-/// (the waited times).
+/// thread rewrites the sessions), the hosts' states (their link threads), the tailnet's reads (its
+/// thread) and the Activity list's waited times (the clock, each on its own phase).
 type Stamp = u64;
 
 /// A section: what it draws, rendered through the workspace.
@@ -161,8 +161,11 @@ impl Workspace {
         let mut h = DefaultHasher::new();
         self.hosts.remotes().for_each(|(i, r)| (i, r.model().fetches).hash(&mut h));
         self.hosts.machines().iter().for_each(|m| m.state().hash(&mut h));
-        let second = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-        second.hash(&mut h);
+        self.hosts.tailnet_reads().hash(&mut h);
+        if self.activity {
+            let now = Instant::now();
+            self.attention.rows().iter().for_each(|r| attention::waited(r.since, now).hash(&mut h));
+        }
         h.finish()
     }
 
@@ -332,9 +335,11 @@ impl Workspace {
                 }
             }
         }
-        // the root's own working indicators: the overview's cards
-        let root = self.overview_shown()
-            && self.overview_cards().iter().any(|c| matches!(c.status, Some(Indicator::Working { .. })));
+        // the root's own working indicators: the overview's cards, the switcher's rows
+        let working = |i: Option<Indicator>| matches!(i, Some(Indicator::Working { .. }));
+        let cards = self.overview_shown() && self.overview_cards().iter().any(|c| working(c.status));
+        let switcher = self.switcher_open() && self.rows().iter().any(|r| r.windows.iter().any(|w| working(w.status)));
+        let root = cards || switcher;
         self.pulse_root = match (root, self.pulse_root.take()) {
             (true, None) => Some(cx.observe(&pulse, |_, _, cx| cx.notify())),
             (true, kept) => kept,

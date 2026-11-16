@@ -17,6 +17,11 @@ fn the_pulse_waits_for_a_frame_after_two_undrawn_ticks(cx: &mut TestAppContext) 
     }
     let (running, ticks) = p.read_with(cx, |p, _| (p.running(), p.ticks()));
     assert_eq!((running, ticks), (false, 2), "two ticks, then it waits");
+    // still wanted (a notify of the workspace asks again), but no frame came: it keeps waiting
+    p.update(cx, |p, cx| p.set_running(true, cx));
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    assert_eq!(p.read_with(cx, |p, _| (p.running(), p.ticks())), (false, 2), "only a drawn frame starts it");
     p.update(cx, |p, cx| p.drew(true, cx));
     cx.executor().advance_clock(Duration::from_millis(130));
     cx.run_until_parked();

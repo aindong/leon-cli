@@ -207,3 +207,44 @@ fn an_unfocused_pane_s_header_shows_working_controls_on_hover(cx: &mut TestAppCo
     s.app.stop();
     assert!(closed, "hovering the unfocused pane showed its close control, and a click closed it");
 }
+
+#[gpui::test]
+fn every_section_renders_on_the_theme(cx: &mut TestAppContext) {
+    let s = setup_with_config("leon.set(\"theme\", { dark = \"leon-dark\", light = \"leon-light\" })\n");
+    let (ws, cx) = open(cx, &s.app);
+    ws.update(cx, |ws, _| ws.sync_keymap());
+    let id = tab_running(&s, &ws, cx, &quiet("theme-ready"), "theme-ready");
+    let dark = ws.read_with(cx, |ws, _| ws.theme()) == leon_app::theme::DARK;
+    let (sidebar, header) = (section_renders(&ws, cx, "sidebar"), section_renders(&ws, cx, &format!("header-{id}")));
+    ws.update_in(cx, |ws, _, cx| ws.set_appearance(!dark, cx));
+    let both = shows(cx, |cx| {
+        section_renders(&ws, cx, "sidebar") > sidebar && section_renders(&ws, cx, &format!("header-{id}")) > header
+    });
+    s.app.stop();
+    assert!(both, "the sidebar and the header drew the new theme");
+}
+
+#[gpui::test]
+fn the_title_bar_renders_when_the_sidebar_hides(cx: &mut TestAppContext) {
+    let s = setup();
+    let (ws, cx) = open(cx, &s.app);
+    top_tabs(&ws, cx);
+    // the toolbar's buttons move into the title bar
+    let again = renders_again(&ws, cx, "titlebar", |cx| cx.simulate_keystrokes("cmd-b"));
+    let moved = drawn(cx, "toolbar-palette");
+    s.app.stop();
+    assert!(again && moved);
+}
+
+#[gpui::test]
+fn a_header_renders_when_its_pane_gets_narrower(cx: &mut TestAppContext) {
+    let s = setup();
+    let (ws, cx) = open(cx, &s.app);
+    let id = tab_running(&s, &ws, cx, &quiet("width-ready"), "width-ready");
+    // the title is cut to the pane's width, an input that a resize changes
+    let again = renders_again(&ws, cx, &format!("header-{id}"), |cx| {
+        cx.simulate_resize(gpui::size(gpui::px(700.), gpui::px(600.)))
+    });
+    s.app.stop();
+    assert!(again);
+}
