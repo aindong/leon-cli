@@ -9,6 +9,8 @@ A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first (its decis
   `scripts/package-linux.sh`. `scripts/test-peer-uid.sh` separately proves peer-uid rejection
   in Docker, including a red run with the check disabled in a disposable source copy. A test gated to macOS needs a `// macOS only: <reason>` line above the gate.
 - GPUI needs the `runtime_shaders` feature on this machine (no Metal Toolchain installed).
+- Before writing or changing GPUI code, read `docs/architecture/gpui.md` (its rules) and the GPUI source or
+  example for each API you use (`~/.cargo/registry/src/*/gpui-0.2.2`); no guessing from memory or other versions.
 - Name new methods, actions, events and flags to fit the ones in `docs/api.md` and `docs/lua.md`; env vars are `LEON_*`.
 - The API is a promise (`docs/integrators.md#compatibility`): a new method needs a line in
   `crates/leon-server/src/contract.rs`; after changing any method, regenerate `docs/api.md` with
