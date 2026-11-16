@@ -50,8 +50,9 @@ fields it doesn't know. The full policy is in
 #### Security
 
 - A release server elsewhere can no longer redirect an update to this machine over https either
-  (`https://127.0.0.1`, `localhost`, `127.1` and the like); before, only plain http to a loopback
-  address was refused. What is downloaded was, and is, verified against the release key.
+  (`https://127.0.0.1`, `[::1]` with or without a zone, `localhost`, `127.1`, a %-escaped name
+  and the like); before, only plain http to a loopback address was refused. An address that is
+  not ASCII is refused outright. What is downloaded was, and is, verified against the release key.
 
 ### Fading the panes without the focus
 

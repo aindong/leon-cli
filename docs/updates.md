@@ -41,7 +41,13 @@ To turn the daily look off, so that the app makes no request of its own:
 leon.set("check_for_updates", false)
 ```
 
-Check for Updates still works then.
+Check for Updates still works then. The app looks on its own only once its server reports this
+setting: attached to a server from before it (API 1.7.0), which would have skipped
+`check_for_updates = false` as unknown, it waits until that server restarts.
+
+The notice's buttons are in the palette too while it shows them (Dismiss the Update Notice, Open
+the Release Notes, Copy the Update Command, Restart to Finish the Update), so the keyboard
+reaches every one.
 
 The notice says what to do instead of Install when the app can't replace itself:
 
