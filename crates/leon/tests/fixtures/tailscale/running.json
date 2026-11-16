@@ -1,0 +1,27 @@
+{
+  "Version": "1.104.5",
+  "BackendState": "Running",
+  "MagicDNSSuffix": "example-tailnet.ts.net",
+  "Self": {
+    "ID": "n1", "HostName": "mymac", "DNSName": "mymac.example-tailnet.ts.net.", "OS": "macOS",
+    "UserID": 1001, "Online": true, "TailscaleIPs": ["100.64.0.1"]
+  },
+  "Peer": {
+    "nodekey:aa": {
+      "ID": "n2", "HostName": "Laptop (old)", "DNSName": "laptop.example-tailnet.ts.net.", "OS": "macOS",
+      "UserID": 1001, "Online": false, "TailscaleIPs": ["100.64.0.2"]
+    },
+    "nodekey:bb": {
+      "ID": "n3", "HostName": "devbox", "DNSName": "devbox.example-tailnet.ts.net.", "OS": "linux",
+      "UserID": 1001, "Online": true, "TailscaleIPs": ["100.64.0.3"],
+      "sshHostKeys": ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEXAMPLEKEYONLY"]
+    },
+    "nodekey:cc": {
+      "ID": "n4", "HostName": "buildbox", "DNSName": "buildbox.example-tailnet.ts.net.", "OS": "linux",
+      "UserID": 1001, "Online": true, "TailscaleIPs": ["100.64.0.4"]
+    }
+  },
+  "User": {
+    "1001": { "ID": 1001, "LoginName": "me@example.com", "DisplayName": "Me" }
+  }
+}

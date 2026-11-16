@@ -3,9 +3,11 @@
 //! per connection attempt does the slow part; the UI thread picks the result up in `poll`.
 
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
+use leon_hosts::tailscale::{self, Tailnet};
 use leon_hosts::{Host, Link};
 
 use crate::remote::{LinkState, Remote};
@@ -49,7 +51,15 @@ impl HostState {
 pub fn classify(why: String) -> HostState {
     let why = leon_hosts::shown_text(&why, 200); // the host's words go on screen
     let l = why.to_lowercase();
-    let asks = ["permission denied", "host key verification failed", "passphrase", "password", "authentication"];
+    // the last: Tailscale SSH's browser check ("To authenticate, visit: …")
+    let asks = [
+        "permission denied",
+        "host key verification failed",
+        "passphrase",
+        "password",
+        "authentication",
+        "to authenticate",
+    ];
     match asks.iter().any(|w| l.contains(w)) {
         true => HostState::NeedsLogin(why),
         false => HostState::Unreachable(why),
@@ -111,9 +121,19 @@ impl Machine {
     }
 }
 
+/// A tailnet status read: the tailnet, or why there is none.
+pub type Status = Result<Arc<Tailnet>, String>;
+
 pub struct Hosts {
     machines: Vec<Machine>,
     wake: Arc<dyn Fn() + Send + Sync>,
+    /// The last tailnet status read (None until one comes), kept while the next is read.
+    tailnet: Arc<Mutex<Option<Status>>>,
+    /// Counts the reads that came in, so the window redraws when one does.
+    tailnet_reads: Arc<AtomicU64>,
+    /// A read is running: one at a time, so a hung client costs one process, and an older read
+    /// can't land after a newer one.
+    reading: Arc<AtomicBool>,
 }
 
 impl Hosts {
@@ -121,9 +141,53 @@ impl Hosts {
     /// thread) whenever a host's state or model changes.
     pub fn new(local: Rc<Remote>, hosts: Vec<Host>, wake: Arc<dyn Fn() + Send + Sync>) -> Hosts {
         let this_mac = Machine::new(THIS_MAC.into(), None, Some(local));
-        let mut out = Hosts { machines: vec![this_mac], wake };
+        let any = !hosts.is_empty();
+        let mut out = Hosts {
+            machines: vec![this_mac],
+            wake,
+            tailnet: Arc::default(),
+            tailnet_reads: Arc::default(),
+            reading: Arc::default(),
+        };
         hosts.into_iter().for_each(|h| out.add(h));
+        if any {
+            out.read_tailnet(); // which hosts are tailnet machines
+        }
         out
+    }
+
+    /// Read the tailnet's status again on a thread of its own (it may take up to its deadline);
+    /// `tailnet` has it once it comes. False when there is no Tailscale client here.
+    pub fn read_tailnet(&self) -> bool {
+        if tailscale::client().is_none() {
+            return false;
+        }
+        if self.reading.swap(true, Ordering::SeqCst) {
+            return true;
+        }
+        let (into, wake, reading) = (self.tailnet.clone(), self.wake.clone(), self.reading.clone());
+        let reads = self.tailnet_reads.clone();
+        let read = move || {
+            let status = tailscale::status().map(Arc::new);
+            *into.lock().unwrap_or_else(PoisonError::into_inner) = Some(status);
+            reads.fetch_add(1, Ordering::SeqCst);
+            reading.store(false, Ordering::SeqCst);
+            wake();
+        };
+        if std::thread::Builder::new().name("leon-tailnet".into()).spawn(read).is_err() {
+            self.reading.store(false, Ordering::SeqCst);
+        }
+        true
+    }
+
+    /// The last tailnet status read, if one has come.
+    pub fn tailnet(&self) -> Option<Status> {
+        self.tailnet.lock().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
+    /// How many tailnet reads have come in (the window's signature: a new one is drawn).
+    pub fn tailnet_reads(&self) -> u64 {
+        self.tailnet_reads.load(Ordering::SeqCst)
     }
 
     /// Show `host` and start connecting to it.
@@ -226,6 +290,7 @@ mod tests {
             "me@box: Permission denied (publickey,password).",
             "Host key verification failed.",
             "Enter passphrase for key: ",
+            "# Tailscale SSH requires an additional check. To authenticate, visit: https://login.example/a/1",
         ] {
             assert!(matches!(classify(why.into()), HostState::NeedsLogin(_)), "{why}");
         }

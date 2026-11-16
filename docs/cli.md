@@ -20,7 +20,7 @@ panes) in a split layout. Every object has a stable ID such as `block:91c0…`.
   `$LEON_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/leon`, else `~/.local/state/leon/run`; its path
   must fit a Unix socket (under 104 bytes on macOS, 108 on Linux), or leon says so and stops.
 - **Another machine.** `-H HOST` sends any client command to the leon server on another machine,
-  through your own `ssh` (see [Hosts](#hosts)).
+  through your own `ssh` (see [cli/hosts.md](cli/hosts.md)).
 
 ## Global flags
 
@@ -363,51 +363,9 @@ yourself.
 
 ## Hosts
 
-`-H HOST` reaches the leon server on another machine (a devbox, a cloud VM, another Mac) through
-the system `ssh`, so `~/.ssh/config`, `ProxyJump`, keys and agents all work, and leon never sees a
-password. Nothing listens on a network port: leon runs `ssh -T … -- [USER@]HOST` and, on the
-host, `leon server proxy` (found on `PATH`, else in `~/.local/bin`), which starts the host's
-server if none runs. `LEON_SSH` names another ssh program. An endpoint is only
-`ssh://[USER@]HOST[:PORT]` with plain names; anything else is refused (exit 2). Each connection is
-one ssh session (`leon attach` opens three), so use keys or an agent, and `ControlMaster auto` in
-`~/.ssh/config` to share one login.
-
-```text
-leon -H ssh://me@devbox ls
-leon hosts add devbox ssh://me@devbox
-leon -H devbox attach
-```
-
-This machine's working directory means nothing on the host: with `-H`, `run`, `split` and `new`
-start in the host's home unless `--cwd` gives an absolute path there (a relative one exits 2).
-
-`leon server run|start|proxy`, `leon app`, `leon config check`, `leon skill`, `leon hosts` and
-`leon self-update` are about this machine and refuse `-H`; `leon server status` and `leon server stop` work over it.
-
-### `leon hosts`
-
-Name other machines for `-H`, and check that they answer. The list is
-`$LEON_STATE_DIR/hosts.json` (mode 0600, in the private state dir).
-
-### `leon hosts list`
-
-List the hosts; `--json` prints `[{"label", "endpoints", "icon"}]`.
-
-### `leon hosts add LABEL ENDPOINT…`
-
-Add a host: a label (letters, digits, `.`, `_`, `-`) and its `ssh://` endpoints. `-H LABEL` uses
-the first. A label is added once (exit 1 if it exists).
-
-- `--icon NAME`: an icon name for the app to show.
-
-### `leon hosts remove LABEL…`
-
-Remove hosts (exit 3 if one isn't there).
-
-### `leon hosts check [LABEL…]`
-
-Reach each host (default: every one) as a command would, and print `ok` with its leon version,
-or why not. Exit 4 if any host failed.
+`-H HOST` reaches the leon server on another machine through the system `ssh`. `leon hosts`
+(list, add, remove, check; `--tailscale` adds a machine from your tailnet) and how `-H` works are
+in [cli/hosts.md](cli/hosts.md).
 
 ## Updates
 

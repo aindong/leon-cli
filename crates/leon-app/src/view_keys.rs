@@ -123,7 +123,7 @@ impl Workspace {
         match name {
             "session.new" => self.new_session_on(self.host_arg(args), cx),
             "session.switch" => self.switch_action(args, cx),
-            "client.host.add" => self.ask_host(cx),
+            "client.host.add" => self.ask_host(args, cx),
             "client.tab.new" => self.new_tab(&NewTab, window, cx),
             "client.tab.next" => self.step_tab(1, cx),
             "client.tab.previous" => self.step_tab(-1, cx),
@@ -243,7 +243,8 @@ impl Workspace {
     /// its one row: what to type, or why the last try was refused.
     pub fn palette_rows(&self) -> Vec<(String, Option<String>)> {
         if let Some((_, row)) = self.ask_rows() {
-            return vec![(row, None)];
+            let picks = self.palette_matches().into_iter().map(|it| (it.title, it.shortcut));
+            return picks.chain([(row, None)]).collect();
         }
         self.palette_matches().into_iter().map(|it| (it.title, it.shortcut)).collect()
     }
@@ -258,7 +259,12 @@ impl Workspace {
     }
 
     pub(super) fn palette_matches(&self) -> Vec<Item> {
-        let Some(p) = self.palette.as_ref().filter(|p| p.ask.is_none()) else { return Vec::new() };
+        let Some(p) = self.palette.as_ref() else { return Vec::new() };
+        match &p.ask {
+            Some((hosts_view::Ask::Tailnet, _)) => return self.tailnet_items(&p.query),
+            Some(_) => return Vec::new(),
+            None => {}
+        }
         if p.switch {
             return self.switcher_items(&p.query);
         }
@@ -308,10 +314,12 @@ impl Workspace {
         let Some(p) = self.palette.as_mut() else { return };
         if named("escape") || toggle {
             self.palette = None;
-        } else if named("enter") && p.ask.is_some() {
+        } else if named("enter") && p.ask.as_ref().is_some_and(|(a, _)| !matches!(a, hosts_view::Ask::Tailnet)) {
             self.ask_enter(cx);
         } else if named("enter") || (ks.key == "enter" && m.platform && p.switch) {
-            let pick = matches.into_iter().nth(p.selected);
+            // the list may have shrunk under the selection (the tailnet's status came in)
+            let last = matches.len().saturating_sub(1);
+            let pick = matches.into_iter().nth(p.selected.min(last));
             if !(m.platform && p.switch) || pick.is_none() {
                 self.palette = None; // ⌘↩ in the switcher: session.switch closes it, or notes why not
             }

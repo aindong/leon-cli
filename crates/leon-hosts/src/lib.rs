@@ -4,6 +4,7 @@
 
 pub mod hosts;
 mod link;
+pub mod tailscale;
 
 use std::process::Command;
 use std::str::FromStr;

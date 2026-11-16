@@ -1,0 +1,7 @@
+{
+  "Version": "1.104.5",
+  "BackendState": "Stopped",
+  "Self": { "ID": "n1", "HostName": "mymac", "DNSName": "", "OS": "macOS", "UserID": 0, "Online": false },
+  "Peer": null,
+  "User": null
+}
