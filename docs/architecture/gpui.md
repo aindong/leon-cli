@@ -117,8 +117,9 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   asks the server for its size from `prepaint` (Zed's terminal element does the same). Why: a
   cached view's `render` does not run, so work done there stops happening; a dirty one runs it
   every frame. And a `cx.notify()` made while drawing asks for no frame, so its change waits.
-  Bookkeeping about the frame itself (that one was drawn) may be scheduled from `render` with
-  `cx.defer_in`, never model work or I/O: it runs once `Window::draw` returns, outside the draw
+  Bookkeeping about the frame itself (that one was drawn, what it showed, such as the pane the
+  user arrived at) may be scheduled from `render` with `cx.defer_in`, given values read in
+  `render` (the model can move before it runs), never model work or I/O: it runs once `Window::draw` returns, outside the draw
   phase, on macOS and on the test platform (`Window::defer`, `window.rs:1541`; `flush_effects`,
   `app.rs:1201`), where `window.on_next_frame` never runs (`platform/test/window.rs:235`).
   Check: review.
@@ -207,7 +208,7 @@ on the main thread, list the file here with its reason, and never use it to driv
 
 - Where the app is today (each moved by the refactor's phases): one `Render` for the whole
   window (`view_panes.rs`, `impl Render for Workspace`; R1, R3); the model work `render` did
-  (`sync_pane`, `run_find`, `settle`, the focus event) runs in `prepare`, an observer of every
+  (`sync_pane`, `run_find`, `settle`) runs in `prepare`, an observer of every
   notify of the workspace, until the views and entities take it over (phases 2 and 5; R5); a poll that hashes everything drawn
   and notifies the whole window (`view_poll.rs`; R4); slides, fades and the spinner clocked by
   that poll (R6); keys for the palette, find and modes handled by hand inside one `key_down`
