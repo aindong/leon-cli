@@ -5,11 +5,11 @@
 //! changed (`diff`, `apply`).
 
 use alacritty_terminal::event::EventListener;
-use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::grid::{Dimensions, Indexed};
 use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::color::Colors;
-use alacritty_terminal::term::{Term, TermMode};
+use alacritty_terminal::term::{RenderableCursor, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 
 use schemars::JsonSchema;
@@ -234,19 +234,55 @@ mod shape {
 }
 
 pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
-    let content = term.renderable_content();
-    let (lines, cols) = (term.screen_lines(), term.columns());
+    build(&Shot::of(term), theme)
+}
+
+/// What a frame is built from, copied out of the emulator under its lock: the parse thread then
+/// waits only for the copy, not for the spans built from it.
+pub struct Shot {
+    lines: usize,
+    cols: usize,
+    cells: Vec<Indexed<Cell>>,
+    offset: i32,
+    cursor: RenderableCursor,
+    colors: Colors,
+    pub(crate) mode: TermMode,
+    history: usize,
+}
+
+impl Shot {
+    pub fn of<T: EventListener>(term: &Term<T>) -> Shot {
+        let content = term.renderable_content();
+        let (lines, cols) = (term.screen_lines(), term.columns());
+        let mut cells = Vec::with_capacity(lines * cols);
+        cells.extend(content.display_iter.map(|c| Indexed { point: c.point, cell: c.cell.clone() }));
+        Shot {
+            lines,
+            cols,
+            cells,
+            offset: content.display_offset as i32,
+            cursor: content.cursor,
+            colors: *content.colors,
+            mode: content.mode,
+            history: term.grid().history_size(),
+        }
+    }
+}
+
+/// The frame of `shot`, as `frame` builds it.
+pub fn build(shot: &Shot, theme: &Theme) -> Frame {
+    let (lines, cols) = (shot.lines, shot.cols);
     let mut f = Frame { lines, cols, rows: vec![Vec::new(); lines], ..Frame::default() };
-    let offset = content.display_offset as i32;
-    let cursor_at = content.cursor.point;
-    let mut cursor = (content.cursor.shape != CursorShape::Hidden).then(|| Cursor {
+    let offset = shot.offset;
+    let cursor_at = shot.cursor.point;
+    let mut cursor = (shot.cursor.shape != CursorShape::Hidden).then(|| Cursor {
         line: usize::MAX,
         col: cursor_at.column.0,
-        shape: content.cursor.shape,
+        shape: shot.cursor.shape,
         wide: false,
         text: String::new(),
     });
-    for cell in content.display_iter {
+    for cell in &shot.cells {
         let Ok(line) = usize::try_from(cell.point.line.0 + offset) else { continue };
         if line >= lines {
             continue;
@@ -258,7 +294,7 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
             }
             continue;
         }
-        let (span, bg) = cell_span(&cell, cell.point.column.0, content.colors, theme);
+        let (span, bg) = cell_span(cell, cell.point.column.0, &shot.colors, theme);
         if let Some(c) = cursor.as_mut().filter(|_| cell.point == cursor_at) {
             // Concealed text stays concealed under a block cursor too.
             let shown = if cell.flags.contains(Flags::HIDDEN) { " ".to_string() } else { span.text.clone() };
@@ -270,11 +306,11 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
         trim(r);
     }
     f.cursor = cursor.filter(|c| c.line < lines);
-    let mode = *term.mode();
+    let mode = shot.mode;
     f.app_cursor = mode.contains(TermMode::APP_CURSOR);
     f.bracketed_paste = mode.contains(TermMode::BRACKETED_PASTE);
     f.view = View {
-        history: term.grid().history_size(),
+        history: shot.history,
         alt_screen: mode.contains(TermMode::ALT_SCREEN),
         alternate_scroll: mode.contains(TermMode::ALTERNATE_SCROLL),
         mouse: crate::mouse::report(mode, false),

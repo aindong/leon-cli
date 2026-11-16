@@ -171,12 +171,13 @@ impl Terminal {
 
     /// The screen a client paints, with its line numbering and mouse modes.
     pub fn frame(&self, theme: &Theme) -> Frame {
-        self.with_term(|term| {
-            let mut f = screen::frame(term, theme);
-            f.view.scrolled = self.scrolled();
-            f.view.mouse = mouse::report(*term.mode(), self.x10.load(Ordering::SeqCst));
-            f
-        })
+        // only the copy under the lock: the parse thread waits for that, not for the spans
+        let (shot, scrolled, x10) =
+            self.with_term(|term| (screen::Shot::of(term), self.scrolled(), self.x10.load(Ordering::SeqCst)));
+        let mut f = screen::build(&shot, theme);
+        f.view.scrolled = scrolled;
+        f.view.mouse = mouse::report(shot.mode, x10);
+        f
     }
 
     /// Rows `from..from + count` by absolute number (at most `MAX_LINES`), history and screen;
