@@ -74,6 +74,9 @@ fields it doesn't know. The full policy is in
   pane gets its resize when the pane is shown; `capture` and `dev.leon.terminal.size` report the
   old size until then. A pane that only `leon attach` shows keeps the size attach gave it. ⌘0 at
   the size the font already has, or an init.lua reload that leaves the font, resizes nothing.
+- On macOS the server hands freed memory back to the system when a pane's history goes (its
+  session killed, its block closed), so its footprint follows what it holds instead of climbing
+  between closes. Closes within 100 ms share one give-back, on a thread of its own.
 
 ### Fading the panes without the focus
 

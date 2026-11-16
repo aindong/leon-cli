@@ -226,7 +226,7 @@ session was streaming the screen, which slows every outside number the same way)
 | memory (footprint) | `memory.sh` | server 7.3 MiB idle, +0.53 MiB a pane, +20.7 MiB per 10,000 lines of scrollback in an 80-column pane; app 137 MiB, +0.06 MiB a pane; a 1 GB flood peaks the app at 163 MiB and it is back to 135 MiB within 30 s; a font change with 9 hidden 10,000-line panes adds 0.1 MiB to the server (387 to 414 MiB when hidden panes were refit too) |
 | CPU with 12 idle panes: still / one pane working / app hidden | `idle-cpu.sh` | server under 0.1% of a core in each; app 2.3% / 6.6% / 1.9%, 80 / 58 / 32 wake-ups a second at first; since the poll runs only when woken, 0.74% / 4.4% / 0.06%, 18 / 18 / 0.3 (load 1.4 to 2.3) |
 | 25 and 100 panes, 50 sessions, 10 tabs | `scale.sh` | 100 panes made in 1.4 s, the 100th split as fast as the first (9 ms, the CLI's own start included); 60 frames a second with all 100 printing, frame build p50 5.1 ms; server 88 MiB; a session 11 ms |
-| 2-hour agent soak: 12 agents in 4 sessions, a session made and killed and an attach client every minute | `soak.sh 120` | app 162 to 180 MiB throughout (+1.2 MiB/h over the last hour); server 354 to 432 MiB, then 667 to 896 MiB after the 9 hidden panes were fitted to the window's width at minute 48 (their 10,000-line histories now 213 columns; likely a font change, which fitted hidden panes then and now fits only the panes on screen); its live heap was the same at minutes 60 and 120 (748 MB, +448 bytes), so the footprint's sawtooth is freed memory the allocator keeps; `leaks` found none in the server and 56 small AppKit objects (2.5 KB) in the app |
+| 2-hour agent soak: 12 agents in 4 sessions, a session made and killed and an attach client every minute | `soak.sh 120` | app 162 to 180 MiB throughout (+1.2 MiB/h over the last hour); server 354 to 432 MiB, then 667 to 896 MiB after the 9 hidden panes were fitted to the window's width at minute 48 (their 10,000-line histories now 213 columns; likely a font change, which fitted hidden panes then and now fits only the panes on screen); its live heap was the same at minutes 60 and 120 (748 MB, +448 bytes), so the footprint's sawtooth is freed memory the allocator keeps; `leaks` found none in the server and 56 small objects (2.5 KB) in the app, all leaked by GPUI ("Two leaks in GPUI" below) |
 
 Where the time goes, from `sample`: the app used to poll its model every 8 ms (`POLL`) even when
 nothing changed or it was hidden; now its main thread sleeps until woken, and what an idle shown
@@ -240,6 +240,22 @@ presents through a three-drawable Metal layer.
 ## A big `cat`
 
 The parse path's speed-up for a flood of text and colour, with its numbers: docs/performance-cat.md.
+
+## Two leaks in GPUI
+
+The app's `leaks` (`MallocStackLogging=1`, release build, agents reporting status) are all
+allocated under GPUI 0.2.2, none in leon's code: 44 objects (2.8 KB) after 6 minutes, a few more
+an hour. leon carries no patched GPUI for 2.5 KB; these are the fixes, ready to send upstream.
+
+- `src/platform/mac/open_type.rs`, `apply_features_and_fallbacks`: the arrays from
+  `generate_feature_array` and `generate_fallback_array` come from `CFArrayCreateMutable` (the
+  caller owns them) and go into a dictionary that retains them, but are never released: arrays
+  leak once per font resolved. Fix, after `CFDictionaryCreate(...)`:
+  `for value in &values { CFRelease(*value as _); }`
+- `src/platform/mac/window.rs`, `display_id_for_screen`: the `NSScreenNumber` key is made with
+  `NSString::alloc(nil).init_str(...)` (owned) and never released; `start_display_link` calls it
+  at every key-window and occlusion change. Fix:
+  `let screen_number_key: id = NSString::alloc(nil).init_str("NSScreenNumber").autorelease();`
 
 ## Not measured yet
 
