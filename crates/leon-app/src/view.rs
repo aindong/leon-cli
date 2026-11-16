@@ -2,7 +2,7 @@
 //! sessions, the tabs then in the titlebar), and the active window's split layout as tiles, each a
 //! pane header over a terminal painted from the screen the server pushes. A task
 //! on the GPUI executor redraws when the model or a screen changed, woken by the reader thread
-//! (or every `POLL`, for the spinner and the keymap).
+//! or at a deadline while something timed is pending (view_poll.rs).
 
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;

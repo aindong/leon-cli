@@ -349,10 +349,11 @@ impl Workspace {
         Some((prefix, self.keymap.hints(&self.pending)))
     }
 
-    /// Ask the server for its keymap now and then, off the UI thread (a reload holds the config
-    /// for up to 5 s); apply a reply whose generation moved, and then the settings of that reload
-    /// (every reload moves the generation, and `settings_changed` only comes with one).
-    pub(super) fn refresh_keymap(&mut self, cx: &mut Context<Self>) {
+    /// Ask the server for its keymap, off the UI thread (a reload holds the config for up to 5 s):
+    /// on the 1 s `tick`, else only for the first time or after a reload. Apply a reply whose
+    /// generation moved, and then the settings of that reload (every reload moves the generation,
+    /// and `settings_changed` only comes with one).
+    pub(super) fn refresh_keymap(&mut self, tick: bool, cx: &mut Context<Self>) {
         let settings = lock(&self.inbox).settings.take();
         // one asked for under an older generation may come after a newer one: it is dropped
         if let Some((_, settings)) = settings.filter(|(g, _)| *g == self.keymap.generation) {
@@ -361,7 +362,7 @@ impl Workspace {
         }
         let reply = {
             let mut inbox = lock(&self.inbox);
-            let due = self.keymap_asked.is_none_or(|t| t.elapsed() >= KEYMAP_POLL);
+            let due = tick || self.keymap_asked.is_none();
             if due && !inbox.asking {
                 inbox.asking = true;
                 self.keymap_asked = Some(Instant::now());

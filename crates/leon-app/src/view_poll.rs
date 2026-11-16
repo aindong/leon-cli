@@ -30,7 +30,7 @@ impl Workspace {
         let tick = cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(KEYMAP_POLL).await;
             let alive = this.update(cx, |ws, cx| {
-                ws.refresh_keymap(cx);
+                ws.refresh_keymap(true, cx);
                 ws.look_for_updates();
                 ws.stats.borrow_mut().report();
             });
@@ -53,6 +53,7 @@ impl Workspace {
                 self.stopped = true;
                 cx.notify();
             }
+            self.planned = None;
             return None;
         }
         self.poll_hosts();
@@ -61,7 +62,7 @@ impl Workspace {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         }
         self.poll_attention(cx);
-        self.refresh_keymap(cx);
+        self.refresh_keymap(false, cx);
         let now = self.signature();
         if now != self.seen || self.sliding() || self.fading() || replied {
             self.seen = now;
