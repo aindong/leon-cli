@@ -62,6 +62,7 @@ impl Workspace {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         }
         self.poll_attention(cx);
+        self.stats.borrow_mut().report(); // and on the tick, for the last frames before a quiet spell
         self.refresh_keymap(false, cx);
         let now = self.signature();
         if now != self.seen || self.sliding() || self.fading() || replied {
