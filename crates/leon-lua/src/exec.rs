@@ -178,6 +178,8 @@ fn spawn(lua: &Lua, argv: Value, opts: Option<&Table>, start: bool) -> mlua::Res
         Value::Nil | Value::Boolean(false) => Stdio::null(),
         v => return Err(bad(format!("leon.exec: stdin must be a string or true, got {}", v.type_name()))),
     });
+    // the program may not keep what another thread is opening just now (a pane's PTY)
+    leon_core::spawn::stdio_only(&mut cmd);
     let mut child = cmd.spawn().map_err(|e| bad(format!("leon.exec: {prog}: {e}")))?;
     let mut pipe = child.stdin.take();
     if let Value::String(s) = &stdin {
