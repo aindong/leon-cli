@@ -11,9 +11,6 @@ use crate::client::{Client, Fail, Server};
 use crate::commands::pick_session;
 use crate::Cli;
 
-/// How long a dropped link is retried: as long as the server keeps a dropped stream.
-const GIVE_UP: Duration = leon_server::resume::HOLD;
-
 pub fn run(mut c: Client, cli: &Cli, all: bool, server: &Server) -> Result<(), Fail> {
     let (method, mut params, session) = match (&cli.session, all) {
         (Some(_), false) => {
@@ -89,7 +86,9 @@ fn reconnect(
     method: &str,
     params: &Value,
 ) -> Result<(Client, Option<Value>), Fail> {
-    let end = Instant::now() + GIVE_UP;
+    // as long as the server keeps a dropped stream
+    let give_up = leon_server::resume::link_hold();
+    let end = Instant::now() + give_up;
     let mut wait = Duration::from_millis(100);
     // One try, which may not outlast `end`: an ssh that hangs (a blackholed network, a prompt
     // nobody answers) would otherwise hold it for minutes.
@@ -115,7 +114,7 @@ fn reconnect(
         }
         if Instant::now() + wait > end {
             let name = server.link.as_ref().map_or("the host", |(n, _)| n.as_str());
-            return Err(Fail::Unreachable(format!("lost the link to {name} for {} s", GIVE_UP.as_secs())));
+            return Err(Fail::Unreachable(format!("lost the link to {name} for {} s", give_up.as_secs())));
         }
         std::thread::sleep(wait);
         wait = (wait * 2).min(Duration::from_secs(5));

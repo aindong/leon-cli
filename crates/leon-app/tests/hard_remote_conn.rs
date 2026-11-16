@@ -169,12 +169,14 @@ fn a_server_that_stops_reading_cant_hold_a_write() {
 
 #[test]
 fn a_spawned_call_to_a_silent_server_ends() {
+    // the Lua limit and 5 s (35 s) by default; 2 s here. Set while this file's other tests run:
+    // Rust's env calls share one lock; nothing here is known to read it from C meanwhile.
+    std::env::set_var("LEON_SPAWN_WAIT_SECS", "2");
     let f = serve(one_session());
     let remote = connect(&f);
     let (tx, rx) = mpsc::channel();
     remote.spawn("test.silent", json!({}), move |r| drop(tx.send(r)));
-    // the Lua limit (30 s), and 7 s
-    let r = rx.recv_timeout(Duration::from_secs(37)).expect("the spawned call ended");
+    let r = rx.recv_timeout(Duration::from_secs(2 + 7)).expect("the spawned call ended");
     assert_eq!(r.expect_err("no reply came").code, "unreachable");
 }
 
