@@ -18,13 +18,7 @@ impl Workspace {
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                // each block read once: per window per block would be a million a poll at the caps
-                let mut by_window = std::collections::HashMap::<&str, Option<Indicator>>::new();
-                for b in &s.blocks {
-                    let shown = status::indicator_of(&b.newest_first());
-                    let w = by_window.entry(&b.window_id).or_default();
-                    *w = status::aggregate([*w, shown]);
-                }
+                let by_window = crate::overview::tab_statuses(s);
                 let windows: Vec<WindowRow> = s
                     .windows
                     .iter()
@@ -181,7 +175,8 @@ impl Workspace {
                 m.block(id).is_some_and(|(s, b)| header(s, b) && working(&status::indicator_of(&b.newest_first())))
             })
         };
-        (sidebar || tabs || headers).then(|| self.pulse())
+        let cards = self.overview_shown() && self.overview_cards().iter().any(|c| working(&c.status));
+        (sidebar || tabs || headers || cards).then(|| self.pulse())
     }
 
     pub fn font_size(&self) -> f32 {
@@ -193,7 +188,9 @@ impl Workspace {
     /// and panes hidden by a zoom don't count).
     pub fn signature(&self) -> u64 {
         let mut h = DefaultHasher::new();
-        let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
+        // with the overview up its thumbnails redraw themselves (`refresh_thumbs`), never the window
+        let shown = self.shown().map(|(_, ids)| ids).filter(|_| !self.overview_shown()).unwrap_or_default();
+        self.overview_shown().hash(&mut h);
         for (host, remote) in self.hosts.remotes() {
             let m = remote.model();
             host.hash(&mut h);

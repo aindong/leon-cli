@@ -397,6 +397,11 @@ impl Remote {
         }
     }
 
+    /// The blocks whose screens the server pushes now.
+    pub fn watched(&self) -> Vec<String> {
+        lock(&self.shared.watched).clone()
+    }
+
     /// Whether the server still answers (false once it stopped).
     pub fn alive(&self) -> bool {
         self.shared.alive.load(Ordering::SeqCst)

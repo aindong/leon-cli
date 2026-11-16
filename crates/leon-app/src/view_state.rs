@@ -3,6 +3,11 @@
 
 use super::*;
 
+/// A GPUI rectangle as a settings frame.
+pub(super) fn frame(b: Bounds<Pixels>) -> chrome::Frame {
+    chrome::Frame { x: b.origin.x.into(), y: b.origin.y.into(), w: b.size.width.into(), h: b.size.height.into() }
+}
+
 impl Workspace {
     /// This Mac's server stopped from outside, and the window says so.
     pub fn server_stopped(&self) -> bool {

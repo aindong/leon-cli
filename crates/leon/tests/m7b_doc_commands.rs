@@ -117,9 +117,11 @@ fn readme_lists_the_app_shortcuts() {
     // the app's built-in shortcuts are the `DEFAULTS` table, one `("key", "action")` per line
     let keymap = std::fs::read_to_string(help_walk::repo().join("crates/leon-app/src/keymap.rs")).unwrap();
     let table = keymap.split("pub const DEFAULTS").nth(1).and_then(|t| t.split("];").next()).unwrap();
-    let bindings: Vec<&str> = table.split("(\"").skip(1).filter_map(|s| s.split('"').next()).collect();
+    // the source escapes a backslash key (`cmd+\\`)
+    let bindings: Vec<String> =
+        table.split("(\"").skip(1).filter_map(|s| s.split('"').next()).map(|b| b.replace("\\\\", "\\")).collect();
     assert!(bindings.len() >= 15, "found the app's bindings: {bindings:?}");
-    for b in bindings {
+    for b in &bindings {
         assert!(readme.contains(&glyphs(b)), "README should list the shortcut {b} as {}", glyphs(b));
     }
     assert!(readme.contains("⌘1"), "README should list ⌘1–⌘9");

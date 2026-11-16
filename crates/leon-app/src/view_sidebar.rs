@@ -45,11 +45,15 @@ impl Workspace {
             for (w, win) in row.windows.iter().enumerate() {
                 let current = selected && w == row.active;
                 let sid = row.id.clone();
+                let hovered = (row.host, row.id.clone(), win.id.clone());
                 items =
                     items.child(
                         div()
                             .id(SharedString::from(format!("row-{i}-{w}")))
                             .debug_selector(|| sel(format!("row-{i}-{w}")))
+                            .on_hover(cx.listener(move |ws, on: &bool, window, cx| {
+                                ws.hover_tab(*on, hovered.clone(), true, window, cx)
+                            }))
                             .flex()
                             .flex_none()
                             .items_center()

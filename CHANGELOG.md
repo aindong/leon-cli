@@ -28,6 +28,22 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### The overview in Leon.app
+
+#### Added
+
+- ⌘⇧\ (or the toolbar's grid button, or "Overview of All Tabs" in the palette) fills the window
+  with every tab of every session and host as a card: its title, its status in the sidebar's
+  colours and words, and a live, scaled-down view of its panes as laid out. Arrow keys move
+  between cards, ↩ or a click goes to the tab, typing filters by title, and esc goes back to where
+  you were. ⌘\ shows only the current session's tabs. A host that isn't connected shows its last
+  cards greyed, with the reason.
+- Resting the pointer on a tab in the titlebar, or on a tab's row in the sidebar, shows a live
+  thumbnail of that tab; moving to the next tab moves it at once.
+- Thumbnails are drawn from the screens leon already has, never captured from the window: a card
+  draws again only when its screen changes, at most four times a second, and an idle overview
+  draws nothing.
+
 ### Output throughput
 
 #### Changed

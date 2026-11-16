@@ -66,7 +66,6 @@ impl Workspace {
         };
         let mut out =
             div().debug_selector(|| sel("panes-area".into())).flex_1().relative().overflow_hidden().bg(rgb(t.chrome));
-        self.app.watch(terms.clone()); // only what is on screen is pushed
         for p in &l.panes {
             if terms.contains(&p.block_id) {
                 out = out.child(self.pane_tile("pane", &p.block_id, p.rect, None, &tiling, cx));
@@ -251,6 +250,7 @@ impl Render for Workspace {
             self.set_font_size(self.font_size, window, cx); // a new font from init.lua
         }
         self.note_slides();
+        self.settle_overview();
         DRAWN.with(|d| d.borrow_mut().clear());
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
@@ -275,6 +275,28 @@ impl Render for Workspace {
         // very panes this frame draws
         let body_shown = self.shown();
         self.note_fades(body_shown.as_ref().map_or(&[][..], |(_, ids)| ids));
+        // only what is drawn is pushed: the panes on screen, and every thumbnail's (view_overview.rs)
+        let on_screen = match &body_shown {
+            Some((_, ids)) if !self.overview_shown() => ids.clone(),
+            _ => Vec::new(),
+        };
+        if !self.stopped {
+            self.watch_screens(&on_screen);
+        }
+        let preview = self.render_preview(window, cx).filter(|_| !self.stopped);
+        if self.overview_shown() && !self.stopped {
+            return div()
+                .key_context("Workspace")
+                .track_focus(&self.focus)
+                .on_key_down(cx.listener(Self::key_down))
+                .size_full()
+                .bg(rgb(self.theme.chrome))
+                .font_family(".SystemUIFont")
+                .text_size(px(UI_TEXT))
+                .text_color(rgb(self.theme.text))
+                .child(self.render_overview(window, cx))
+                .children(self.render_stale(window));
+        }
         let body = match body_shown {
             _ if self.stopped => self.render_stopped(cx).into_any_element(),
             Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
@@ -325,6 +347,7 @@ impl Render for Workspace {
             .child(column)
             .children(self.render_stale(window))
             .children(self.render_update(cx).filter(|_| !self.stopped))
+            .children(preview)
             // last, so it paints over the panes: GPUI paints children in order
             .children(self.render_overlay(cx).filter(|_| !self.stopped))
     }

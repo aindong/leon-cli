@@ -40,6 +40,8 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+,", "client.settings"),
     ("cmd+k", "session.switch"),
     ("cmd+shift+a", "client.sidebar.activity.toggle"),
+    ("cmd+\\", "client.overview.session.toggle"),
+    ("cmd+shift+\\", "client.overview.toggle"),
     ("cmd+c", "pane.copy"),
     ("cmd+a", "pane.select_all"),
     ("cmd+f", "client.find.open"),

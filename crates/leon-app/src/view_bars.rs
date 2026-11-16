@@ -11,12 +11,13 @@ impl Workspace {
             .flex()
             .flex_none()
             .items_center()
-            .gap(px(2.))
             .h(px(TITLEBAR))
             .pl(px(TRAFFIC_LIGHTS))
-            .pr(px(8.))
+            // five 28 pt buttons after the traffic lights fill the default 220 px sidebar exactly
+            .pr(px(2.))
             .child(self.tool("toolbar-sidebar", Icon::Sidebar, "client.sidebar.toggle", cx))
             .child(div().flex_1())
+            .child(self.tool("toolbar-overview", Icon::Grid, "client.overview.toggle", cx))
             .child(self.activity_button(cx))
             .child(self.tool("toolbar-palette", Icon::Command, "client.palette.toggle", cx))
             .child(self.tool("toolbar-new", Icon::Plus, "session.new", cx))
@@ -103,7 +104,8 @@ impl Workspace {
             }
         }
         bar.child(div().flex_1()).when(hidden, |d| {
-            d.child(self.activity_button(cx))
+            d.child(self.tool("toolbar-overview", Icon::Grid, "client.overview.toggle", cx))
+                .child(self.activity_button(cx))
                 .child(self.tool("toolbar-palette", Icon::Command, "client.palette.toggle", cx))
                 .child(self.tool("toolbar-new", Icon::Plus, "session.new", cx))
         })
@@ -120,8 +122,12 @@ impl Workspace {
     ) -> impl IntoElement {
         let t = &self.theme;
         let (sid, wid) = (row.id.clone(), w.id.clone());
+        let hovered = (row.host, row.id.clone(), w.id.clone());
         div()
             .id(SharedString::from(format!("tab-{i}")))
+            .on_hover(
+                cx.listener(move |ws, on: &bool, window, cx| ws.hover_tab(*on, hovered.clone(), false, window, cx)),
+            )
             .debug_selector(|| sel(format!("tab-{i}")))
             .group(SharedString::from(format!("tab-{i}")))
             .flex()

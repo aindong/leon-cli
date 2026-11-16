@@ -9,9 +9,9 @@ or through your coding agent, which can open a pane beside itself, run your test
 the result. Programs can report whether they are working, blocked or done, so you can see which
 one needs you. It runs on macOS and Linux (the app is macOS only for now) and is written in Rust.
 
-![The leon app: splitting a tab, switching sessions with ⌘K, a scratch drawer, and an agent that reports it is working and then blocked](docs/images/demo-app.gif)
+![The leon app: splitting a tab, switching with ⌘K, a scratch drawer, and an agent working, then blocked](docs/images/demo-app.gif)
 
-![The leon command in a terminal: a new session, a run that waits for its program, typing into Python and waiting for its answer, then leon attach and a split](docs/images/demo-cli.gif)
+![The leon command: a new session, a run that waits, typing into Python and waiting for its answer, then leon attach and a split](docs/images/demo-cli.gif)
 
 ## Features
 
@@ -260,7 +260,7 @@ what it created. See [docs/agents.md](docs/agents.md).
 Programs report what they're doing (working, blocked, done), and the app shows it in two places.
 The tab's row gets a symbol, and the pane's header gets the symbol with the program's own words.
 
-![The leon app: three sessions in the sidebar with their tabs as rows, a tab split into three panes, and an agent's progress on its tab row and its pane header](docs/images/app-status.png)
+![The leon app: sessions in the sidebar with their tabs as rows, a tab split in three, and an agent's progress on its row and pane header](docs/images/app-status.png)
 
 With more than one pane in a tab, the panes you aren't in are drawn a little faded, so your eye
 stays on the focused one; the fade follows the focus over 120 ms (at once with Reduce Motion).
@@ -280,7 +280,7 @@ OSC 7501 reports for its own block with `leon notify`:
 leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 ```
 
-![The Activity list in the sidebar: two blocked agents with their questions, a failed deploy, a finished README review and builds in progress, and the blocked count on the toolbar](docs/images/app-activity.png)
+![The Activity list: two blocked agents with questions, a failed deploy, a finished review, builds in progress, the blocked count](docs/images/app-activity.png)
 
 ## App shortcuts
 
@@ -312,6 +312,7 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘, | Settings: the theme for dark and for light mode, font, notifications, copy on select; each change is written to init.lua |
 | ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
 | ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
+| ⌘⇧\, ⌘\ | Overview: every tab (⌘\: this session's), live; arrows and ↩ go, typing filters; resting on a tab previews it |
 | ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
 
