@@ -227,6 +227,7 @@ impl Workspace {
         self.session_id.hash(&mut h);
         self.find_due().hash(&mut h);
         self.activity_signature(&mut h);
+        self.updates.generation().hash(&mut h);
         // each header draws its own pane's state, which its tab's may hide
         for id in &shown {
             let state = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));

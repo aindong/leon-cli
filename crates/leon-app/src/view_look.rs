@@ -51,6 +51,11 @@ impl Workspace {
         }
         self.look = look;
         self.use_theme();
+        // a server older than the setting doesn't report it, and would have skipped a
+        // `check_for_updates = false` as unknown: no look of the app's own until it does
+        self.check_for_updates = reply["settings"]["check_for_updates"].as_bool();
+        self.updates_looked = None; // a reload may have turned it on
+        self.look_for_updates();
     }
 
     /// Show the Settings window: open it, or bring the open one forward.

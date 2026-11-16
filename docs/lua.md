@@ -244,6 +244,7 @@ message, and the setting keeps its default.
 | `hint_patterns` | a list of regular expressions, at most 32 | `{}` |
 | `resume` | `"ask"`, `"always"` or `"never"` | `"ask"` |
 | `fade_inactive_panes` | a number, 0 (off) to 0.8 | `0.35` |
+| `check_for_updates` | `true` or `false` ([updates.md](updates.md)) | `true` |
 
 `theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored; an unknown name is
 an error.
@@ -253,8 +254,7 @@ leon.set("theme", { dark = "leon-dark", light = "leon-light" })
 leon.set("font.family", "Menlo")
 leon.set("font.size", 14)
 leon.set("notifications.done", false)
-leon.set("notifications.blocked", true)
-leon.set("notifications.error", true)
+leon.set("check_for_updates", false)
 ```
 
 `resume` is what a block restored after a server restart does with the resume command its program

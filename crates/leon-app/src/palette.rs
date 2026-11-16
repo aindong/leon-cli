@@ -44,6 +44,8 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("client.scroll.top", "Scroll to the Top"),
     ("client.scroll.bottom", "Scroll to the Bottom"),
     ("client.host.add", "Add Host…"),
+    ("client.update.check", "Check for Updates"),
+    ("client.update.install", "Install Update"),
 ];
 
 #[derive(Debug, Clone, PartialEq)]

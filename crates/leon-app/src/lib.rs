@@ -26,6 +26,8 @@ pub mod stamp;
 pub mod status;
 pub mod switcher;
 pub mod theme;
+#[cfg(target_os = "macos")]
+pub mod updates;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod view;
 

@@ -1,6 +1,6 @@
 # Updates
 
-leon updates when you ask it to:
+The leon CLI updates when you ask it to:
 
 ```sh
 leon self-update --check   # is there a newer release? changes nothing
@@ -17,6 +17,53 @@ this system and this processor; a release without one is an error, never a reaso
 file. From a tarball only the `leon` binary is replaced: the README, notices and docs you unpacked
 beside it stay as they were, and the new ones are in the release's tarball. Releases themselves, and what is in them,
 are in [releases.md](releases.md).
+
+## In Leon.app
+
+Leon.app looks for a newer release once a day, in the background, as soon as it has read your settings,
+and again each day it stays open. It runs the same check as `leon self-update --check` and draws
+nothing when you are up to date, offline, or when the look fails (one line goes to the app's log,
+and it tries again the next day). When there is a newer release, a small notice at the bottom
+right of the window gives its version, a link to its release notes, and Install. It is not a
+system notification and does not take the keyboard. Dismiss hides it until a newer version comes
+out.
+
+Nothing is downloaded or replaced until you choose Install, in the notice or as
+**Install Update** in the command palette (⌘⇧P). The notice then shows each step (downloading, checking,
+installing), and when it is done it says the new version runs from the next launch, with
+**Restart**. Restart quits the app and opens the new one; the server keeps running, so your
+sessions and panes are there as after any quit. **Check for Updates** in the palette looks at
+once and says what it found.
+
+To turn the daily look off, so that the app makes no request of its own:
+
+```lua
+leon.set("check_for_updates", false)
+```
+
+Check for Updates still works then. The app looks on its own only once its server reports this
+setting: attached to a server from before it (API 1.7.0), which would have skipped
+`check_for_updates = false` as unknown, it waits until that server restarts.
+
+The notice's buttons are in the palette too while it shows them (Dismiss the Update Notice, Open
+the Release Notes, Copy the Update Command, Restart to Finish the Update), so the keyboard
+reaches every one.
+
+The notice says what to do instead of Install when the app can't replace itself:
+
+- **Homebrew**: the command, `brew upgrade --cask aindong/leon/leon`, with Copy.
+- **Run from a download**: macOS runs an app that is still quarantined where it was unpacked
+  from a read-only copy (App Translocation, a path with `AppTranslocation` in it), which no
+  update can replace. The notice says "Move Leon.app to Applications first".
+- **App Management**: macOS lets an app change another app's bundle when both are signed by the
+  same Team ID, or when you allow it under System Settings, Privacy & Security, App Management.
+  Leon.app is signed ad hoc, with no Team ID, so in `/Applications` macOS may refuse the rename
+  that puts the new app in place ("Operation not permitted"). The notice then opens that pane of
+  System Settings, or the release page to update by hand; nothing was changed. In a temporary
+  directory on macOS 27.2, the swap (`renamex_np` with `RENAME_SWAP`) of an ad hoc Leon.app went
+  through every time: from inside the bundle and from another ad hoc binary, with the installed
+  app fresh, quarantined, or already run. That run came from a terminal, which may hold App
+  Management itself; `/Applications` was not tried.
 
 ## What is checked
 
@@ -65,15 +112,16 @@ tarball, from `scripts/install.sh`, or a Leon.app you unzipped yourself updates 
 
 ## What leon never does
 
-- It never updates or checks on its own. The CLI talks to the release server only when you run
-  `leon self-update`.
+- The CLI never updates or checks on its own: it talks to the release server only when you run
+  `leon self-update`. Leon.app looks once a day unless `check_for_updates` is off, and never
+  installs without your Install.
 - No telemetry. A check is one plain request for the manifest and one for its signature, plus
   the redirects the release server answers with. Each carries a fixed `User-Agent`,
   `leon/<version>`, and nothing about you or your machine: no identifier, no login, no hostname.
 - It never asks for a password and never runs `sudo`. If it cannot write where leon is installed,
   it says so and stops before downloading.
 - It never replaces a leon that Homebrew or dpkg installed.
-- It never restarts your server or closes a session.
+- It never restarts your server or closes a session, Restart included.
 
 ## A running server
 
@@ -86,8 +134,8 @@ leon server stop
 
 That saves your sessions and ends the programs in them; the next `leon` command starts the new
 server and restores the sessions. Until then the new CLI talks to the old server, which the
-[API's compatibility promise](integrators.md#compatibility) covers. After updating Leon.app, quit
-it and open it again.
+[API's compatibility promise](integrators.md#compatibility) covers. After updating Leon.app, choose
+Restart in its notice, or quit it and open it again.
 
 ## Another place for releases
 

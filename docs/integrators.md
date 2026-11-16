@@ -221,7 +221,7 @@ ssh runs the proxy as your user on the host, which is what the server's same-use
 ## Compatibility
 
 The socket API has a version of its own, `api_version`, reported by `help.all` and
-`server.version` (it is `1.6.0` today; [CHANGELOG.md](../CHANGELOG.md) lists every change). It
+`server.version` (it is `1.7.0` today; [CHANGELOG.md](../CHANGELOG.md) lists every change). It
 follows semver, for the methods marked `stable`:
 
 - A **major** bump (2.0.0) may break clients: remove or rename a stable method or field, change a

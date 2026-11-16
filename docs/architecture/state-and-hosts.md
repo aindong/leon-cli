@@ -96,7 +96,12 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   rename). It shells out to `curl` behind `fetch.rs`, pins the keys in
   `crates/leon/release-keys.pub` with `include_str!`, stages in `.leon-update` beside the install
   under a `flock`, and never replaces a Homebrew or dpkg install. The rules and their reasons are
-  in docs/updates.md and docs/releases.md.
+  in docs/updates.md and docs/releases.md. Leon.app's side is `leon-app/src/updates.rs`, with no
+  GPUI: a daily look on a `leon-update` thread once `server.settings` says `check_for_updates`,
+  the time in `$LEON_STATE_DIR/updates.json` before the look starts, and part A's `install` only
+  on the user's Install; `view_update.rs` draws its notice, and the redraw signature hashes its
+  generation, so a notice at rest draws nothing. A debug build looks on its own only with
+  `LEON_RELEASE_URL` or `LEON_TEST_UPDATE` set, so no test reaches the real server.
 - **Linux packages.** `scripts/package-linux.sh [--arch arm64|amd64]` builds a release binary
   (symbols stripped) in the same pinned image and writes, to `target/linux/<arch>/` (emptied
   first), the bare `leon` (which `m16a_docker_sshd` runs behind a real sshd),

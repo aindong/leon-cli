@@ -40,8 +40,13 @@ pub struct Target {
 impl Target {
     /// The running binary, by its real path: what is on PATH may be a symlink to it.
     pub fn running() -> Result<Target, String> {
-        let exe = std::env::current_exe().and_then(|p| p.canonicalize());
-        let exe = exe.map_err(|e| format!("can't find the running leon on disk: {e}"))?;
+        let exe = std::env::current_exe().map_err(|e| format!("can't find the running leon on disk: {e}"))?;
+        Target::at(exe)
+    }
+
+    /// The leon at `exe`, by its real path: the running one, or (the app's tests) one in a temp dir.
+    pub fn at(exe: PathBuf) -> Result<Target, String> {
+        let exe = exe.canonicalize().map_err(|e| format!("can't find the running leon on disk: {e}"))?;
         // X.app/Contents/MacOS/leon
         let bundle = exe.ancestors().nth(3).filter(|app| {
             app.extension().is_some_and(|e| e == "app")
@@ -180,6 +185,7 @@ pub fn install(cfg: &Config, release: &Release, target: &Target, say: &mut dyn F
         other => return Err(format!("the release server answered {other} for {}: {url}", file.name)),
     }
     // nothing of the archive is read, let alone unpacked, before both of these hold
+    say(format!("checking {}", file.name));
     verify(&keys, file, &archive)?;
 
     let unpacked = staging.dir.join("unpacked");
@@ -226,6 +232,7 @@ pub fn install(cfg: &Config, release: &Release, target: &Target, say: &mut dyn F
     std::fs::File::open(&leon)
         .and_then(|f| f.sync_all())
         .map_err(|e| format!("can't write {}: {e}", leon.display()))?;
+    say(format!("installing {}", target.root.file_name().unwrap_or_default().to_string_lossy()));
     cfg.step("installing");
     swap(&new, &target.root)
         .map_err(|e| format!("can't replace {}: {e}; nothing was changed", target.root.display()))?;

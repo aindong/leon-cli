@@ -138,7 +138,8 @@ $ make release
 [ 40%] Building CXX object src/CMakeFiles/core.dir/engine.cpp.o
 EOF
 
-base=(env -u LEON_SESSION -u LEON_BLOCK -u ZDOTDIR HOME="$home" SHELL=/bin/zsh PATH="$home/bin:$PATH")
+# LEON_RELEASE_URL: the app's look for a release goes to a loopback port that refuses, not to GitHub
+base=(env -u LEON_SESSION -u LEON_BLOCK -u ZDOTDIR HOME="$home" SHELL=/bin/zsh PATH="$home/bin:$PATH" LEON_RELEASE_URL=http://127.0.0.1:9)
 here() { "${base[@]}" LEON_RUNTIME_DIR="$d/run" LEON_STATE_DIR="$d/state" LEON_CONFIG="$home/.config/leon/init.lua" "$leon" "$@"; }
 dev() { "${base[@]}" LEON_RUNTIME_DIR="$d/dev/run" LEON_STATE_DIR="$d/dev/state" LEON_CONFIG="$home/.config/leon/none.lua" "$leon" "$@"; }
 
