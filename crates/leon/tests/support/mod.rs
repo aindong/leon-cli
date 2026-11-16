@@ -34,7 +34,10 @@ impl Env {
             .env_remove("LEON_BLOCK")
             .env_remove("LEON_SERVER")
             .env_remove("LEON_AUTOSTART")
-            .env_remove("LEON_IDLE_EXIT_SECS");
+            .env_remove("LEON_IDLE_EXIT_SECS")
+            .env_remove("LEON_LINK_HOLD_SECS")
+            .env_remove("LEON_LINK_PING_SECS")
+            .env_remove("LEON_SPAWN_WAIT_SECS");
         c
     }
 

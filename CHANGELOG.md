@@ -80,6 +80,16 @@ fields it doesn't know. The full policy is in
   updates it instead. leon never checks on its own. `LEON_RELEASE_URL` points it at a mirror.
   [docs/updates.md](docs/updates.md) has the checks and what each refusal means.
 
+#### Fixed
+
+- A pane whose program can't be executed is refused like one that isn't there: `leon run`,
+  `block.create` and `session.create` fail with `bad_request`, name the program and the OS's
+  reason ("can't run its interpreter /no/such/interp: No such file or directory" for a script
+  whose `#!` interpreter is missing, "Exec format error" for a file that isn't a program), and
+  leave no block behind. Before, the pane showed `fatal runtime error: assertion failed` and
+  the program's exit was 134 (or a binary ran as a `/bin/sh` script). A script without a `#!`
+  line still runs with `/bin/sh`.
+
 ### Releases
 
 #### Added

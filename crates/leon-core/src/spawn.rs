@@ -26,7 +26,7 @@ pub fn stdio_only(cmd: &mut Command) {
 /// Room for `only_stdio`'s list (macOS): the whole descriptor table, not a likely count, since
 /// an older kernel lists only the numbers below the room it is given. Pages never written cost
 /// nothing.
-fn fd_room() -> Vec<[i32; 2]> {
+pub(crate) fn fd_room() -> Vec<[i32; 2]> {
     // SAFETY: getdtablesize has no preconditions.
     let table = if cfg!(target_os = "macos") { unsafe { libc::getdtablesize() } } else { 0 };
     vec![[0; 2]; table.max(0) as usize]
@@ -44,7 +44,7 @@ const SLOW_MOST: libc::c_int = 1 << 16;
 /// # Safety
 /// Only async-signal-safe calls: proc_pidinfo (one syscall) and getpid, or on Linux the
 /// close_range syscall, then `mark_table`'s.
-unsafe fn only_stdio(room: &mut [[i32; 2]]) {
+pub(crate) unsafe fn only_stdio(room: &mut [[i32; 2]]) {
     #[cfg(target_os = "macos")]
     let marked = {
         let size = std::mem::size_of_val(room).min(libc::c_int::MAX as usize) as libc::c_int;
