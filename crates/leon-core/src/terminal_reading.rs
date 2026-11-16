@@ -10,10 +10,13 @@ pub(super) struct Reading {
     pub(super) writer: Writer,
     pub(super) reported: Arc<Mutex<Reported>>,
     pub(super) output: Arc<AtomicU64>,
+    /// Bytes read from the PTY, counted before they are queued for the parser.
+    pub(super) read: Arc<AtomicU64>,
     /// Bumped after each read is fed, so a renderer can skip unchanged frames.
     pub(super) changes: Arc<watch::Sender<u64>>,
     pub(super) scrolled: Arc<AtomicUsize>,
     pub(super) x10: Arc<AtomicBool>,
+    pub(super) held: Held,
 }
 
 /// The last pwd and title a program reported.
@@ -46,15 +49,20 @@ impl Reading {
     /// notifying.
     pub(super) fn run(self, mut reader: Box<dyn Read + Send>, at_eof: mpsc::Sender<()>, notify: &dyn Fn(Notice)) {
         let (tx, reads) = mpsc::sync_channel::<Vec<u8>>(QUEUED_READS);
+        let (held, read) = (self.held.clone(), self.read.clone());
         std::thread::spawn(move || {
             let _at_eof = at_eof; // dropped when reading ends
+            let _release = Release(held); // nothing reads now, so the program's exit mustn't wait
             let mut buf = vec![0u8; READ_SIZE];
             loop {
-                match reader.read(&mut buf) {
+                let n = match reader.read(&mut buf) {
                     // macOS reports a closed PTY as EIO rather than EOF.
                     Ok(0) | Err(_) => return,
-                    Ok(n) if tx.send(buf[..n].to_vec()).is_err() => return,
-                    Ok(_) => {}
+                    Ok(n) => n,
+                };
+                read.fetch_add(n as u64, Ordering::SeqCst);
+                if tx.send(buf[..n].to_vec()).is_err() {
+                    return;
                 }
             }
         });
