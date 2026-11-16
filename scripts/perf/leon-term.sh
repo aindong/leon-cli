@@ -5,7 +5,7 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 leon="$root/target/release/leon"
-"$leon" server start
+"$leon" server start --restore=false
 "$leon" --json server status | python3 -c 'import json,sys; print(json.load(sys.stdin)["pid"])' >>"$PERF_DIR/extra-pids"
 sid=$("$leon" new term)
 first=$("$leon" --json block ls -s "$sid" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["block_id"])')

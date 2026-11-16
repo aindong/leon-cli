@@ -10,24 +10,26 @@ set -euo pipefail
 PERF_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 LEON="$PERF_ROOT/target/release/leon"
 WINFRAMES="$PERF_ROOT/target/perf/winframes"
+NOW="$PERF_ROOT/target/perf/now"
 PERF_PY=$(command -v python3)
 PERF_PIDS=()
 
 load1() { sysctl -n vm.loadavg | awk '{print $2}'; }
 
-# Refuse to measure on a busy machine: other builds make timing worthless. PERF_ALLOW_LOAD=1 runs
-# anyway (a dry run: say so beside the numbers and throw them away).
+# Wait (up to 10 minutes) for the 1-minute load to fall under 3 before measuring: other builds
+# make timing worthless, and each measurement's own work raises the load for a minute after it.
+# PERF_ALLOW_LOAD=1 runs anyway (a dry run: say so beside the numbers and throw them away).
 perf_load_gate() {
-  local l
-  l=$(load1)
-  if awk -v l="$l" 'BEGIN { exit !(l >= 3) }'; then
-    if [ "${PERF_ALLOW_LOAD:-0}" = 1 ]; then
-      echo "# load $l >= 3: DRY RUN, these numbers don't count" >&2
-    else
-      echo "perf: the 1-minute load is $l (>= 3): not measuring; PERF_ALLOW_LOAD=1 for a dry run" >&2
-      exit 3
-    fi
-  fi
+  local l i
+  for i in $(seq 120); do
+    l=$(load1)
+    awk -v l="$l" 'BEGIN { exit !(l < 3) }' && return 0
+    [ "${PERF_ALLOW_LOAD:-0}" = 1 ] && { echo "# load $l >= 3: DRY RUN, these numbers don't count" >&2; return 0; }
+    sleep 5
+  done
+  echo "perf: the 1-minute load stayed at 3 or more for 10 minutes ($l): not measuring" >&2
+  ps -Ao pcpu,comm -r | head -8 >&2
+  exit 3
 }
 
 # A locked screen marks every window occluded and GPUI stops drawing.
@@ -50,6 +52,9 @@ perf_build() {
   if [ ! -x "$WINFRAMES" ] || [ "$PERF_ROOT/scripts/perf/winframes.swift" -nt "$WINFRAMES" ]; then
     mkdir -p "$(dirname "$WINFRAMES")"
     swiftc -O -o "$WINFRAMES" "$PERF_ROOT/scripts/perf/winframes.swift"
+  fi
+  if [ ! -x "$NOW" ] || [ "$PERF_ROOT/scripts/perf/now.c" -nt "$NOW" ]; then
+    cc -O2 -o "$NOW" "$PERF_ROOT/scripts/perf/now.c"
   fi
 }
 
@@ -74,14 +79,24 @@ SH
 
 perf_cleanup() {
   local p
+  # only pids still running as this shell's jobs: one already waited for may be reused by now
   for p in ${PERF_PIDS[@]+"${PERF_PIDS[@]}"}; do
-    kill "$p" 2>/dev/null || true
+    jobs -p | grep -qx "$p" && kill "$p" 2>/dev/null || true
   done
   "$LEON" --autostart=false server stop >/dev/null 2>&1 || true
   for p in ${PERF_PIDS[@]+"${PERF_PIDS[@]}"}; do
     wait "$p" 2>/dev/null || true
   done
   rm -rf "${PERF_DIR:?}"
+}
+
+# perf_stop PID: stop a process this script started, and forget it.
+perf_stop() {
+  kill "$1" 2>/dev/null || true
+  wait "$1" 2>/dev/null || true
+  local keep=() p
+  for p in ${PERF_PIDS[@]+"${PERF_PIDS[@]}"}; do [ "$p" = "$1" ] || keep+=("$p"); done
+  PERF_PIDS=(${keep[@]+"${keep[@]}"})
 }
 
 # perf_note WHAT: one line in the run's notes with the load, the thermal state and the power source.
@@ -93,13 +108,13 @@ perf_note() {
 }
 
 perf_server() {
-  "$LEON" server start
+  "$LEON" server start --restore=false
   SERVER_PID=$("$LEON" --json server status | "$PERF_PY" -c 'import json,sys; print(json.load(sys.stdin)["pid"])')
 }
 
 # perf_app LOG: start the app with its frame log at LOG; sets APP_PID and waits for its window.
 perf_app() {
-  LEON_FRAME_LOG="$1" "$LEON" app 2>"$RUN/app-stderr.txt" &
+  LEON_FRAME_LOG="$1" "$LEON" app 2>>"$RUN/app-stderr.txt" &
   APP_PID=$!
   PERF_PIDS+=("$APP_PID")
   local i
@@ -111,7 +126,8 @@ perf_app() {
   exit 1
 }
 
-uptime_ns() { "$PERF_PY" -c 'import time; print(time.clock_gettime_ns(time.CLOCK_UPTIME_RAW))'; }
+# The boot clock in ns. A stamp costs about 1.5 ms of process start, inside any span it ends.
+uptime_ns() { "$NOW"; }
 
 # mem PID: RSS and phys_footprint in KiB ("rss footprint").
 mem() {
@@ -140,6 +156,7 @@ stack() {
     [ "$k" = 1 ] || ratio=$(((100 * (n - k + 1) + (n - k + 2) / 2) / (n - k + 2)))
     t0=$(uptime_ns)
     prev=$("$LEON" split -s "$sid" -b "$prev" --split "$dir" --ratio "$ratio" --focus=false -- sh -c "$cmd")
+    [ -n "$prev" ] || { echo "perf: split $k of $n failed" >&2; return 1; }
     echo "$(( ($(uptime_ns) - t0) / 1000000 ))" >>"$RUN/splits.txt"
     echo "$prev"
   done

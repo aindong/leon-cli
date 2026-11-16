@@ -10,7 +10,7 @@ impl Workspace {
         if self.stopped {
             return; // nothing to type into: the notice's buttons and ⌘Q are what's left
         }
-        if self.stats.borrow().enabled {
+        if self.stats.borrow().logging() {
             if let (Some(id), Some(stamped)) = (self.target_block(), crate::input::current_event_stamp()) {
                 let cursor = self.drawn(&id).frame.cursor.map(|c| (c.line, c.col));
                 self.stats.borrow_mut().key(stamped, id, cursor);

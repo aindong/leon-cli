@@ -58,8 +58,8 @@ def svg(rows, path):
     for who, colour in (("server", "#1f6feb"), ("app", "#d1242f")):
         pts = " ".join(f"{x(r['minute']):.1f},{y(r[f'{who}_footprint_kib'] / 1024):.1f}" for r in rows)
         parts.append(f'<polyline fill="none" stroke="{colour}" stroke-width="2" points="{pts}"/>')
-        last = rows[-1]
-        parts.append(f'<text x="{x(last["minute"]) - 4:.0f}" y="{y(last[f"{who}_footprint_kib"] / 1024) - 6:.0f}" text-anchor="end" fill="{colour}">{who}</text>')
+        lx = w - pad - (150 if who == "server" else 70)
+        parts.append(f'<text x="{lx}" y="24" fill="{colour}">— {who}</text>')
     parts.append("</svg>")
     with open(path, "w") as f:
         f.write("\n".join(parts))

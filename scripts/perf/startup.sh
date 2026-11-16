@@ -27,8 +27,7 @@ app_run() { # app_run KIND I: one launch, appending "KIND inapp_ms window_ms pro
   p=$(awk '/^frame / { if (!seen++ && $3 >= 1) { print -1; exit } if ($3 >= 1) { print $2; exit } }' "$RUN/$1-$2-watch.txt")
   [ "${p:-0}" = -1 ] && p=$t0 # drawn before the capture began: no outside number for this run
   echo "$1 $(ms "$t0" "$(awk '/^text / {print $2; exit}' "$log")") $(ms "$t0" "${w:-0}") $(ms "$t0" "${p:-0}")" >>"$RUN/results.txt"
-  kill "$APP_PID"
-  wait "$APP_PID" 2>/dev/null || true
+  perf_stop "$APP_PID"
 }
 
 for i in $(seq "$runs"); do

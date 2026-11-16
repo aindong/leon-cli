@@ -27,7 +27,8 @@ if mode == "fill":
     for n in range(int(sys.argv[2])):
         out.write(f"{n} {'x' * 60}\n")
     out.flush()
-    time.sleep(1e9)
+    while True:
+        time.sleep(3600)
 elif mode == "busy":
     while True:
         out.write("".join(line(n + i) for i in range(20)))

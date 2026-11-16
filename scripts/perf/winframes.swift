@@ -249,7 +249,7 @@ func run() async {
     // keys go to the key window of the active app: bring the target (a process the caller started) forward
     NSRunningApplication(processIdentifier: pid)?.activate()
     try? await Task.sleep(nanoseconds: 1_200_000_000)  // and past the re-presenting that follows
-    let n = Int(args[3]) ?? 100
+    let n = max(1, Int(args[3]) ?? 100)
     let gap = Double(args.count > 4 ? args[4] : "50") ?? 50
     let src = CGEventSource(stateID: .privateState)
     var missed = 0
@@ -273,6 +273,9 @@ func run() async {
       } else {
         missed += 1
         print("missed \(i) \(posted)")
+        // a late echo may still land: let it, so the next key isn't credited with it (the next
+        // key's colour is worked out from the bar as it is then)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
       }
       // a random gap, so keys don't lock onto one phase of the display's refresh
       try? await Task.sleep(nanoseconds: UInt64((gap + Double.random(in: 0..<gap)) * 1e6))

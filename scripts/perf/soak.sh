@@ -47,11 +47,17 @@ for m in $(seq 0 "$minutes"); do
   fi
   echo "$m,$(mem "$SERVER_PID" | tr ' ' ','),$(mem "$APP_PID" | tr ' ' ','),$(load1),$after" >>"$RUN/soak.csv"
   after=0
-  case "$m" in
-    5) probe start; after=1 ;;
-    $((minutes / 2))) probe middle; after=1 ;;
-    "$minutes") probe end; break ;;
-  esac
+  # the end first, so a short soak still ends (and probes) on time
+  if [ "$m" = "$minutes" ]; then
+    probe end
+    break
+  elif [ "$m" = $((minutes / 2)) ]; then
+    probe middle
+    after=1
+  elif [ "$m" = 5 ]; then
+    probe start
+    after=1
+  fi
   # a session created and the last one killed
   new=$("$LEON" new "churn-$m")
   stack "$new" "$(first_block "$new")" 2 "exec '$PERF_PY' '$PERF_ROOT/scripts/perf/agent.py' soak 90" >/dev/null
@@ -62,6 +68,7 @@ for m in $(seq 0 "$minutes"); do
   attach=$!
   PERF_PIDS+=("$attach")
   sleep 20
+  pkill -TERM -P "$attach" 2>/dev/null || true # leon attach itself: script(1) doesn't pass SIGTERM on
   kill "$attach" 2>/dev/null || true
   wait "$attach" 2>/dev/null || true
   sleep $((60 - ($(date +%s) - t0) > 0 ? 60 - ($(date +%s) - t0) : 0))

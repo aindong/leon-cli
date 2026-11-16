@@ -57,12 +57,24 @@ impl Stats {
         Stats { enabled: stats || log.is_some(), log, ..Stats::default() }
     }
 
+    /// Whether keys and paints are logged (`LEON_FRAME_LOG`), beyond the per-second summary.
+    pub(super) fn logging(&self) -> bool {
+        self.log.is_some()
+    }
+
+    /// Whether a paint should say if its pane has text: until the first one with text is logged.
+    pub(super) fn wants_text(&self) -> bool {
+        self.log.as_ref().is_some_and(|l| !l.text)
+    }
+
     /// A key AppKit stamped at `stamped` (boot clock, ns) reached `key_down` for pane `block`,
     /// whose cursor is at `cursor`.
     pub(super) fn key(&mut self, stamped: u64, block: String, cursor: Option<(usize, usize)>) {
         let Some(log) = self.log.as_mut() else { return };
         let now = uptime_ns();
-        if stamped > now || now - stamped > 1_000_000_000 {
+        // a stamp from the future is on another clock; a slow key (a stall) still counts
+        if stamped > now {
+            log.key = None;
             let _ = writeln!(log.out, "badclock {stamped} {now}");
             return;
         }
@@ -147,7 +159,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("frames.log");
         let mut s = Stats::with(false, Some(std::fs::File::create(&path).unwrap()));
-        assert!(s.enabled);
+        assert!(s.enabled && s.logging() && s.wants_text());
         s.key(uptime_ns() - 2_000_000, "b1".into(), Some((0, 5)));
         // a frame that draws the pane unmoved, and another pane moving, are not the echo
         s.render_start = Some(Instant::now());
@@ -157,6 +169,7 @@ mod tests {
         s.render_start = Some(Instant::now());
         assert!(s.painted("b1", Some((0, 6)), true));
         s.presented();
+        assert!(!s.wants_text(), "the first text is logged once");
         // a stamp from the future is refused; two keys before an echo are an overlap, unmatched
         s.key(uptime_ns() + 1_000_000_000, "b1".into(), Some((0, 6)));
         s.key(uptime_ns(), "b1".into(), Some((0, 6)));

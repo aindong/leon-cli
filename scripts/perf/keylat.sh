@@ -37,10 +37,21 @@ for load in $loads; do
   perf_app "$RUN/$load-frames.log"
   sleep 2 # past start-up, and past GPUI's "present every frame for 1 s after input"
   "$WINFRAMES" "$APP_PID" keys "$keys" 50 >"$RUN/$load-winframes.txt"
-  kill "$APP_PID"; wait "$APP_PID" 2>/dev/null || true
+  perf_stop "$APP_PID"
   "$LEON" kill "$sid" >/dev/null
   echo "== $load (load=$(load1), delay=${delay} ms)" | tee -a "$RUN/summary.txt"
   "$PERF_PY" "$PERF_ROOT/scripts/perf/stats.py" keylat "$RUN/$load-winframes.txt" "$RUN/$load-frames.log" | tee -a "$RUN/summary.txt"
 done
+# the floor: the same keys and capture, to a window that repaints the moment a key arrives
+perf_load_gate
+"$WINFRAMES" floor >/dev/null &
+floor=$!
+PERF_PIDS+=("$floor")
+sleep 1
+"$WINFRAMES" "$floor" keys "$keys" 50 >"$RUN/floor-winframes.txt"
+perf_stop "$floor"
+echo "== floor (load=$(load1))" | tee -a "$RUN/summary.txt"
+: >"$RUN/empty.log"
+"$PERF_PY" "$PERF_ROOT/scripts/perf/stats.py" keylat "$RUN/floor-winframes.txt" "$RUN/empty.log" | head -1 | tee -a "$RUN/summary.txt"
 perf_note "end"
 echo "keylat: $RUN/summary.txt"

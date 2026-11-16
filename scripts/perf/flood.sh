@@ -36,13 +36,14 @@ for n in $counts; do
   sleep 2
   "$WINFRAMES" "$APP_PID" watch 120 "$n" "floor=$floor" >"$RUN/$n-watch.txt" &
   watch=$!
+  PERF_PIDS+=("$watch")
   # go once both captures run
   for i in $(seq 250); do grep -q '^start ' "$RUN/$n-watch.txt" && break; sleep 0.1; done
   sleep 0.5
   touch "$go"
-  wait "$watch"
-  kill "$floor" 2>/dev/null || true
-  kill "$APP_PID"; wait "$APP_PID" 2>/dev/null || true
+  wait "$watch" || true
+  perf_stop "$floor"
+  perf_stop "$APP_PID"
   "$LEON" kill "$sid" >/dev/null
   echo "== $n pane(s), $mb MB each (load=$(load1))" | tee -a "$RUN/summary.txt"
   "$PERF_PY" "$PERF_ROOT/scripts/perf/stats.py" flood "$RUN/$n-watch.txt" "$RUN/$n-frames.log" "$marks" "$n" | tee -a "$RUN/summary.txt"

@@ -5,12 +5,14 @@ python3 stats.py flood WATCH_OUT FRAME_LOG MARKS [PANES]   (MARKS: "begin NS" an
     the first begin and last end count; the screen is current once PANES sentinel bars show)
 python3 stats.py selftest
 """
+import math
 import sys
 
 
 def pct(xs, p):
+    """Nearest rank: the smallest value with at least p% of the samples at or below it."""
     xs = sorted(xs)
-    return xs[min(len(xs) - 1, int(len(xs) * p / 100))] if xs else float("nan")
+    return xs[max(0, math.ceil(len(xs) * p / 100) - 1)] if xs else float("nan")
 
 
 def ms(ns):
@@ -93,7 +95,7 @@ def selftest():
     with open(k, "w") as f:
         f.write("key 1 0 8000000\nkey 2 100 4000100\nmissed 3 9\n")
     out = keylat(k, l)
-    assert "p50 8.00 ms" in out[0] and "missed 1" in out[0], out
+    assert "p50 4.00 ms" in out[0] and "missed 1" in out[0], out  # nearest rank: the lower of two
     assert "p50 3.00 ms" in out[2] and "overlaps 1" in out[3], out
     print("stats selftest ok")
 

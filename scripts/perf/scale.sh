@@ -17,12 +17,13 @@ APP_PID=
 for side in 5 10; do
   perf_load_gate
   perf_note "scale grid $side"
-  [ -n "$APP_PID" ] && { kill "$APP_PID"; wait "$APP_PID" 2>/dev/null || true; }
+  [ -n "$APP_PID" ] && { perf_stop "$APP_PID"; }
   [ -n "${sid:-}" ] && "$LEON" kill "$sid" >/dev/null
   sid=$("$LEON" new "grid-$side")
   : >"$RUN/splits.txt"
   t0=$(uptime_ns)
   cols=$(stack "$sid" "$(first_block "$sid")" "$side" "exec /bin/sh" right)
+  [ "$(echo "$cols" | wc -w)" -eq "$side" ] || { echo "scale: the columns were not all made" >&2; exit 1; }
   for c in $cols; do
     stack "$sid" "$c" "$side" "$tick" >/dev/null
   done
@@ -32,7 +33,7 @@ for side in 5 10; do
   sleep "$secs"
   echo "grid-$side $total $(mem "$SERVER_PID") $(mem "$APP_PID") $(load1)" >>"$RUN/results.txt"
 done
-kill "$APP_PID"; wait "$APP_PID" 2>/dev/null || true
+perf_stop "$APP_PID"
 "$LEON" kill "$sid" >/dev/null
 perf_app "$RUN/sessions-frames.log"
 perf_load_gate
@@ -64,8 +65,8 @@ import sys, statistics as st
 run = sys.argv[1]
 def nums(path):
     return [float(x) for x in open(path).read().split()]
-def pct(xs, p):
-    xs = sorted(xs); return xs[min(len(xs) - 1, int(len(xs) * p / 100))]
+def pct(xs, p):  # nearest rank, as stats.py
+    xs = sorted(xs); return xs[max(0, -(-len(xs) * p // 100) - 1)]
 for l in open(f"{run}/results.txt"):
     k, *v = l.split()
     if k.startswith("grid"):

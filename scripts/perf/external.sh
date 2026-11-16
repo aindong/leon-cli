@@ -35,8 +35,7 @@ launch() {
 }
 quit() {
   local p
-  kill "$TERM_PID" 2>/dev/null || true
-  wait "$TERM_PID" 2>/dev/null || true
+  perf_stop "$TERM_PID"
   if [ -s "$PERF_DIR/extra-pids" ]; then
     while read -r p; do kill "$p" 2>/dev/null || true; done <"$PERF_DIR/extra-pids"
     : >"$PERF_DIR/extra-pids"
@@ -100,11 +99,12 @@ printf '\\033[48;2;255;0;128m%60s\\033[0m\\n' ''; exec sleep 100000")"
     sleep 1
     "$WINFRAMES" "$TERM_PID" watch 120 1 "floor=$floor" >"$RUN/watch.txt" &
     watch=$!
+    PERF_PIDS+=("$watch")
     for i in $(seq 250); do grep -q '^start ' "$RUN/watch.txt" && break; sleep 0.1; done
     sleep 0.5
     touch "$go"
-    wait "$watch"
-    kill "$floor" 2>/dev/null || true
+    wait "$watch" || true
+    perf_stop "$floor"
     quit
     : >"$RUN/empty.log"
     "$PERF_PY" "$PERF_ROOT/scripts/perf/stats.py" flood "$RUN/watch.txt" "$RUN/empty.log" "$RUN/marks.txt" 1 | head -3 | tee "$RUN/summary.txt"

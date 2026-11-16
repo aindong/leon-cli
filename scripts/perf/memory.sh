@@ -53,6 +53,7 @@ done_file="$RUN/flood-done"
 times=$((gb * 10))
 "$LEON" split -s "$sid" -- sh -c "for i in \$(seq $times); do cat '$flood'; done; touch '$done_file'; exec sleep 100000" >/dev/null
 while [ ! -e "$done_file" ]; do
+  kill -0 "$SERVER_PID" 2>/dev/null || { echo "memory: the server exited during the flood" >&2; exit 1; }
   sample "flood-during"
   sleep 2
 done
