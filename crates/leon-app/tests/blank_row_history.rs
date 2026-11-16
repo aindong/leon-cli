@@ -1,6 +1,7 @@
 //! Output arriving under a pane scrolled back pushes rows from its screen into the history; the
-//! app fetches those (`sync_pane`, run before the frame the poll asks for), so the view holds
-//! still with every row filled (GPUI phase 1, criterion 2d).
+//! app fetches those (`sync_pane`), so once it has run the view holds still with every row filled
+//! (GPUI phase 1, criterion 2d). This checks the settled view, not each drawn frame: a frame drawn
+//! before the poll runs can still show the row blank (the ADR's one-frame race, phase 5).
 mod m20b_support;
 
 use gpui::TestAppContext;
@@ -25,6 +26,8 @@ fn output_under_a_scrolled_pane_has_its_new_history_rows_fetched(cx: &mut TestAp
     assert!(shows(cx, |cx| stays(cx, &t, t.size())), "the pane keeps its size");
     act(&ws, cx, "client.scroll.page_up");
     let before = lines(cx);
+    // `seq` fills every row, and page_up (a page less one line) leaves the screen's first row last
+    assert!(before.iter().all(|l| !l.is_empty()), "every row is filled before the output: {before:?}");
     assert!(ws.read_with(cx, |ws, _| ws.view_top(&id)).is_some(), "scrolled back");
     let fetches = ws.read_with(cx, |ws, _| ws.fetches());
     t.write(b"\n").unwrap();
