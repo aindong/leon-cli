@@ -63,7 +63,7 @@ impl Workspace {
     /// theme), and after a settings reload (`glass_later`). GPUI is asked only for a change.
     pub fn update_glass(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let see = if self.glass.reduced || window.is_fullscreen() { 0. } else { self.look.translucency };
-        let glass = Glass::new(&self.theme, see);
+        let glass = Glass::new(&self.theme, see, self.look.fade);
         let bg = if glass.translucent() { Bg::Blurred } else { Bg::Opaque };
         if self.glass.set.last() != Some(&bg) {
             window.set_background_appearance(bg);
@@ -101,9 +101,10 @@ impl Workspace {
         see_through(self.theme.chrome, self.glass.glass.chrome_alpha())
     }
 
-    /// A tile's fill in its own theme `t`. A float is opaque: it sits over other tiles.
+    /// A tile's fill in its own theme `t` (faded or not; every pane has one alpha). A float is
+    /// opaque: it sits over other tiles.
     pub(super) fn pane_fill(&self, kind: &str, t: &Theme) -> Hsla {
-        let alpha = if kind == "float" { 1. } else { self.glass.glass.pane_alpha(t) };
+        let alpha = if kind == "float" { 1. } else { self.glass.glass.pane_alpha() };
         see_through(t.bg, alpha)
     }
 

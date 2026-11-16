@@ -95,9 +95,13 @@ of [the architecture](../architecture.md).
   the rounded tiles) and each tile fill themselves. Each alpha is what the setting asks, or
   more where text would read worse over a pure white or a pure black desktop than it must: body
   text on a pane 4.5:1, `text` on the chrome 4.5:1 and `muted` 3:1, each capped at what the
-  theme gives it opaque, so an imported low-contrast theme is never made worse and a faded pane
-  keeps its fade's contrast (it is drawn more opaque). leon-dark reaches that floor at about
-  0.25, leon-light at about 0.45. An inactive window keeps its blur (GPUI's effect view stays
+  theme gives it opaque, so an imported low-contrast theme is never made worse. The maths lets
+  a quarter more of the desktop through than the alpha says (`SEE_GAIN`: measured on screen, the
+  window server shows about a fifth more). Every pane gets one alpha, enough for the theme
+  faded by `fade_inactive_panes` too, so a faded pane keeps its fade's contrast and the focused
+  pane is never the paler one; with the default fade the panes stay nearly opaque (0.95 on
+  leon-dark) and the chrome carries the translucency (0.82 on leon-dark, 0.79 on leon-light,
+  where the floor stops each from 0.2 up). An inactive window keeps its blur (GPUI's effect view stays
   active). The window is opaque, exactly as before, in full screen, with Reduce Transparency on
   (read when the window becomes active) and at 0. Floats and overlays (the palette, the overview, the
   find bar) stay opaque: they sit over other content. A program's own background colours are
