@@ -229,8 +229,8 @@ any`, and a `?` suffix for optional ones.
 
 `leon.set(name, value)` sets a setting. init.lua is the only place settings live; `leon config
 get` and `set` ([cli/settings.md](cli/settings.md)) and the app's Settings window (⌘,) read and edit
-them in place. A running app follows every one of them when the config reloads (`leon config set`,
-the Settings window and `leon config reload` all reload it). A bad value is a skipped call with a `file:line`
+them in place. A running app follows every one of them when the config reloads (`leon config set`
+and the Settings window reload it). A bad value is a skipped call with a `file:line`
 message, and the setting keeps its default.
 
 | Setting | Takes | Default |
@@ -244,6 +244,7 @@ message, and the setting keeps its default.
 | `hint_patterns` | a list of regular expressions, at most 32 | `{}` |
 | `resume` | `"ask"`, `"always"` or `"never"` | `"ask"` |
 | `fade_inactive_panes` | a number, 0 (off) to 0.8 | `0.35` |
+| `check_for_updates` | `true` or `false`: Leon.app's daily look ([updates.md](updates.md)) | `true` |
 
 `theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored; an unknown name is
 an error.
@@ -253,8 +254,7 @@ leon.set("theme", { dark = "leon-dark", light = "leon-light" })
 leon.set("font.family", "Menlo")
 leon.set("font.size", 14)
 leon.set("notifications.done", false)
-leon.set("notifications.blocked", true)
-leon.set("notifications.error", true)
+leon.set("check_for_updates", false)
 ```
 
 `resume` is what a block restored after a server restart does with the resume command its program

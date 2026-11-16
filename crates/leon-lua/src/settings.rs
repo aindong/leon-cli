@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 11] = [
+pub const KEYS: [&str; 12] = [
     "theme",
     "font.family",
     "font.size",
@@ -22,6 +22,7 @@ pub const KEYS: [&str; 11] = [
     "hint_patterns",
     "resume",
     "fade_inactive_panes",
+    "check_for_updates",
 ];
 
 /// How far the app fades the panes without the focus toward the window's background, unless the
@@ -69,6 +70,8 @@ pub struct Settings {
     /// How far the app fades the panes without the focus toward the window's background, 0 to
     /// `FADE_MAX`; 0 turns the fade off.
     pub fade_inactive_panes: f64,
+    /// Leon.app looks for a newer release once a day (docs/updates.md); false: only when asked.
+    pub check_for_updates: bool,
 }
 
 /// tmux's `repeat-time` default, in milliseconds, for a config that doesn't set `repeat_time`.
@@ -76,7 +79,7 @@ pub const REPEAT_TIME: u64 = 500;
 
 impl Default for Settings {
     /// Today's app: the dark theme whatever the OS, Menlo 13, every notification, 500 ms repeat,
-    /// unfocused panes faded by `FADE`.
+    /// unfocused panes faded by `FADE`, a daily look for a new release.
     fn default() -> Self {
         let dark = "leon-dark".to_string();
         Settings {
@@ -89,6 +92,7 @@ impl Default for Settings {
             hint_patterns: vec![],
             resume: Resume::Ask,
             fade_inactive_panes: FADE,
+            check_for_updates: true,
         }
     }
 }
@@ -106,6 +110,7 @@ impl Settings {
             "hint_patterns": self.hint_patterns,
             "resume": self.resume.as_str(),
             "fade_inactive_panes": self.fade_inactive_panes,
+            "check_for_updates": self.check_for_updates,
         })
     }
 
@@ -157,6 +162,7 @@ impl Settings {
             "notifications.blocked" => self.notifications.blocked = flag()?,
             "notifications.error" => self.notifications.error = flag()?,
             "copy_on_select" => self.copy_on_select = flag()?,
+            "check_for_updates" => self.check_for_updates = flag()?,
             "repeat_time" => match v.as_f64() {
                 Some(ms) if ms.fract() == 0. && (0. ..=10_000.).contains(&ms) => self.repeat_time = ms as u64,
                 _ => return Err("repeat_time is whole milliseconds, 0 to 10000 (0 turns repeat off)".into()),

@@ -13,7 +13,7 @@ the server, the CLI and `leon attach`).
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.6.0`.
+one is `1.7.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -27,6 +27,31 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+### Updates in Leon.app
+
+#### Added
+
+- Leon.app looks for a newer release once a day, in the background, and shows a quiet notice in
+  the window when one exists: its version, its release notes, and Install. Nothing is downloaded
+  or replaced until you choose Install (or "Install Update" in the command palette); the notice
+  then shows each step, and when it is done, Restart opens the new version with your sessions as
+  they were. Dismissing the notice hides it until a newer version comes out. "Check for Updates"
+  in the palette looks at once. It checks and installs what `leon self-update` does
+  ([docs/updates.md](docs/updates.md)).
+- A Leon.app that Homebrew installed shows the `brew upgrade --cask` command to copy instead of
+  Install. An app run from where macOS put a download (App Translocation) says to move it to
+  Applications first, and an install that macOS's App Management setting refuses says where to
+  allow it.
+- `leon.set("check_for_updates", false)` turns the daily look off: the app then makes no request
+  of its own. `server.settings` reports `check_for_updates`, a new result field on a stable
+  method, so `api_version` goes from `1.6.0` to `1.7.0`.
+
+#### Security
+
+- A release server elsewhere can no longer redirect an update to this machine over https either
+  (`https://127.0.0.1`, `localhost`, `127.1` and the like); before, only plain http to a loopback
+  address was refused. What is downloaded was, and is, verified against the release key.
 
 ### Fading the panes without the focus
 

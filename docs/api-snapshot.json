@@ -1,5 +1,5 @@
 {
-  "api_version": "1.6.0",
+  "api_version": "1.7.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -2762,6 +2762,9 @@
               "fade_inactive_panes": {
                 "type": "number",
                 "format": "double"
+              },
+              "check_for_updates": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -2772,7 +2775,8 @@
               "repeat_time",
               "hint_patterns",
               "resume",
-              "fade_inactive_panes"
+              "fade_inactive_panes",
+              "check_for_updates"
             ]
           },
           "sources": {
