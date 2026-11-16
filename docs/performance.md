@@ -224,13 +224,14 @@ session was streaming the screen, which slows every outside number the same way)
 | `cat` 100 MB of text and colour, 1 / 8 panes | `flood.sh` | 55.5 / 57.3 frames a second shown (the capture's own floor 54.7 / 55.6), none missed; frame build p50 1.0 / 1.4 ms; screen current 46 ms after the last byte |
 | start-up to the prompt drawn, no server / server up | `startup.sh` | 159 / 154 ms (window on screen 188 / 190 ms); `leon run --wait -- true` 13 ms; `leon server start` 32 ms |
 | memory (footprint) | `memory.sh` | server 7.3 MiB idle, +0.53 MiB a pane, +20.7 MiB per 10,000 lines of scrollback in an 80-column pane; app 137 MiB, +0.06 MiB a pane; a 1 GB flood peaks the app at 163 MiB and it is back to 135 MiB within 30 s |
-| CPU with 12 idle panes: still / one pane working / app hidden | `idle-cpu.sh` | server 0.08% of a core in each; app 2.3% / 6.6% / 1.9%, 80 / 58 / 32 wake-ups a second |
+| CPU with 12 idle panes: still / one pane working / app hidden | `idle-cpu.sh` | server under 0.1% of a core in each; app 2.3% / 6.6% / 1.9%, 80 / 58 / 32 wake-ups a second at first; since the poll runs only when woken, 0.74% / 4.4% / 0.06%, 18 / 18 / 0.3 (load 1.4 to 2.3) |
 | 25 and 100 panes, 50 sessions, 10 tabs | `scale.sh` | 100 panes made in 1.4 s, the 100th split as fast as the first (9 ms, the CLI's own start included); 60 frames a second with all 100 printing, frame build p50 5.1 ms; server 88 MiB; a session 11 ms |
 | 2-hour agent soak: 12 agents in 4 sessions, a session made and killed and an attach client every minute | `soak.sh 120` | app 162 to 180 MiB throughout (+1.2 MiB/h over the last hour); server 354 to 432 MiB, then 667 to 896 MiB after the 9 hidden panes were fitted to the window's width at minute 48 (their 10,000-line histories now 213 columns); its live heap was the same at minutes 60 and 120 (748 MB, +448 bytes), so the footprint's sawtooth is freed memory the allocator keeps; `leaks` found none in the server and 56 small AppKit objects (2.5 KB) in the app |
 
-Where the time goes, from `sample`: the app polls its model every 8 ms (`POLL`) even when nothing
-changed or it is hidden, and a pulsing status indicator re-lays out the whole window on each of
-its frames. During a flood the server's parse thread spends more time in leon's own passes over
+Where the time goes, from `sample`: the app used to poll its model every 8 ms (`POLL`) even when
+nothing changed or it was hidden; now its main thread sleeps until woken, and what an idle shown
+window still costs is GPUI's display link, which ticks at 60 Hz while the window is visible. A
+pulsing status indicator re-lays out the whole window on each of its frames. During a flood the server's parse thread spends more time in leon's own passes over
 the bytes (the slice scans in `terminal_view::feed`, the X10 mouse scanner, the OSC 7501 scanner)
 than in alacritty's parser. A keystroke's echo is painted 12 ms after the key (most of it waiting for the next
 display tick), then shown about two display frames later: GPUI draws on the display link and
