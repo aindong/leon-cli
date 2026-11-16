@@ -44,6 +44,7 @@ impl Workspace {
         }
         self.look = look;
         self.use_theme();
+        // after `use_theme`: the first settings are drawn at once, a change from then on fades
         self.note_theme_names(&reply["settings"]);
         // a server older than the setting doesn't report it, and would have skipped a
         // `check_for_updates = false` as unknown: no look of the app's own until it does

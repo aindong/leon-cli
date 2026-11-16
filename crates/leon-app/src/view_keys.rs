@@ -334,7 +334,10 @@ impl Workspace {
             Some("client.palette.toggle") => Some(false),
             _ => None,
         };
-        let toggle = want_switch.is_some_and(|w| self.palette.as_ref().is_some_and(|p| p.switch == w));
+        // the theme list is neither: ⌘⇧P goes to the actions, its own key (⌘⇧T) closes it
+        let themes = self.palette.as_ref().is_some_and(|p| p.themes.is_some());
+        let toggle = want_switch.is_some_and(|w| self.palette.as_ref().is_some_and(|p| p.switch == w && !themes))
+            || (themes && bound.as_deref() == Some("client.theme.change"));
         if let (Some(w), false, Some(p)) = (want_switch, toggle, self.palette.as_mut()) {
             (p.switch, p.query, p.selected, p.ask, p.note, p.themes) = (w, String::new(), 0, None, None, None);
             cx.notify();

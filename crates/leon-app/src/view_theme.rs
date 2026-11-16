@@ -20,8 +20,10 @@ pub(super) struct ThemeUi {
     /// The colours on screen when the change to `to` started, and when (None: at rest).
     from: Theme,
     at: Option<Instant>,
-    /// How far the panes are dipped this frame.
+    /// How far the panes are dipped this frame, and how far they were when this change started
+    /// (one that starts mid-way through another carries on from there, never flashing back).
     dip: f32,
+    held: f32,
     /// The setting's theme names (dark, light), as the last settings reply gave them.
     names: (String, String),
     /// The settings were applied once: a change from then on is the user's, and fades.
@@ -31,7 +33,7 @@ pub(super) struct ThemeUi {
 impl ThemeUi {
     pub(super) fn new(t: Theme) -> Self {
         let d = leon_lua::settings::Settings::default().theme;
-        ThemeUi { to: t, from: t, at: None, dip: 0., names: (d.dark, d.light), settled: false }
+        ThemeUi { to: t, from: t, at: None, dip: 0., held: 0., names: (d.dark, d.light), settled: false }
     }
 }
 
@@ -72,7 +74,7 @@ impl Workspace {
         let now = self.fade_now();
         if want != self.themes.to {
             let moving = self.themes.settled && !self.reduce_motion();
-            (self.themes.from, self.themes.to) = (self.theme, want);
+            (self.themes.from, self.themes.to, self.themes.held) = (self.theme, want, self.themes.dip);
             self.themes.at = moving.then_some(now);
             self.term.panes.values_mut().for_each(|p| p.cache.clear()); // scrollback in the old colours
             self.send_palette();
@@ -83,10 +85,10 @@ impl Workspace {
         {
             Some((p, linear)) => {
                 self.theme = s.from.mix(&s.to, p);
-                s.dip = DIP * (1. - (2. * linear - 1.).abs());
+                s.dip = (DIP * (1. - (2. * linear - 1.).abs())).max(s.held * (1. - linear));
             }
             None => {
-                (self.theme, s.at, s.dip) = (s.to, None, 0.);
+                (self.theme, s.at, s.dip, s.held) = (s.to, None, 0., 0.);
             }
         }
     }
@@ -102,7 +104,8 @@ impl Workspace {
     /// The theme the open theme list's selected row names.
     fn previewed(&self) -> Option<Theme> {
         let list = self.palette.as_ref()?.themes.as_ref()?;
-        let item = self.palette_matches().into_iter().nth(self.palette_selected_row()?)?;
+        let matches = self.palette_matches();
+        let item = matches.get(self.palette.as_ref()?.selected.min(matches.len().checked_sub(1)?))?;
         let name = item.args.as_ref()?["theme"].as_str()?.to_string();
         list.iter().find(|(n, _)| *n == name).map(|(_, t)| *t)
     }
@@ -127,7 +130,11 @@ impl Workspace {
         let list: Vec<(String, Theme)> =
             theme_names(&dir).into_iter().filter_map(|n| load_theme(&dir, &n).ok().map(|t| (n, t))).collect();
         let current = if self.dark { &self.themes.names.0 } else { &self.themes.names.1 };
-        let selected = list.iter().position(|(n, _)| n == current).unwrap_or(0);
+        // a configured theme that no longer loads is drawn as the built-in one: select that
+        let shown = self.look.theme(self.dark);
+        let selected =
+            list.iter().position(|(n, _)| n == current).or_else(|| list.iter().position(|(_, t)| *t == shown));
+        let selected = selected.unwrap_or(0);
         let themes = Some(list);
         self.palette = Some(Palette { query: String::new(), selected, ask: None, switch: false, note, themes });
         cx.notify();
@@ -164,9 +171,12 @@ impl Workspace {
     /// init.lua's `theme` as the Settings window writes it, for the side `theme_prompt` names. A
     /// refused write goes back and reopens the list with the reason.
     fn keep_theme(&mut self, name: String, cx: &mut Context<Self>) {
-        let Ok(t) = load_theme(&self.themes_dir(), &name) else { return self.open_themes(None, cx) };
+        let t = match load_theme(&self.themes_dir(), &name) {
+            Ok(t) => t,
+            Err(e) => return self.open_themes(Some(e), cx),
+        };
         let Some(config) = self.config_path() else { return };
-        let before = (self.look.clone(), self.themes.names.clone());
+        let before = (self.look.dark, self.look.light, self.themes.names.clone());
         let (d, l) = self.themes.names.clone();
         let value = match (d == l, self.dark) {
             (true, _) => json!(name),
@@ -185,7 +195,7 @@ impl Workspace {
             this.update(cx, |ws, cx| match written {
                 Ok(_) => ws.reload_config(),
                 Err(e) => {
-                    (ws.look, ws.themes.names) = before;
+                    (ws.look.dark, ws.look.light, ws.themes.names) = before;
                     ws.open_themes(Some(e), cx);
                 }
             })

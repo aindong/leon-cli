@@ -173,7 +173,7 @@ impl Workspace {
     /// The theme and font every thumbnail is drawn with, as a stamp.
     fn look_stamp(&self) -> u64 {
         let mut h = DefaultHasher::new();
-        (format!("{:?}", self.theme), &self.font_family, self.font_size.to_bits()).hash(&mut h);
+        (format!("{:?}", self.theme()), &self.font_family, self.font_size.to_bits()).hash(&mut h);
         h.finish()
     }
 
@@ -214,13 +214,13 @@ impl Workspace {
             let thumb = Thumb {
                 window_id: wid.clone(),
                 panes: panes.clone(),
-                theme: self.theme,
+                theme: self.theme(),
                 family: self.font_family.clone(),
                 font_size: self.font_size,
                 renders: self.overview.renders.clone(),
             };
             let view = cx.new(|_| thumb);
-            let slot = Slot { view, panes, theme: self.theme, stamp, at: now, filled };
+            let slot = Slot { view, panes, theme: self.theme(), stamp, at: now, filled };
             self.overview.thumbs.insert(wid.clone(), slot);
             drew |= update;
         }

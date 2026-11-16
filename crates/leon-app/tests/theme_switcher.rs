@@ -136,3 +136,37 @@ fn enter_changes_only_the_side_macos_is_on(cx: &mut TestAppContext) {
     assert!(light, "only the light side changed: {after_light:?}");
     assert!(dark, "then only the dark side: {after_dark:?}");
 }
+
+#[gpui::test]
+fn a_refused_write_goes_back_and_says_why(cx: &mut TestAppContext) {
+    // set by code: `leon config set` can't rewrite the call, so the pick can't be written
+    let s = setup_with_config("leon.set(\"theme\", os.getenv(\"LEON_NO_SUCH_VAR\") or \"leon-dark\")\n");
+    let (ws, cx) = open(cx, &s.app);
+    ws.update(cx, |ws, _| ws.sync_keymap());
+    let before = init_lua(&s);
+    act(&ws, cx, "client.theme.change");
+    cx.simulate_input("sand");
+    cx.simulate_keystrokes("enter");
+    let reopened = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.palette_open()));
+    let (note, theme) = ws.read_with(cx, |ws, _| (ws.switcher_note(), ws.theme()));
+    s.app.stop();
+    assert!(reopened, "the list opens again");
+    assert!(note.as_deref().is_some_and(|n| n.contains("theme")), "with the reason: {note:?}");
+    assert_eq!(theme, DARK, "and the theme in use before");
+    assert_eq!(init_lua(&s), before, "init.lua is as it was");
+}
+
+#[gpui::test]
+fn the_lists_own_key_closes_it_and_the_palettes_key_goes_to_the_actions(cx: &mut TestAppContext) {
+    let s = setup_with_config("-- mine\n");
+    let (ws, cx) = open(cx, &s.app);
+    ws.update(cx, |ws, _| ws.sync_keymap());
+    cx.simulate_keystrokes("cmd-shift-t down cmd-shift-t");
+    let closed = ws.read_with(cx, |ws, _| (ws.palette_open(), ws.theme()));
+    cx.simulate_keystrokes("cmd-shift-t down cmd-shift-p");
+    let actions = ws.read_with(cx, |ws, _| (ws.palette_prompt(), ws.theme()));
+    cx.simulate_keystrokes("escape");
+    s.app.stop();
+    assert_eq!(closed, (false, DARK), "⌘⇧T in the list closes it and goes back");
+    assert_eq!(actions, ("Type an action…".to_string(), DARK), "⌘⇧P turns it into the action list");
+}
