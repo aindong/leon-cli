@@ -39,6 +39,11 @@ impl Workspace {
         self.polls
     }
 
+    /// How many redraws were shown at once for a key's echo (`show_now`).
+    pub fn echo_shows(&self) -> u64 {
+        self.echo_shows
+    }
+
     pub fn sidebar_visible(&self) -> bool {
         self.sidebar
     }

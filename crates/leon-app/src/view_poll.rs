@@ -4,6 +4,16 @@
 
 use super::*;
 
+/// The window's NSView, through raw-window-handle (None off macOS; a test window has none and
+/// panics when asked, so only the app's own workspace asks).
+pub(super) fn native_view(window: &Window) -> Option<std::ptr::NonNull<std::ffi::c_void>> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    match HasWindowHandle::window_handle(window).ok()?.as_raw() {
+        RawWindowHandle::AppKit(h) => Some(h.ns_view),
+        _ => None,
+    }
+}
+
 /// How long the Activity list's waited times (`12s`) stay right.
 const WAITED_TICK: Duration = Duration::from_secs(1);
 
@@ -70,6 +80,10 @@ impl Workspace {
             self.polls.1 += 1;
             self.undrawn = self.undrawn.saturating_add(1);
             cx.notify();
+            if std::mem::take(&mut self.echo_due) {
+                self.echo_shows += 1;
+                self.show_now();
+            }
         }
         let next = self.next_poll();
         self.planned = next.map(|d| Instant::now() + d);
@@ -99,6 +113,26 @@ impl Workspace {
         due.extend(self.notifier.due().map(|t| t.saturating_duration_since(now)));
         due.extend(self.hosts.next_retry().map(|t| t.saturating_duration_since(now)));
         due.into_iter().min().map(|d| d.max(POLL))
+    }
+
+    /// Draw and show the redraw just asked for now, not at the display link's next tick: AppKit's
+    /// `displayLayer:` (GPUI's view) draws it when this run-loop pass commits and presents it with
+    /// that transaction. Only for a key's echo: a flood keeps to the display link.
+    fn show_now(&self) {
+        #[cfg(target_os = "macos")]
+        if let Some(view) = self.native_view.filter(|_| self.platform) {
+            let view: *mut objc2::runtime::AnyObject = view.as_ptr().cast();
+            // SAFETY: GPUI's NSView lives as long as the window, and this runs on the main thread
+            unsafe {
+                let window: *mut objc2::runtime::AnyObject = objc2::msg_send![view, window];
+                // NSWindowOcclusionStateVisible: a hidden or covered window draws nothing (GPUI
+                // stops its display link), and a key typed into it doesn't change that
+                let state: usize = objc2::msg_send![window, occlusionState];
+                if state & (1 << 1) != 0 {
+                    let _: () = objc2::msg_send![view, setNeedsDisplay: objc2::runtime::Bool::YES];
+                }
+            }
+        }
     }
 
     /// From render: a frame was drawn, and the poll looks again at once if this frame started

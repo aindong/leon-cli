@@ -89,6 +89,7 @@ impl Workspace {
                 }
             }
             self.app.write(&sid, &id, &bytes);
+            self.echo_due = true;
             if self.view_top(&id).is_some() {
                 self.scroll_to(&id, None); // typing goes back to the prompt
                 cx.notify();

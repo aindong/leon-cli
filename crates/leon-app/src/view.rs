@@ -197,6 +197,12 @@ pub struct Workspace {
     undrawn: u8,
     /// When the poll looks next without a wake (None: only a wake).
     planned: Option<Instant>,
+    /// A key went to a pane since the last redraw the poll asked for: show that one at once; and
+    /// how many were (tests).
+    echo_due: bool,
+    echo_shows: u64,
+    /// The window's NSView (the app's own workspace only), for `show_now`.
+    native_view: Option<std::ptr::NonNull<std::ffi::c_void>>,
     keymap: Keymap,
     inbox: Arc<Mutex<KeymapInbox>>,
     keymap_asked: Option<Instant>,
@@ -280,6 +286,7 @@ impl Workspace {
         });
         let mut ws = Self::with_hosts(app, settings_path(), hosts, window, cx);
         ws.platform = true;
+        ws.native_view = poll_view::native_view(window);
         ws.native_key = crate::input::current_key_event;
         let store = leon_core::paths::state_dir().map(|d| d.join("updates.json"));
         ws.enable_updates(store, Arc::new(leon_update::Target::running));
@@ -359,6 +366,9 @@ impl Workspace {
             polls: (0, 0),
             undrawn: 0,
             planned: None,
+            echo_due: false,
+            echo_shows: 0,
+            native_view: None,
             keymap: Keymap::app(&json!({})),
             inbox: Arc::default(),
             keymap_asked: None,

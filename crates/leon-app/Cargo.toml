@@ -28,6 +28,8 @@ leon-update.workspace = true
 # already in the tree through GPUI; for notifications and the Dock badge (notify_mac.rs)
 objc2 = "0.6.5"
 block2 = "0.6.2"
+# already in the tree through GPUI; the window's NSView, to show a key's echo at once (view_poll.rs)
+raw-window-handle = "0.6.2"
 
 [dev-dependencies]
 tempfile.workspace = true
