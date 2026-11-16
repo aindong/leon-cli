@@ -129,6 +129,14 @@ impl Workspace {
         })
     }
 
+    /// How long until a find with output it hasn't searched may run again (the poll's clock).
+    pub(super) fn find_rerun_in(&self) -> Option<Duration> {
+        let f = self.term.find.as_ref().filter(|f| !f.query.is_empty())?;
+        let unseen = self.app.model().screen_updates.get(&f.block).copied() != f.seen;
+        // once due, the redraw runs it: a deadline already past would only spin a hidden window
+        (unseen && f.ran.elapsed() < RERUN).then(|| RERUN - f.ran.elapsed())
+    }
+
     fn step_find(&mut self, forward: bool) {
         let Some(f) = self.term.find.as_mut().filter(|f| !f.matches.is_empty()) else { return };
         let n = f.matches.len();

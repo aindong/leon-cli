@@ -55,8 +55,10 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   (sessions, windows, layout trees, blocks, program-status records), refetched after each batch of
   events with `session.list`, `session.view`, `session.list_blocks` and `program_status` rather
   than by applying events one by one. The window shows the active tab's whole split tree; keys go
-  to the zoomed block, else the focused one. The view redraws when the reader thread wakes it (or
-  every ~8 ms for the spinner and the keymap) and only when something drawn changed.
+  to the zoomed block, else the focused one. The view redraws when the reader thread wakes it, and only when something drawn changed. Idle, it
+  does nothing: a timer runs only while something timed is pending (a slide or fade, the spinner,
+  a find re-run, a host retry), stopping once the window stops drawing (hidden); the keymap is
+  asked for once a second.
 - **Screen transport.** `block.watch {block_ids}` on a connection replaces the set of blocks whose
   screens it gets; the app watches only the panes on screen. Each screen line is
   `{"screen":{block_id, full, lines, cols, rows:[{line, spans, backgrounds}], cursor, app_cursor,

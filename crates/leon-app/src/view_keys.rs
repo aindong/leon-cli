@@ -197,10 +197,11 @@ impl Workspace {
             "client.update.restart" => self.restart_for_update(cx),
             n if n.starts_with("client.update.") => self.update_named(n, window, cx),
             "client.config.reload" => {
-                let inbox = self.inbox.clone();
+                let (inbox, wake) = (self.inbox.clone(), self.wake.clone());
                 self.hosts.local().spawn("server.config_reload", json!({}), move |r| {
                     report("the config reload", r);
-                    lock(&inbox).asking = false; // fetch the new keymap at the next poll
+                    lock(&inbox).asking = false;
+                    wake(); // the poll asks for the new keymap
                 });
                 self.keymap_asked = None;
             }
@@ -364,23 +365,30 @@ impl Workspace {
             if due && !inbox.asking {
                 inbox.asking = true;
                 self.keymap_asked = Some(Instant::now());
-                let back = self.inbox.clone();
+                let (back, wake, known) = (self.inbox.clone(), self.wake.clone(), self.keymap.generation);
                 self.hosts.local().spawn("client.keymap", json!({}), move |r| {
+                    let news = r.as_ref().is_ok_and(|km| km["generation"].as_u64() != Some(known));
                     let mut inbox = lock(&back);
                     inbox.asking = false;
                     inbox.reply = r.ok();
+                    drop(inbox);
+                    if news {
+                        wake();
+                    }
                 });
             }
             inbox.reply.take()
         };
         if let Some(km) = reply.filter(|km| km["generation"].as_u64() != Some(self.keymap.generation)) {
             self.use_keymap(&km);
-            let (back, generation) = (self.inbox.clone(), self.keymap.generation);
+            let (back, generation, wake) = (self.inbox.clone(), self.keymap.generation, self.wake.clone());
             self.hosts.local().spawn("server.settings", json!({}), move |r| {
                 let mut inbox = lock(&back);
                 // a slow reply asked for under an older generation never replaces a newer one
                 if let (Ok(s), true) = (r, inbox.settings.as_ref().is_none_or(|(g, _)| *g <= generation)) {
                     inbox.settings = Some((generation, s));
+                    drop(inbox);
+                    wake();
                 }
             });
             cx.notify();
