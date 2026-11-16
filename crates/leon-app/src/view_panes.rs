@@ -143,7 +143,7 @@ impl Workspace {
             .h(px(rect.h))
             .flex()
             .flex_col()
-            .rounded(px(6.))
+            .rounded(px(crate::glass::TILE_RADIUS))
             .overflow_hidden()
             .bg(self.pane_fill(kind, t))
             .children(header)

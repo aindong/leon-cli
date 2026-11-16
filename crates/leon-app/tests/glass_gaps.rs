@@ -5,7 +5,7 @@
 use leon_app::glass::{gaps, Gaps};
 use leon_app::panes::Rect;
 
-const R: f32 = 6.;
+const R: f32 = leon_app::glass::TILE_RADIUS;
 
 fn inside(r: &Rect, (x, y): (f32, f32)) -> bool {
     x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h
