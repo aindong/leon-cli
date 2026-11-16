@@ -56,9 +56,24 @@ impl Scanner {
         let mut i = 0;
         while i < input.len() {
             if self.mode == Mode::Ground {
-                let n = memchr::memchr(ESC, &input[i..]).unwrap_or(input.len() - i);
-                self.pass.extend_from_slice(&input[i..i + n]);
-                i += n;
+                // Hand out, uncopied, the run up to an escape this scanner acts on (`ESC ]`, `ESC c`,
+                // `ESC ESC`) or an ESC it must hold at the end; any other `ESC x` passes as `step` would.
+                let start = i;
+                loop {
+                    let Some(n) = memchr::memchr(ESC, &input[i..]) else {
+                        i = input.len();
+                        break;
+                    };
+                    i += n;
+                    match input.get(i + 1) {
+                        Some(b']' | b'c' | &ESC) | None => break,
+                        Some(_) => i += 2,
+                    }
+                }
+                if i > start {
+                    self.flush(&mut f);
+                    f(Piece::Bytes(&input[start..i]));
+                }
                 if i == input.len() {
                     break;
                 }

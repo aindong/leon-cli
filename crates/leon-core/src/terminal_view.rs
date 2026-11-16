@@ -75,10 +75,18 @@ impl Escapes {
     pub fn feed(&mut self, bytes: &[u8]) -> bool {
         let (mut cleared, mut i) = (false, 0);
         while i < bytes.len() {
+            // only an ESC leaves the text state; `ESC x` and `ESC [ x` that start nothing
+            // followed here go back to it, so they are skipped as `step` would
             if self.state == Scan::Text {
-                // only an ESC leaves the text state
-                let Some(n) = memchr::memchr(0x1b, &bytes[i..]) else { break };
-                i += n;
+                loop {
+                    let Some(n) = memchr::memchr(0x1b, &bytes[i..]) else { return cleared };
+                    i += n;
+                    match (bytes.get(i + 1), bytes.get(i + 2)) {
+                        (Some(b'['), Some(x)) if !matches!(x, b'?' | b'3' | 0x1b) => i += 3,
+                        (Some(b), _) if !matches!(b, b'[' | b'c' | 0x1b) => i += 2,
+                        _ => break,
+                    }
+                }
             }
             cleared |= self.step(bytes[i]);
             i += 1;

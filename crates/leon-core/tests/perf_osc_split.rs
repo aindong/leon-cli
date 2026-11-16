@@ -68,3 +68,84 @@ fn each_sequence_is_found_split_at_every_byte() {
         }
     }
 }
+
+/// xorshift64: deterministic, so a failure reproduces from the printed case.
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        self.0
+    }
+
+    fn below(&mut self, n: usize) -> usize {
+        (self.next() % n as u64) as usize
+    }
+}
+
+const TOKENS: &[&[u8]] = &[
+    b"\x1b",
+    b"\x1b",
+    b"]",
+    b"c",
+    b"\\",
+    b"[",
+    b"7501;",
+    b"7;",
+    b"133;A",
+    b"state=working",
+    b"?",
+    b"\x07",
+    b"\x18",
+    b"\x1b\\",
+    b"\x1b[31m",
+    b"\x1b[0m",
+    b"\x1b[1;92m",
+    b"\x1bc",
+    b"\x1b]7;file://h/x\x07",
+    b"\x1b]7501;state=done\x07",
+    b"\x1b]133;A\x1b\\",
+    b"\x1b]0;title\x07",
+    b"plain text ",
+    b"\n",
+];
+
+/// Feeding one byte at a time never skips ahead (the skip needs the next byte in the same input),
+/// so it is the scanner's per-byte path: any split must give what it gives.
+#[test]
+fn random_splits_give_what_one_byte_at_a_time_gives() {
+    let mut rng = Rng(0x7501_5ca7);
+    for case in 0..2000 {
+        let mut stream = Vec::new();
+        for _ in 0..rng.below(300) {
+            if rng.below(8) == 0 {
+                stream.push(rng.next() as u8);
+            } else {
+                stream.extend_from_slice(TOKENS[rng.below(TOKENS.len())]);
+            }
+        }
+        let bytes: Vec<&[u8]> = stream.chunks(1).collect();
+        let mut cuts: Vec<usize> = (0..rng.below(6)).map(|_| rng.below(stream.len() + 1)).collect();
+        cuts.extend([0, stream.len()]);
+        cuts.sort();
+        let pieces: Vec<&[u8]> = cuts.windows(2).map(|w| &stream[w[0]..w[1]]).collect();
+        let pwds = |out: &[Out]| out.iter().filter(|o| matches!(o, Out::Pwd(_))).count();
+        let (slow, fast) = (scan(&bytes), scan(&pieces));
+        // without the pwds, bytes on either side of one merge
+        let strip = |out: Vec<Out>| {
+            let mut merged: Vec<Out> = Vec::new();
+            for o in out.into_iter().filter(|o| !matches!(o, Out::Pwd(_))) {
+                match (merged.last_mut(), o) {
+                    (Some(Out::Bytes(prev)), Out::Bytes(b)) => prev.extend_from_slice(&b),
+                    (_, o) => merged.push(o),
+                }
+            }
+            merged
+        };
+        // a pwd is noted per feed call: the byte-at-a-time run notes each, a piece only its last
+        assert!(pwds(&fast) <= pwds(&slow), "case {case}: {stream:?}");
+        assert_eq!(strip(fast), strip(slow), "case {case}: {stream:?}");
+    }
+}
