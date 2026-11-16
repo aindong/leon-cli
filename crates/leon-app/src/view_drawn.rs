@@ -29,7 +29,8 @@ pub fn drawing<V: 'static>(cx: &mut Context<V>) {
 /// `name`, noted as drawn by the view rendering now: what each `debug_selector` closure returns.
 pub fn sel(name: String) -> String {
     if let Some(id) = DRAWING.with(|d| d.get()) {
-        DRAWN.with(|d| d.borrow_mut().entry(id).or_default().insert(name.clone()));
+        // only a view that started its record: one released since has none to add to
+        DRAWN.with(|d| d.borrow_mut().get_mut(&id).map(|r| r.insert(name.clone())));
     }
     name
 }

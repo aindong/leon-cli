@@ -224,6 +224,8 @@ pub struct Workspace {
     /// The pane last seen with the focus, and whether the window was active: a change is the user
     /// arriving at a pane, which clears its done/error.
     seen_focus: Option<(String, bool)>,
+    /// The focus event `note_focus` found after a frame, for the poll to send, on its pane's machine.
+    focus_event: Option<(Rc<Remote>, Value)>,
     /// Scrollback, selection, find and links per pane.
     term: scroll::TermUi,
     floats: floats_view::FloatUi,
@@ -325,9 +327,9 @@ impl Workspace {
         // shortcut: every notify of the workspace brings what render draws from up to date (R5);
         // phase 2 moves `sync_pane` to each pane's grid view, which a child's notify won't reach
         // here, and phase 5 (the model as entities) removes this observer
-        let prepare = cx.observe_in(&cx.entity(), window, |ws, _, window, _| ws.prepare(window));
+        let prepare = cx.observe_self(|ws, _| ws.prepare());
         let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
-        Workspace {
+        let mut ws = Workspace {
             app,
             hosts,
             host: 0,
@@ -373,6 +375,7 @@ impl Workspace {
             settings_window: None,
             epoch: Instant::now(),
             seen_focus: None,
+            focus_event: None,
             term,
             floats: Default::default(),
             fade: Default::default(),
@@ -390,7 +393,9 @@ impl Workspace {
             _release: release,
             _appearance: appearance,
             _prepare: prepare,
-        }
+        };
+        ws.prepare(); // the first frame comes before any notify
+        ws
     }
 
     /// The target block and its screen (an empty one until the first arrives: keys typed by then

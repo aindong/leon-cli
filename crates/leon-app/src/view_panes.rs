@@ -2,6 +2,15 @@
 
 use super::*;
 
+/// What a drawn frame showed, for the bookkeeping after it (`drew_frame`): the model can move
+/// between the frame and then.
+pub(super) struct Shown {
+    /// (session, block) input went to, on `app`'s machine.
+    target: Option<(String, String)>,
+    active: bool,
+    app: Rc<Remote>,
+}
+
 /// What every tile of one frame shares.
 pub(super) struct Tiling {
     pub(super) sid: String,
@@ -227,18 +236,21 @@ impl Workspace {
 
     /// The user arriving at a pane (another pane, tab or session selected, or the window made active)
     /// has seen its done and error: clear them (docs/agents.md, "Lifetime"). Not while they stay on it, so a
-    /// finish in the pane they are looking at still shows until they come back.
-    fn note_focus(&mut self, window: &Window) {
-        let now = self.target().map(|(_, id, _)| (id, window.is_window_active()));
+    /// finish in the pane they are looking at still shows until they come back. After a frame
+    /// (`drew_frame`), for what that frame `showed`: a hidden window draws nothing, so a pane it
+    /// moves to unseen has seen nothing. The poll tells the server.
+    pub(super) fn note_focus(&mut self, showed: Shown) {
+        let now = showed.target.as_ref().map(|(_, id)| (id.clone(), showed.active));
         let arrived = match (&self.seen_focus, &now) {
             (_, None) => false,
             (Some((was, was_active)), Some((id, active))) => was != id || (*active && !was_active),
             (None, Some(_)) => true,
         };
         self.seen_focus = now;
-        if let Some((sid, id, _)) = self.target().filter(|_| arrived) {
+        if let Some((sid, id)) = showed.target.filter(|_| arrived) {
             let event = json!({ "session_id": sid, "block_id": id, "event": { "type": "focus" } });
-            self.app.send_then("block.event", event, drop); // a pane already gone is fine
+            self.focus_event = Some((showed.app, event));
+            (self.wake)();
         }
     }
 
@@ -246,9 +258,8 @@ impl Workspace {
     /// (ADR R5). It runs after every notify of the workspace, before the frame that notify asks
     /// for (the observer in `with_hosts`), so render, which may run more often (a hover, a
     /// resize), only draws. It takes no `cx`: it can't notify, which would run it again.
-    pub(super) fn prepare(&mut self, window: &Window) {
+    pub(super) fn prepare(&mut self) {
         self.prepares += 1;
-        self.note_focus(window);
         self.note_slides();
         self.settle_overview();
         self.drop_unshown_thumbs();
@@ -283,9 +294,14 @@ impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         drawing(cx);
         self.renders += 1;
-        // after the frame: undrawn redraws back to none, and the poll woken if this frame's state
-        // has something timed due sooner than it planned for (ADR R5, frame bookkeeping)
-        cx.defer_in(window, |ws, _, _| ws.drew_frame());
+        // after the frame: undrawn redraws back to none, the pane it showed noted as seen, and the
+        // poll woken if that is news or something timed is due sooner (ADR R5, frame bookkeeping)
+        let showed = Shown {
+            target: self.target().map(|(sid, id, _)| (sid, id)),
+            active: window.is_window_active(),
+            app: self.app.clone(),
+        };
+        cx.defer_in(window, move |ws, _, _| ws.drew_frame(showed));
         let stats = self.stats.clone();
         if stats.borrow().enabled {
             stats.borrow_mut().render_start = Some(Instant::now());

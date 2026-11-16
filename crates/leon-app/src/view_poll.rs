@@ -56,6 +56,9 @@ impl Workspace {
             self.planned = None;
             return None;
         }
+        if let Some((app, event)) = self.focus_event.take() {
+            app.send_then("block.event", event, drop); // a pane already gone is fine
+        }
         self.poll_hosts();
         let replied = self.poll_terms();
         if let Some(text) = self.term.clip.take() {
@@ -106,8 +109,9 @@ impl Workspace {
     /// After a frame was drawn (render defers it): the poll looks again at once if the state that
     /// frame drew has something timed due sooner than it planned for (a slide, a fade, the spinner,
     /// the Activity list), as after a hidden spell, when the poll stopped its clocks.
-    pub(super) fn drew_frame(&mut self) {
+    pub(super) fn drew_frame(&mut self, showed: Shown) {
         self.undrawn = 0;
+        self.note_focus(showed);
         let Some(d) = self.next_poll() else { return };
         if self.planned.is_none_or(|p| Instant::now() + d + POLL < p) {
             (self.wake)();
