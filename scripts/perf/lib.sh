@@ -123,3 +123,25 @@ mem() {
 
 # cpu_s PID: CPU time used so far, in seconds.
 cpu_s() { ps -o time= -p "$1" | awk -F'[:.]' '{ if (NF == 3) print $1 * 60 + $2 "." $3; else print $1 * 3600 + $2 * 60 + $3 "." $4 }'; }
+
+# first_block SID: the block a new session starts with.
+first_block() {
+  "$LEON" --json block ls -s "$1" | "$PERF_PY" -c 'import json,sys; print(json.load(sys.stdin)[0]["block_id"])'
+}
+
+# stack SID ANCHOR N CMD [DIR]: N panes of the same size where block ANCHOR is (below each other,
+# or DIR=right: side by side), each running `sh -c CMD` without taking the focus; then ANCHOR
+# closes. Pane k takes (N-k+1)/(N-k+2) of the one before it, so each ends with 1/N. Prints the
+# new blocks' IDs, and appends each split's time in ms to $RUN/splits.txt.
+stack() {
+  local sid=$1 at=$2 n=$3 cmd=$4 dir=${5:-below} k prev=$2 ratio t0
+  for k in $(seq "$n"); do
+    ratio=50
+    [ "$k" = 1 ] || ratio=$(((100 * (n - k + 1) + (n - k + 2) / 2) / (n - k + 2)))
+    t0=$(uptime_ns)
+    prev=$("$LEON" split -s "$sid" -b "$prev" --split "$dir" --ratio "$ratio" --focus=false -- sh -c "$cmd")
+    echo "$(( ($(uptime_ns) - t0) / 1000000 ))" >>"$RUN/splits.txt"
+    echo "$prev"
+  done
+  "$LEON" block close "$at" >/dev/null
+}

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # keylat.sh: key to pixel in the app, by two clocks, under three loads (docs/performance.md).
 #   scripts/perf/keylat.sh [--loads "idle flood1 busy8"] [--keys N] [--delay MS]
-# Per load: a fresh session whose focused pane runs scripts/perf/echo.py (plus one pane looping
-# `cat` of the 100 MB flood file, or eight panes of agent.py busy), the app with LEON_FRAME_LOG,
+# Per load: a fresh session whose focused right pane runs scripts/perf/echo.py, and on the left
+# nothing (idle: the session's shell), one pane looping `cat` of the 100 MB flood file, or eight
+# panes of agent.py busy, the app with LEON_FRAME_LOG,
 # and winframes posting N keys to the app's pid. --delay makes echo.py wait MS before each echo:
 # both clocks must rise by it (the check that they measure the echo).
 source "$(dirname "$0")/lib.sh"
@@ -24,13 +25,13 @@ for load in $loads; do
   perf_load_gate
   perf_note "keylat $load"
   sid=$("$LEON" new "kl-$load")
-  echo_id=$("$LEON" split -s "$sid" --label echo -- "$PERF_PY" "$PERF_ROOT/scripts/perf/echo.py" --delay "$delay")
+  shell=$(first_block "$sid")
+  "$LEON" split -s "$sid" -b "$shell" --label echo -- "$PERF_PY" "$PERF_ROOT/scripts/perf/echo.py" --delay "$delay" >/dev/null
+  # the load goes in the left half, where the session's shell was
   case "$load" in
     idle) ;;
-    flood1) "$LEON" split -s "$sid" -b "$echo_id" --split below --focus=false -- sh -c "while :; do cat '$flood'; done" >/dev/null ;;
-    busy8) for i in 1 2 3 4 5 6 7 8; do
-        "$LEON" split -s "$sid" -b "$echo_id" --split below --ratio 80 --focus=false -- "$PERF_PY" "$PERF_ROOT/scripts/perf/agent.py" busy >/dev/null
-      done ;;
+    flood1) stack "$sid" "$shell" 1 "while :; do cat '$flood'; done" >/dev/null ;;
+    busy8) stack "$sid" "$shell" 8 "exec '$PERF_PY' '$PERF_ROOT/scripts/perf/agent.py' busy" >/dev/null ;;
     *) echo "unknown load $load" >&2; exit 2 ;;
   esac
   perf_app "$RUN/$load-frames.log"
