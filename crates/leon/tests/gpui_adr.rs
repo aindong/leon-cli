@@ -31,6 +31,12 @@ fn app_sources() -> Vec<(String, String)> {
     files
 }
 
+/// The `[patch…]` sections of the workspace's Cargo.toml.
+fn cargo_patches() -> String {
+    let cargo = doc("Cargo.toml");
+    cargo.split("\n[").filter(|t| t.starts_with("patch")).collect::<Vec<_>>().join("\n[")
+}
+
 /// The text of the ADR's `## <name>` section, up to the next `## `.
 fn section<'a>(text: &'a str, name: &str) -> &'a str {
     let head = format!("\n## {name}\n");
@@ -51,6 +57,7 @@ fn the_adr_is_where_contributors_look() {
     assert!(rules.len() >= 8, "the ADR has its rules as `- **R<n>.**` bullets: {}", rules.len());
     for r in &rules {
         assert!(r.contains("Why:"), "each rule gives its reason: R{r}");
+        assert!(r.contains("Check:"), "each rule says how it is checked: R{r}");
     }
     assert!(doc("docs/architecture.md").contains("(architecture/gpui.md)"), "docs/architecture.md links the ADR");
     let claude = doc("CLAUDE.md");
@@ -75,6 +82,8 @@ fn the_adr_names_the_gpui_leon_builds_with() {
         .find(|l| l.starts_with("Built against: "))
         .expect("docs/architecture/gpui.md has a `Built against: ` line")
         .to_string();
+    let patched = cargo_patches();
+    assert!(!patched.contains("gpui"), "R11: GPUI is used as published, no [patch] for it: {patched}");
     assert!(built.contains(&format!("GPUI {version}")), "a GPUI change (to {version}) amends the ADR first: {built}");
     if source.starts_with("registry+") {
         assert!(built.contains("crates.io"), "the ADR says the GPUI is crates.io's: {built}");
