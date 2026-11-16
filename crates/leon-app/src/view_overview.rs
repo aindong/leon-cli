@@ -356,9 +356,6 @@ impl Workspace {
         let t = &self.theme;
         let wid = c.window_id.clone();
         let (name, status_name) = (format!("card-{wid}"), format!("card-status-{wid}"));
-        for p in self.overview.thumbs.get(&wid).map_or(&[][..], |s| &s.panes[..]) {
-            sel(format!("card-pane-{wid}-{}", p.block)); // the cached thumbnail doesn't render each frame
-        }
         let pick = c.window_id.clone();
         div()
             .id(SharedString::from(name.clone()))

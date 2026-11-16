@@ -10,6 +10,13 @@ use gpui::TestAppContext;
 use leon_app::floats::SLIDE;
 use m10b_support::*;
 
+/// What the motion's `request_animation_frame` does on the next frame, which the test platform
+/// never asks for: it notifies the workspace (GPUI's `Window::request_animation_frame`).
+fn animation_frame(ws: &gpui::Entity<leon_app::view::Workspace>, cx: &mut gpui::VisualTestContext) {
+    ws.update(cx, |_, cx| cx.notify());
+    cx.run_until_parked();
+}
+
 #[gpui::test]
 fn opening_moves_the_current_card_then_settles(cx: &mut TestAppContext) {
     let s = setup();
@@ -23,8 +30,7 @@ fn opening_moves_the_current_card_then_settles(cx: &mut TestAppContext) {
     // opacity: a cached view replays its paint as recorded, so a faint paint would stay faint
     assert!(ws.read_with(cx, |ws, _| ws.overview_veil()) > 0., "a veil over the grid while it opens");
     std::thread::sleep(SLIDE + Duration::from_millis(50));
-    cx.update(|window, _| window.refresh());
-    cx.run_until_parked();
+    animation_frame(&ws, cx);
     assert!(!drawn(cx, "overview-moving"), "the motion is over after a slide's time");
     assert!(drawn(cx, &format!("card-{current}")), "the card is in its place");
     assert_eq!(ws.read_with(cx, |ws, _| ws.overview_veil()), 0., "no veil is left over the grid");
@@ -32,8 +38,7 @@ fn opening_moves_the_current_card_then_settles(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("escape");
     assert!(drawn(cx, "overview-moving"), "closing moves the card back to the panes");
     std::thread::sleep(SLIDE + Duration::from_millis(50));
-    cx.update(|window, _| window.refresh());
-    cx.run_until_parked();
+    animation_frame(&ws, cx);
     assert!(!drawn(cx, "overview"), "then the overview is gone");
     s.app.stop();
 }

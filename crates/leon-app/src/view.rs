@@ -138,23 +138,6 @@ enum Drag {
     Overlay { block: String, grab: floats::Grab, from: gpui::Point<Pixels>, last: Option<floats::Placement> },
 }
 
-thread_local! {
-    /// The debug selectors the last frame drew. Only test builds name elements, and GPUI keeps a
-    /// selector's bounds after its element is gone, so tests ask this what is on screen.
-    static DRAWN: RefCell<HashSet<String>> = RefCell::default();
-}
-
-/// `name`, noted as drawn this frame: what each `debug_selector` closure returns.
-fn sel(name: String) -> String {
-    DRAWN.with(|d| d.borrow_mut().insert(name.clone()));
-    name
-}
-
-/// The debug selectors of the elements the last frame drew (empty outside test builds).
-pub fn drawn() -> HashSet<String> {
-    DRAWN.with(|d| d.borrow().clone())
-}
-
 // Truncating text cells use `line_clamp(1)`, not `whitespace_nowrap`: GPUI 0.2.2 caches a no-wrap
 // text's size from its first layout (before its width is known) and never adds the ellipsis.
 
@@ -187,6 +170,9 @@ pub struct Workspace {
     /// How many times the poll has run, and asked for a redraw (tests: it runs when woken or when
     /// something timed is due).
     polls: (u64, u64),
+    /// How many times the window rendered, and `prepare` ran (tests: what a frame did, R5).
+    renders: u64,
+    prepares: u64,
     /// Redraws the poll asked for since the last frame was drawn: a window that is hidden or
     /// covered draws none, and from the second the poll stops the clocks only a frame shows.
     undrawn: u8,
@@ -238,6 +224,8 @@ pub struct Workspace {
     /// The pane last seen with the focus, and whether the window was active: a change is the user
     /// arriving at a pane, which clears its done/error.
     seen_focus: Option<(String, bool)>,
+    /// The focus event `note_focus` found after a frame, for the poll to send, on its pane's machine.
+    focus_event: Option<(Rc<Remote>, Value)>,
     /// Scrollback, selection, find and links per pane.
     term: scroll::TermUi,
     floats: floats_view::FloatUi,
@@ -259,6 +247,7 @@ pub struct Workspace {
     _quit: Subscription,
     _release: Subscription,
     _appearance: Subscription,
+    _prepare: Subscription,
 }
 
 impl Workspace {
@@ -310,8 +299,7 @@ impl Workspace {
         let woke = wake.clone();
         app.on_change(move || woke());
         crate::notify::on_click(&wake);
-        let mut term = scroll::TermUi::default();
-        term.wake = Some(wake.clone());
+        let term = scroll::TermUi { wake: Some(wake.clone()), ..Default::default() };
         let updates =
             Arc::new(crate::updates::Updater::new(None, Arc::new(leon_update::Target::running), wake.clone()));
         let hosts = Hosts::new(app.clone(), hosts, wake.clone());
@@ -336,8 +324,12 @@ impl Workspace {
         let appearance = cx.observe_window_appearance(window, |ws, window, cx| {
             ws.set_appearance(look_view::is_dark(window.appearance()), cx)
         });
+        // shortcut: every notify of the workspace brings what render draws from up to date (R5);
+        // phase 2 moves `sync_pane` to each pane's grid view, which a child's notify won't reach
+        // here, and phase 5 (the model as entities) removes this observer
+        let prepare = cx.observe_self(|ws, _| ws.prepare());
         let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
-        Workspace {
+        let mut ws = Workspace {
             app,
             hosts,
             host: 0,
@@ -353,6 +345,8 @@ impl Workspace {
             stats: Rc::new(RefCell::new(stats)),
             seen: 0,
             polls: (0, 0),
+            renders: 0,
+            prepares: 0,
             undrawn: 0,
             planned: None,
             keymap: Keymap::app(&json!({})),
@@ -381,6 +375,7 @@ impl Workspace {
             settings_window: None,
             epoch: Instant::now(),
             seen_focus: None,
+            focus_event: None,
             term,
             floats: Default::default(),
             fade: Default::default(),
@@ -397,7 +392,10 @@ impl Workspace {
             _quit: quit,
             _release: release,
             _appearance: appearance,
-        }
+            _prepare: prepare,
+        };
+        ws.prepare(); // the first frame comes before any notify
+        ws
     }
 
     /// The target block and its screen (an empty one until the first arrives: keys typed by then
@@ -449,6 +447,8 @@ mod bars;
 mod calls;
 #[path = "view_copy.rs"]
 mod copy;
+#[path = "view_drawn.rs"]
+mod drawn_view;
 #[path = "view_fade.rs"]
 mod fade_view;
 #[path = "view_find.rs"]
@@ -470,6 +470,7 @@ mod start;
 #[path = "view_state.rs"]
 mod state;
 pub(crate) use bars::Tip;
+pub use drawn_view::{drawing, drawn, sel};
 pub use look_view::is_dark;
 pub use start::{init, install, quits, run};
 #[path = "view_menus.rs"]

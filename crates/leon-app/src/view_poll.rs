@@ -56,6 +56,9 @@ impl Workspace {
             self.planned = None;
             return None;
         }
+        if let Some((app, event)) = self.focus_event.take() {
+            app.send_then("block.event", event, drop); // a pane already gone is fine
+        }
         self.poll_hosts();
         let replied = self.poll_terms();
         if let Some(text) = self.term.clip.take() {
@@ -80,7 +83,7 @@ impl Workspace {
     /// The soonest timed thing pending, never sooner than `POLL`; None when only a wake can bring
     /// news. Slides, fades, the spinner, the waited times and a find's re-run only matter on
     /// screen: once a second redraw asked for is not drawn (hidden, covered), they wait for the
-    /// next frame, whose render wakes the poll again.
+    /// next frame, which wakes the poll again (`drew_frame`).
     pub(super) fn next_poll(&self) -> Option<Duration> {
         let now = Instant::now();
         let mut due = Vec::new();
@@ -103,10 +106,12 @@ impl Workspace {
         due.into_iter().min().map(|d| d.max(POLL))
     }
 
-    /// From render: a frame was drawn, and the poll looks again at once if this frame started
-    /// something timed sooner than it planned for (a slide, a fade, the spinner, the Activity list).
-    pub(super) fn drew_frame(&mut self) {
+    /// After a frame was drawn (render defers it): the poll looks again at once if the state that
+    /// frame drew has something timed due sooner than it planned for (a slide, a fade, the spinner,
+    /// the Activity list), as after a hidden spell, when the poll stopped its clocks.
+    pub(super) fn drew_frame(&mut self, showed: Shown) {
         self.undrawn = 0;
+        self.note_focus(showed);
         let Some(d) = self.next_poll() else { return };
         if self.planned.is_none_or(|p| Instant::now() + d + POLL < p) {
             (self.wake)();

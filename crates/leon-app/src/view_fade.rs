@@ -1,5 +1,6 @@
-//! The fade of the panes without the focus (`crate::fade`) in the workspace: each frame heads every
-//! shown pane for its fade, and a pane is drawn with the window's theme faded that far.
+//! The fade of the panes without the focus (`crate::fade`) in the workspace: before each frame
+//! it heads every shown pane for its fade, and a pane is drawn with the window's theme faded
+//! that far.
 
 use std::collections::HashMap;
 

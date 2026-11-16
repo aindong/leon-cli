@@ -52,7 +52,7 @@ pub(super) struct TermUi {
     /// Over a link, the cell cmd+hover last asked about (a late answer for another is dropped).
     pub(super) hover_at: Option<(String, Pos)>,
     /// Numbers each history fetch, so a reply only fills the pane that asked.
-    fetches: u64,
+    pub(super) fetches: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
