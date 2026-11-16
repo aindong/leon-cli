@@ -75,15 +75,21 @@ def decode(raw, start, dur):
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, bufsize=SRC_W * SRC_H * 3)
     size = SRC_W * SRC_H * 3
     last = None
-    while True:
-        buf = p.stdout.read(size)
-        if len(buf) < size:
-            break
-        last = Image.frombuffer("RGB", (SRC_W, SRC_H), buf, "raw", "RGB", 0, 1)
-        yield last
-    p.wait()
-    while last is not None:  # past the clip's last frame: hold it
-        yield last
+    try:
+        while True:
+            buf = p.stdout.read(size)
+            if len(buf) < size:
+                break
+            last = Image.frombuffer("RGB", (SRC_W, SRC_H), buf, "raw", "RGB", 0, 1)
+            yield last
+        p.wait()
+        while last is not None:  # past the clip's last frame: hold it
+            yield last
+    finally:  # closed early (a piece ends before the clip does): end ffmpeg quietly, not by a broken pipe
+        if p.poll() is None:
+            p.kill()
+        p.stdout.close()
+        p.wait()
 
 
 XFADE = 0.3  # seconds each piece dissolves in from the one before
