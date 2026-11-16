@@ -21,16 +21,107 @@ const GAP: usize = SCROLLBACK + MAX_SIZE.0 as usize;
 pub const MAX_LINES: usize = 1000;
 
 /// Feed output to the emulator, adding the lines it pushed into the scrollback to `scrolled`.
-pub(super) fn feed(term: &mut Term<Listener>, parser: &mut Processor, bytes: &[u8], scrolled: &AtomicUsize) {
+pub(super) fn feed(
+    term: &mut Term<Listener>,
+    parser: &mut Processor,
+    escapes: &mut Escapes,
+    bytes: &[u8],
+    scrolled: &AtomicUsize,
+) {
     for slice in bytes.chunks(SLICE) {
-        // a history clear (`CSI 3 J`, `ESC c`) with nothing pinned can't be seen afterwards
-        let clears = [b"\x1b[3J".as_slice(), b"\x1bc"].iter().any(|c| slice.windows(c.len()).any(|w| w == *c));
-        let guess = slice.iter().filter(|&&b| b == b'\n').count();
+        // a history clear with nothing pinned can't be seen afterwards
+        let clears = escapes.feed(slice);
+        let guess = memchr::memchr_iter(b'\n', slice).count();
         let pushed = counting(term, guess, |t| parser.advance(t, slice));
         let pushed = if clears { GAP + term.grid().history_size() } else { pushed };
         // never below the history, so the oldest kept line has a number
         let n = (scrolled.load(Ordering::SeqCst) + pushed).max(term.grid().history_size());
         scrolled.store(n, Ordering::SeqCst);
+    }
+}
+
+/// Follows, across reads, the escapes leon acts on that alacritty doesn't report: `CSI ? Pm h` /
+/// `CSI ? Pm l` for mode 9 (X10 mouse), which it doesn't parse, and the history clears (`CSI 3 J`,
+/// `ESC c`). Text is skipped to the next ESC with a vectorised search, so most of the output is
+/// looked at once. A sequence's parameters are kept up to `MAX_PARAMS` bytes; a longer one is
+/// dropped, so a program can't make it buffer without bound.
+#[derive(Debug, Default)]
+pub struct Escapes {
+    x10: bool,
+    state: Scan,
+    params: Vec<u8>,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+enum Scan {
+    #[default]
+    Text,
+    Esc,
+    Csi,
+    /// `CSI 3`: a `J` next clears the history.
+    Three,
+    Params,
+}
+
+const MAX_PARAMS: usize = 64;
+
+impl Escapes {
+    /// Whether the program has X10 mouse reporting (`?9`) on.
+    pub fn x10(&self) -> bool {
+        self.x10
+    }
+
+    /// Follow `bytes`; true when a history clear ended in them.
+    pub fn feed(&mut self, bytes: &[u8]) -> bool {
+        let (mut cleared, mut i) = (false, 0);
+        while i < bytes.len() {
+            if self.state == Scan::Text {
+                // only an ESC leaves the text state
+                let Some(n) = memchr::memchr(0x1b, &bytes[i..]) else { break };
+                i += n;
+            }
+            cleared |= self.step(bytes[i]);
+            i += 1;
+        }
+        cleared
+    }
+
+    fn step(&mut self, b: u8) -> bool {
+        let mut cleared = false;
+        self.state = match (self.state, b) {
+            (_, 0x1b) => Scan::Esc,
+            (Scan::Esc, b'[') => Scan::Csi,
+            (Scan::Esc, b'c') => {
+                (self.x10, cleared) = (false, true); // RIS
+                Scan::Text
+            }
+            (Scan::Csi, b'3') => Scan::Three,
+            (Scan::Three, b'J') => {
+                cleared = true;
+                Scan::Text
+            }
+            (Scan::Csi, b'?') => {
+                self.params.clear();
+                Scan::Params
+            }
+            (Scan::Params, b'0'..=b'9' | b';') if self.params.len() < MAX_PARAMS => {
+                self.params.push(b);
+                Scan::Params
+            }
+            (Scan::Params, b'h' | b'l') => {
+                // the mouse modes replace each other (xterm): setting or resetting another ends X10
+                for p in self.params.split(|&c| c == b';') {
+                    match p {
+                        b"9" => self.x10 = b == b'h',
+                        b"1000" | b"1001" | b"1002" | b"1003" => self.x10 = false,
+                        _ => {}
+                    }
+                }
+                Scan::Text
+            }
+            _ => Scan::Text,
+        };
+        cleared
     }
 }
 
@@ -125,3 +216,7 @@ impl Terminal {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "terminal_view_tests.rs"]
+mod tests;

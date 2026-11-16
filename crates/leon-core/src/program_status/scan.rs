@@ -56,7 +56,7 @@ impl Scanner {
         let mut i = 0;
         while i < input.len() {
             if self.mode == Mode::Ground {
-                let n = input[i..].iter().position(|&b| b == ESC).unwrap_or(input.len() - i);
+                let n = memchr::memchr(ESC, &input[i..]).unwrap_or(input.len() - i);
                 self.pass.extend_from_slice(&input[i..i + n]);
                 i += n;
                 if i == input.len() {

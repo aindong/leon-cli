@@ -355,7 +355,8 @@ fn push_cell(row: &mut Vec<Span>, bgs: &mut Vec<BgRect>, line: usize, span: Span
         Some(s)
             if one_char
                 && s.col + s.cells == col
-                && s.cells == s.text.chars().count()
+                // past 2 cells a span has been joined to, so it holds one char per cell: no count
+                && (s.cells > 2 || s.cells == s.text.chars().count())
                 && (same_style(s, &span) || blank && !s.underline && !s.strikeout) =>
         {
             s.text.push_str(&span.text);

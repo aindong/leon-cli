@@ -1,6 +1,7 @@
 //! M11 criterion 3: mouse reports for each mode and encoding (`leon_core::mouse`).
 
-use leon_core::mouse::{encode, Action, Button, Event, Mode, Mods, Report, X10Scanner};
+use leon_core::mouse::{encode, Action, Button, Event, Mode, Mods, Report};
+use leon_core::terminal::Escapes;
 
 fn mode(report: Option<Report>) -> Mode {
     Mode { report, ..Mode::default() }
@@ -94,29 +95,29 @@ fn wheel_is_buttons_64_and_65_or_arrows_on_the_alt_screen() {
 
 #[test]
 fn the_x10_scanner_follows_set_and_reset_even_split() {
-    let mut s = X10Scanner::default();
+    let mut s = Escapes::default();
     s.feed(b"hello \x1b[?9h");
-    assert!(s.on());
+    assert!(s.x10());
     s.feed(b"\x1b[?1000;9");
-    assert!(s.on(), "nothing decided mid-sequence");
+    assert!(s.x10(), "nothing decided mid-sequence");
     s.feed(b"l more");
-    assert!(!s.on(), "reset in a list, split across reads");
+    assert!(!s.x10(), "reset in a list, split across reads");
     s.feed(b"\x1b[?19h\x1b[?90h");
-    assert!(!s.on(), "19 and 90 aren't 9");
+    assert!(!s.x10(), "19 and 90 aren't 9");
     s.feed(b"\x1b[?1;9h");
-    assert!(s.on());
+    assert!(s.x10());
     s.feed(b"\x1bc");
-    assert!(!s.on(), "a full reset clears it");
+    assert!(!s.x10(), "a full reset clears it");
     s.feed(&[b"\x1b[?".as_slice(), [b'1'; 100_000].as_slice()].concat());
     s.feed(b";9h");
-    assert!(!s.on(), "an endless parameter is dropped, not buffered");
+    assert!(!s.x10(), "an endless parameter is dropped, not buffered");
 }
 
 #[test]
 fn a_later_mouse_mode_replaces_x10() {
-    let mut s = X10Scanner::default();
+    let mut s = Escapes::default();
     s.feed(b"\x1b[?9h\x1b[?1000h\x1b[?1000l");
-    assert!(!s.on(), "1000 set then reset leaves no mouse mode, as in xterm");
+    assert!(!s.x10(), "1000 set then reset leaves no mouse mode, as in xterm");
     s.feed(b"\x1b[?9h\x1b[?1003l");
-    assert!(!s.on(), "resetting any mouse mode ends X10 too");
+    assert!(!s.x10(), "resetting any mouse mode ends X10 too");
 }
