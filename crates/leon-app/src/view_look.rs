@@ -51,6 +51,10 @@ impl Workspace {
         }
         self.look = look;
         self.use_theme();
+        // a server older than the setting doesn't report it: the default
+        self.check_for_updates = Some(reply["settings"]["check_for_updates"].as_bool().unwrap_or(true));
+        self.updates_looked = None; // a reload may have turned it on
+        self.look_for_updates();
     }
 
     /// Show the Settings window: open it, or bring the open one forward.

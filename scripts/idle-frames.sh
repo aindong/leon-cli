@@ -22,6 +22,9 @@ log="$dir/stats.log"
 # Private dirs throughout: the app starts a server that outlives it (and would otherwise restore
 # and save the real ~/.local/state/leon), so cleanup stops that server before removing them.
 export LEON_RUNTIME_DIR="$dir" LEON_STATE_DIR="$dir/state" LEON_CONFIG="$dir/no-init.lua"
+# the app's daily look for a release goes to a loopback port that refuses: it fails silently and
+# draws nothing, and nothing reaches the real release server
+export LEON_RELEASE_URL=http://127.0.0.1:9
 LEON_FRAME_STATS=1 SHELL=/bin/sh ./target/release/leon app 2>"$log" &
 pid=$!
 trap './target/release/leon --autostart=false server stop >/dev/null 2>&1 || true; kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true; rm -rf "$dir"' EXIT

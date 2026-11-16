@@ -96,7 +96,8 @@ cat >"$d/migrate.txt" <<'EOF'
 EOF
 
 # a clean env: nothing of this machine (tokens, TERM_PROGRAM, ssh agent) reaches the demo
-base=(env -i HOME="$home" SHELL=/bin/zsh PATH="$home/bin:/usr/bin:/bin:/usr/sbin:/sbin" TERM=xterm-256color LANG=en_US.UTF-8)
+# LEON_RELEASE_URL: the app's look for a release goes to a loopback port that refuses, not to GitHub
+base=(env -i HOME="$home" SHELL=/bin/zsh PATH="$home/bin:/usr/bin:/bin:/usr/sbin:/sbin" TERM=xterm-256color LANG=en_US.UTF-8 LEON_RELEASE_URL=http://127.0.0.1:9)
 here() { "${base[@]}" LEON_RUNTIME_DIR="$d/run" LEON_STATE_DIR="$d/state" LEON_CONFIG="$d/none.lua" "$leon" "$@"; }
 
 app_pid=

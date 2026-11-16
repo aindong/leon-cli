@@ -324,6 +324,7 @@ impl Render for Workspace {
             .children(places.sidebar.filter(|_| !self.stopped).map(|list| self.render_sidebar(&rows, list, cx)))
             .child(column)
             .children(self.render_stale(window))
+            .children(self.render_update(cx).filter(|_| !self.stopped))
             // last, so it paints over the panes: GPUI paints children in order
             .children(self.render_overlay(cx).filter(|_| !self.stopped))
     }

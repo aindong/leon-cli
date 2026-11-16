@@ -241,6 +241,14 @@ pub struct Workspace {
     floats: floats_view::FloatUi,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
+    /// Leon.app's updates (view_update.rs): the notice, and the look for a release.
+    updates: Arc<crate::updates::Updater>,
+    /// Look on its own (the app; a test only when it asks), once the settings say whether to.
+    updates_auto: bool,
+    check_for_updates: Option<bool>,
+    updates_looked: Option<Instant>,
+    /// Wakes the poll from another thread.
+    wake: Arc<dyn Fn() + Send + Sync>,
     _poll: Task<()>,
     _activation: Subscription,
     _bounds: Subscription,
@@ -265,6 +273,8 @@ impl Workspace {
         let mut ws = Self::with_hosts(app, settings_path(), hosts, window, cx);
         ws.platform = true;
         ws.native_key = crate::input::current_key_event;
+        let store = leon_core::paths::state_dir().map(|d| d.join("updates.json"));
+        ws.enable_updates(store, Arc::new(leon_update::Target::running));
         crate::notify::prepare();
         ws
     }
@@ -298,7 +308,9 @@ impl Workspace {
         crate::notify::on_click(&wake);
         let mut term = scroll::TermUi::default();
         term.wake = Some(wake.clone());
-        let hosts = Hosts::new(app.clone(), hosts, wake);
+        let updates =
+            Arc::new(crate::updates::Updater::new(None, Arc::new(leon_update::Target::running), wake.clone()));
+        let hosts = Hosts::new(app.clone(), hosts, wake.clone());
         let poll = cx.spawn(async move |this, cx| loop {
             let timer = cx.background_executor().timer(POLL);
             futures::future::select(timer, woken.next()).await;
@@ -321,6 +333,7 @@ impl Workspace {
                 ws.poll_attention(cx);
                 ws.stats.borrow_mut().report();
                 ws.refresh_keymap(cx);
+                ws.look_for_updates();
                 let now = ws.signature();
                 if now != ws.seen || ws.sliding() || ws.fading() || replied {
                     ws.seen = now;
@@ -397,6 +410,11 @@ impl Workspace {
             term,
             floats: Default::default(),
             fade: Default::default(),
+            updates,
+            updates_auto: false,
+            check_for_updates: None,
+            updates_looked: None,
+            wake,
             _poll: poll,
             _activation: activation,
             _bounds: bounds,
@@ -498,6 +516,8 @@ mod sidebar;
 mod stats;
 #[path = "view_switch.rs"]
 mod switch;
+#[path = "view_update.rs"]
+mod update_view;
 use bars::status_mark;
 pub use menus::{about_text, menus, set_version};
 use paint::*;

@@ -9,6 +9,16 @@ impl Workspace {
         self.stopped
     }
 
+    /// Leon.app's updater, whose notice the window draws.
+    pub fn updater(&self) -> Arc<crate::updates::Updater> {
+        self.updates.clone()
+    }
+
+    /// How many sessions the sidebar lists, over every machine.
+    pub fn session_count(&self) -> usize {
+        self.rows().len()
+    }
+
     /// What Start It Again ran, in a test workspace.
     pub fn relaunched(&self) -> Option<Vec<String>> {
         self.relaunched.clone()

@@ -185,6 +185,9 @@ impl Workspace {
             "client.scroll.page_up" | "client.scroll.page_down" | "client.scroll.top" | "client.scroll.bottom" => {
                 self.scroll_action(name, cx)
             }
+            "client.update.check" => self.updates.check_now(),
+            "client.update.install" => self.updates.install(),
+            "client.update.restart" => self.restart_for_update(cx),
             "client.config.reload" => {
                 let inbox = self.inbox.clone();
                 self.hosts.local().spawn("server.config_reload", json!({}), move |r| {
