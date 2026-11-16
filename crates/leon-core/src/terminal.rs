@@ -288,12 +288,13 @@ impl Terminal {
             writer: writer.clone(),
             reported: reported.clone(),
             output: output.clone(),
+            read: Arc::default(),
             changes: generation.clone(),
             scrolled: scrolled.clone(),
             x10: Arc::default(),
             held: held.clone(),
         };
-        let x10 = reading.x10.clone();
+        let (x10, read, parsed_bytes) = (reading.x10.clone(), reading.read.clone(), output.clone());
         let to_reader = notify.clone();
         let to_self = notify.clone();
         std::thread::spawn(move || {
@@ -317,6 +318,14 @@ impl Terminal {
             drop(child); // reaped above; dropping std's Child neither waits nor kills
             if eof.recv_timeout(DRAIN_WAIT) == Err(mpsc::RecvTimeoutError::Disconnected) {
                 let _ = drained.recv(); // a bounded backlog: it finishes
+            } else {
+                // Still no EOF (a job holds the PTY, or the reader is behind): what was read by now
+                // is parsed first. Polled: the parser has no per-batch signal for a plain thread.
+                let read = read.load(Ordering::SeqCst);
+                let tick = Duration::from_millis(5);
+                while parsed_bytes.load(Ordering::SeqCst) < read
+                    && drained.recv_timeout(tick) == Err(mpsc::RecvTimeoutError::Timeout)
+                {}
             }
             notify(Notice::Exited(status));
         });

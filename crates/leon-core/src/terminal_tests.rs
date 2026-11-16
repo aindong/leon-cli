@@ -198,3 +198,24 @@ fn openpty_reissues_only_eredriveopen() {
         assert!(!reissue(&failed(code)), "{}", failed(code));
     }
 }
+
+#[test]
+fn the_exit_waits_for_what_was_read_when_the_eof_wait_runs_out() {
+    // One line per read (the pauses): the parser's batch, the queue and the reader's own send hold
+    // them all. With the parser held, the reader is left sending the last line, never reads the
+    // EOF, and the EOF wait runs out; what was read must still be parsed before the report.
+    let lines = QUEUED_READS + 2;
+    let script = format!("i=0; while [ $i -lt {lines} ]; do printf '%d\\n' $i; sleep 0.02; i=$((i+1)); done");
+    let (t, exits) = spawn(&["sh", "-c", &script]);
+    let parsing = lock(&t.term);
+    let end = std::time::Instant::now() + Duration::from_secs(30);
+    while !t.has_exited() {
+        assert!(std::time::Instant::now() < end, "the program didn't exit");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    std::thread::sleep(DRAIN_WAIT + Duration::from_millis(300)); // past the EOF wait
+    assert!(exits.try_recv().is_err(), "the exit was reported while its output was still unparsed");
+    drop(parsing);
+    exits.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert!(t.text(true).ends_with(&format!("\n{}", lines - 1)), "{:?}", t.text(true));
+}
