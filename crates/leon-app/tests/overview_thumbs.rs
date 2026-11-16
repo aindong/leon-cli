@@ -15,12 +15,18 @@ use m10b_support::*;
 /// is a timer on it, which real time alone never fires in a test window.
 fn ticks(cx: &mut VisualTestContext, mut pred: impl FnMut(&mut VisualTestContext) -> bool) -> bool {
     let end = Instant::now() + Duration::from_secs(20);
-    while !pred(cx) && Instant::now() < end {
+    loop {
+        // the answer it saw, not a second look: a frame between two looks can change it
+        if pred(cx) {
+            return true;
+        }
+        if Instant::now() >= end {
+            return false;
+        }
         cx.executor().advance_clock(Duration::from_millis(50));
         cx.run_until_parked();
         std::thread::sleep(Duration::from_millis(20));
     }
-    pred(cx)
 }
 
 #[gpui::test]
@@ -42,7 +48,13 @@ fn a_card_draws_each_pane_of_its_tab_and_resizes_none(cx: &mut TestAppContext) {
     act(&ws, cx, "client.overview.toggle");
     for id in &ids {
         let pane = format!("card-pane-{}-{id}", w.id);
-        assert!(ticks(cx, |cx| drawn(cx, &pane)), "{pane}: each pane of the split tab is drawn");
+        // the view's own list of what its last render drew: GPUI's debug bounds hold only what the
+        // last frame prepainted, and a frame that replays a cached thumbnail prepaints none of it
+        let listed = |cx: &mut VisualTestContext| {
+            cx.run_until_parked();
+            leon_app::view::drawn().contains(&pane)
+        };
+        assert!(ticks(cx, listed), "{pane}: each pane of the split tab is drawn");
     }
     let watched = ws.read_with(cx, |ws, _| ws.watching());
     for id in ids.iter().chain(leaves(&other).iter()) {

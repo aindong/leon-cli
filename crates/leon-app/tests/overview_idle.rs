@@ -16,12 +16,18 @@ fn all_filled(ws: &gpui::Entity<leon_app::view::Workspace>, cx: &mut VisualTestC
 /// `shows`, with the test clock moving too: a refresh `THUMB_EVERY` held back is a timer on it.
 fn ticks(cx: &mut VisualTestContext, mut pred: impl FnMut(&mut VisualTestContext) -> bool) -> bool {
     let end = Instant::now() + Duration::from_secs(20);
-    while !pred(cx) && Instant::now() < end {
+    loop {
+        // the answer it saw, not a second look: a frame between two looks can change it
+        if pred(cx) {
+            return true;
+        }
+        if Instant::now() >= end {
+            return false;
+        }
         cx.executor().advance_clock(Duration::from_millis(50));
         cx.run_until_parked();
         std::thread::sleep(Duration::from_millis(20));
     }
-    pred(cx)
 }
 
 /// Let what opening brought in land (the whole screens a new watch sends, a prompt still being
