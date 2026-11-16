@@ -148,7 +148,8 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   goes to the pane. **Sizes:** the server has no `own_block` yet, so the rule is the client's own
   size: the TUI resizes a pane only when its own layout of that pane changes (attach, host resize,
   split, zoom, the pane coming back on screen), never because another client resized it, and clips or pads a screen of another
-  size. The app re-fits whenever a screen's size differs from its pane, so while both show the
+  size. The app fits only the panes on screen (a font change too; a hidden one when it is shown),
+  and re-fits whenever a screen's size differs from its pane, so while both show the
   same tab the app's size wins. **The host terminal** is put back (raw mode off, alt screen left,
   cursor shown, bracketed paste off) on detach, errors, a panic (hook), and SIGHUP, SIGTERM,
   SIGINT, SIGQUIT: those are blocked in every thread (after any server autostart, so the server
