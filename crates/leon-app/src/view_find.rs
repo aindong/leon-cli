@@ -133,8 +133,9 @@ impl Workspace {
     pub(super) fn find_rerun_in(&self) -> Option<Duration> {
         let f = self.term.find.as_ref().filter(|f| !f.query.is_empty())?;
         let unseen = self.app.model().screen_updates.get(&f.block).copied() != f.seen;
-        // once due, the redraw runs it: a deadline already past would only spin a hidden window
-        (unseen && f.ran.elapsed() < RERUN).then(|| RERUN - f.ran.elapsed())
+        // already due: the next poll redraws, whose render runs it (a hidden window stops asking,
+        // `next_poll`); one clock read, so the subtraction can't underflow
+        unseen.then(|| RERUN.saturating_sub(f.ran.elapsed()))
     }
 
     fn step_find(&mut self, forward: bool) {
