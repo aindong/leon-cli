@@ -33,6 +33,8 @@ pub(super) struct OverviewUi {
     thumbs: HashMap<String, Slot>,
     /// Per tab: refreshes after the first draw, and renders of its thumbnail (tests).
     refreshes: HashMap<String, u64>,
+    /// When the soonest refresh `THUMB_EVERY` held back may run.
+    held: Option<Instant>,
     renders: Rc<RefCell<HashMap<String, u64>>>,
     scroll: gpui::ScrollHandle,
     /// The pane area's and the window's size at the last render: what a thumbnail lays its tab

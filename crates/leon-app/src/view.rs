@@ -2,7 +2,7 @@
 //! sessions, the tabs then in the titlebar), and the active window's split layout as tiles, each a
 //! pane header over a terminal painted from the screen the server pushes. A task
 //! on the GPUI executor redraws when the model or a screen changed, woken by the reader thread
-//! (or every `POLL`, for the spinner and the keymap).
+//! or at a deadline while something timed is pending (view_poll.rs).
 
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
@@ -73,7 +73,7 @@ const LINE_HEIGHT: f32 = 1.3;
 const TITLEBAR: f32 = 38.;
 /// Room for the traffic lights at the left of the titlebar row.
 const TRAFFIC_LIGHTS: f32 = 78.;
-/// How often the poll looks for changes (about 120 Hz).
+/// The poll's pace while something moves on screen (a slide, a fade): about 120 Hz.
 const POLL: Duration = Duration::from_millis(8);
 /// The spinner's frame time: at most 8 redraws a second for it.
 const SPIN: Duration = Duration::from_millis(125);
@@ -184,6 +184,14 @@ pub struct Workspace {
     stats: Rc<RefCell<Stats>>,
     /// Hash of everything drawn last time; the poll redraws when it moves.
     seen: u64,
+    /// How many times the poll has run, and asked for a redraw (tests: it runs when woken or when
+    /// something timed is due).
+    polls: (u64, u64),
+    /// Redraws the poll asked for since the last frame was drawn: a window that is hidden or
+    /// covered draws none, and from the second the poll stops the clocks only a frame shows.
+    undrawn: u8,
+    /// When the poll looks next without a wake (None: only a wake).
+    planned: Option<Instant>,
     keymap: Keymap,
     inbox: Arc<Mutex<KeymapInbox>>,
     keymap_asked: Option<Instant>,
@@ -215,12 +223,11 @@ pub struct Workspace {
     window_active: bool,
     font_size: f32,
     /// init.lua's settings as drawn (`look.rs`); the theme for the OS appearance now (`dark`),
-    /// and the terminal font. `refit` fits every pane again at the next render (a new font).
+    /// and the terminal font.
     look: Look,
     dark: bool,
     theme: Theme,
     font_family: SharedString,
-    refit: bool,
     /// The config the local server loaded, from its keymap: where the theme files and the
     /// Settings window's init.lua are.
     config_path: Option<PathBuf>,
@@ -246,6 +253,7 @@ pub struct Workspace {
     /// Wakes the poll from another thread.
     wake: Arc<dyn Fn() + Send + Sync>,
     _poll: Task<()>,
+    _tick: Task<()>,
     _activation: Subscription,
     _bounds: Subscription,
     _quit: Subscription,
@@ -295,7 +303,7 @@ impl Workspace {
         window.focus(&focus);
         // the reader thread wakes the poll at once; one pending wake is enough (one sender, so the
         // channel's bound holds: each clone would bring a slot of its own)
-        let (wake, mut woken) = futures::channel::mpsc::channel::<()>(0);
+        let (wake, woken) = futures::channel::mpsc::channel::<()>(0);
         let wake = Mutex::new(wake);
         let wake: Arc<dyn Fn() + Send + Sync> =
             Arc::new(move || drop(wake.lock().unwrap_or_else(|e| e.into_inner()).try_send(())));
@@ -307,40 +315,7 @@ impl Workspace {
         let updates =
             Arc::new(crate::updates::Updater::new(None, Arc::new(leon_update::Target::running), wake.clone()));
         let hosts = Hosts::new(app.clone(), hosts, wake.clone());
-        let poll = cx.spawn(async move |this, cx| loop {
-            let timer = cx.background_executor().timer(POLL);
-            futures::future::select(timer, woken.next()).await;
-            let alive = this.update(cx, |ws, cx| {
-                if !ws.hosts.local().alive() {
-                    // the menu's end-all quits; a stop from outside is said, not a vanishing window
-                    if ws.ending {
-                        cx.quit();
-                    } else if !ws.stopped {
-                        ws.stopped = true;
-                        cx.notify();
-                    }
-                    return;
-                }
-                ws.poll_hosts();
-                let replied = ws.poll_terms();
-                if let Some(text) = ws.term.clip.take() {
-                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
-                }
-                ws.poll_attention(cx);
-                ws.refresh_thumbs(true, cx);
-                ws.stats.borrow_mut().report();
-                ws.refresh_keymap(cx);
-                ws.look_for_updates();
-                let now = ws.signature();
-                if now != ws.seen || ws.sliding() || ws.fading() || replied {
-                    ws.seen = now;
-                    cx.notify();
-                }
-            });
-            if alive.is_err() {
-                return;
-            }
-        });
+        let (poll, tick) = Self::start_poll(woken, cx);
         let stats = Stats::new();
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |ws, window, cx| {
@@ -377,6 +352,9 @@ impl Workspace {
             focus,
             stats: Rc::new(RefCell::new(stats)),
             seen: 0,
+            polls: (0, 0),
+            undrawn: 0,
+            planned: None,
             keymap: Keymap::app(&json!({})),
             inbox: Arc::default(),
             keymap_asked: None,
@@ -399,7 +377,6 @@ impl Workspace {
             font_family: look.font_family.clone().into(),
             look,
             dark,
-            refit: false,
             config_path: None,
             settings_window: None,
             epoch: Instant::now(),
@@ -414,6 +391,7 @@ impl Workspace {
             updates_looked: None,
             wake,
             _poll: poll,
+            _tick: tick,
             _activation: activation,
             _bounds: bounds,
             _quit: quit,
@@ -506,6 +484,8 @@ mod overview_view;
 mod paint;
 #[path = "view_panes.rs"]
 mod panes_view;
+#[path = "view_poll.rs"]
+mod poll_view;
 #[path = "view_scroll.rs"]
 mod scroll;
 #[path = "view_select.rs"]

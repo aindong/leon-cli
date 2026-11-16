@@ -247,41 +247,6 @@ impl Workspace {
         let o = m.block(id).and_then(|(s, b)| s.overlays.get(&b.window_id));
         o.is_some_and(|o| o.floating.iter().any(|f| f.block_id == id))
     }
-
-    /// Every block of window `w` with its terminal's area, as it is or would be in a pane area of
-    /// `area`: the tiles (the zoomed one filling their part; a header when `headers`), and every
-    /// float and drawer, hidden ones too, so a font change sizes them all before they are shown.
-    /// A float or drawer always has its header, and a float its border.
-    pub(super) fn window_rects(
-        s: &crate::remote::Session,
-        w: &leon_core::Window,
-        area: (f32, f32),
-        headers: bool,
-    ) -> Vec<(String, Rect)> {
-        let o = s.overlay(&w.id);
-        let placed = floats::place(&o, area, &|_| None);
-        let (tx, ty) = (placed.tiles.x, placed.tiles.y);
-        let mut out = Vec::new();
-        if let Some(tree) = &w.layout {
-            let size = (placed.tiles.w, placed.tiles.h);
-            let zoomed = w.zoomed.as_deref().map(|z| panes::tiles(tree, Some(z), size).panes);
-            for p in panes::tiles(tree, None, size).panes {
-                let r = zoomed.iter().flatten().find(|z| z.block_id == p.block_id).map_or(p.rect, |z| z.rect);
-                out.push((p.block_id, panes::text_rect(Rect { x: r.x + tx, y: r.y + ty, ..r }, headers)));
-            }
-        }
-        let mut all = o;
-        all.floating.iter_mut().for_each(|f| f.hidden = false);
-        all.docked.iter_mut().for_each(|d| d.hidden = false);
-        let shown = floats::place(&all, area, &|_| None);
-        out.extend(shown.docks.into_iter().map(|d| (d.block_id, panes::text_rect(d.rect, true))));
-        for f in shown.floats {
-            let r = f.rect;
-            let inside = Rect { x: r.x + 1., y: r.y + 1., w: (r.w - 2.).max(0.), h: (r.h - 2.).max(0.) };
-            out.push((f.block_id, panes::text_rect(inside, true)));
-        }
-        out
-    }
 }
 
 /// An invisible drag handle over `r`.

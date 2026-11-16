@@ -246,9 +246,6 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.note_focus(window);
-        if std::mem::take(&mut self.refit) {
-            self.set_font_size(self.font_size, window, cx); // a new font from init.lua
-        }
         self.note_slides();
         self.settle_overview();
         DRAWN.with(|d| d.borrow_mut().clear());
@@ -275,6 +272,7 @@ impl Render for Workspace {
         // very panes this frame draws
         let body_shown = self.shown();
         self.note_fades(body_shown.as_ref().map_or(&[][..], |(_, ids)| ids));
+        self.drew_frame();
         // only what is drawn is pushed: the panes on screen, and every thumbnail's (view_overview.rs);
         // the panes stay watched under the overview, so they are current when it closes, even when
         // a filter hid their card

@@ -313,7 +313,7 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
 | ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
 | ⌘⇧\, ⌘\ | Overview: every tab (⌘\: this session's), live; arrows and ↩ go, typing filters; resting on a tab previews it |
-| ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
+| ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (shown panes) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
 
 These are defaults. A `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`

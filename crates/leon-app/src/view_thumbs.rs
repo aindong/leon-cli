@@ -173,6 +173,9 @@ impl Workspace {
         }
         let look = self.look_stamp();
         let now = Instant::now();
+        if update {
+            self.overview.held = None;
+        }
         let keep: HashSet<&str> = tabs.iter().map(|t| t.2.as_str()).collect();
         self.overview.thumbs.retain(|w, _| keep.contains(w.as_str()));
         self.overview.refreshes.retain(|w, _| keep.contains(w.as_str()));
@@ -205,9 +208,18 @@ impl Workspace {
                     (slot.stamp, slot.at, slot.filled) = (stamp, now, filled);
                     *self.overview.refreshes.entry(wid.clone()).or_default() += 1;
                 }
+                Some(slot) if update && slot.stamp != stamp => {
+                    let at = slot.at + THUMB_EVERY;
+                    self.overview.held = Some(self.overview.held.map_or(at, |h| h.min(at)));
+                }
                 Some(_) => {}
             }
         }
+    }
+
+    /// How long until a refresh `THUMB_EVERY` held back may run, for the poll's next look.
+    pub(in crate::view) fn thumbs_due(&self) -> Option<Duration> {
+        self.overview.held.map(|t| t.saturating_duration_since(Instant::now()))
     }
 
     /// Have every machine push the screens drawn now: `shown` (the active window's panes, on the

@@ -298,6 +298,11 @@ impl Notifier {
         })
     }
 
+    /// When the notice for what a storm held back can go (the poll's clock).
+    pub fn due(&self) -> Option<Instant> {
+        self.posted.front().filter(|_| self.held > 0).map(|at| *at + QUIET)
+    }
+
     /// Whether another notice fits in the last minute's `BURST`.
     fn room(&mut self, now: Instant) -> bool {
         self.last.retain(|_, at| now.saturating_duration_since(*at) < QUIET); // only what can still hold one back

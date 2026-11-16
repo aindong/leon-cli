@@ -168,9 +168,9 @@ impl Workspace {
             "client.tab_style.toggle" => self.toggle_tab_style(cx),
             "client.settings" => self.open_settings(cx),
             "client.pane_header.reveal" => self.toggle_pane_headers(cx),
-            "client.font.increase" => self.set_font_size(self.font_size + 1., window, cx),
-            "client.font.decrease" => self.set_font_size(self.font_size - 1., window, cx),
-            "client.font.reset" => self.set_font_size(self.look.font_size, window, cx),
+            "client.font.increase" => self.set_font_size(self.font_size + 1., cx),
+            "client.font.decrease" => self.set_font_size(self.font_size - 1., cx),
+            "client.font.reset" => self.set_font_size(self.look.font_size, cx),
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
@@ -198,10 +198,11 @@ impl Workspace {
             "client.update.restart" => self.restart_for_update(cx),
             n if n.starts_with("client.update.") => self.update_named(n, window, cx),
             "client.config.reload" => {
-                let inbox = self.inbox.clone();
+                let (inbox, wake) = (self.inbox.clone(), self.wake.clone());
                 self.hosts.local().spawn("server.config_reload", json!({}), move |r| {
                     report("the config reload", r);
-                    lock(&inbox).asking = false; // fetch the new keymap at the next poll
+                    lock(&inbox).asking = false;
+                    wake(); // the poll asks for the new keymap
                 });
                 self.keymap_asked = None;
             }
@@ -355,63 +356,6 @@ impl Workspace {
         }
         let prefix = self.pending.iter().map(Chord::to_string).collect::<Vec<_>>().join(">");
         Some((prefix, self.keymap.hints(&self.pending)))
-    }
-
-    /// Ask the server for its keymap now and then, off the UI thread (a reload holds the config
-    /// for up to 5 s); apply a reply whose generation moved, and then the settings of that reload
-    /// (every reload moves the generation, and `settings_changed` only comes with one).
-    pub(super) fn refresh_keymap(&mut self, cx: &mut Context<Self>) {
-        let settings = lock(&self.inbox).settings.take();
-        // one asked for under an older generation may come after a newer one: it is dropped
-        if let Some((_, settings)) = settings.filter(|(g, _)| *g == self.keymap.generation) {
-            self.apply_settings(&settings);
-            cx.notify();
-        }
-        let reply = {
-            let mut inbox = lock(&self.inbox);
-            let due = self.keymap_asked.is_none_or(|t| t.elapsed() >= KEYMAP_POLL);
-            if due && !inbox.asking {
-                inbox.asking = true;
-                self.keymap_asked = Some(Instant::now());
-                let back = self.inbox.clone();
-                self.hosts.local().spawn("client.keymap", json!({}), move |r| {
-                    let mut inbox = lock(&back);
-                    inbox.asking = false;
-                    inbox.reply = r.ok();
-                });
-            }
-            inbox.reply.take()
-        };
-        if let Some(km) = reply.filter(|km| km["generation"].as_u64() != Some(self.keymap.generation)) {
-            self.use_keymap(&km);
-            let (back, generation) = (self.inbox.clone(), self.keymap.generation);
-            self.hosts.local().spawn("server.settings", json!({}), move |r| {
-                let mut inbox = lock(&back);
-                // a slow reply asked for under an older generation never replaces a newer one
-                if let (Ok(s), true) = (r, inbox.settings.as_ref().is_none_or(|(g, _)| *g <= generation)) {
-                    inbox.settings = Some((generation, s));
-                }
-            });
-            cx.notify();
-        }
-    }
-
-    fn use_keymap(&mut self, km: &Value) {
-        self.keymap = Keymap::app(km);
-        // a relative path is the server's, from its own working directory: not one to use here
-        let path = km["path"].as_str().map(PathBuf::from).filter(|p| p.is_absolute());
-        self.config_path = path.or_else(leon_lua::config_path);
-    }
-
-    /// Fetch the keymap and the settings and apply them now, waiting for the server (tests, and
-    /// nothing on a hot path).
-    pub fn sync_keymap(&mut self) {
-        if let Ok(km) = self.hosts.local().call("client.keymap", json!({})) {
-            self.use_keymap(&km);
-        }
-        if let Ok(settings) = self.hosts.local().call("server.settings", json!({})) {
-            self.apply_settings(&settings);
-        }
     }
 }
 

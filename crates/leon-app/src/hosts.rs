@@ -214,6 +214,11 @@ impl Hosts {
         self.machines.iter().enumerate().filter_map(|(i, m)| m.remote.as_ref().map(|r| (i, r)))
     }
 
+    /// When the next host's retry is due (the poll's clock).
+    pub fn next_retry(&self) -> Option<Instant> {
+        self.machines.iter().filter(|m| m.remote.is_none()).filter_map(|m| m.retry_at).min()
+    }
+
     /// Pick up finished attempts, drop links that gave up, start due retries. True when a host
     /// gained or lost its remote.
     pub fn poll(&mut self) -> bool {

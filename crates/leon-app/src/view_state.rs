@@ -39,6 +39,11 @@ impl Workspace {
         self.session_id.clone()
     }
 
+    /// How many times the poll has run, and how many of those asked for a redraw.
+    pub fn polls(&self) -> (u64, u64) {
+        self.polls
+    }
+
     pub fn sidebar_visible(&self) -> bool {
         self.sidebar
     }

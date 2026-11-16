@@ -78,6 +78,19 @@ fields it doesn't know. The full policy is in
   and the like); before, only plain http to a loopback address was refused. An address that is
   not ASCII is refused outright. What is downloaded was, and is, verified against the release key.
 
+### Memory
+
+#### Changed
+
+- A font change in Leon.app (⌘=, ⌘-, ⌘0, `font.size` or `font.family` in init.lua) now
+  fits only the panes on screen. A pane in another tab or session, a hidden float or drawer, or a pane a
+  zoom covers keeps its size until it is shown, and is fitted then, as after a window resize.
+  Resizing a pane reallocates its whole history at the new width, so before, one font change
+  could grow the server by hundreds of MiB for panes nobody was looking at. A program in a hidden
+  pane gets its resize when the pane is shown; `capture` and `dev.leon.terminal.size` report the
+  old size until then. A pane that only `leon attach` shows keeps the size attach gave it. ⌘0 at
+  the size the font already has, or an init.lua reload that leaves the font, resizes nothing.
+
 ### Fading the panes without the focus
 
 #### Added

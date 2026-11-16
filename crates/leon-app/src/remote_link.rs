@@ -117,6 +117,7 @@ pub(super) fn relink(shared: &Shared, limit: Duration) -> Option<(BufReader<Unix
                 *lock(&shared.heard) = Instant::now();
                 *lock(&shared.ping) = None;
                 *lock(&shared.link) = LinkState::Up;
+                shared.bump();
                 return Some(events);
             }
         }

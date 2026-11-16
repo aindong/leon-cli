@@ -128,10 +128,11 @@ impl Workspace {
     /// Mac, once it shows over a link.
     pub(super) fn new_session_on(&mut self, host: usize, cx: &mut Context<Self>) {
         let Some(remote) = self.hosts.machines().get(host).and_then(Machine::remote).cloned() else { return };
-        let later = self.select_later.clone();
+        let (later, wake) = (self.select_later.clone(), self.wake.clone());
         remote.act_later("session.create", json!({}), move |r| {
             if let Some(sid) = r.ok().and_then(|r| r["session_id"].as_str().map(String::from)) {
                 *lock(&later) = Some((host, sid));
+                wake(); // over a link the refetch's wake came first
             }
         });
         self.poll_hosts();

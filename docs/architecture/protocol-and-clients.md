@@ -55,8 +55,9 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   (sessions, windows, layout trees, blocks, program-status records), refetched after each batch of
   events with `session.list`, `session.view`, `session.list_blocks` and `program_status` rather
   than by applying events one by one. The window shows the active tab's whole split tree; keys go
-  to the zoomed block, else the focused one. The view redraws when the reader thread wakes it (or
-  every ~8 ms for the spinner and the keymap) and only when something drawn changed.
+  to the zoomed block, else the focused one. The view redraws when the reader thread wakes it, and only when something drawn changed. Idle, it
+  does nothing: a timer runs only while something timed is pending (a host retry; a slide, fade,
+  spinner or find re-run, but not while hidden); the keymap is asked for once a second.
 - **Screen transport.** `block.watch {block_ids}` on a connection replaces the set of blocks whose
   screens it gets; the app watches only the panes on screen. Each screen line is
   `{"screen":{block_id, full, lines, cols, rows:[{line, spans, backgrounds}], cursor, app_cursor,
@@ -148,7 +149,8 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   goes to the pane. **Sizes:** the server has no `own_block` yet, so the rule is the client's own
   size: the TUI resizes a pane only when its own layout of that pane changes (attach, host resize,
   split, zoom, the pane coming back on screen), never because another client resized it, and clips or pads a screen of another
-  size. The app re-fits whenever a screen's size differs from its pane, so while both show the
+  size. The app fits only the panes on screen (a font change too; a hidden one when it is shown),
+  and re-fits whenever a screen's size differs from its pane, so while both show the
   same tab the app's size wins. **The host terminal** is put back (raw mode off, alt screen left,
   cursor shown, bracketed paste off) on detach, errors, a panic (hook), and SIGHUP, SIGTERM,
   SIGINT, SIGQUIT: those are blocked in every thread (after any server autostart, so the server
