@@ -231,6 +231,8 @@ pub struct Workspace {
     floats: floats_view::FloatUi,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
+    /// The translucent window (view_glass.rs).
+    glass: glass_view::GlassUi,
     overview: overview_view::OverviewUi,
     /// Leon.app's updates (view_update.rs): the notice, and the look for a release.
     updates: Arc<crate::updates::Updater>,
@@ -308,6 +310,8 @@ impl Workspace {
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |ws, window, cx| {
             ws.window_active = window.is_window_active();
+            ws.note_reduce_transparency();
+            ws.update_glass(window, cx);
             cx.notify()
         });
         // the window's frame and display are kept with the settings, and saved when the app quits
@@ -315,6 +319,7 @@ impl Workspace {
         let bounds = cx.observe_window_bounds(window, |ws, window, cx| {
             ws.settings.window = Some(state::frame(window.window_bounds().get_bounds()));
             ws.settings.display = window.display(cx).map(|d| u32::from(d.id()));
+            ws.update_glass(window, cx); // full screen in or out
         });
         let quit = cx.on_app_quit(|ws, _| {
             ws.save_settings();
@@ -322,7 +327,8 @@ impl Workspace {
         });
         let release = cx.on_release(|ws, _| ws.save_settings());
         let appearance = cx.observe_window_appearance(window, |ws, window, cx| {
-            ws.set_appearance(look_view::is_dark(window.appearance()), cx)
+            ws.set_appearance(look_view::is_dark(window.appearance()), cx);
+            ws.update_glass(window, cx)
         });
         // shortcut: every notify of the workspace brings what render draws from up to date (R5);
         // phase 2 moves `sync_pane` to each pane's grid view, which a child's notify won't reach
@@ -379,6 +385,7 @@ impl Workspace {
             term,
             floats: Default::default(),
             fade: Default::default(),
+            glass: glass_view::GlassUi::new(window.window_handle()),
             overview: Default::default(),
             updates,
             updates_auto: false,
@@ -395,6 +402,8 @@ impl Workspace {
             _prepare: prepare,
         };
         ws.prepare(); // the first frame comes before any notify
+        ws.note_reduce_transparency();
+        ws.update_glass(window, cx);
         ws
     }
 
@@ -455,6 +464,8 @@ mod fade_view;
 mod find;
 #[path = "view_floats.rs"]
 mod floats_view;
+#[path = "view_glass.rs"]
+mod glass_view;
 #[path = "view_handlers.rs"]
 mod handlers;
 #[path = "view_header.rs"]

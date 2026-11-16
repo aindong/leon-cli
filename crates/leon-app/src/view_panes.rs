@@ -49,7 +49,6 @@ impl Workspace {
         stats: Rc<RefCell<Stats>>,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &self.theme;
         let size = self.pane_area(window);
         let view = window.viewport_size();
         let origin = (f32::from(view.width) - size.0, f32::from(view.height) - size.1);
@@ -73,8 +72,12 @@ impl Workspace {
             several: l.panes.len() + placed.docks.len() + placed.floats.len() > 1,
             stats,
         };
-        let mut out =
-            div().debug_selector(|| sel("panes-area".into())).flex_1().relative().overflow_hidden().bg(rgb(t.chrome));
+        let mut out = div()
+            .debug_selector(|| sel("panes-area".into()))
+            .flex_1()
+            .relative()
+            .overflow_hidden()
+            .child(self.render_gaps(&l, &placed, &terms));
         for p in &l.panes {
             if terms.contains(&p.block_id) {
                 out = out.child(self.pane_tile("pane", &p.block_id, p.rect, None, &tiling, cx));
@@ -158,7 +161,7 @@ impl Workspace {
             .flex_col()
             .rounded(px(6.))
             .overflow_hidden()
-            .bg(rgb(t.bg))
+            .bg(self.pane_fill(kind, t))
             .children(header)
             // with headers off the find bar floats over the pane, so its size stays
             .when(!headers && finding, |d| {
@@ -361,7 +364,7 @@ impl Render for Workspace {
             .on_action(cx.listener(|ws, _: &OpenSettings, w, cx| ws.run_action("client.settings", None, "menu", w, cx)))
             .size_full()
             .flex()
-            .bg(rgb(self.theme.chrome))
+            .bg(self.root_fill())
             .font_family(".SystemUIFont")
             .text_size(px(UI_TEXT))
             .text_color(rgb(self.theme.text))

@@ -324,3 +324,18 @@ fn system_reduce_motion() -> bool {
         on.as_bool()
     }
 }
+
+/// System Settings › Accessibility › Display › Reduce transparency (GPUI has no read for it).
+pub(super) fn system_reduce_transparency() -> bool {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject, Bool};
+    let Some(cls) = AnyClass::get(c"NSWorkspace") else { return false };
+    unsafe {
+        let ws: *mut AnyObject = msg_send![cls, sharedWorkspace];
+        if ws.is_null() {
+            return false;
+        }
+        let on: Bool = msg_send![ws, accessibilityDisplayShouldReduceTransparency];
+        on.as_bool()
+    }
+}
