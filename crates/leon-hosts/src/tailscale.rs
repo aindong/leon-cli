@@ -22,23 +22,22 @@ const MOST_BYTES: u64 = 8 << 20;
 const MOST_PEERS: usize = 4096;
 const DEADLINE: Duration = Duration::from_secs(3);
 
-/// The client to run: `env` (`$LEON_TAILSCALE`) when set (none if it names a path that isn't
-/// there), else an executable `tailscale` in an absolute PATH entry, else the first bundle that
-/// exists.
+/// The client to run: `env` (`$LEON_TAILSCALE`) when set (none if it names nothing runnable),
+/// else an executable `tailscale` in an absolute PATH entry, else the first bundle that exists. A
+/// bare name in `env` is looked up in absolute PATH entries too, never in the working directory.
 pub fn locate(env: Option<&OsStr>, path: Option<&OsStr>, bundles: &[&Path]) -> Option<PathBuf> {
     let runnable = |p: &Path| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0);
+    let on_path = |name: &OsStr| {
+        let dirs = path.map(|p| std::env::split_paths(p).collect::<Vec<_>>()).unwrap_or_default();
+        dirs.into_iter().filter(|d| d.is_absolute()).map(|d| d.join(name)).find(|p| runnable(p))
+    };
     if let Some(e) = env.filter(|e| !e.is_empty()).map(Path::new) {
-        // a bare name is looked up on PATH when it runs
-        return (e.components().count() == 1 && !e.is_absolute() || runnable(e)).then(|| e.to_path_buf());
+        return match e.components().count() == 1 && !e.is_absolute() {
+            true => on_path(e.as_os_str()),
+            false => runnable(e).then(|| e.to_path_buf()),
+        };
     }
-    let on_path = path
-        .map(|p| std::env::split_paths(p).collect::<Vec<_>>())
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|d| d.is_absolute())
-        .map(|d| d.join("tailscale"))
-        .find(|p| runnable(p));
-    on_path.or_else(|| bundles.iter().find(|b| runnable(b)).map(|b| b.to_path_buf()))
+    on_path(OsStr::new("tailscale")).or_else(|| bundles.iter().find(|b| runnable(b)).map(|b| b.to_path_buf()))
 }
 
 /// A machine on the tailnet, as the status describes it.
@@ -52,6 +51,7 @@ pub struct Machine {
     pub ssh: bool,
     /// Its first Tailscale address (IPv4 first), used when MagicDNS is off.
     pub ip: Option<String>,
+    /// Its addresses, only ones inside Tailscale's ranges.
     pub ips: Vec<String>,
 }
 
@@ -101,6 +101,10 @@ impl Tailnet {
             false => format!("ssh://{at}"),
         }
         .parse()?;
+        // the name is only a host: an `@` or `:` in it must not pick the ssh user or port
+        if endpoint.user.is_some() || endpoint.port.is_some() || endpoint.host != at {
+            return Err(format!("bad machine name {:?}", m.shown()));
+        }
         Ok(Host { label: m.name().to_string(), endpoints: vec![endpoint.to_string()], icon })
     }
 
@@ -204,6 +208,9 @@ fn run(program: &Path) -> Result<Vec<u8>, String> {
         Err(_) => Err(format!("Tailscale didn't answer in {} s (tailscale status)", DEADLINE.as_secs())),
         Ok(Err(e)) => Err(format!("can't read tailscale's status: {e}")),
         Ok(Ok(b)) if b.len() as u64 > MOST_BYTES => Err("tailscale's status is too large to read".into()),
+        Ok(Ok(_)) if status.is_none() => {
+            Err(format!("Tailscale didn't finish in {} s (tailscale status)", DEADLINE.as_secs()))
+        }
         Ok(Ok(_)) if !status.is_some_and(|s| s.success()) => {
             Err("Tailscale isn't running (tailscale status failed)".into())
         }
@@ -241,21 +248,43 @@ pub fn parse(bytes: &[u8]) -> Result<Tailnet, String> {
     let mut machines: Vec<Machine> = peers
         .values()
         .filter(|p| p.is_object())
-        .take(MOST_PEERS)
         .filter_map(|p| {
             let dns = text(p, "DNSName").trim_end_matches('.').to_string();
             let ips: Vec<String> = match p.get("TailscaleIPs") {
-                Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).take(8).map(String::from).collect(),
+                Some(Value::Array(a)) => {
+                    a.iter().filter_map(Value::as_str).filter(|ip| tailnet_ip(ip)).take(8).map(String::from).collect()
+                }
                 _ => Vec::new(),
             };
             let ip = ips.iter().find(|ip| !ip.contains(':')).or(ips.first()).cloned();
             let ssh = matches!(p.get("sshHostKeys"), Some(Value::Array(k)) if !k.is_empty());
             let online = p.get("Online").and_then(Value::as_bool).unwrap_or(false);
-            (!dns.is_empty()).then(|| Machine { dns, os: text(p, "OS"), online, ssh, ip, ips })
+            // an exit node from a location provider (it has a Location) is no machine to log in to
+            let provider = p.get("Location").is_some_and(Value::is_object);
+            // a DNS name is at most 253 bytes; a longer one is junk, not a machine
+            (!provider && !dns.is_empty() && dns.len() <= 253).then(|| Machine {
+                dns,
+                os: text(p, "OS"),
+                online,
+                ssh,
+                ip,
+                ips,
+            })
         })
         .collect();
     machines.sort_by(|a, b| b.online.cmp(&a.online).then_with(|| a.dns.cmp(&b.dns)));
+    machines.truncate(MOST_PEERS); // after the sort: the online ones are kept
     Ok(Tailnet { login, magic_dns, machines })
+}
+
+/// An address inside Tailscale's ranges: 100.64.0.0/10 or fd7a:115c:a1e0::/48. Another one in a
+/// peer's list would let it claim a LAN host as a tailnet machine.
+fn tailnet_ip(ip: &str) -> bool {
+    match ip.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(v4)) => v4.octets()[0] == 100 && v4.octets()[1] & 0xc0 == 64,
+        Ok(std::net::IpAddr::V6(v6)) => v6.segments()[..3] == [0xfd7a, 0x115c, 0xa1e0],
+        Err(_) => false,
+    }
 }
 
 /// A user id as the `User` map keys it: the status writes it as a number.
@@ -273,16 +302,21 @@ mod tests {
 
     const RUNNING: &str = r#"{"BackendState":"Running","Self":{"DNSName":"me.t.ts.net.","UserID":7},
         "User":{"7":{"LoginName":"me@example.com"}},
-        "Peer":{"a":{"DNSName":"b.t.ts.net.","OS":"linux","Online":false,"TailscaleIPs":["fd7a::2","100.64.0.2"]},
+        "Peer":{"a":{"DNSName":"b.t.ts.net.","OS":"linux","Online":false,"TailscaleIPs":["fd7a:115c:a1e0::2","100.64.0.2"]},
                 "b":{"DNSName":"a.t.ts.net.","OS":"macOS","Online":true,"sshHostKeys":["k"]},
-                "c":{"DNSName":"","OS":"x","Online":true}, "d": 5}}"#;
+                "c":{"DNSName":"","OS":"x","Online":true}, "d": 5,
+                "e":{"DNSName":"us-nyc-wg-1.exit.ts.net.","Online":true,"Location":{"Country":"USA"}}}}"#;
 
     #[test]
     fn reads_peers_online_first_and_who_you_are() {
         let t = parse(RUNNING.as_bytes()).unwrap();
         assert_eq!(t.login.as_deref(), Some("me@example.com"));
         let names: Vec<&str> = t.machines.iter().map(|m| m.dns.as_str()).collect();
-        assert_eq!(names, ["a.t.ts.net", "b.t.ts.net"], "online first, no nameless or junk peers, not Self");
+        assert_eq!(
+            names,
+            ["a.t.ts.net", "b.t.ts.net"],
+            "online first, no nameless, junk or exit-provider peers, not Self"
+        );
         assert!(t.machines[0].ssh && !t.machines[1].ssh);
         assert_eq!(t.machines[1].ip.as_deref(), Some("100.64.0.2"), "IPv4 first");
         assert_eq!(t.machines[0].marks(), "macOS · online · Tailscale SSH");
@@ -292,7 +326,7 @@ mod tests {
         assert_eq!(off.entry(&t.machines[1], None).unwrap().endpoints, ["ssh://100.64.0.2"]);
         let host = Host { label: "x".into(), endpoints: vec!["ssh://me@B.t.ts.net".into()], icon: None };
         assert_eq!(t.machine_for(&host).map(|m| m.dns.as_str()), Some("b.t.ts.net"));
-        let by_ip = Host { label: "x".into(), endpoints: vec!["ssh://[fd7a::2]".into()], icon: None };
+        let by_ip = Host { label: "x".into(), endpoints: vec!["ssh://[fd7a:115c:a1e0::2]".into()], icon: None };
         assert_eq!(t.machine_for(&by_ip).map(|m| m.dns.as_str()), Some("b.t.ts.net"));
     }
 
@@ -323,6 +357,15 @@ mod tests {
         }
         let off = Tailnet { magic_dns: false, ..Default::default() };
         assert!(off.entry(&m("a.t"), None).is_err(), "no address to use");
+        // the status can't pick the ssh user, host or port behind a plain label
+        let at = Tailnet { magic_dns: true, ..Default::default() };
+        assert!(at.entry(&m("box.t@evil.example"), None).is_err());
+        let ip = Machine { ip: Some("root@203.0.113.9".into()), ..m("box.t") };
+        assert!(off.entry(&ip, None).is_err());
+        let parsed = parse(r#"{"BackendState":"Running","Peer":{"a":{"DNSName":"a.t","TailscaleIPs":["root@1.2.3.4","192.168.1.10","100.64.0.9","fd7a:115c:a1e0::9","fe80::1"]},
+            "b":{"DNSName":"LONG"}}}"#.replace("LONG", &"x".repeat(300)).as_bytes()).unwrap();
+        assert_eq!(parsed.machines.len(), 1, "a name over 253 bytes is no machine");
+        assert_eq!(parsed.machines[0].ips, ["100.64.0.9", "fd7a:115c:a1e0::9"], "only tailnet addresses");
     }
 
     #[test]

@@ -35,8 +35,10 @@ fn env_then_path_then_the_app_bundle() {
     // no client at all (Tailscale "isn't installed")
     let env = bundle.clone().into_os_string();
     assert_eq!(locate(Some(&env), path(&[&bin]).as_deref(), &[]), Some(bundle.clone()));
+    exe(&bin.join("my-tailscale"));
     let env = OsString::from("my-tailscale");
-    assert_eq!(locate(Some(&env), path(&[&bin]).as_deref(), &[&bundle]), Some("my-tailscale".into()));
+    assert_eq!(locate(Some(&env), path(&[&bin]).as_deref(), &[&bundle]), Some(bin.join("my-tailscale")));
+    assert_eq!(locate(Some(&env), Some(&OsString::from("bin")), &[&bundle]), None, "not from a relative entry");
     let env = OsString::from("/nowhere/tailscale");
     assert_eq!(locate(Some(&env), path(&[&bin]).as_deref(), &[&bundle]), None);
     // an empty one is unset

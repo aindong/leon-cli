@@ -21,12 +21,18 @@ fn run(env: &Env, fake: &Fake, args: &[&str]) -> (Option<i32>, String) {
 fn odd_names_are_refused() {
     let env = Env::new();
     let fake = Fake::new("odd.json");
-    for name in ["bad name.example-tailnet.ts.net", &format!("{}.example-tailnet.ts.net", "a".repeat(70))] {
+    for name in [
+        "bad name.example-tailnet.ts.net",
+        &format!("{}.example-tailnet.ts.net", "a".repeat(70)),
+        "semi;colon.example-tailnet.ts.net",
+        "box.t@evil.example",
+    ] {
         let (code, text) = run(&env, &fake, &["hosts", "add", "--tailscale", name]);
         assert!(code.is_some_and(|c| c != 0), "{name}: {text}");
+        assert!(text.contains("bad "), "the parser's reason: {text}");
     }
     // by number from the list, too
-    for n in 1..=4 {
+    for n in 1..=6 {
         let mut c = env.cmd();
         let mut child = fake
             .apply(&mut c)
@@ -67,6 +73,7 @@ fn junk_and_floods_fail_in_one_line() {
         assert_eq!(text.trim().lines().count(), 1, "one line: {text}");
     }
     assert!(env.json(&["hosts", "list", "--json"]).as_array().unwrap().is_empty());
+    fake.only_read();
 }
 
 #[test]
@@ -80,5 +87,6 @@ fn a_client_that_never_answers_or_never_stops_is_given_up_on() {
         assert_eq!(code, Some(1), "{mode}: {text}");
         assert_eq!(text.trim().lines().count(), 1, "{mode}: one line: {text}");
         assert!(t.elapsed() < Duration::from_secs(8), "{mode}: took {:?}", t.elapsed());
+        fake.only_read();
     }
 }

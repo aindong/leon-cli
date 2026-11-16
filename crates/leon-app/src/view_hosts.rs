@@ -283,7 +283,8 @@ impl Workspace {
     /// `{"label": TEXT}` goes on to a typed host with that label), else the prompt for a label.
     pub(super) fn ask_host(&mut self, args: Option<&Value>, cx: &mut Context<Self>) {
         if let Some(name) = args.and_then(|a| a["tailnet"].as_str()) {
-            return self.add_tailnet(name, cx);
+            let query = args.and_then(|a| a["query"].as_str()).unwrap_or_default().to_string();
+            return self.add_tailnet(name, query, cx);
         }
         let typed = args.and_then(|a| a["label"].as_str()).map(String::from);
         let ask = match typed.is_none() && self.hosts.read_tailnet() {
@@ -300,10 +301,8 @@ impl Workspace {
 
     /// The tailnet step's rows for the query: the machines that match, then a typed host.
     pub(super) fn tailnet_items(&self, query: &str) -> Vec<Item> {
-        let machines = match self.hosts.tailnet() {
-            Some(Ok(t)) => t.machines,
-            _ => Vec::new(),
-        };
+        let tailnet = self.hosts.tailnet().and_then(Result::ok);
+        let machines = tailnet.as_ref().map_or(&[][..], |t| &t.machines[..]);
         // searched by name only (an action's name would match every row)
         let rows: Vec<Item> = machines
             .iter()
@@ -312,7 +311,7 @@ impl Workspace {
                 title: m.shown(),
                 keywords: vec![],
                 shortcut: Some(m.marks()),
-                args: Some(json!({ "tailnet": m.dns })),
+                args: Some(json!({ "tailnet": m.dns, "query": query })),
             })
             .collect();
         let mut items: Vec<Item> = crate::palette::filter(&rows, query)
@@ -330,8 +329,8 @@ impl Workspace {
     }
 
     /// Add the tailnet's machine `name` as `leon hosts add --tailscale` does; a refusal reopens the
-    /// step with the reason.
-    fn add_tailnet(&mut self, name: &str, cx: &mut Context<Self>) {
+    /// step with the reason and the search it was picked from.
+    fn add_tailnet(&mut self, name: &str, query: String, cx: &mut Context<Self>) {
         let added = (|| {
             let tailnet = self.hosts.tailnet().ok_or("no tailnet status yet")??;
             let m = tailnet.find(name)?;
@@ -349,7 +348,6 @@ impl Workspace {
                 self.hosts.add(host);
             }
             Err(e) => {
-                let query = self.palette.as_ref().map(|p| p.query.clone()).unwrap_or_default();
                 let ask = Some((Ask::Tailnet, Some(e)));
                 self.palette = Some(Palette { query, selected: 0, ask, switch: false, note: None });
             }

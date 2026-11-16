@@ -33,6 +33,9 @@ fn check(env: &Env, fake: Option<&Fake>, want: &str) {
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "box  ssh://box", "as before");
     assert!(out.stderr.is_empty(), "{}", String::from_utf8_lossy(&out.stderr));
     env.ok(&["hosts", "remove", "box"]);
+    if let Some(f) = fake {
+        f.only_read();
+    }
 }
 
 #[test]

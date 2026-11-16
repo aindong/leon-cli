@@ -3,6 +3,7 @@
 //! per connection attempt does the slow part; the UI thread picks the result up in `poll`.
 
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -120,11 +121,19 @@ impl Machine {
     }
 }
 
+/// A tailnet status read: the tailnet, or why there is none.
+pub type Status = Result<Arc<Tailnet>, String>;
+
 pub struct Hosts {
     machines: Vec<Machine>,
     wake: Arc<dyn Fn() + Send + Sync>,
     /// The last tailnet status read (None until one comes), kept while the next is read.
-    tailnet: Arc<Mutex<Option<Result<Tailnet, String>>>>,
+    tailnet: Arc<Mutex<Option<Status>>>,
+    /// Counts the reads that came in, so the window redraws when one does.
+    tailnet_reads: Arc<AtomicU64>,
+    /// A read is running: one at a time, so a hung client costs one process, and an older read
+    /// can't land after a newer one.
+    reading: Arc<AtomicBool>,
 }
 
 impl Hosts {
@@ -133,7 +142,13 @@ impl Hosts {
     pub fn new(local: Rc<Remote>, hosts: Vec<Host>, wake: Arc<dyn Fn() + Send + Sync>) -> Hosts {
         let this_mac = Machine::new(THIS_MAC.into(), None, Some(local));
         let any = !hosts.is_empty();
-        let mut out = Hosts { machines: vec![this_mac], wake, tailnet: Arc::default() };
+        let mut out = Hosts {
+            machines: vec![this_mac],
+            wake,
+            tailnet: Arc::default(),
+            tailnet_reads: Arc::default(),
+            reading: Arc::default(),
+        };
         hosts.into_iter().for_each(|h| out.add(h));
         if any {
             out.read_tailnet(); // which hosts are tailnet machines
@@ -147,19 +162,32 @@ impl Hosts {
         if tailscale::client().is_none() {
             return false;
         }
-        let (into, wake) = (self.tailnet.clone(), self.wake.clone());
+        if self.reading.swap(true, Ordering::SeqCst) {
+            return true;
+        }
+        let (into, wake, reading) = (self.tailnet.clone(), self.wake.clone(), self.reading.clone());
+        let reads = self.tailnet_reads.clone();
         let read = move || {
-            let status = tailscale::status();
+            let status = tailscale::status().map(Arc::new);
             *into.lock().unwrap_or_else(PoisonError::into_inner) = Some(status);
+            reads.fetch_add(1, Ordering::SeqCst);
+            reading.store(false, Ordering::SeqCst);
             wake();
         };
-        let _ = std::thread::Builder::new().name("leon-tailnet".into()).spawn(read);
+        if std::thread::Builder::new().name("leon-tailnet".into()).spawn(read).is_err() {
+            self.reading.store(false, Ordering::SeqCst);
+        }
         true
     }
 
     /// The last tailnet status read, if one has come.
-    pub fn tailnet(&self) -> Option<Result<Tailnet, String>> {
+    pub fn tailnet(&self) -> Option<Status> {
         self.tailnet.lock().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
+    /// How many tailnet reads have come in (the window's signature: a new one is drawn).
+    pub fn tailnet_reads(&self) -> u64 {
+        self.tailnet_reads.load(Ordering::SeqCst)
     }
 
     /// Show `host` and start connecting to it.

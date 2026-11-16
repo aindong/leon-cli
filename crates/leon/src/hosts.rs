@@ -76,9 +76,7 @@ pub fn run(cli: &Cli, cmd: &HostsCmd) -> Result<(), Fail> {
         HostsCmd::Add { label, endpoints, icon, .. } => {
             let label = label.clone().expect("clap requires it without --tailscale");
             let host = Host { label, endpoints: endpoints.clone(), icon: icon.clone() };
-            // a label in use is not a bad command line
-            let fail = |e: String| if e.starts_with(hosts::TAKEN) { Fail::Other(e) } else { Fail::Usage(e) };
-            hosts::add(&mut list, host).map_err(fail)?;
+            hosts::add(&mut list, host).map_err(added)?;
             hosts::save(&list).map_err(Fail::Other)?;
         }
         HostsCmd::Remove { labels } => {
@@ -89,6 +87,14 @@ pub fn run(cli: &Cli, cmd: &HostsCmd) -> Result<(), Fail> {
         HostsCmd::Check { labels } => return check(cli, &list, labels),
     }
     Ok(())
+}
+
+/// Why `hosts::add` refused: a label in use is not a bad command line.
+fn added(e: String) -> Fail {
+    match e.starts_with(hosts::TAKEN) {
+        true => Fail::Other(e),
+        false => Fail::Usage(e),
+    }
 }
 
 /// `leon hosts add --tailscale [MACHINE]`: the machine named, or the one picked from the list on
@@ -102,7 +108,7 @@ fn add_tailnet(list: &mut Vec<Host>, name: Option<&str>, icon: &Option<String>) 
     let host =
         tailnet.entry(machine, icon.clone()).map_err(|e| Fail::Other(format!("can't add {}: {e}", machine.shown())))?;
     let label = host.label.clone();
-    hosts::add(list, host.clone()).map_err(Fail::Other)?;
+    hosts::add(list, host.clone()).map_err(added)?;
     hosts::save(list).map_err(Fail::Other)?;
     println!("added {label}: {}", host.endpoints[0]);
     if !machine.ssh {
@@ -118,7 +124,7 @@ fn pick(tailnet: &tailscale::Tailnet) -> Result<&tailscale::Machine, Fail> {
         return Err(Fail::Other("no other machines on your tailnet".into()));
     }
     println!("Machines on your tailnet ({}):", tailnet.identity());
-    let width = tailnet.machines.iter().map(|m| m.shown().len()).max().unwrap_or(0);
+    let width = tailnet.machines.iter().map(|m| m.shown().chars().count()).max().unwrap_or(0);
     for (i, m) in tailnet.machines.iter().enumerate() {
         println!("{:>3} {:<width$}  {}", i + 1, m.shown(), m.marks());
     }

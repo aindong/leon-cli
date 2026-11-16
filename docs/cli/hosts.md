@@ -75,6 +75,8 @@ added devbox: ssh://devbox.example-tailnet.ts.net
 The machine becomes an ordinary host: its short name as the label, `ssh://` and its MagicDNS name
 as the endpoint (its Tailscale address when MagicDNS is off). ssh logs in with your local user name;
 for another one, add the host by hand: `leon hosts add devbox ssh://me@devbox.example-tailnet.ts.net`.
+If this machine doesn't use Tailscale's DNS (`--accept-dns=false`), MagicDNS names don't resolve
+here: add the host by its `100.x` address instead (`tailscale status` shows it).
 
 - **Tailscale SSH.** A machine marked `Tailscale SSH` lets you in with your tailnet identity: no
   keys to set up. For one without it, leon says so: run `tailscale set --ssh` on that machine, or

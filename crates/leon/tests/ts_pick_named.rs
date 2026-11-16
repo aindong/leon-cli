@@ -58,6 +58,7 @@ fn a_named_machine_is_added_and_one_without_tailscale_ssh_says_what_to_do() {
     let out = run(&["hosts", "add", "--tailscale", "twin"]);
     let text = String::from_utf8_lossy(&out.stderr);
     assert!(!out.status.success() && text.contains("MagicDNS name"), "{text}");
+    assert_eq!(env.json(&["hosts", "list", "--json"]).as_array().unwrap().len(), 2, "nothing written");
     assert!(run(&["hosts", "add", "--tailscale", "twin.other-tailnet.ts.net"]).status.success());
 
     // MagicDNS off: the name wouldn't resolve, so the endpoint is the machine's tailnet address

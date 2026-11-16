@@ -317,7 +317,9 @@ impl Workspace {
         } else if named("enter") && p.ask.as_ref().is_some_and(|(a, _)| !matches!(a, hosts_view::Ask::Tailnet)) {
             self.ask_enter(cx);
         } else if named("enter") || (ks.key == "enter" && m.platform && p.switch) {
-            let pick = matches.into_iter().nth(p.selected);
+            // the list may have shrunk under the selection (the tailnet's status came in)
+            let last = matches.len().saturating_sub(1);
+            let pick = matches.into_iter().nth(p.selected.min(last));
             if !(m.platform && p.switch) || pick.is_none() {
                 self.palette = None; // ⌘↩ in the switcher: session.switch closes it, or notes why not
             }

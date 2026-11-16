@@ -25,6 +25,16 @@
       "OS": "li\u001b]0;pwned\u0007nux\u202e",
       "Online": true,
       "sshHostKeys": "not-a-list"
+    },
+    "k5": {
+      "DNSName": "semi;colon.example-tailnet.ts.net.",
+      "OS": "linux",
+      "Online": true
+    },
+    "k6": {
+      "DNSName": "box.t@evil.example.",
+      "OS": "linux",
+      "Online": true
     }
   },
   "User": {
