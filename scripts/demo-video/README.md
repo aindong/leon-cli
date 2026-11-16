@@ -44,7 +44,7 @@ These need a person once, over VNC (`tart run leon-demo --vnc-experimental` prin
    screen and post keys. Allow the first capture's one-time prompt.
 3. Put a standalone Python 3.12+ in `~demo/python` (the VM has no developer tools, and the stub
    `python3` asks to install them).
-4. An ssh key for the host: `ssh-keygen -t ed25519 -N "" -f target/demo-video/key`, and the
+4. An ssh key for the host: `mkdir -p target/demo-video && ssh-keygen -t ed25519 -N "" -f target/demo-video/key`, and the
    `.pub` in `~demo/.ssh/authorized_keys`.
 5. The "devbox": the VM's second user (here `admin`) plays another machine, reached over real
    ssh. As `demo`: `ssh-keygen -t ed25519 -N "" -f ~/.ssh/devbox`; the `.pub` in that user's
@@ -140,7 +140,7 @@ What it draws, and the limits it keeps:
 | `zoom` | `region` `[x, y, w, h]` raw pixels, `until` | zoom onto the region until `until` |
 | `caption` | `text`, `until`, `small` | a caption (and an `.srt` line), with an optional smaller line |
 
-`run-demo.sh cue take-beats.txt` rebuilds the cue file of an earlier take without the VM: the
+`run-demo.sh cue [BEATS]` (default: the last take's `take-beats.txt`) rebuilds the cue file of an earlier take without the VM: the
 scenes run on a virtual clock, re-anchored at each mark to the take's real beat times. Change a
 zoom or a caption in `run-demo.sh`, run `cue`, then `render`.
 

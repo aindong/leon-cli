@@ -4,7 +4,7 @@ import math
 import tempfile
 import unittest
 
-from compose import SQUARE_CUT, frame_plan, pieces, soft
+from compose import SQUARE_CUT, frame_plan, pieces, soft, srt
 from draw import combo_caps, ease
 from frame import BASE, MAIN, Renderer, fit, lerp_cam, load_cue
 
@@ -79,6 +79,22 @@ class TimelineTest(unittest.TestCase):
     def test_only_the_quit_join_is_hard(self):
         self.assertEqual([soft("main", i) for i in range(4)], [False, True, False, True])
         self.assertTrue(all(soft("square", i) for i in range(1, len(SQUARE_CUT) + 1)))
+
+
+class SrtTest(unittest.TestCase):
+    def test_a_caption_running_into_the_cut_is_clipped_not_dropped(self):
+        rows = [{"t": 0, "type": "take", "lead": 1.5},
+                {"t": 91, "type": "caption", "text": "Quit the app", "until": 93},
+                {"t": 95, "type": "caption", "text": "Still running", "until": 98}]
+        with tempfile.TemporaryDirectory() as d:
+            cue_path, out = f"{d}/c.jsonl", f"{d}/o.srt"
+            with open(cue_path, "w") as f:
+                f.write("\n".join(json.dumps(r) for r in rows))
+            srt("main", cue_path, (94.0, 96.85), 106.0, out)
+            text = open(out).read()
+        self.assertIn("Quit the app", text)  # 92.5-94.5 in video time: kept up to the cut at 94
+        self.assertIn("00:01:35,000 --> 00:01:36,500", text)  # title 2.5 + 92.5, to 2.5 + 94
+        self.assertIn("00:01:36,500 --> 00:01:39,150", text)  # 96.85-99.5, shifted back by the 2.85 s cut
 
 
 class KeysTest(unittest.TestCase):

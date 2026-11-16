@@ -109,7 +109,15 @@ def last_frame(R, L, raw, p, out_t):
     """piece p's last output frame, for the dissolve into the piece after it"""
     dur = p[2] if p[0] == "card" else p[2] - p[1]
     pt = dur - 1 / FPS
-    src = next(decode(raw, p[1] + pt, 1.0)) if p[0] == "take" else None
+    src = None
+    if p[0] == "take":
+        # a variable-rate take can have no frame in its last 1/60 s: decode the last 0.2 s and keep
+        # the last frame it gives (decode holds the last one past the end)
+        frames = decode(raw, max(p[1], p[2] - 0.2), 0.2)
+        for _ in range(int(0.2 * FPS)):
+            src = next(frames, src)
+        if src is None:
+            sys.exit(f"compose: no frame of the take near {p[2]:.2f} s")
     return piece_frame(R, L, p, pt, src, out_t)
 
 
@@ -154,11 +162,11 @@ def srt(mode, cue_path, cut, duration, out):
     if mode == "main":
         a, b = cut if cut else (duration, duration)
         for c in [r for r in load_cue(cue_path) if r["type"] == "caption"]:
-            s, e = c["vt"], c["vuntil"]
-            if e <= a:
-                rows.append((TITLE + s, TITLE + e, c["text"], c.get("small", "")))
-            elif s >= b:
-                rows.append((TITLE + s - (b - a), TITLE + e - (b - a), c["text"], c.get("small", "")))
+            s, e, line = c["vt"], c["vuntil"], (c["text"], c.get("small", ""))
+            if s < a:  # before the cut: shown up to it
+                rows.append((TITLE + s, TITLE + min(e, a), *line))
+            if e > b:  # after it: shown from it, shifted back by the cut's length
+                rows.append((TITLE + max(s, b) - (b - a), TITLE + e - (b - a), *line))
     else:
         t = 0.0
         for s, e, _, c, sm in SQUARE_CUT:

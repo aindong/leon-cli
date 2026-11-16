@@ -6,7 +6,8 @@
 #                 scripts/bundle.sh)
 #   setup         a clean take: reset, stage the sessions and agents, full screen, pointer parked
 #   take [A-B]    record scenes A to B (default 1-11), pull the clip, make take.mp4 and take-cut.mp4
-#   cue BEATS     rebuild a take's cue file (take-cue.jsonl) from its beats file, sending nothing
+#   cue [BEATS]   rebuild a take's cue file (take-cue.jsonl) from its beats file (default the last
+#                 take's), sending nothing
 #   render        the finished videos from the take: renders/leon-demo-main.mp4 (16:9) and
 #                 renders/leon-demo-square-30s.mp4 (1:1), each with an .srt
 #   shot NAME     a VNC screenshot of the VM to shots/NAME.png
@@ -195,7 +196,12 @@ case "${1:-}" in
   boot)
     nohup tart run "$vm" --no-graphics --vnc-experimental --no-audio >"$work/tart-run.log" 2>&1 &
     ip >"$work/.ip"
-    until ssh $(ssh_opts) -o ConnectTimeout=2 "demo@$(cat "$work/.ip")" true 2>/dev/null; do sleep 1; done
+    [ -f "$work/key" ] || { echo "run-demo: no ssh key at $work/key (README, one-time setup step 4)" >&2; exit 1; }
+    for ((n = 0; ; n++)); do
+      ssh $(ssh_opts) -o ConnectTimeout=2 "demo@$(cat "$work/.ip")" true 2>/dev/null && break
+      [ $n -lt 120 ] || { echo "run-demo: no ssh to demo@$(cat "$work/.ip") after 2 minutes" >&2; exit 1; }
+      sleep 1
+    done
     echo "boot: $(cat "$work/.ip"), $(vnc_url)" ;;
   push)
     ip >"$work/.ip"
@@ -241,14 +247,20 @@ case "${1:-}" in
     python3 "$here/cut.py" "$work/take.mp4" "$work/take-cut.mp4"
     echo "take: $work/take.mp4, $work/take-cut.mp4; beats: $work/take-beats.txt" ;;
   cue) # cue BEATS: rebuild an earlier take's cue file from its beats file, sending nothing
-    anchor=${2:?cue needs a beats file}
+    anchor=${2:-$work/take-beats.txt}
+    [ -f "$anchor" ] || anchor=$work/$anchor # a bare name means the work dir's
+    [ -f "$anchor" ] || { echo "run-demo: no beats file $anchor" >&2; exit 1; }
     CUE_ONLY=1
     printf '{"t": 0, "type": "take", "lead": 1.5, "width": 2880, "height": 1620}\n' >"$cuefile"
     for ((n = 1; n <= 11; n++)); do "scene$n"; done
     echo "cue: $cuefile ($(wc -l <"$cuefile" | tr -d ' ') lines, rebuilt from $anchor)" ;;
   render)
     venv=$work/venv
-    [ -x "$venv/bin/python" ] || { python3 -m venv "$venv" && "$venv/bin/pip" install -q -r "$here/compose/requirements.txt"; }
+    if ! "$venv/bin/python" -c 'import numpy, PIL' 2>/dev/null; then # none yet, or a failed install
+      rm -rf "${venv:?}"
+      python3 -m venv "$venv"
+      "$venv/bin/pip" install -q -r "$here/compose/requirements.txt"
+    fi
     cut=$(python3 "$here/cut.py" --print "$work/take.mp4") # the reopen's windowed seconds, A:B
     mkdir -p "$work/renders"
     nice -n 10 "$venv/bin/python" "$here/compose/compose.py" main "$work/take-raw.mov" "$work/take-cue.jsonl" \
@@ -258,5 +270,5 @@ case "${1:-}" in
   shot) mkdir -p "$work/shots"; vnc shot "$work/shots/$2.png"; echo "$work/shots/$2.png" ;;
   check) ip >"$work/.ip"; g check ;;
   stop) tart stop "$vm" ;;
-  *) sed -n '2,12s/^# \{0,1\}//p' "$0"; exit 2 ;;
+  *) sed -n '2,17s/^# \{0,1\}//p' "$0"; exit 2 ;;
 esac
