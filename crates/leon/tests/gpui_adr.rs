@@ -120,7 +120,7 @@ fn gpui_code_neither_spawns_threads_nor_blocks() {
         // the view's submodules see GPUI through `use super::*`
         if code.contains("gpui") || name.starts_with("view") || name.starts_with("settings_window") {
             views += 1;
-            for bad in ["thread::spawn", "thread::Builder", "thread::sleep", "block_on("] {
+            for bad in ["std::thread", "thread::spawn", "thread::Builder", "thread::sleep", "block_on("] {
                 assert!(
                     !code.contains(bad),
                     "{name} uses {bad}: GPUI code runs off-thread work on GPUI's executors (R8)"

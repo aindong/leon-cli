@@ -104,7 +104,8 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   a render-count test per cached view.
 - **R4. Notify the view whose drawing changed, and only it.** What a view draws lives in that
   view or in an entity it observes (`cx.observe(&model, |_, _, cx| cx.notify())`) or subscribes
-  to (`EventEmitter`); a cached view that reads a model it does not observe stays stale when
+  to (`EventEmitter`), keeping the returned `Subscription` in the view (dropping it ends the
+  observation); a cached view that reads a model it does not observe stays stale when
   the model notifies (GPUI draws a frame but reuses the view). A window-wide hash of what
   was drawn (`Workspace::signature`) is not how a view learns it changed. Why: GPUI skips a
   cached view unless that view was notified, and a hash over everything costs every view on
