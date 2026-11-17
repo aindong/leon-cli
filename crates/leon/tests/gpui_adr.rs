@@ -59,6 +59,12 @@ fn the_adr_is_where_contributors_look() {
         assert!(r.contains("Why:"), "each rule gives its reason: R{r}");
         assert!(r.contains("Check:"), "each rule says how it is checked: R{r}");
     }
+    // #44: a cached view laid out without a size of its own shrank to its content
+    let r3 = rules.iter().find(|r| r.starts_with("3.")).expect("R3");
+    assert!(
+        r3.contains("laid out as a root") && r3.contains("its own size"),
+        "R3 says a cached view's root needs its own size"
+    );
     assert!(doc("docs/architecture.md").contains("(architecture/gpui.md)"), "docs/architecture.md links the ADR");
     let claude = doc("CLAUDE.md");
     assert!(

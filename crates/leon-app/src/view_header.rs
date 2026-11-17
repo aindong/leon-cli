@@ -116,7 +116,11 @@ impl Workspace {
                     .text_color(rgb(t.muted))
                     .children(caption),
             )
-            .children(self.render_find_bar(id, cx))
+            .children(
+                input.find.as_ref().map(|f| {
+                    super::presence::faded(input.find_look, 3., self.render_find_bar(id, f, input.find_live, cx))
+                }),
+            )
             .child(controls)
     }
 

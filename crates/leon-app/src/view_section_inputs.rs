@@ -31,6 +31,8 @@ pub(super) struct SidebarInput {
     /// How see-through its fill is (`chrome_fill`).
     pub(super) glass: Glass,
     pub(super) list: SidebarList,
+    /// How the list looks this frame: the one switched to fades in.
+    pub(super) list_look: crate::overlay_motion::Look,
     pub(super) rows: Vec<SessionRow>,
     pub(super) selected: Option<String>,
     pub(super) collapsed: Vec<String>,
@@ -86,8 +88,11 @@ pub(super) struct HeaderInput {
     pub(super) focused: bool,
     pub(super) hovered: bool,
     pub(super) overlay: bool,
-    /// The find bar, while open here: the query, case, regex and the count.
+    /// The find bar, while open here or fading out: the query, case, regex and the count; how it
+    /// looks this frame, and whether it is open (a going one takes no clicks).
     pub(super) find: Option<(String, bool, bool, String)>,
+    pub(super) find_look: crate::overlay_motion::Look,
+    pub(super) find_live: bool,
     pub(super) family: SharedString,
     pub(super) tips: u64,
 }
@@ -142,6 +147,7 @@ impl Workspace {
             theme: self.theme,
             glass: self.glass(),
             list,
+            list_look: self.list_look(),
             working: rows.iter().any(drawn)
                 || activity.iter().any(|(r, _)| matches!(r.status, Indicator::Working { .. })),
             rows: rows.to_vec(),
@@ -194,7 +200,7 @@ impl Workspace {
     /// What pane `id`'s header draws in a pane `width` wide.
     pub(super) fn header_input(&self, id: &str, width: f32, cx: &App) -> HeaderInput {
         let title = self.header_title(id, (width - HEADER_PARTS - self.badge_width(id)).min(TITLE_MAX), cx);
-        let find = self.term.find.as_ref().filter(|f| f.block == id);
+        let find = self.find_drawn(id);
         // its own statement: the model's guard would live to the end of the struct, and
         // `header_caption` below locks the model again
         let state = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
@@ -210,7 +216,9 @@ impl Workspace {
             focused: self.target().is_some_and(|(_, t, _)| t == id),
             hovered: self.hovered_pane.as_deref() == Some(id),
             overlay: self.is_overlay(id),
-            find: find.map(|f| (f.query.clone(), f.case, f.regex, self.find_count().unwrap_or_default())),
+            find: find.map(|(f, _, _)| (f.1.clone(), f.2, f.3, f.4.clone())),
+            find_look: find.map_or(crate::overlay_motion::Look::SHOWN, |(_, look, _)| look),
+            find_live: find.is_none_or(|(_, _, live)| live),
             family: self.font_family.clone(),
             tips: self.tips_key(),
             id: id.to_string(),
@@ -220,6 +228,7 @@ impl Workspace {
     /// Whether pane `id` (a tile, a dock or a float) draws a header: always on a float or drawer,
     /// on a tile with headers on, or while its find bar is open.
     pub(super) fn header_shown(&self, id: &str, kind: &str) -> bool {
-        self.settings.pane_headers || kind != "pane" || self.term.find.as_ref().is_some_and(|f| f.block == id)
+        self.settings.pane_headers || kind != "pane" || self.find_drawn(id).is_some()
+        // open, or fading out
     }
 }
