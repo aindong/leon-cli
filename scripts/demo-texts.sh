@@ -79,10 +79,41 @@ EOF
 txt migrate <<'EOF'
 > Migrate the users table to the new schema
 
+  Read migrations/ (41 files), schema.sql (312 lines)
+  users.email has no unique index, and 3 accounts share an
+  address in staging. Production has the same 3.
+
   Wrote migrations/0042_users_email_unique.sql
+   + merge the 3 duplicate accounts into the oldest one
+   + CREATE UNIQUE INDEX CONCURRENTLY users_email_key
+
   Dry run on staging: 18,204 rows, 0 conflicts.
+  The index builds in 2.1 s without locking writes.
+
+  Backed up users to s3://backups/users-0042.sql.gz
 
   Run it on production now?
+EOF
+txt sql <<'EOF'
+-- 0042: one account per email address
+
+BEGIN;
+
+UPDATE orders o
+   SET user_id = d.keep
+  FROM (SELECT min(id) AS keep, unnest(array_agg(id)) AS id
+          FROM users GROUP BY lower(email)
+        HAVING count(*) > 1) d
+ WHERE o.user_id = d.id AND d.id <> d.keep;
+
+DELETE FROM users u
+ USING users k
+ WHERE lower(u.email) = lower(k.email) AND u.id > k.id;
+
+COMMIT;
+
+CREATE UNIQUE INDEX CONCURRENTLY users_email_key
+    ON users (lower(email));
 EOF
 txt api <<'EOF'
 > Add rate limiting to the public API
