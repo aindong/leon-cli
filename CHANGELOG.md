@@ -13,7 +13,7 @@ the server, the CLI and `leon attach`).
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.9.0`.
+one is `1.10.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -28,12 +28,13 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
-### A Settings window with sections
+### Settings window
 
 #### Added
 
-- Settings (⌘,) has sections, a search field and a control for every setting, and lists the
-  keymap and `leon skill status` ([docs/lua/settings.md](docs/lua/settings.md#settings)).
+- Settings (⌘,) has sections, search and a control for every setting; it lists the keymap,
+  `leon skill status`, the server and the hosts ([docs](docs/lua/settings.md#settings)).
+- `server.status` gives `started_at`, `blocks` and `log`: `api_version` `1.10.0`.
 
 ### An icon per program in Leon.app
 

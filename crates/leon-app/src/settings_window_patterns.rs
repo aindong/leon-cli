@@ -26,6 +26,49 @@ impl PatternField {
     }
 }
 
+/// What a key did in a one-line text field.
+pub(super) enum Typed {
+    Enter,
+    Escape,
+    Edited,
+    /// Nothing (⌘ keys go on to the window: ⌘W).
+    Other,
+}
+
+/// A key in a one-line text field holding `draft`. Every key but a ⌘ one stays in the field: ↑/↓
+/// on the window would change the section under it.
+pub(super) fn typed(draft: &mut String, e: &KeyDownEvent, cx: &mut Context<SettingsWindow>) -> Typed {
+    let k = &e.keystroke;
+    let m = &k.modifiers;
+    if m.platform {
+        return Typed::Other;
+    }
+    cx.stop_propagation();
+    let did = match k.key.as_str() {
+        "enter" => Typed::Enter,
+        "escape" => Typed::Escape,
+        "backspace" => {
+            draft.pop();
+            Typed::Edited
+        }
+        "space" => {
+            draft.push(' ');
+            Typed::Edited
+        }
+        _ => match k.key_char.as_deref().filter(|c| !c.is_empty() && !m.control && !m.alt) {
+            Some(t) => {
+                draft.extend(t.chars().filter(|c| !c.is_control()));
+                Typed::Edited
+            }
+            None => Typed::Other,
+        },
+    };
+    if !matches!(did, Typed::Other) {
+        cx.notify();
+    }
+    did
+}
+
 impl SettingsWindow {
     /// Why the last hint pattern wasn't added.
     pub fn pattern_error(&self) -> Option<String> {
@@ -146,33 +189,15 @@ impl SettingsWindow {
 
     /// A key in the hint pattern field. ⌘ keys go on to the window (⌘W).
     fn pattern_key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let k = &e.keystroke;
-        let m = &k.modifiers;
-        if m.platform {
-            return;
-        }
-        let f = &mut self.pattern;
-        match k.key.as_str() {
-            "enter" => self.add_pattern(cx),
-            "escape" => {
+        match typed(&mut self.pattern.draft, e, cx) {
+            Typed::Enter => self.add_pattern(cx),
+            Typed::Escape => {
+                let f = &mut self.pattern;
                 (f.draft, f.editing, f.error) = (String::new(), None, None);
                 window.focus(&self.focus);
             }
-            "backspace" => {
-                f.draft.pop();
-            }
-            "space" => f.draft.push(' '),
-            _ => {
-                // every other key stays here too: ↑/↓ on the root would change the section under the field
-                cx.stop_propagation();
-                match k.key_char.as_deref().filter(|c| !c.is_empty() && !m.control && !m.alt) {
-                    Some(typed) => f.draft.extend(typed.chars().filter(|c| !c.is_control())),
-                    None => return,
-                }
-            }
+            Typed::Edited | Typed::Other => {}
         }
-        cx.stop_propagation();
-        cx.notify();
     }
 
     /// Add the field's pattern (or save the one it edits), once it compiles and the list has room;

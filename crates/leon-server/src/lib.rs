@@ -58,6 +58,10 @@ pub struct Ctx {
     pub discard: AtomicBool,
     /// The loaded `init.lua` (lua.rs).
     lua: lua::Shared,
+    /// When this server started, in seconds since the Unix epoch (`server.status`).
+    pub started_at: u64,
+    /// The file its output goes to, when it was started with one (`server.status`).
+    pub log: Option<String>,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -109,6 +113,8 @@ impl Ctx {
             state_file: Mutex::default(),
             discard: AtomicBool::new(false),
             lua: lua::Shared::default(),
+            started_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()),
+            log: None,
         }
     }
 

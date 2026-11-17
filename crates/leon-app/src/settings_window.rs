@@ -25,6 +25,8 @@ use crate::look::Look;
 use crate::remote::Remote;
 use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
 
+#[path = "settings_window_hosts.rs"]
+mod hosts;
 #[path = "settings_window_lists.rs"]
 mod lists;
 #[path = "settings_window_patterns.rs"]
@@ -33,11 +35,16 @@ mod patterns;
 mod rows;
 #[path = "settings_window_sections.rs"]
 mod sections;
+#[path = "settings_window_server.rs"]
+mod server;
+#[path = "settings_window_tailscale.rs"]
+mod tailscale;
 #[path = "settings_window_theme.rs"]
 mod theme_picker;
 
 pub use lists::{parse_agents, AgentRow, ShortcutRow};
 pub use sections::Section;
+pub use server::{running_for, stop_warning, ServerInfo};
 
 /// Monospaced families the font control steps through, when installed (init.lua takes any).
 // shortcut: a fixed list, not every installed monospace font; upgrade with a text field.
@@ -104,6 +111,14 @@ pub struct SettingsWindow {
     shortcuts: Vec<ShortcutRow>,
     /// `leon skill status`, once read (Err: why it couldn't be).
     agents: Option<Result<Vec<AgentRow>, String>>,
+    /// This Mac's server, once asked (Err: why it didn't answer).
+    server_info: Option<Result<server::ServerInfo, String>>,
+    /// The main window's hosts, followed while it is open.
+    hosts: Vec<crate::hosts::HostLine>,
+    rename: hosts::RenameField,
+    /// Restart stopped the server and waits for the main window to see it gone.
+    restarting: bool,
+    _workspace: Option<Subscription>,
     glass: Glass,
     /// What GPUI was asked for, oldest first (GPUI's test window keeps no background).
     backgrounds: Vec<Bg>,
@@ -166,6 +181,7 @@ impl SettingsWindow {
                 sw.note_reduce_transparency();
                 sw.reload(cx);
                 sw.read_shortcuts(cx);
+                sw.read_server(cx);
             }
         });
         // full screen has nothing behind it to show
@@ -187,6 +203,11 @@ impl SettingsWindow {
             pattern: patterns::PatternField::new(cx),
             shortcuts: Vec::new(),
             agents: None,
+            server_info: None,
+            hosts: Vec::new(),
+            rename: hosts::RenameField::new(cx),
+            restarting: false,
+            _workspace: None,
             glass: Glass::OPAQUE,
             backgrounds: Vec::new(),
             reduce_transparency: None,
@@ -201,6 +222,9 @@ impl SettingsWindow {
         sw.note_reduce_transparency();
         sw.reload(cx);
         sw.read_shortcuts(cx);
+        sw.read_server(cx);
+        // once ⌘,'s update of the main window is over: it can't be read while it opens this one
+        cx.spawn(async move |this, cx| this.update(cx, |sw, cx| sw.follow_workspace(cx))).detach();
         // the app runs as `leon app`: its own binary says what `leon skill status` says
         match std::env::current_exe().ok().filter(|e| e.file_name().is_some_and(|n| n == "leon")) {
             Some(leon) => sw.read_agents(leon, cx),

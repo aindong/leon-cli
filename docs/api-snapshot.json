@@ -1,5 +1,5 @@
 {
-  "api_version": "1.9.0",
+  "api_version": "1.10.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -211,6 +211,22 @@
               "string",
               "null"
             ]
+          },
+          "started_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "blocks": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "log": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -219,7 +235,9 @@
           "version",
           "socket",
           "autostarted",
-          "sessions"
+          "sessions",
+          "started_at",
+          "blocks"
         ]
       }
     },

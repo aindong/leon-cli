@@ -7,6 +7,9 @@ use super::*;
 use crate::hosts::Machine;
 use crate::palette::Item;
 
+#[path = "view_hosts_edit.rs"]
+mod edit;
+
 /// What the palette asks for.
 #[derive(Clone)]
 pub(super) enum Ask {

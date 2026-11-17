@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.9.0**. Every method is marked:
+API version **1.10.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -229,7 +229,7 @@ same facts for the server you run.
 
 ### `server.status`
 
-*stable*. Whether the server runs, its pid, version and socket.
+*stable*. Whether the server runs, its pid, version and socket, since when, and how many sessions and blocks.
 
 **Input:** none
 
@@ -244,6 +244,9 @@ same facts for the server you run.
 | `autostarted` | boolean | yes | True when a client started this server on demand; it exits once idle. |
 | `sessions` | integer (uint) | yes |  |
 | `state_file` | string \| null |  | Where sessions are saved, while running and on stop; null when they aren't (the state dir isn't private). |
+| `started_at` | integer (uint64) | yes | When the server started, in seconds since the Unix epoch. |
+| `blocks` | integer (uint) | yes | The blocks in every session. |
+| `log` | string \| null |  | The file the server's output goes to; null when it has none (a server run in a terminal). |
 
 <details><summary>JSON Schemas</summary>
 
@@ -290,6 +293,25 @@ same facts for the server you run.
           "string",
           "null"
         ]
+      },
+      "started_at": {
+        "description": "When the server started, in seconds since the Unix epoch.",
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      },
+      "blocks": {
+        "description": "The blocks in every session.",
+        "type": "integer",
+        "format": "uint",
+        "minimum": 0
+      },
+      "log": {
+        "description": "The file the server's output goes to; null when it has none (a server run in a terminal).",
+        "type": [
+          "string",
+          "null"
+        ]
       }
     },
     "required": [
@@ -298,7 +320,9 @@ same facts for the server you run.
       "version",
       "socket",
       "autostarted",
-      "sessions"
+      "sessions",
+      "started_at",
+      "blocks"
     ]
   }
 }
@@ -351,7 +375,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.9.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.10.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>

@@ -11,17 +11,21 @@ pub enum Section {
     Notifications,
     Shortcuts,
     Agents,
+    RemoteHosts,
+    Server,
 }
 
 impl Section {
     /// In the sidebar's order.
-    pub const ALL: [Section; 6] = [
+    pub const ALL: [Section; 8] = [
         Section::General,
         Section::Appearance,
         Section::Terminal,
         Section::Notifications,
         Section::Shortcuts,
         Section::Agents,
+        Section::RemoteHosts,
+        Section::Server,
     ];
 
     pub fn name(self) -> &'static str {
@@ -32,6 +36,8 @@ impl Section {
             Section::Notifications => "Notifications",
             Section::Shortcuts => "Shortcuts",
             Section::Agents => "Agents",
+            Section::RemoteHosts => "Remote Hosts",
+            Section::Server => "Server",
         }
     }
 
@@ -44,6 +50,8 @@ impl Section {
             Section::Notifications => "section-notifications",
             Section::Shortcuts => "section-shortcuts",
             Section::Agents => "section-agents",
+            Section::RemoteHosts => "section-hosts",
+            Section::Server => "section-server",
         }
     }
 }
@@ -62,6 +70,7 @@ pub(super) enum Item {
     Entry(&'static str),
     Shortcut(usize),
     Agent(usize),
+    Host(usize),
 }
 
 const fn entry(section: Section, id: &'static str, label: &'static str, keys: &'static [&'static str]) -> Entry {
@@ -71,7 +80,7 @@ const fn entry(section: Section, id: &'static str, label: &'static str, keys: &'
 use Section::*;
 
 /// Every settings row, in the order each section shows them.
-pub(super) const ENTRIES: [Entry; 13] = [
+pub(super) const ENTRIES: [Entry; 16] = [
     entry(General, "resume", "Resume programs after a restart", &["resume"]),
     entry(General, "check_for_updates", "Look for updates once a day", &["check_for_updates"]),
     entry(Appearance, "theme", "Theme", &["theme"]),
@@ -85,6 +94,9 @@ pub(super) const ENTRIES: [Entry; 13] = [
     entry(Notifications, "notifications.blocked", rows::NOTIFY_BLOCKED, &["notifications.blocked"]),
     entry(Notifications, "notifications.error", rows::NOTIFY_ERROR, &["notifications.error"]),
     entry(Agents, "agents", "Coding agents", &["skill"]),
+    entry(RemoteHosts, "hosts", "Remote hosts", &["hosts", "ssh", "add host", "tailnet"]),
+    entry(Server, "server", "This Mac's server", &["server", "running", "restart", "stop", "socket", "log", "version"]),
+    entry(Server, "tailscale", "Tailscale", &["tailscale", "tailnet", "serve"]),
 ];
 
 /// Whether every word of `query` (lower case) is in one of `texts`.
@@ -96,7 +108,7 @@ pub(super) fn matches(query: &str, texts: &[&str]) -> bool {
 impl SettingsWindow {
     /// Every setting a control changes (each of `leon_lua::settings::KEYS` must be one).
     pub fn controls() -> Vec<&'static str> {
-        ENTRIES.iter().flat_map(|e| e.keys).copied().filter(|k| *k != "skill").collect()
+        ENTRIES.iter().flat_map(|e| e.keys).copied().filter(|k| leon_lua::settings::KEYS.contains(k)).collect()
     }
 
     pub fn section(&self) -> Section {
@@ -117,6 +129,7 @@ impl SettingsWindow {
                 Some(Ok(list)) => format!("agent:{}", list[i].agent),
                 _ => String::new(),
             },
+            Item::Host(i) => format!("host:{}", self.hosts[i].label),
         };
         self.pages().into_iter().flat_map(|(_, items)| items).map(|i| id(&i)).collect()
     }
@@ -140,6 +153,12 @@ impl SettingsWindow {
                     let hits = list.iter().enumerate().filter(|(_, a)| any || a.matches(&q));
                     items.extend(hits.map(|(i, _)| Item::Agent(i)));
                 }
+            }
+            if s == RemoteHosts {
+                let hits = self.hosts.iter().enumerate().filter(|(_, h)| {
+                    any || matches(&q, &[&h.label, &h.endpoint, h.tailnet.as_deref().unwrap_or(""), "hosts"])
+                });
+                items.extend(hits.map(|(i, _)| Item::Host(i)));
             }
             items
         };
@@ -189,6 +208,9 @@ impl SettingsWindow {
                     .when(on, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
                     .when(!on, |d| d.hover(|d| d.bg(rgb(t.hover))))
                     .on_click(cx.listener(move |sw, _, window, cx| {
+                        if s == Server {
+                            sw.read_server(cx); // how it is now
+                        }
                         sw.section = s;
                         sw.query.clear();
                         window.focus(&sw.focus);
@@ -245,13 +267,17 @@ impl SettingsWindow {
             if s == Shortcuts {
                 part = part.child(self.shortcuts_intro(t, cx));
             }
-            let (mut shortcuts, mut agents) = (vec![], vec![]);
+            let (mut shortcuts, mut agents, mut hosts) = (vec![], vec![], vec![]);
             for item in items {
                 match item {
                     Item::Entry(id) => part = part.child(self.entry(id, t, cx)),
                     Item::Shortcut(i) => shortcuts.push(i),
                     Item::Agent(i) => agents.push(i),
+                    Item::Host(i) => hosts.push(i),
                 }
+            }
+            if !hosts.is_empty() {
+                part = part.child(self.host_rows(&hosts, t, cx));
             }
             if !shortcuts.is_empty() {
                 part = part.child(self.shortcut_rows(&shortcuts, t));
@@ -274,6 +300,9 @@ impl SettingsWindow {
             "font" => self.font_section(t, cx).into_any_element(),
             "hint_patterns" => self.patterns(t, cx).into_any_element(),
             "agents" => self.agents_intro(t).into_any_element(),
+            "hosts" => self.hosts_intro(t, cx).into_any_element(),
+            "server" => self.server_page(t, cx).into_any_element(),
+            "tailscale" => Self::subtitle(t, label).child(self.tailscale_section(t, cx)).into_any_element(),
             "resume" => self.choice(t, "resume", label, rows::RESUME_NOTE, &rows::RESUME, cx).into_any_element(),
             "repeat_time" => self.stepper(t, "repeat_time", label, rows::REPEAT, cx).into_any_element(),
             "translucency" => self.stepper(t, "translucency", label, rows::TRANSLUCENCY, cx).into_any_element(),

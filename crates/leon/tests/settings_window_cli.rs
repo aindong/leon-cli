@@ -16,7 +16,7 @@ fn the_docs_describe_the_window() {
     let changelog = include_str!("../../../CHANGELOG.md");
     let unreleased = &changelog[changelog.find("## [Unreleased]").unwrap()..];
     let next = unreleased[3..].find("\n## ").map_or(unreleased.len(), |i| i + 3);
-    assert!(unreleased[..next].contains("### A Settings window with sections"), "CHANGELOG.md [Unreleased]");
+    assert!(unreleased[..next].contains("### Settings window"), "CHANGELOG.md [Unreleased]");
 }
 
 /// The window's parser reads the real `leon --json skill status`, and says to set up each agent
