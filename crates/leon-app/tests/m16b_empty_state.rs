@@ -10,7 +10,7 @@ use m10b_support::*;
 fn the_empty_state_is_larger_and_adds_a_host(cx: &mut TestAppContext) {
     let s = setup_with_config(r#"leon.bind("cmd+k", "client.palette.toggle")"#);
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     cx.simulate_keystrokes("cmd-w");
     assert!(drawn(cx, "empty-state"));
     let hints = ws.read_with(cx, |ws, _| ws.empty_hints());

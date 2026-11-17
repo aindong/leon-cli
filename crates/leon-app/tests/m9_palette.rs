@@ -50,7 +50,7 @@ fn the_palette_opens_filters_runs_and_closes(cx: &mut TestAppContext) {
              run = function(ctx) leon.session.set_label{ label = "hi from lua" } end }"#,
     );
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     assert!(!ws.read_with(cx, |ws, _| ws.palette_open()));
     cx.simulate_keystrokes("cmd-shift-p");
     assert!(ws.read_with(cx, |ws, _| ws.palette_open()), "cmd-shift-p opens the palette");

@@ -13,7 +13,7 @@ use m10b_support::*;
 fn a_change_mid_way_keeps_the_dip(cx: &mut TestAppContext) {
     let s = setup_with_config("-- mine\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let pane = ws.read_with(cx, |ws, _| ws.target_block()).expect("a pane");
     let t0 = Instant::now();
     ws.update(cx, |ws, _| {

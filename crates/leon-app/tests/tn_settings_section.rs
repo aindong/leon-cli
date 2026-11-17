@@ -14,7 +14,7 @@ fn the_switch_turns_serving_on_and_the_section_says_how_it_went(cx: &mut TestApp
     std::env::set_var("LEON_TEST_TAILNET", json!({ "localapi": nowhere.path().join("none.sock") }).to_string());
     let s = setup_with_config("");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     cx.simulate_keystrokes("cmd-,");
     cx.run_until_parked();
     let sw: WindowHandle<SettingsWindow> =

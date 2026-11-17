@@ -56,7 +56,7 @@ leon.bind("cmd+t>1", "pane.split.right")
 fn lua_bindings_drive_the_app(cx: &mut TestAppContext) {
     let s = setup_with_config(CONFIG);
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let tabs = |cx: &mut gpui::VisualTestContext| window(&s.app, &ws, cx).1;
     assert_eq!(tabs(cx), 1);
 
