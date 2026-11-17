@@ -131,13 +131,10 @@ impl Terminal {
     /// that starts silently (`sleep`) prints nothing to notice.
     pub fn check_foreground(&self) {
         let now = self.foreground();
-        {
-            let mut r = lock(&self.reported);
-            if r.foreground == now {
-                return;
-            }
-            r.foreground.clone_from(&now);
+        if lock(&self.reported).foreground == now {
+            return;
         }
-        (self.notify)(Notice::Foreground(now));
+        (self.notify)(Notice::Foreground(now.clone()));
+        self.remember(&Notice::Foreground(now));
     }
 }
