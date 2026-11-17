@@ -144,6 +144,8 @@ summary bullet per feature, linking its section here.
   the end of its output is slow to come.
 - Opening a pane no longer fails now and then with "failed to openpty" while other programs open
   and close terminals: macOS's "open it again" answer is now followed.
+- `leon run --wait` (and `block.wait`) of a program that exits at once no longer fails now and
+  then with "no block": a program exiting just as the wait began was neither running nor done.
 
 ### The overview in Leon.app
 
