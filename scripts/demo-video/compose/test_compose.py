@@ -12,7 +12,7 @@ from compose import SQUARE_CUT, frame_plan, pieces, soft, srt
 from draw import combo_caps, ease
 from frame import BASE, MAIN, SQUARE, SRC_H, SRC_W, Renderer, fit, lerp_cam, load_cue
 
-RUN_DEMO = (Path(__file__).resolve().parent.parent / "run-demo.sh").read_text()
+RUN_DEMO = "".join((Path(__file__).resolve().parent.parent / f).read_text() for f in ("run-demo.sh", "scenes.sh"))
 
 
 def cue(*zooms):
