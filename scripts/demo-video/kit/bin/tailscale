@@ -14,7 +14,7 @@ cat <<'JSON'
       "TailscaleIPs": ["100.101.12.20"], "sshHostKeys": ["ssh-ed25519 AAAAdemo"] },
     "nodekey:gpubox": { "DNSName": "gpu-box.example-tailnet.ts.net.", "OS": "linux", "Online": true,
       "TailscaleIPs": ["100.101.12.31"] },
-    "nodekey:ci": { "DNSName": "ci-runner.example-tailnet.ts.net.", "OS": "linux", "Online": false,
+    "nodekey:ci": { "DNSName": "ci-box.example-tailnet.ts.net.", "OS": "linux", "Online": false,
       "TailscaleIPs": ["100.101.12.42"] }
   }
 }
