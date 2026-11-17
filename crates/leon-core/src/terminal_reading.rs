@@ -24,6 +24,8 @@ pub(super) struct Reading {
 pub(super) struct Reported {
     pub(super) pwd: Option<String>,
     pub(super) title: Option<String>,
+    /// The foreground program last reported (`check_foreground`).
+    pub(super) foreground: Option<String>,
 }
 
 impl Terminal {

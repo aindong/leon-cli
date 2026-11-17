@@ -28,6 +28,7 @@ fn block(id: &str, window: &str, status: Option<State>) -> Block {
         command: vec!["/bin/sh".into()],
         title: None,
         cwd: None,
+        foreground: None,
         status: status.map(record).into_iter().collect(),
     }
 }

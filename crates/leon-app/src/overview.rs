@@ -41,6 +41,8 @@ pub struct Card {
     /// The sidebar's title for the tab.
     pub title: String,
     pub status: Option<Indicator>,
+    /// The kind of program in the pane the tab shows.
+    pub program: Option<crate::program_kind::Kind>,
     /// Its machine isn't connected: drawn grey, from the last model.
     pub greyed: bool,
 }
@@ -92,6 +94,7 @@ pub fn groups(machines: &[Machine], scope: &Scope, hosts: bool) -> Vec<Group> {
                     window_id: w.id.clone(),
                     title: switcher::tab_title(s, w),
                     status: statuses.get(w.id.as_str()).copied().flatten(),
+                    program: crate::program_kind::tab_kind(s, w),
                     greyed: m.note.is_some(),
                 })
                 .collect();

@@ -112,6 +112,9 @@ pub struct Block {
     /// The title the program set, and where it is (`session.list_blocks`).
     pub title: Option<String>,
     pub cwd: Option<String>,
+    /// The program in front (`foreground`): None from a server older than that field, `Some(None)`
+    /// when the server names none (the program exited, or another user's is in front).
+    pub foreground: Option<Option<String>>,
     /// Program-status records, least recently reported first.
     pub status: Vec<Record>,
 }

@@ -2,6 +2,26 @@
 //! the settings, and the signature the poll compares to decide on a redraw.
 
 use super::*;
+use crate::program_kind;
+
+/// What one render needs from the model, copied out under the state lock.
+pub(super) struct SessionRow {
+    /// Which machine it is on (`Hosts` index; 0 is This Mac).
+    pub(super) host: usize,
+    pub(super) id: String,
+    pub(super) title: String,
+    pub(super) windows: Vec<WindowRow>,
+    pub(super) active: usize,
+    pub(super) status: Option<Indicator>,
+}
+
+pub(super) struct WindowRow {
+    pub(super) id: String,
+    pub(super) title: String,
+    pub(super) status: Option<Indicator>,
+    /// The kind of program in the pane the tab shows (`named_tile`); None for an empty tab.
+    pub(super) program: Option<Kind>,
+}
 
 impl Workspace {
     /// Every machine's sessions, This Mac's first, then each host's in the hosts list's order.
@@ -26,6 +46,7 @@ impl Workspace {
                         id: w.id.clone(),
                         title: switcher::tab_title(s, w),
                         status: by_window.get(w.id.as_str()).copied().flatten(),
+                        program: program_kind::tab_kind(s, w),
                     })
                     .collect();
                 SessionRow {
@@ -212,7 +233,7 @@ impl Workspace {
         let rows = self.rows();
         for r in &rows {
             r.status.hash(&mut h);
-            r.windows.iter().for_each(|w| (w.status, &w.title).hash(&mut h));
+            r.windows.iter().for_each(|w| (w.status, &w.title, w.program).hash(&mut h));
         }
         self.spinning(&rows).hash(&mut h);
         (self.sidebar, self.font_size.to_bits(), self.pending.len(), self.palette.is_some()).hash(&mut h);
@@ -225,8 +246,10 @@ impl Workspace {
         self.hosts.tailnet_reads().hash(&mut h); // Add Host…'s list and the hosts' tailnet lines
                                                  // each header draws its own pane's state, which its tab's may hide
         for id in &shown {
-            let state = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
-            (state, self.header_caption(id), self.pane_title(id)).hash(&mut h);
+            let (state, kind) = self.app.model().block(id).map_or((None, None), |(_, b)| {
+                (status::indicator_of(&b.newest_first()), Some(program_kind::kind_of_block(b)))
+            });
+            (state, kind, self.header_caption(id), self.pane_title(id)).hash(&mut h);
         }
         h.finish()
     }
