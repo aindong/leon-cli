@@ -1,0 +1,19 @@
+title agent: mobile layout
+task Make the status page work on phones.
+wait_go
+working 10 reading build.py
+read build.py
+say No viewport tag, and a fixed four-column grid.
+say I'll write the tests first.
+working 30 writing the tests
+diff 1 6
+apply 1
+test tests right python3 runtests.py
+wait_go status-fix
+working 60 fixing build.py
+say Two failures, as expected. Adding the viewport and a narrow layout.
+diff 2 8
+apply 2
+working 85 running the tests again
+test tests right python3 runtests.py
+done The page fits a phone, and all 10 tests pass.

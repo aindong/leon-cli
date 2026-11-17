@@ -1,0 +1,4 @@
+# the demo's neutral shell: no user or host in the prompt or the title
+PROMPT='%F{8}%1~%f %F{5}❯%f '
+unsetopt PROMPT_SP
+export PATH=$HOME/kit/bin:$HOME/python/bin:$HOME/leon/target/release/Leon.app/Contents/MacOS:$PATH
