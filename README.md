@@ -258,7 +258,7 @@ leon do -e 'print(#leon.session.view().windows .. " tabs")'
 
 ## Roadmap
 
-leon is at 0.1.0, not yet tagged. What has landed, milestone by milestone, is in
+leon 0.1.0 is the first release. What has landed, milestone by milestone, is in
 [docs/roadmap.md](docs/roadmap.md) and [CHANGELOG.md](CHANGELOG.md). What comes next:
 
 - **The app on Linux.** Linux has the server, the CLI, `leon attach`, agents and Lua; the GPUI app
