@@ -254,6 +254,8 @@ summary bullet per feature, linking its section here.
 
 - A one-shot `claude -p` (`--print`, or `-p` among other short flags, `-cp`) in a pane no longer
   registers a resume command. (F10)
+- With a translucent window, the title bar's strip to the right of the last tab is tinted like
+  the rest of the bar instead of showing the desktop through it.
 - Keys typed into `leon -H … attach` while the link is stalled no longer arrive in part (the
   research run left `ec` of `echo …⏎` at the remote prompt). After a quiet second, keys wait for
   a probe of the link; if it fails they are all dropped, and so are keys typed while it
