@@ -188,11 +188,16 @@ impl Workspace {
         f.matches.iter().filter(|m| m.start.line < shown.end && m.end.line >= shown.start).count()
     }
 
-    /// The find bar, in pane `id`'s header while it is open there.
-    pub(super) fn render_find_bar(&self, id: &str, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let f = self.term.find.as_ref().filter(|f| f.block == id)?;
+    /// The find bar in pane `id`'s header, drawn from its header's input (query, case, regex,
+    /// count): while it is open there, and while it fades out (`live` false: no clicks).
+    pub(super) fn render_find_bar(
+        &self,
+        id: &str,
+        (query, case, regex, count): &(String, bool, bool, String),
+        live: bool,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
         let (t, theme) = (&self.theme, self.theme);
-        let count = self.find_count().unwrap_or_default();
         let toggle = |name: &'static str, label: &'static str, on: bool, key: &'static str, cx: &mut Context<Self>| {
             div()
                 .id(SharedString::from(format!("find-{name}-{id}")))
@@ -205,46 +210,46 @@ impl Workspace {
                 .hover(|d| d.text_color(rgb(t.title)))
                 .child(label)
                 .tooltip(move |_, cx| cx.new(|_| super::bars::Tip(format!("{label}   ⌥{key}").into(), theme)).into())
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |ws, _, _, cx| {
-                        cx.stop_propagation();
-                        if let Some(f) = ws.term.find.as_mut() {
-                            match name {
-                                "case" => f.case = !f.case,
-                                _ => f.regex = !f.regex,
+                .when(live, |d| {
+                    d.on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |ws, _, _, cx| {
+                            cx.stop_propagation();
+                            if let Some(f) = ws.term.find.as_mut() {
+                                match name {
+                                    "case" => f.case = !f.case,
+                                    _ => f.regex = !f.regex,
+                                }
                             }
-                        }
-                        ws.run_find();
-                        cx.notify();
-                    }),
-                )
+                            ws.run_find();
+                            cx.notify();
+                        }),
+                    )
+                })
         };
-        Some(
-            div()
-                .debug_selector(|| sel(format!("find-bar-{id}")))
-                .flex()
-                .flex_none()
-                .items_center()
-                .gap(px(6.))
-                .child(
-                    div()
-                        .w(px(180.))
-                        .h(px(20.))
-                        .px(px(6.))
-                        .flex()
-                        .items_center()
-                        .rounded(px(4.))
-                        .bg(rgb(t.bg))
-                        .border_1()
-                        .border_color(rgb(t.accent))
-                        .overflow_hidden()
-                        .text_color(rgb(t.title))
-                        .child(format!("{}▏", f.query)),
-                )
-                .child(div().min_w(px(64.)).text_color(rgb(t.muted)).child(count))
-                .child(toggle("case", "Aa", f.case, "C", cx))
-                .child(toggle("regex", ".*", f.regex, "R", cx)),
-        )
+        div()
+            .debug_selector(|| sel(format!("find-bar-{id}")))
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(6.))
+            .child(
+                div()
+                    .w(px(180.))
+                    .h(px(20.))
+                    .px(px(6.))
+                    .flex()
+                    .items_center()
+                    .rounded(px(4.))
+                    .bg(rgb(t.bg))
+                    .border_1()
+                    .border_color(rgb(t.accent))
+                    .overflow_hidden()
+                    .text_color(rgb(t.title))
+                    .child(format!("{query}▏")),
+            )
+            .child(div().min_w(px(64.)).text_color(rgb(t.muted)).child(count.clone()))
+            .child(toggle("case", "Aa", *case, "C", cx))
+            .child(toggle("regex", ".*", *regex, "R", cx))
     }
 }

@@ -1,0 +1,75 @@
+   Compiling leon-app v0.1.0 (/Users/alleo/orca/workspaces/leon-cli/gpui-phase1/crates/leon-app)
+error[E0599]: no method named `overlay_look` found for reference `&Workspace` in the current scope
+  --> crates/leon-app/tests/gpui_overlay_activity.rs:14:79
+   |
+14 |     let look = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.overlay_look("list"));
+   |                                                                               ^^^^^^^^^^^^ method not found in `&Workspace`
+
+error[E0599]: no method named `overlay_look` found for reference `&Workspace` in the current scope
+  --> crates/leon-app/tests/gpui_overlay_reduce.rs:13:47
+   |
+13 |     let launch = ws.read_with(cx, |ws, _| (ws.overlay_look("list"), ws.frame_asked()));
+   |                                               ^^^^^^^^^^^^ method not found in `&Workspace`
+
+error[E0599]: no method named `overlay_look` found for reference `&Workspace` in the current scope
+  --> crates/leon-app/tests/gpui_overlay_turn.rs:18:45
+   |
+18 |     let going = ws.read_with(cx, |ws, _| ws.overlay_look("palette")).expect("fading out").opacity;
+   |                                             ^^^^^^^^^^^^ method not found in `&Workspace`
+
+error[E0599]: no method named `overlay_look` found for reference `&Workspace` in the current scope
+  --> crates/leon-app/tests/gpui_overlay_close.rs:16:79
+   |
+16 |     let look = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.overlay_look("palette"));
+   |                                                                               ^^^^^^^^^^^^ method not found in `&Workspace`
+
+error[E0599]: no method named `overlay_look` found for reference `&Workspace` in the current scope
+  --> crates/leon-app/tests/gpui_overlay_open.rs:11:33
+   |
+11 |     ws.read_with(cx, |ws, _| ws.overlay_look("palette"))
+   |                                 ^^^^^^^^^^^^ method not found in `&Workspace`
+
+error[E0599]: no method named `overlay_look` found for reference `&Workspace` in the current scope
+  --> crates/leon-app/tests/gpui_overlay_bars.rs:18:73
+   |
+18 |     let look = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.overlay_look(name));
+   |                                                                         ^^^^^^^^^^^^ method not found in `&Workspace`
+
+error[E0599]: no method named `overlay_look` found for reference `&Workspace` in the current scope
+  --> crates/leon-app/tests/gpui_overlay_turn.rs:20:45
+   |
+20 |     let back = ws.read_with(cx, |ws, _| (ws.overlay_look("palette"), ws.palette_open(), ws.palette_going()));
+   |                                             ^^^^^^^^^^^^ method not found in `&Workspace`
+
+error[E0599]: no method named `overlay_look` found for reference `&Workspace` in the current scope
+  --> crates/leon-app/tests/gpui_overlay_reduce.rs:16:38
+   |
+16 |         ws.read_with(cx, |ws, _| (ws.overlay_look(name), ws.frame_asked()))
+   |                                      ^^^^^^^^^^^^ method not found in `&Workspace`
+
+error[E0599]: no method named `palette_going` found for reference `&Workspace` in the current scope
+  --> crates/leon-app/tests/gpui_overlay_turn.rs:20:92
+   |
+20 |     let back = ws.read_with(cx, |ws, _| (ws.overlay_look("palette"), ws.palette_open(), ws.palette_going()));
+   |                                                                                            ^^^^^^^^^^^^^
+   |
+help: there is a method `palette_open` with a similar name
+   |
+20 -     let back = ws.read_with(cx, |ws, _| (ws.overlay_look("palette"), ws.palette_open(), ws.palette_going()));
+20 +     let back = ws.read_with(cx, |ws, _| (ws.overlay_look("palette"), ws.palette_open(), ws.palette_open()));
+   |
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `leon-app` (test "gpui_overlay_close") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `leon-app` (test "gpui_overlay_activity") due to 1 previous error
+error: could not compile `leon-app` (test "gpui_overlay_open") due to 1 previous error
+error: could not compile `leon-app` (test "gpui_overlay_bars") due to 1 previous error
+error[E0599]: no method named `overlay_look` found for reference `&Workspace` in the current scope
+  --> crates/leon-app/tests/gpui_overlay_turn.rs:22:44
+   |
+22 |     let rest = ws.read_with(cx, |ws, _| ws.overlay_look("palette").map(|l| l.opacity));
+   |                                            ^^^^^^^^^^^^ method not found in `&Workspace`
+
+error: could not compile `leon-app` (test "gpui_overlay_reduce") due to 2 previous errors
+error: could not compile `leon-app` (test "gpui_overlay_turn") due to 4 previous errors

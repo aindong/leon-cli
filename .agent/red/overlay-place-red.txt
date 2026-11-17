@@ -1,0 +1,5 @@
+thread 'a_fading_overlay_is_drawn_at_its_place' (97362252) panicked at crates/leon-app/tests/gpui_overlay_place.rs:49:49:
+hint
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+--
+error: test failed, to rerun pass `-p leon-app --test gpui_overlay_place`

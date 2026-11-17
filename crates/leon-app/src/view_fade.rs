@@ -14,6 +14,8 @@ pub(super) struct FadeUi {
     clock: gpui::BackgroundExecutor,
     /// Whether the last render asked GPUI for an animation frame (tests can't see the request).
     asked: bool,
+    /// The overlays' fades and what a going one keeps (view_presence.rs).
+    pub(super) overlays: super::presence::OverlayUi,
     /// Motion held at this time, as a test set it, whatever GPUI's clock says (a test that moves
     /// the clock for something else, such as a card's refresh, while a motion stands still).
     held: Option<Instant>,
@@ -24,7 +26,14 @@ pub(super) struct FadeUi {
 
 impl FadeUi {
     pub(super) fn new(clock: gpui::BackgroundExecutor) -> Self {
-        FadeUi { fades: Fades::default(), clock, asked: false, held: None, seen: HashMap::new() }
+        FadeUi {
+            fades: Fades::default(),
+            clock,
+            asked: false,
+            held: None,
+            seen: HashMap::new(),
+            overlays: Default::default(),
+        }
     }
 }
 
@@ -48,7 +57,12 @@ impl Workspace {
     /// Whether anything moves: a drawer's slide, a fade, the theme's change, the overview's open
     /// or close. Render asks GPUI for the next frame while it holds (ADR R6).
     pub fn animating(&self) -> bool {
-        self.sliding() || self.fading() || self.theme_shifting() || self.overview_moving() || self.layout_moving()
+        self.sliding()
+            || self.fading()
+            || self.theme_shifting()
+            || self.overview_moving()
+            || self.layout_moving()
+            || self.overlays_moving()
     }
 
     /// Ask for the next animation frame while anything moves, noting that it did beside the call

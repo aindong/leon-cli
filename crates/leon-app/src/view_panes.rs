@@ -135,7 +135,7 @@ impl Workspace {
         let id = id.to_string();
         let canvas = self.grid_element(&id);
         let headers = self.settings.pane_headers || kind != "pane";
-        let finding = self.term.find.as_ref().is_some_and(|f| f.block == id);
+        let finding = self.find_drawn(&id).is_some(); // open here, or fading out
         let on_link = self.term.hovered.as_ref().is_some_and(|(b, _)| *b == id);
         // built only when shown: building an element notes it as drawn (`sel`)
         let header = headers.then(|| match grab {
@@ -318,6 +318,7 @@ impl Workspace {
         if !self.stopped {
             self.watch_screens(&on_screen);
         }
+        self.note_overlays(); // last: what each overlay shows now, and its fade
     }
 }
 
