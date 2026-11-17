@@ -13,7 +13,7 @@ the server, the CLI and `leon attach`).
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.9.0`.
+one is `1.10.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -28,6 +28,9 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **Serve over Tailscale**: with `serve_tailscale` on, the server also listens on its Tailscale
+  addresses for your own other machines only, and `tailnet://HOST` reaches it without ssh;
+  `server.status` reports `tailnet`, API `1.10.0` ([detail](docs/changelog-detail.md#serve-over-tailscale)).
 - **An icon per program in Leon.app**: each pane's header, tab, sidebar row and overview card
   shows what kind of program runs in it; `session.list_blocks` reports `foreground`, API `1.9.0`
   ([detail](docs/changelog-detail.md#an-icon-per-program-in-leonapp)).

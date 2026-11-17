@@ -14,8 +14,7 @@ use std::time::{Duration, Instant};
 use leon_core::ApiError;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::mpsc;
@@ -46,20 +45,20 @@ struct Request {
     params: Value,
 }
 
-struct Shared {
-    ctx: Arc<Ctx>,
-    open: AtomicUsize,
+pub(crate) struct Shared {
+    pub(crate) ctx: Arc<Ctx>,
+    pub(crate) open: AtomicUsize,
     last_activity: Mutex<Instant>,
 }
 
 impl Shared {
-    fn touch(&self) {
+    pub(crate) fn touch(&self) {
         *self.last_activity.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
     }
 }
 
 /// Counts an open connection for the idle check; the drop also covers a panicking handler.
-struct Open(Arc<Shared>);
+pub(crate) struct Open(pub(crate) Arc<Shared>);
 
 impl Drop for Open {
     fn drop(&mut self) {
@@ -128,6 +127,7 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
     let shared = Arc::new(Shared { ctx, open: AtomicUsize::new(0), last_activity: Mutex::new(Instant::now()) });
     let mut tick = tokio::time::interval(Duration::from_millis(200));
     let mut autosave = persist::Autosave::default();
+    let tailnet = tokio::spawn(crate::tailnet::supervise(shared.clone())); // serve_tailscale
     loop {
         tokio::select! {
             accepted = listener.accept() => {
@@ -145,7 +145,8 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
                 shared.touch();
                 let guard = Open(shared.clone());
                 tokio::spawn(async move {
-                    let _ = connection(stream, &guard.0).await;
+                    let (read, write) = stream.into_split();
+                    let _ = connection(read, write, &guard.0).await;
                     drop(guard);
                 });
             }
@@ -167,6 +168,8 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
             }
         }
     }
+    tailnet.abort(); // no tailnet listener or connection outlives the loop
+    let _ = tailnet.await;
     if let Some(file) = &state_file {
         let st = shared.ctx.state();
         // Under the lock, as in end_programs: no session is created or changed after the save.
@@ -265,27 +268,39 @@ fn lock(path: &Path) -> io::Result<std::fs::File> {
     Ok(f)
 }
 
+/// A connection's reader task, aborted when the connection ends, also when it is cut mid-way
+/// (tailnet.rs, when serving stops): the read half closes with it.
+struct Reader(tokio::task::JoinHandle<io::Result<()>>);
+
+impl Drop for Reader {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 /// One request line from the client, or the end of a line too long to read.
 enum Line {
     Text(Vec<u8>),
     TooLarge,
 }
 
-/// One connection: requests are answered one at a time, in order, while events the connection
-/// attached to are written between replies.
-async fn connection(stream: UnixStream, shared: &Shared) -> io::Result<()> {
-    let (read, mut write) = stream.into_split();
+/// One connection (the Unix socket's, or one tailnet.rs let in): requests are answered one at a
+/// time, in order, while events the connection attached to are written between replies.
+pub(crate) async fn connection<R, W>(read: R, mut write: W, shared: &Shared) -> io::Result<()>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin,
+{
     let (tx, mut lines) = mpsc::channel(1);
-    let reader = tokio::spawn(read_lines(read, tx));
+    let _reader = Reader(tokio::spawn(read_lines(read, tx)));
     let sub = Arc::new(Subscriber::default());
     let mut screens = Screens::default();
     let result = serve_lines(&mut lines, &mut write, &sub, &mut screens, shared).await;
-    reader.abort();
     shared.ctx.park(&sub); // a resumable stream waits for its client to come back
     result
 }
 
-async fn read_lines(read: OwnedReadHalf, tx: mpsc::Sender<Line>) -> io::Result<()> {
+async fn read_lines(read: impl AsyncRead + Unpin, tx: mpsc::Sender<Line>) -> io::Result<()> {
     let mut reader = BufReader::new(read);
     loop {
         let mut line = Vec::new();
@@ -304,7 +319,7 @@ async fn read_lines(read: OwnedReadHalf, tx: mpsc::Sender<Line>) -> io::Result<(
 
 async fn serve_lines(
     lines: &mut mpsc::Receiver<Line>,
-    write: &mut OwnedWriteHalf,
+    write: &mut (impl AsyncWrite + Unpin),
     sub: &Arc<Subscriber>,
     screens: &mut Screens,
     shared: &Shared,
@@ -411,7 +426,7 @@ fn line(v: &Value) -> Vec<u8> {
 
 /// Write one line. Ok(false) if `sub` is dropped meanwhile: that also frees a connection stuck
 /// writing to a client that stopped reading.
-async fn send(write: &mut OwnedWriteHalf, line: &[u8], sub: &Subscriber) -> io::Result<bool> {
+async fn send(write: &mut (impl AsyncWrite + Unpin), line: &[u8], sub: &Subscriber) -> io::Result<bool> {
     let mut out = std::pin::pin!(async {
         write.write_all(line).await?;
         write.flush().await

@@ -4,7 +4,7 @@
 use std::time::{Duration, Instant};
 
 use leon_core::paths::socket_path;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::client::{spawn_server, Client, Fail};
 use crate::{Cli, ServerCmd};
@@ -114,6 +114,19 @@ pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                     st["sessions"],
                     st["socket"].as_str().unwrap_or("")
                 );
+                // the host's words, as the app shows them: no control characters
+                let (t, text) = (&st["tailnet"], |v: &Value| leon_hosts::shown_text(v.as_str().unwrap_or(""), 300));
+                match text(&t["state"]).as_str() {
+                    "serving" => {
+                        let at: Vec<String> = t["addresses"].as_array().into_iter().flatten().map(text).collect();
+                        println!("tailnet  serving on {} for {}", at.join(", "), text(&t["login"]));
+                    }
+                    "stopped" => println!("tailnet  stopped: {}", text(&t["reason"])),
+                    _ => {}
+                }
+                if let Some(r) = t["last_refusal"].as_object() {
+                    println!("tailnet  last refused {}: {}", text(&r["peer"]), text(&r["reason"]));
+                }
             }
             Ok(())
         }

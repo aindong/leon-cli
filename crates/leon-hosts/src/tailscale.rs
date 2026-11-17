@@ -277,14 +277,10 @@ pub fn parse(bytes: &[u8]) -> Result<Tailnet, String> {
     Ok(Tailnet { login, magic_dns, machines })
 }
 
-/// An address inside Tailscale's ranges: 100.64.0.0/10 or fd7a:115c:a1e0::/48. Another one in a
-/// peer's list would let it claim a LAN host as a tailnet machine.
+/// An address inside Tailscale's ranges. Another one in a peer's list would let it claim a LAN
+/// host as a tailnet machine.
 fn tailnet_ip(ip: &str) -> bool {
-    match ip.parse::<std::net::IpAddr>() {
-        Ok(std::net::IpAddr::V4(v4)) => v4.octets()[0] == 100 && v4.octets()[1] & 0xc0 == 64,
-        Ok(std::net::IpAddr::V6(v6)) => v6.segments()[..3] == [0xfd7a, 0x115c, 0xa1e0],
-        Err(_) => false,
-    }
+    ip.parse().is_ok_and(crate::direct::in_ranges)
 }
 
 /// A user id as the `User` map keys it: the status writes it as a number.

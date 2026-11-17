@@ -1,5 +1,5 @@
 {
-  "api_version": "1.9.0",
+  "api_version": "1.10.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -211,6 +211,71 @@
               "string",
               "null"
             ]
+          },
+          "tailnet": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string"
+              },
+              "port": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "addresses": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "login": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "last_refusal": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "peer": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "peer",
+                      "reason",
+                      "at"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "state",
+              "port",
+              "addresses"
+            ]
           }
         },
         "required": [
@@ -219,7 +284,8 @@
           "version",
           "socket",
           "autostarted",
-          "sessions"
+          "sessions",
+          "tailnet"
         ]
       }
     },
@@ -2781,6 +2847,21 @@
               "translucency": {
                 "type": "number",
                 "format": "double"
+              },
+              "serve_tailscale": {
+                "type": "boolean"
+              },
+              "serve_tailscale_port": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "serve_tailscale_tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -2793,7 +2874,10 @@
               "resume",
               "fade_inactive_panes",
               "check_for_updates",
-              "translucency"
+              "translucency",
+              "serve_tailscale",
+              "serve_tailscale_port",
+              "serve_tailscale_tags"
             ]
           },
           "sources": {

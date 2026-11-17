@@ -31,7 +31,8 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   saved sessions) and bridges stdin and stdout to `server.sock`; the server's peer-uid check holds
   because ssh runs the proxy as the host's user. Only a link's connections until one reaches the
   server may autostart; later ones pass `--autostart=false`, so a server stopped on purpose stays
-  stopped. Nothing listens on TCP. An endpoint is parsed into words of `[A-Za-z0-9._-]` (or an
+  stopped. Over ssh nothing listens on TCP (serving over Tailscale is the one listener, off by
+  default: [tailnet.md](tailnet.md)). An endpoint is parsed into words of `[A-Za-z0-9._-]` (or an
   IPv6 address in brackets) that can't start with `-`, a port 1–65535, and no path: anything that
   could reach ssh as an option or a shell as code is a bad command line (exit 2). The hosts list is
   `$LEON_STATE_DIR/hosts.json` (`{"version":1,"hosts":[{label, endpoints, icon}]}`),
@@ -142,5 +143,5 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   trusts the status with host keys, so it is not done.
 - **leon on the other side.** A host without `leon` exits 127 from the fixed remote command, and
   the link says how to install it there (Homebrew, or a release tarball) instead of ssh's words.
-- **Nothing listens.** This is still ssh: a server listening on the tailnet would be leon's first
-  network listener, and is a separate decision.
+- **Serving over the tailnet** is a separate, opt-in path: `serve_tailscale` and `tailnet://`
+  endpoints, in [tailnet.md](tailnet.md).

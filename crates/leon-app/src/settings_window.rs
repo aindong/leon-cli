@@ -23,6 +23,8 @@ use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
 
 #[path = "settings_window_rows.rs"]
 mod rows;
+#[path = "settings_window_tailscale.rs"]
+mod tailscale;
 #[path = "settings_window_theme.rs"]
 mod theme_picker;
 
@@ -78,6 +80,8 @@ pub struct SettingsWindow {
     /// Changes not written yet, in the order they were made; `saving` while they are written.
     queue: VecDeque<(String, Value)>,
     saving: bool,
+    /// `server.status`'s `tailnet`, fetched every 2 s (settings_window_tailscale.rs).
+    tailnet: Option<Value>,
     focus: FocusHandle,
     _appearance: Subscription,
     _activation: Subscription,
@@ -140,11 +144,13 @@ impl SettingsWindow {
             dark: crate::view::is_dark(window.appearance()),
             queue: VecDeque::new(),
             saving: false,
+            tailnet: None,
             focus,
             _appearance: appearance,
             _activation: activation,
         };
         sw.reload(cx);
+        sw.watch_tailnet(cx);
         sw
     }
 
@@ -251,7 +257,8 @@ impl Render for SettingsWindow {
             body = body
                 .child(self.theme_section(&t, cx))
                 .child(self.font_section(&t, cx))
-                .child(self.toggles_section(&t, cx));
+                .child(self.toggles_section(&t, cx))
+                .child(self.tailscale_section(&t, cx));
         }
         let (text, color) = match (&self.error, self.saving) {
             (_, true) => ("Saving…".to_string(), t.muted),

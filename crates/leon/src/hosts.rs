@@ -27,7 +27,8 @@ fn resolve(name: &str) -> Result<(String, Endpoint), Fail> {
         let e: Endpoint = name.parse().map_err(Fail::Usage)?;
         return Ok((e.host.clone(), e));
     }
-    hosts::check_label(name).map_err(|_| Fail::Usage(format!("-H {name:?}: not a host label or ssh:// endpoint")))?;
+    hosts::check_label(name)
+        .map_err(|_| Fail::Usage(format!("-H {name:?}: not a host label or ssh:// or tailnet:// endpoint")))?;
     let list = hosts::load().map_err(Fail::Other)?;
     let host = list.iter().find(|h| h.label == name).ok_or_else(|| unknown(name))?;
     Ok((host.label.clone(), host.endpoint().map_err(Fail::Usage)?))
