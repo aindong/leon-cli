@@ -228,6 +228,7 @@ impl Workspace {
     /// Whether pane `id` (a tile, a dock or a float) draws a header: always on a float or drawer,
     /// on a tile with headers on, or while its find bar is open.
     pub(super) fn header_shown(&self, id: &str, kind: &str) -> bool {
-        self.settings.pane_headers || kind != "pane" || self.term.find.as_ref().is_some_and(|f| f.block == id)
+        self.settings.pane_headers || kind != "pane" || self.find_drawn(id).is_some()
+        // open, or fading out
     }
 }
