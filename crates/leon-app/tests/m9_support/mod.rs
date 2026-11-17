@@ -24,20 +24,38 @@ fn private_dir() -> tempfile::TempDir {
 
 /// A server with no config.
 pub fn setup() -> Setup {
-    let dir = private_dir();
-    let app = Rc::new(embedded::start_at(dir.path().join("server.sock")).unwrap());
-    Setup { dir, app }
+    serve(None, Vec::new())
 }
 
 /// A server that loads `init_lua` as its config; returns once the load has finished.
 pub fn setup_with_config(init_lua: &str) -> Setup {
+    serve(Some(init_lua), Vec::new())
+}
+
+/// `setup`, with every pane in a plain shell (`plain_env`).
+pub fn plain_setup() -> Setup {
+    serve(None, plain_env())
+}
+
+/// `setup_with_config`, with every pane in a plain shell (`plain_env`).
+pub fn plain_setup_with_config(init_lua: &str) -> Setup {
+    serve(Some(init_lua), plain_env())
+}
+
+fn serve(init_lua: Option<&str>, pane_env: Vec<(String, String)>) -> Setup {
     let dir = private_dir();
-    let config = dir.path().join("init.lua");
-    std::fs::write(&config, init_lua).unwrap();
-    let app = Rc::new(embedded::start_configured(dir.path().join("server.sock"), config).unwrap());
-    // client.keymap waits for the load that started with the server
-    let km = app.call("client.keymap", serde_json::json!({})).unwrap();
-    assert!(km["generation"].as_u64().unwrap() >= 1, "the config loaded: {km}");
+    let config = init_lua.map(|lua| {
+        let config = dir.path().join("init.lua");
+        std::fs::write(&config, lua).unwrap();
+        config
+    });
+    let loads = config.is_some();
+    let app = Rc::new(embedded::start_with(dir.path().join("server.sock"), config, pane_env).unwrap());
+    if loads {
+        // client.keymap waits for the load that started with the server
+        let km = app.call("client.keymap", serde_json::json!({})).unwrap();
+        assert!(km["generation"].as_u64().unwrap() >= 1, "the config loaded: {km}");
+    }
     Setup { dir, app }
 }
 
@@ -155,21 +173,18 @@ pub fn stays(cx: &mut VisualTestContext, t: &Terminal, size: (u16, u16)) -> bool
     t.size() == size
 }
 
-/// Panes run a plain `sh` with a private home that holds no shell config, never this machine's:
-/// a login zsh's prompt may set the title to user@host or swallow a line typed before it. Call it
-/// before `setup()`. It sets the process's environment once, before the first shell starts.
-pub fn plain_shell() {
-    static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| {
-        let home = Path::new(env!("CARGO_TARGET_TMPDIR")).join("plain-home");
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::env::set_var("SHELL", "/bin/sh");
-        std::env::set_var("HOME", &home);
-        // a login sh reads $ENV, and /etc/bashrc reads /etc/bashrc_$TERM_PROGRAM
-        std::env::remove_var("ENV");
-        std::env::remove_var("TERM_PROGRAM");
-    });
+/// What a plain-shell server gives every pane, so it never runs this machine's shell config (a
+/// login zsh's prompt may set the title to user@host, or swallow a line typed before it): `/bin/sh`,
+/// a private home that holds no shell config, and no `$ENV` or `/etc/bashrc_$TERM_PROGRAM` to read.
+/// The server sets it on each pane; this process's environment stays as it is.
+pub fn plain_env() -> Vec<(String, String)> {
+    let home = Path::new(env!("CARGO_TARGET_TMPDIR")).join("plain-home");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+    [("SHELL", "/bin/sh"), ("HOME", home.to_str().unwrap()), ("ENV", ""), ("TERM_PROGRAM", "")]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
 }
 
 /// What `leon config set KEY VALUE` does: rewrite init.lua, then reload the running server.

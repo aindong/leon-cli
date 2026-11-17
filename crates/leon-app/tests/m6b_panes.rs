@@ -23,9 +23,9 @@ struct Setup {
 }
 
 fn setup() -> Setup {
-    m9_support::plain_shell(); // the tests type into panes just made
     let dir = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
-    let app = Rc::new(embedded::start_at(dir.path().join("server.sock")).unwrap());
+    // a plain shell: the tests type into panes just made
+    let app = Rc::new(embedded::start_with(dir.path().join("server.sock"), None, m9_support::plain_env()).unwrap());
     Setup { _dir: dir, app }
 }
 

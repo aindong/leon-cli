@@ -107,15 +107,17 @@ pub(crate) fn spawn(
     cwd: Option<PathBuf>,
     shown: &[u8],
 ) -> Result<Terminal, ApiError> {
-    let mut env: Vec<(String, String)> = [
-        ("LEON_SESSION", session_id),
-        ("LEON_BLOCK", block_id),
-        ("LEON_SERVER", ctx.info.socket.as_str()),
-        ("TERM", "xterm-256color"),
-    ]
-    .iter()
-    .map(|(k, v)| (k.to_string(), v.to_string()))
-    .collect();
+    let mut env = ctx.pane_env.clone(); // leon's variables after it, so they win
+    env.extend(
+        [
+            ("LEON_SESSION", session_id),
+            ("LEON_BLOCK", block_id),
+            ("LEON_SERVER", ctx.info.socket.as_str()),
+            ("TERM", "xterm-256color"),
+        ]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string())),
+    );
     // `leon` resolves in every terminal, even when the user's PATH lacks where it was installed
     if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(PathBuf::from)) {
         let path = std::env::var_os("PATH")

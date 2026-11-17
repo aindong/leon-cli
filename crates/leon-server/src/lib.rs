@@ -65,6 +65,9 @@ pub struct Ctx {
     pub log: Option<String>,
     /// Serving over Tailscale (tailnet.rs).
     pub tailnet: tailnet::Tailnet,
+    /// Set on top of this process's environment for every pane, under leon's own variables: what
+    /// an embedding test gives its shells (a plain `sh`, a private home). Empty in leon's server.
+    pub pane_env: Vec<(String, String)>,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -119,6 +122,7 @@ impl Ctx {
             started_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()),
             log: None,
             tailnet: tailnet::Tailnet::default(),
+            pane_env: Vec::new(),
         }
     }
 

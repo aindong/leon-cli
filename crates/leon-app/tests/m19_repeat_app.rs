@@ -21,8 +21,7 @@ end, nil, { repeats = true })
 
 #[gpui::test]
 fn prefix_then_the_key_again(cx: &mut TestAppContext) {
-    plain_shell(); // the clock step below reads what a pane's prompt shows
-    let s = setup_with_config(CONFIG);
+    let s = plain_setup_with_config(CONFIG); // the clock step below reads what a pane's prompt shows
     let km = s.app.call("client.keymap", json!({})).unwrap();
     assert_eq!(km["settings"]["repeat_time"], 2000);
     let h = km["bindings"].as_array().unwrap().iter().find(|b| b["key"] == "ctrl+b>h").unwrap();

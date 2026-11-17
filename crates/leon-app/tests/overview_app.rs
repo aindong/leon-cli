@@ -12,8 +12,7 @@ use serde_json::json;
 /// Every test here types into its panes: a plain shell, never this machine's (a login zsh can
 /// swallow a line typed before its prompt).
 fn setup() -> Setup {
-    plain_shell();
-    m10b_support::setup()
+    plain_setup()
 }
 
 const BLOCKED: &str = r"printf '\033]7501;state=blocked\007'; echo b-sent";

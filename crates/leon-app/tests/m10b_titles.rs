@@ -13,8 +13,7 @@ fn type_sizes() {
 
 #[gpui::test]
 fn a_tab_is_named_by_its_label_then_its_programs_title_then_the_program(cx: &mut TestAppContext) {
-    plain_shell(); // the first title is the program's, not one a login shell's prompt sets
-    let s = setup();
+    let s = plain_setup(); // the first title is the program's, not one a login shell's prompt sets
     let (ws, cx) = open(cx, &s.app);
     let titles = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.tab_titles());
     let first = titles(cx);
