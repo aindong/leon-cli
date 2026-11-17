@@ -29,8 +29,8 @@ fn updates_md_describes_the_app() {
 
 #[test]
 fn the_setting_is_listed() {
-    let lua = read("docs/lua.md");
-    assert!(lua.contains("| `check_for_updates` |"), "docs/lua.md's settings table");
-    assert!(lua.len() < 20_000, "docs/lua.md stays under 20 KB: {}", lua.len());
+    let lua = read("docs/lua/settings.md");
+    assert!(lua.contains("| `check_for_updates` |"), "docs/lua/settings.md's settings table");
+    assert!(lua.len() < 20_000, "docs/lua/settings.md stays under 20 KB: {}", lua.len());
     assert!(read("docs/cli/settings.md").contains("check_for_updates"));
 }

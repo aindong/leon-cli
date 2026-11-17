@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.8.0**. Every method is marked:
+API version **1.9.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -351,7 +351,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.8.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.9.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -459,6 +459,7 @@ same facts for the server you run.
 | `resume` | string | yes | What a restored block does with its program's resume command: `ask`, `always` or `never`. |
 | `fade_inactive_panes` | number | yes | How far the app fades the panes without the focus toward the window's background, from 0 (off) to 0.8. |
 | `check_for_updates` | boolean | yes | Leon.app looks for a newer release once a day; false, only when asked. |
+| `translucency` | number | yes | How much of the desktop shows through Leon.app's window, from 0 (opaque) to 0.8. |
 
 **`ThemeChoice`:** A theme name for each OS appearance (the same one for both unless init.lua gives two).
 
@@ -556,6 +557,11 @@ same facts for the server you run.
           "check_for_updates": {
             "description": "Leon.app looks for a newer release once a day; false, only when asked.",
             "type": "boolean"
+          },
+          "translucency": {
+            "description": "How much of the desktop shows through Leon.app's window, from 0 (opaque) to 0.8.",
+            "type": "number",
+            "format": "double"
           }
         },
         "required": [
@@ -567,7 +573,8 @@ same facts for the server you run.
           "hint_patterns",
           "resume",
           "fade_inactive_panes",
-          "check_for_updates"
+          "check_for_updates",
+          "translucency"
         ]
       },
       "ThemeChoice": {

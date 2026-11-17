@@ -3,8 +3,11 @@
 
 #[test]
 fn the_overview_is_documented() {
-    let readme = include_str!("../../../README.md");
-    let row = readme.lines().find(|l| l.starts_with("| ⌘⇧\\, ⌘\\ |")).expect("the README's table lists ⌘⇧\\ and ⌘\\");
+    let shortcuts = include_str!("../../../docs/shortcuts.md");
+    let row = shortcuts
+        .lines()
+        .find(|l| l.starts_with("| ⌘⇧\\, ⌘\\ |"))
+        .expect("docs/shortcuts.md's table lists ⌘⇧\\ and ⌘\\");
     assert!(row.contains("Overview") && row.contains("this session"), "{row}");
     let arch = include_str!("../../../docs/architecture/attention.md");
     for word in ["client.overview.toggle", "client.overview.session.toggle", "Reduce Motion", "hover"] {

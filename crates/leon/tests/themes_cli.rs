@@ -41,7 +41,8 @@ fn the_docs_name_the_themes_and_the_switcher() {
     }
     let readme = doc("README.md");
     assert!(readme.contains("eight themes"), "the README's themes line");
-    let row = readme.lines().find(|l| l.starts_with("| ⌘⇧T |")).expect("the README's shortcut table has ⌘⇧T");
+    let shortcuts = doc("docs/shortcuts.md");
+    let row = shortcuts.lines().find(|l| l.starts_with("| ⌘⇧T |")).expect("docs/shortcuts.md's table has ⌘⇧T");
     assert!(row.contains("theme"), "{row}");
     assert!(doc("docs/cli/settings.md").contains("Change Theme…"), "docs/cli/settings.md names the switcher");
 }

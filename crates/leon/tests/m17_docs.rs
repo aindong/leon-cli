@@ -25,7 +25,7 @@ fn docs_cover_attach() {
     for word in ["block.watch", "ratatui", "SIGHUP", "own size", "prefix"] {
         assert!(part.contains(word), "architecture.md's terminal-client paragraph mentions {word}");
     }
-    let lua = doc("docs/lua.md");
-    assert!(lua.contains("leon.mode(\"attach\", { prefix ="), "docs/lua.md shows the attach prefix");
-    assert!(lua.contains("attach/"), "docs/lua.md shows attach/ bindings");
+    let lua = doc("docs/lua/keys.md");
+    assert!(lua.contains("leon.mode(\"attach\", { prefix ="), "docs/lua/keys.md shows the attach prefix");
+    assert!(lua.contains("attach/"), "docs/lua/keys.md shows attach/ bindings");
 }

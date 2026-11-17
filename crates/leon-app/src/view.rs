@@ -213,6 +213,8 @@ pub struct Workspace {
     grid_renders: Rc<RefCell<HashMap<String, u64>>>,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
+    /// The translucent window (view_glass.rs).
+    glass: glass_view::GlassUi,
     overview: overview_view::OverviewUi,
     /// Leon.app's updates (view_update.rs): the notice, and the look for a release.
     updates: Arc<crate::updates::Updater>,
@@ -290,6 +292,8 @@ impl Workspace {
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |ws, window, cx| {
             ws.window_active = window.is_window_active();
+            ws.note_reduce_transparency();
+            ws.update_glass(window, cx);
             cx.notify()
         });
         // the window's frame and display are kept with the settings, and saved when the app quits
@@ -297,6 +301,7 @@ impl Workspace {
         let bounds = cx.observe_window_bounds(window, |ws, window, cx| {
             ws.settings.window = Some(state::frame(window.window_bounds().get_bounds()));
             ws.settings.display = window.display(cx).map(|d| u32::from(d.id()));
+            ws.update_glass(window, cx); // full screen in or out
         });
         let quit = cx.on_app_quit(|ws, _| {
             ws.save_settings();
@@ -304,7 +309,8 @@ impl Workspace {
         });
         let release = cx.on_release(|ws, _| ws.save_settings());
         let appearance = cx.observe_window_appearance(window, |ws, window, cx| {
-            ws.set_appearance(look_view::is_dark(window.appearance()), cx)
+            ws.set_appearance(look_view::is_dark(window.appearance()), cx);
+            ws.update_glass(window, cx)
         });
         // shortcut: every notify of the workspace brings what render draws from up to date (R5),
         // and gives each grid its input; a pushed screen reaches its grid from the poll instead
@@ -368,6 +374,7 @@ impl Workspace {
             grids: HashMap::new(),
             grid_renders: Rc::default(),
             fade: Default::default(),
+            glass: glass_view::GlassUi::new(window.window_handle()),
             overview: Default::default(),
             updates,
             updates_auto: false,
@@ -386,37 +393,9 @@ impl Workspace {
         let seen = ws.screens_seen();
         ws.prepare(); // the first frame comes before any notify
         ws.sync_grids(&seen, cx);
+        ws.note_reduce_transparency();
+        ws.update_glass(window, cx);
         ws
-    }
-
-    /// The target block and its screen (an empty one until the first arrives: keys typed by then
-    /// still go to the program).
-    fn target_screen(&self) -> Option<(String, String, Arc<render::Frame>)> {
-        let (sid, id, _) = self.target()?;
-        let f = self.app.model().screens.get(&id).cloned().unwrap_or_default();
-        Some((sid, id, f))
-    }
-
-    /// (session id, target block id, whether it is zoomed) of the selected session's active window.
-    fn target(&self) -> Option<(String, String, bool)> {
-        let sid = self.session_id.clone()?;
-        let m = self.app.model();
-        let s = m.session(&sid)?;
-        let w = s.windows.get(s.active)?;
-        Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
-    }
-
-    /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
-    /// killed from the CLI, or its host went away) hands over to the session now in its place.
-    fn settle(&mut self, rows: &[SessionRow]) {
-        if let Some(i) = rows.iter().position(|r| Some(&r.id) == self.session_id.as_ref()) {
-            self.selected_at = i;
-            self.use_host(rows[i].host);
-            return;
-        }
-        self.selected_at = self.selected_at.min(rows.len().saturating_sub(1));
-        self.session_id = rows.get(self.selected_at).map(|r| r.id.clone());
-        self.use_host(rows.get(self.selected_at).map_or(0, |r| r.host));
     }
 
     /// Run a layout method on the selected session; redraw.
@@ -446,6 +425,8 @@ mod fade_view;
 mod find;
 #[path = "view_floats.rs"]
 mod floats_view;
+#[path = "view_glass.rs"]
+mod glass_view;
 #[path = "view_grid.rs"]
 mod grid_view;
 #[path = "view_handlers.rs"]

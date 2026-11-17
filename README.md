@@ -82,66 +82,8 @@ A leon from Homebrew is updated by `brew upgrade`, and one from a `.deb` by inst
 
 ### From source
 
-To build leon yourself you need a Rust toolchain ([rustup](https://rustup.rs)) and git. The two
-sections below build it on macOS and on Linux.
-
-### macOS
-
-You need macOS 11 or later. From a checkout of this repository:
-
-```sh
-scripts/install.sh
-```
-
-That builds `Leon.app`, copies it to `~/Applications`, and links the `leon` command into
-`~/.local/bin` (use `--prefix DIR` for `DIR/bin`). It never uses root, prints each thing it does,
-is safe to run again, and refuses to replace anything at those paths that it didn't install.
-`scripts/install.sh --uninstall` removes both. Open **Leon** from Finder, Spotlight or the Dock, or
-type `leon`. To build only the app, `scripts/bundle.sh` writes `target/release/Leon.app`.
-
-The app is a client of the leon server. It attaches to the one running (from the shell or an
-earlier launch) or starts it. Quitting the app leaves the server and your programs running;
-`leon server stop`, or **Quit and End All Sessions…** in the leon menu, ends them.
-
-### Linux
-
-On Linux leon is the server, the CLI and `leon attach` (agents and Lua scripts too); the app isn't
-there yet, so `leon` alone in a terminal runs `leon attach`. Build it with `cargo`:
-
-```sh
-cargo build --release -p leon
-```
-
-That gives a headless `target/release/leon`; put it on your `PATH`. It needs glibc 2.34 or newer
-(Debian 12, Ubuntu 22.04, RHEL 9 and later). The socket goes in `$XDG_RUNTIME_DIR/leon` when your
-session sets it. With Docker you can build packages instead:
-
-```sh
-scripts/package-linux.sh                 # or --arch amd64 / --arch arm64
-```
-
-That writes a tarball and a `.deb` to `target/linux/<arch>/` and checks that both install and run
-in clean containers. Install the `.deb` on Debian or Ubuntu with `dpkg` (as root):
-
-```sh
-dpkg -i target/linux/$(dpkg --print-architecture)/leon_*.deb
-```
-
-or unpack the tarball anywhere and put its `leon` on your `PATH`:
-
-```sh
-tar xzf target/linux/*/leon-*-"$(uname -m)"-linux.tar.gz -C ~/.local
-ln -s ~/.local/leon-*-linux/leon ~/.local/bin/leon
-```
-
-### Release files
-
-`scripts/release.sh` builds, from a clean clone of one commit, the files a release has:
-`Leon-<version>-macos-<arch>.zip` (Leon.app, signed ad hoc and not notarized), the CLI tarball for
-macOS, a tarball and a `.deb` for Linux on arm64 and x86_64, and `SHA256SUMS`. It runs on macOS and
-needs Docker for the Linux packages. `leon --version` names the release and the commit it was
-built from. A pushed tag does the same on GitHub, signs every file and publishes the release:
-[docs/releases.md](docs/releases.md).
+To build leon yourself, `scripts/install.sh` on macOS or `cargo` on Linux:
+[docs/install.md](docs/install.md) has the steps, and the files a release has.
 
 ## The first five commands
 
@@ -214,26 +156,9 @@ leon hosts check
 leon hosts add --tailscale          # from your tailnet (Tailscale SSH: no keys)
 ```
 
-A dropped Wi-Fi link is retried for a minute: `leon events` and the app resume without losing or
-repeating an event, and `leon attach` says so, then reconnects and redraws. Keys
-typed while the link is stalled or down arrive whole or not at all, and the status bar says how many
-were not sent (keys sent as a stall starts may land). Use ssh keys or an agent: each
-connection is its own ssh session.
+Dropped links, keys typed while one is down, and the hosts in the app's sidebar are in
+[docs/remote-hosts.md](docs/remote-hosts.md).
 
-The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
-and tabs and a dot for its connection. A remote pane works like a local one, with the host's name in
-its header; New Session, New Tab and splits act on the machine of the focused pane, and the palette
-has New Session on each machine and Add Host… (your tailnet's machines, or a label, then an
-`ssh://` endpoint). Click a host's label to fold it away. The app's ssh never asks for a password. A host that needs one says
-`needs login: run leon hosts check devbox in a terminal`; do that once (accept the host key, unlock
-your key), and the app's next try gets in. While a link is down the host's panes keep their last
-screens under a "reconnecting" note.
-
-![The sidebar with This Mac and a devbox, each with its sessions and tabs](docs/images/m16b-hosts.png)
-
-![A pane on the devbox, focused, with the host's name in its header](docs/images/m16b-remote-pane.png)
-
-![A host that can't be reached, with ssh's reason under its label](docs/images/m16b-unreachable.png)
 
 ## Let an agent drive it
 
@@ -262,12 +187,13 @@ The tab's row gets a symbol, and the pane's header gets the symbol with the prog
 
 ![The leon app: sessions in the sidebar with their tabs as rows, a tab split in three, and an agent's progress on its row and pane header](docs/images/app-status.png)
 
-With more than one pane in a tab, the panes you aren't in are drawn a little faded, so your eye
-stays on the focused one; the fade follows the focus over 120 ms (at once with Reduce Motion).
-What you are waiting for is never faded: a status symbol keeps its colour, and a pane that is
-blocked, has failed, or finished since you last looked stays at full strength. In init.lua,
-`leon.set("fade_inactive_panes", 0)` turns the fade off and a number up to 0.8 sets its strength
-(0.35 by default).
+With more than one pane in a tab, the panes you aren't in are faded, so your eye stays on
+the focused one. What you are waiting for is never faded: a status symbol keeps its
+colour, and a pane that is blocked, has failed, or finished since you last looked stays at full
+strength. `leon.set("fade_inactive_panes", N)` sets it from 0 (off) to 0.8 (default 0.35).
+
+The window is translucent, tinted by the theme, with text readable over any desktop;
+`leon.set("translucency", 0)` makes it opaque.
 
 ⌘K switches to any session, tab or block on any host, the most recent first, and ⌘⇧A lists what
 needs you: blocked first (with what it is waiting for), then errors, finished runs you haven't
@@ -284,45 +210,9 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 
 ## App shortcuts
 
-| Keys | Action |
-|---|---|
-| ⌘N | New session |
-| ⌘T | New tab |
-| ⌘D | Split right |
-| ⌘⇧D | Split down |
-| ⌘⌥←, ⌘⌥→, ⌘⌥↑, ⌘⌥↓ | Focus the pane that way |
-| ⌘⇧↩ | Zoom the pane (again to undo) |
-| ⌘W | Close the pane |
-| ⌘⌥F, ⌘⌥⇧F | Float the pane above the others, put it back in the tiles (drag its header to move it, an edge to resize it) |
-| ⌘J | Show or hide the scratch drawer: a shell at the bottom, opened in the focused pane's directory, that keeps running while hidden |
-| ⌘⌃←, ⌘⌃→, ⌘⌃↓ | Dock the pane as a drawer on the left, right or bottom (drag its edge to resize it) |
-| ⌘⇧], ⌘⇧[ | Next, previous tab |
-| ⌘1 … ⌘9 | Go to tab 1–9 |
-| ⌘C, ⌘V | Copy the selection, paste |
-| ⌘A | Select everything in the pane, scrollback too |
-| ⌘F | Find in the pane: ↩ and ⇧↩ step, ⌥C case, ⌥R regex, esc closes |
-| ⌘G, ⌘⇧G | Next, previous match |
-| ⌘⇧C | Copy mode: vi keys over the scrollback (h j k l, w b, 0 $, g ⇧G, ⌃U ⌃D), v and ⇧V select, / and ? search with n and ⇧N, y copies, esc or q leaves |
-| ⌘⇧H | Hints: a label on every URL, path, hash, IP and long number on screen; type one to copy it, in upper case to type it into the pane |
-| ⇧PageUp, ⇧PageDown | Scroll a page back, forward |
-| ⌘↑, ⌘↓ | Scroll to the oldest line, back to the bottom |
-| ⌘B | Show or hide the sidebar |
-| ⌘⇧S | Tabs in the sidebar or in the titlebar (saved for the next launch) |
-| ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
-| ⌘, | Settings: theme for dark and light mode, font, notifications, copy on select (into init.lua) |
-| ⌘⇧T | Change theme, shown live as you move; ↩ keeps it, esc goes back |
-| ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
-| ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
-| ⌘⇧\, ⌘\ | Overview: every tab (⌘\: this session's), live; arrows and ↩ go, typing filters; resting on a tab previews it |
-| ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (shown panes) |
-| ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
+Every key the app has, from ⌘N to ⌘Q, with how to change one, is in
+[docs/shortcuts.md](docs/shortcuts.md).
 
-These are defaults. A `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
-removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow. Every
-button names its action and shortcut on hover. The wheel scrolls a pane back through its
-scrollback; drag to select, option+drag for a rectangle; hold ⌘ over a link to open it with a click.
-A program that asks for the mouse (an editor or `htop`) gets clicks and the wheel; hold shift to
-select anyway.
 
 ## Configuration
 

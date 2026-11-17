@@ -48,9 +48,13 @@ fn images() -> Vec<PathBuf> {
 fn image_names_readme_and_image_bytes_name_no_user_or_machine() {
     let names = private_names();
     assert!(!names.is_empty(), "found the login and hostname to look for");
-    let readme = std::fs::read_to_string(root().join("README.md")).unwrap();
+    // the README and the pages split out of it (file-size limit)
+    let pages = ["README.md", "docs/install.md", "docs/shortcuts.md", "docs/remote-hosts.md"]
+        .map(|p| (p, std::fs::read_to_string(root().join(p)).unwrap()));
     for name in &names {
-        assert!(!mentions(&readme, name), "README.md mentions {name:?}");
+        for (page, text) in &pages {
+            assert!(!mentions(text, name), "{page} mentions {name:?}");
+        }
         for img in images() {
             let file = img.file_name().unwrap().to_string_lossy().to_string();
             assert!(!mentions(&file, name), "{file} is named after {name:?}");

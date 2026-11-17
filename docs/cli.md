@@ -235,7 +235,7 @@ Call a block method, such as `size` or `program_status`, or a full name like
 `dev.leon.terminal.size`. `ARGS` is a JSON object, `@file`, or `-` for stdin.
 
 `set_resume` registers the command that resumes this block's program after a restart (`null`
-clears it); a restored block offers it by the config's `resume` setting (see [lua.md](lua.md)):
+clears it); a restored block offers it by the config's `resume` setting (see [lua/settings.md](lua/settings.md)):
 
 ```sh
 leon block call set_resume '{"command": ["claude", "--resume", "c7583d2c-3133-4d13-b5f0-45883f1cabcb"]}'

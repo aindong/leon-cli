@@ -110,7 +110,7 @@ impl Workspace {
             .flex_none()
             .w(px(width))
             .h_full()
-            .bg(rgb(t.chrome))
+            .bg(self.chrome_fill())
             .child(self.render_toolbar(cx))
             .child(div().id("sidebar-list").flex_1().overflow_y_scroll().child(items))
             .child(
