@@ -33,6 +33,12 @@ chmod 700 "$d"
 mkdir -m 700 -p "$d/run" "$d/state" "$d/dev/run" "$d/dev/state"
 home=$d/home
 mkdir -p "$home/bin" "$home/.config/leon" "$home/src/auth" "$home/src/site" "$home/src/infra" "$home/src/api" "$home/src/deploy"
+# a plain desktop behind the window for its translucency (scripts/deskshot.swift), its own binary
+# so the window's owner is the pid we start
+swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift" 2>/dev/null
+# the window: 80% of the screen, centred, with room for a pane or two more
+read -r wx wy ww wh < <("$d/deskshot" window 80)
+echo "demo-shots: a ${ww} x ${wh} pt window at $wx,$wy"
 # a neutral shell: no user or host in the prompt or the title
 cat >"$home/.zshrc" <<'EOF'
 PROMPT='%1~ %% '
@@ -47,6 +53,31 @@ leon.bind("ctrl+b>%", "pane.split.right")
 leon.bind("ctrl+b>\"", "pane.split.down")
 leon.bind("ctrl+b>z", "pane.zoom")
 EOF
+# ctrl+alt+g: docs/lua/keys.md's popup recipe, as it is there
+awk '/<!-- popup-git -->/{on=1;next} /<!-- \/popup-git -->/{on=0} on && !/^```/' docs/lua/keys.md >>"$home/.config/leon/init.lua"
+# the popup's history: a made-up author and fixed dates, so the same hashes every run
+(
+  export GIT_AUTHOR_NAME=demo GIT_AUTHOR_EMAIL=demo@example.com GIT_COMMITTER_NAME=demo GIT_COMMITTER_EMAIL=demo@example.com
+  n=0
+  c() { n=$((n + 1)); export GIT_AUTHOR_DATE="@$((1793000000 + n * 86400)) +0000" GIT_COMMITTER_DATE="@$((1793000000 + n * 86400)) +0000"; }
+  cd "$home/src/auth"
+  mkdir src tests
+  printf '[package]\nname = "auth"\nversion = "0.4.0"\n' >Cargo.toml
+  : >README.md; : >src/lib.rs; : >src/session.rs; : >src/token.rs; : >tests/session_test.rs
+  git init -q --template= -b main .
+  c; git add -A; git commit -q -m "sessions: a cookie per login"
+  c; git commit -q --allow-empty -m "tokens: sign with the key from the vault"
+  git checkout -q -b expiry
+  c; git commit -q --allow-empty -m "sessions expire after an hour idle"
+  c; git commit -q --allow-empty -m "a test clock instead of sleeps"
+  git checkout -q main
+  c; git commit -q --allow-empty -m "refresh keeps the session id"
+  c; git merge -q --no-ff expiry -m "merge expiry"
+  c; git commit -q --allow-empty -m "login: rate limit by address"
+  c; git commit -q --allow-empty -m "logout clears the cookie on every path"
+  c; git commit -q --allow-empty -m "tokens: rotate keys weekly"
+  git checkout -q -b fix-flaky-login
+)
 : >"$home/.config/leon/none.lua"
 
 # show TITLE TEXTFILE [OSC7501 PAIRS]: a "program" that sets its title and status and shows the
@@ -67,116 +98,7 @@ chmod +x "$home/bin/show"
 b64() { printf %s "$1" | base64; }
 txt() { cat >"$d/$1.txt"; }
 
-txt claude <<'EOF'
-> Fix the flaky login test in auth/session_test.rs
-
-  I'll read the test first, then run it a few times to see
-  how it fails.
-
-  Read auth/session_test.rs (212 lines)
-  The test sleeps 50 ms and then checks the session expired.
-  On a busy machine the check runs before the timer fires.
-
-  Update auth/session_test.rs
-   - std::thread::sleep(Duration::from_millis(50));
-   + clock.advance(Duration::from_secs(61));
-
-  Running the tests beside me:
-    leon split --label tests -- cargo test -p auth
-EOF
-txt tests <<'EOF'
-   Compiling auth v0.4.0 (/src/auth)
-    Finished `test` profile in 4.21s
-     Running unittests src/lib.rs
-
-running 18 tests
-test session::tests::refresh_keeps_the_id ... ok
-test session::tests::expired_session_is_rejected ... ok
-test session::tests::login_sets_a_cookie ... ok
-test token::tests::round_trip ... ok
-test token::tests::rejects_a_bad_signature ... ok
-EOF
-txt server <<'EOF'
-listening on http://127.0.0.1:8080
-GET /login 200 3ms
-POST /session 201 12ms
-GET /me 200 2ms
-EOF
-txt readme <<'EOF'
-> Review the README for the 0.4 release
-
-  Checked every command in README.md against --help: all current.
-  Fixed two broken links in the install section.
-EOF
-txt migrate <<'EOF'
-> Migrate the users table to the new schema
-
-  Wrote migrations/0042_users_email_unique.sql
-  Dry run on staging: 18,204 rows, 0 conflicts.
-
-  Run it on production now?
-EOF
-txt api <<'EOF'
-> Add rate limiting to the public API
-
-  Plan: a token bucket per API key in src/limits.rs, 100 requests
-  a minute, with Retry-After on a 429.
-
-  Edit src/routes.rs to add the middleware?
-EOF
-txt deploy <<'EOF'
-$ ./deploy.sh api v2.3.1
-rolling out api v2.3.1 to 4 pods
-pod api-7f9c-1 ready
-pod api-7f9c-2 CrashLoopBackOff
-rollout failed: 2 of 4 pods crashed
-EOF
-txt notes <<'EOF'
-## 0.4.0
-
-- Sessions survive a server restart
-- The login test no longer sleeps
-- Rate limits on the public API
-EOF
-txt build <<'EOF'
-$ make release
-[ 40%] Building CXX object src/CMakeFiles/core.dir/engine.cpp.o
-EOF
-
-txt routes <<'EOF'
-use axum::{routing::get, Router};
-
-pub fn routes() -> Router {
-    Router::new()
-        .route("/health", get(health))
-        .route("/v1/orders", get(orders::list).post(orders::create))
-        .layer(limits::per_key(100))
-}
-EOF
-txt pytest <<'EOF'
-============================= test session starts ==============================
-collected 42 items
-
-tests/test_orders.py ..........                                          [ 23%]
-tests/test_limits.py ........                                            [ 42%]
-tests/test_users.py ........................                             [100%]
-
-============================== 42 passed in 1.84s ==============================
-EOF
-txt caddy <<'EOF'
-INFO  using config from file  {"file": "Caddyfile"}
-INFO  serving initial configuration
-INFO  http.log.access  {"method": "GET", "uri": "/health", "status": 200}
-EOF
-txt htop <<'EOF'
-  CPU [|||||||||               24.1%]   Tasks: 212, 3 running
-  Mem [||||||||||||       6.12G/16.0G]   Load average: 1.42 1.20 0.98
-
-    PID  CPU% MEM%  Command
-   4121  31.0  2.4  api-server
-   4180  12.5  1.1  postgres
-   4202   3.2  0.4  worker --queue orders
-EOF
+. "$repo/scripts/demo-texts.sh"
 
 # LEON_RELEASE_URL: the app's look for a release goes to a loopback port that refuses, not to GitHub
 base=(env -u LEON_SESSION -u LEON_BLOCK -u ZDOTDIR HOME="$home" SHELL=/bin/zsh PATH="$home/bin:$PATH" LEON_RELEASE_URL=http://127.0.0.1:9 LEON_TAILSCALE="$d/no-tailscale")
@@ -225,32 +147,35 @@ here new auth >/dev/null
 claude=$(here -s auth run --keep-open -c "$home/src/auth" -- show "Fix the flaky login test" "$d/claude.txt" \
   "state=working:progress=60:title=$(b64 Claude):msg=$(b64 'running the tests')")
 here -s auth window close 1 >/dev/null
-tests=$(here -s auth split -b "$claude" --focus=false -c "$home/src/auth" -- show tests.sh "$d/tests.txt")
-here -s auth split -b "$tests" --split below --focus=false -c "$home/src/auth" >/dev/null
+# the agent | its tests over a shell | a monitor over the access log
+tests=$(here -s auth split -b "$claude" --ratio 60 --focus=false -c "$home/src/auth" -- show tests.sh "$d/tests.txt")
+mon=$(here -s auth split -b "$tests" --ratio 45 --focus=false -c "$home/src/auth" -- show htop "$d/htop.txt")
+here -s auth split -b "$mon" --split below --focus=false -c "$home/src/auth" -- show "tail -f access.log" "$d/access.txt" >/dev/null
+shell=$(here -s auth split -b "$tests" --split below --focus=false -c "$home/src/auth")
+here -s auth send -b "$shell" 'git --no-pager log --oneline --graph' >/dev/null
+here -s auth send-key -b "$shell" enter >/dev/null
 tab auth auth "dev server" server >/dev/null
 here -s auth focus "$claude" >/dev/null 2>&1 || true
 here new site >/dev/null
 tab site site "Review the README" readme "state=done" >/dev/null
 here -s site window close 1 >/dev/null
 here new infra >/dev/null
-tab infra infra "Migrate the users table" migrate \
-  "state=blocked:kind=question:title=$(b64 'Run it on production now?')" >/dev/null
+migrate=$(tab infra infra "Migrate the users table" migrate \
+  "state=blocked:kind=question:title=$(b64 'Run it on production now?')")
 here -s infra window close 1 >/dev/null
+here -s infra split -b "$migrate" --focus=false -c "$home/src/infra" -- show "nvim 0042_users_email_unique.sql" "$d/sql.txt" >/dev/null
 
-# the window: 1440 x 900 points on the main display, sidebar style
+# the window on the main display, sidebar style
 display=$(swift - 2>/dev/null <<'SWIFT'
 import CoreGraphics
 print(CGMainDisplayID())
 SWIFT
 )
 cat >"$d/state/app.json" <<EOF
-{"tab_style":"sidebar","pane_headers":true,"sidebar_width":230,"window":{"x":160,"y":120,"w":1440,"h":900},"display":$display,"collapsed_hosts":[]}
+{"tab_style":"sidebar","pane_headers":true,"sidebar_width":230,"window":{"x":$wx,"y":$wy,"w":$ww,"h":$wh},"display":$display,"collapsed_hosts":[]}
 EOF
 
 ts=$d/no-tailscale
-# a plain desktop behind the window for its translucency (scripts/deskshot.swift), its own binary
-# so the window's owner is the pid we start
-swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift"
 open_app() {
   take_lock
   "$d/deskshot" backdrop &
@@ -285,19 +210,26 @@ in_front() {
   [ "$top" = "$app_pid" ] || { echo "demo-shots: pid $top is in front, not leon ($app_pid); stopping" >&2; exit 1; }
 }
 # shot NAME [PAD]: leon's frontmost window and PAD points around it, as the screen draws it over the
-# plain desktop; deskshot refuses when any other program's window is in the way
+# plain desktop; deskshot refuses when any other program's window is in the way. Kept 1760 px wide:
+# twice the README's column, sharp at a fraction of the bytes
 shot() {
   front
   in_front
   sleep 0.5
-  "$d/deskshot" "$app_pid" "$desk_pid" "$out/$1.png" "${2:-0}"
+  # a system overlay can pass over the shot for a moment: three tries, each checked
+  local n
+  for n in 1 2 3; do
+    "$d/deskshot" "$app_pid" "$desk_pid" "$out/$1.png" "${2:-0}" && break
+    [ "$n" = 3 ] && exit 1
+    sleep 1
+  done
+  sips -Z 1760 "$out/$1.png" >/dev/null
   echo "demo-shots: $1.png"
 }
 
 open_app
 shot app-status
 shot app-translucent 80
-sips -Z 1760 "$out/app-translucent.png" >/dev/null # twice the README's width: sharp at half the bytes
 keys 'keystroke "p" using {command down, shift down}'
 keys 'keystroke "log"'
 shot app-palette
@@ -336,14 +268,21 @@ shot app-drawer
 scratch=$(here -s auth block ls --json | python3 -I -c 'import json,sys; print([b["block_id"] for b in json.load(sys.stdin) if b.get("label") == "scratch"][0])')
 here -s auth block close "$notes" >/dev/null
 here -s auth block close "$scratch" >/dev/null
+# the git popup over the agent (ctrl+alt+g, docs/lua/keys.md), hidden again after
+here -s auth focus "$claude" >/dev/null
+keys 'keystroke "g" using {control down, option down}'
+sleep 1
+shot app-popup
+keys 'keystroke "g" using {control down, option down}'
 close_app
 
 # a devbox with an agent waiting for permission and a failed deploy
 dev server start >/dev/null
 dev new api >/dev/null
-dev -s api run --keep-open -c "$home/src/api" -- show "Add rate limiting" "$d/api.txt" \
-  "state=blocked:kind=permission:title=$(b64 'Edit src/routes.rs?')" >/dev/null
+apiblock=$(dev -s api run --keep-open -c "$home/src/api" -- show "Add rate limiting" "$d/api.txt" \
+  "state=blocked:kind=permission:title=$(b64 'Edit src/routes.rs?')")
 dev -s api window close 1 >/dev/null
+dev -s api split -b "$apiblock" --focus=false -c "$home/src/api" -- show "pytest -q" "$d/pytest.txt" >/dev/null
 dev new deploy >/dev/null
 dev -s deploy run --keep-open -c "$home/src/deploy" -- show "deploy api v2.3.1" "$d/deploy.txt" \
   "state=error:title=$(b64 'rollout failed: 2 of 4 pods crashed')" >/dev/null
