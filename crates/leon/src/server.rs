@@ -47,6 +47,17 @@ pub(crate) fn app(cli: &Cli, _socket: &std::path::Path) -> Result<(), Fail> {
     <Cli as clap::CommandFactory>::command().print_help().map_err(|e| Fail::Other(e.to_string()))
 }
 
+/// `server.log` beside `socket` when this process's stderr is that file (a server `leon` started
+/// in the background, `client::spawn_server`); None for one run in a terminal.
+fn log_file(socket: &std::path::Path) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    let log = socket.with_file_name("server.log");
+    use std::os::fd::AsFd;
+    let stderr = std::fs::File::from(std::io::stderr().as_fd().try_clone_to_owned().ok()?);
+    let (ours, file) = (stderr.metadata().ok()?, std::fs::metadata(&log).ok()?);
+    (ours.dev() == file.dev() && ours.ino() == file.ino()).then(|| log.display().to_string())
+}
+
 pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
     let socket = socket_path();
     match cmd {
@@ -58,7 +69,9 @@ pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                 version: env!("CARGO_PKG_VERSION"),
                 socket: socket.display().to_string(),
             };
-            let ctx = std::sync::Arc::new(leon_server::Ctx::new(info, *autostarted));
+            let mut ctx = leon_server::Ctx::new(info, *autostarted);
+            ctx.log = log_file(&socket);
+            let ctx = std::sync::Arc::new(ctx);
             let state_dir = leon_core::paths::state_dir();
             let opts = leon_server::serve::Options { socket, idle_exit: Duration::from_secs(idle) };
             let rt = tokio::runtime::Runtime::new().map_err(|e| Fail::Other(e.to_string()))?;

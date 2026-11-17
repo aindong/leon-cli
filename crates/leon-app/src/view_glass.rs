@@ -55,7 +55,7 @@ fn keep<T>(log: &mut Vec<T>, x: T) {
 /// `90d8514059` does (docs/architecture/gpui.md, Allowed outside GPUI). Main thread only; GPUI
 /// makes the view in `set_background_appearance(Blurred)`. Returns how many it set.
 #[cfg(target_os = "macos")]
-fn set_blur_material() -> usize {
+pub(crate) fn set_blur_material() -> usize {
     use objc2::msg_send;
     use objc2::runtime::{AnyClass, AnyObject, Bool};
     const UNDER_WINDOW_BACKGROUND: isize = 21;
@@ -93,7 +93,7 @@ fn set_blur_material() -> usize {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn set_blur_material() -> usize {
+pub(crate) fn set_blur_material() -> usize {
     0
 }
 

@@ -20,6 +20,7 @@ impl SettingsWindow {
                 list = list.child(
                     div()
                         .id(SharedString::from(format!("theme-{side}-{n}")))
+                        .debug_selector(|| format!("theme-{side}-{n}"))
                         .flex()
                         .items_center()
                         .gap(px(10.))
@@ -47,13 +48,13 @@ impl SettingsWindow {
                 .child(preview(shown.as_ref()))
                 .child(list)
         };
-        Self::section(t, "Theme")
+        Self::subtitle(t, "Theme")
             .child(div().flex().gap(px(20.)).child(column("dark", "When macOS is dark", cx)).child(column(
                 "light",
                 "When macOS is light",
                 cx,
             )))
-            .children(Self::locked(t, &row))
+            .children(Self::locked(t, "theme", &row))
     }
 }
 

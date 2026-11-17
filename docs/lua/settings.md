@@ -9,6 +9,17 @@ get` and `set` ([cli/settings.md](../cli/settings.md)) and the app's Settings wi
 them in place; a running app follows them on a reload. A bad value is a skipped call with a
 `file:line` message, and the setting keeps its default.
 
+The Settings window has a control for every setting in the table below, in sections: General
+(`resume`, `check_for_updates`), Appearance (`theme`, `translucency`, `fade_inactive_panes`,
+`font`), Terminal (`copy_on_select`, `repeat_time`, `hint_patterns`) and Notifications. Its search
+field finds a setting by its label or by its name here (`fade_inactive_panes`). A setting init.lua
+sets by code, not with a literal value, shows read-only there, with the line to change. Two more
+sections are read-only: Shortcuts lists every key the app binds, with Edit in init.lua to change
+them, and Agents shows what `leon skill status` says. Remote Hosts lists the hosts `leon hosts`
+does, with each one's state, and adds, renames and removes them. Server shows This Mac's server
+(how long it has run, its sessions, blocks and log) and stops or restarts it; each asks first,
+since every program in every session ends.
+
 | Setting | Takes | Default |
 |---|---|---|
 | `theme` | a theme name, or `{ dark = NAME, light = NAME }` to follow the OS appearance | `"leon-dark"` |

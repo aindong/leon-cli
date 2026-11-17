@@ -66,6 +66,12 @@ pub struct Status {
     pub sessions: usize,
     /// Where sessions are saved, while running and on stop; null when they aren't (the state dir isn't private).
     pub state_file: Option<String>,
+    /// When the server started, in seconds since the Unix epoch.
+    pub started_at: u64,
+    /// The blocks in every session.
+    pub blocks: usize,
+    /// The file the server's output goes to; null when it has none (a server run in a terminal).
+    pub log: Option<String>,
     /// Serving over Tailscale (`serve_tailscale`): whether, where, for whom, and the last caller turned away.
     pub tailnet: crate::tailnet::TailnetStatus,
 }
@@ -278,16 +284,21 @@ pub fn registry() -> Registry {
     });
     r.add(
         "server.status",
-        "Whether the server runs, its pid, version and socket, and whether it serves over Tailscale.",
+        "Whether the server runs, its pid, version and socket, since when, how many sessions and blocks, and whether it serves over Tailscale.",
         |ctx, _: NoParams| {
+            let st = ctx.state(); // once: a second lock in this statement would wait on the first
+            let blocks = st.sessions.iter().map(|s| s.blocks.len()).sum();
             Ok(Status {
                 state: "running".into(),
                 pid: ctx.info.pid,
                 version: ctx.info.version.into(),
                 socket: ctx.info.socket.clone(),
                 autostarted: ctx.is_autostarted(),
-                sessions: ctx.state().sessions.len(),
+                sessions: st.sessions.len(),
                 state_file: crate::events::lock(&ctx.state_file).as_ref().map(|f| f.display().to_string()),
+                started_at: ctx.started_at,
+                blocks,
+                log: ctx.log.clone(),
                 tailnet: ctx.tailnet.status(),
             })
         },

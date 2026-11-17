@@ -46,6 +46,19 @@ impl HostState {
     }
 }
 
+/// A host as Settings › Remote Hosts lists it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HostLine {
+    pub label: String,
+    /// Its `ssh://` endpoints.
+    pub endpoint: String,
+    pub connected: bool,
+    /// Why not, while it isn't (`unreachable: …`, `needs login: …`).
+    pub note: Option<String>,
+    /// `tailnet: LOGIN` for a machine on this machine's tailnet.
+    pub tailnet: Option<String>,
+}
+
 /// Sort a failure: in BatchMode ssh fails where it would have asked something, and those need a
 /// terminal; anything else is a host that can't be reached.
 pub fn classify(why: String) -> HostState {
@@ -195,6 +208,23 @@ impl Hosts {
         let mut m = Machine::new(host.label.clone(), Some(host), None);
         Self::spawn(&mut m, self.wake.clone());
         self.machines.push(m);
+    }
+
+    /// Stop showing the host at `i` (never This Mac); its link closes.
+    pub fn remove(&mut self, i: usize) {
+        if i > 0 && i < self.machines.len() {
+            self.machines.remove(i);
+        }
+    }
+
+    /// Call the host at `i` (never This Mac) `label` from now on.
+    pub fn rename(&mut self, i: usize, label: &str) {
+        if let Some(m) = self.machines.get_mut(i).filter(|m| !m.is_local()) {
+            m.label = label.to_string();
+            if let Some(h) = &mut m.host {
+                h.label = label.to_string();
+            }
+        }
     }
 
     pub fn machines(&self) -> &[Machine] {

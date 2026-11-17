@@ -64,7 +64,7 @@ impl SettingsWindow {
         let refused = t_["last_refusal"]
             .as_object()
             .map(|r| note(format!("Last refused {}: {}", text(&r["peer"]), text(&r["reason"])), t.muted));
-        Self::section(t, "Tailscale")
+        Self::subtitle(t, "Tailscale")
             .child(self.toggle(t, "serve_tailscale", "Let my other machines on Tailscale reach this server", cx))
             .child(note(
                 format!(

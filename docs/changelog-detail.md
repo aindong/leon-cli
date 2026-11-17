@@ -6,6 +6,33 @@ summary bullet per feature, linking its section here.
 
 ## Since 0.1.0: the detail
 
+### Server and Remote Hosts in Settings
+
+#### Added
+
+- Settings › Server shows This Mac's server: how long it has run, its version, socket, sessions,
+  blocks and log file (Reveal). Stop and Restart ask first, saying what `server.stop` does:
+  every program in every session ends, and the sessions come back only from a server that saves
+  them. Restart starts leon again once the window has seen the server stop.
+- Settings › Remote Hosts lists each host with its endpoint, its state and why, and its tailnet
+  login; Add Host… opens the window's prompt, Rename checks the label as `leon hosts add` does,
+  and Remove asks first.
+- `server.status` gains `started_at`, `blocks` and `log` (null for a server run in a terminal):
+  new result fields on a stable method, so `api_version` goes from `1.10.0` to `1.11.0`.
+
+### A Settings window with sections
+
+#### Added
+
+- Settings (⌘,) has a sidebar of sections (General, Appearance, Terminal, Notifications,
+  Shortcuts, Agents) and a search field that finds a row by its label or its Lua name
+  ([lua/settings.md](lua/settings.md#settings)). Every setting has a control: steppers with
+  their range for the numbers, a choice for `resume`, switches, and an editable list for
+  `hint_patterns` that checks a pattern before it is written. A setting init.lua sets by code
+  stays read-only, with the line to change.
+- Shortcuts lists every key the app binds, with Edit in init.lua; Agents shows what
+  `leon skill status` says, with the command that sets an agent up.
+
 ### Serve over Tailscale
 
 #### Added

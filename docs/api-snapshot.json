@@ -1,5 +1,5 @@
 {
-  "api_version": "1.10.0",
+  "api_version": "1.11.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -212,6 +212,22 @@
               "null"
             ]
           },
+          "started_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "blocks": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "log": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "tailnet": {
             "type": "object",
             "properties": {
@@ -285,6 +301,8 @@
           "socket",
           "autostarted",
           "sessions",
+          "started_at",
+          "blocks",
           "tailnet"
         ]
       }

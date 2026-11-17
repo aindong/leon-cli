@@ -13,7 +13,7 @@ the server, the CLI and `leon attach`).
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.10.0`.
+one is `1.11.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -28,6 +28,11 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **A Settings window with sections**: sections, search and a control for every setting in
+  Settings (⌘,), with the keymap and `leon skill status` ([detail](docs/changelog-detail.md#a-settings-window-with-sections)).
+- **Server and Remote Hosts in Settings**: the server's state with Stop and Restart, and the hosts
+  with Add, Rename and Remove; `server.status` gains `started_at`, `blocks` and `log`, API `1.11.0`
+  ([detail](docs/changelog-detail.md#server-and-remote-hosts-in-settings)).
 - **Serve over Tailscale**: with `serve_tailscale` on, the server also listens on its Tailscale
   addresses for your own other machines only, and `tailnet://HOST` reaches it without ssh;
   `server.status` reports `tailnet`, API `1.10.0` ([detail](docs/changelog-detail.md#serve-over-tailscale)).
