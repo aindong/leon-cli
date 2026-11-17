@@ -134,8 +134,11 @@ impl Shared {
 fn serve(conn: UnixStream, s: &Arc<Shared>) {
     // as the server does: the dir is private, and a connection that isn't ours gets no ssh
     // SAFETY: geteuid has no preconditions.
-    if peer_uid(&conn) != Some(unsafe { libc::geteuid() }) {
+    if crate::peer_uid(&conn) != Some(unsafe { libc::geteuid() }) {
         return;
+    }
+    if s.endpoint.tailnet {
+        return serve_tailnet(conn, s);
     }
     let autostart = !s.reached.load(Ordering::SeqCst);
     let mut cmd = s.endpoint.ssh(autostart, s.batch.load(Ordering::SeqCst));
@@ -221,6 +224,43 @@ fn serve(conn: UnixStream, s: &Arc<Shared>) {
     let _ = conn.shutdown(std::net::Shutdown::Both);
 }
 
+/// One connection over the tailnet: a TCP stream to the host's server, checked by
+/// `direct::connect`, carrying the same bytes ssh would.
+fn serve_tailnet(conn: UnixStream, s: &Arc<Shared>) {
+    let tcp = match crate::direct::connect(&s.endpoint.host, s.endpoint.port.unwrap_or(crate::direct::PORT)) {
+        Ok(t) => t,
+        Err(why) => {
+            eprintln!("leon: {why}");
+            s.failed(why);
+            return;
+        }
+    };
+    let (Ok(mut from), Ok(mut up)) = (conn.try_clone(), tcp.try_clone()) else { return };
+    let _ = std::thread::Builder::new().name("leon-link-up".into()).spawn(move || {
+        crate::pump(&mut from, &mut up);
+        let _ = up.shutdown(std::net::Shutdown::Write); // the server answers what it got, then closes
+    });
+    let (mut down, mut to) = (&tcp, &conn);
+    let mut answered = false;
+    let mut buf = vec![0; 64 << 10];
+    while let Ok(n @ 1..) = down.read(&mut buf) {
+        if !std::mem::replace(&mut answered, true) {
+            *s.last_error.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
+        if to.write_all(&buf[..n]).is_err() {
+            break;
+        }
+    }
+    if !answered {
+        s.failed(format!(
+            "{} closed the connection without answering: its server lets in only your own machines, or it is stopping",
+            s.name
+        ));
+    }
+    let _ = tcp.shutdown(std::net::Shutdown::Both);
+    let _ = conn.shutdown(std::net::Shutdown::Both);
+}
+
 /// Remove the dirs of links whose client died without cleaning up (Ctrl-C, SIGKILL): nothing
 /// holds their lock. Never connect to find out: a live link answers a connection by running ssh.
 /// A dir without a lock file yet may be a link opening now.
@@ -240,27 +280,6 @@ fn remove_stale(runtime: &Path) {
         if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
             let _ = std::fs::remove_dir_all(&path);
         }
-    }
-}
-
-/// The uid of the process at the other end (std's `peer_cred` isn't stable).
-fn peer_uid(conn: &UnixStream) -> Option<libc::uid_t> {
-    let fd = conn.as_raw_fd();
-    #[cfg(target_os = "linux")]
-    {
-        // SAFETY: getsockopt writes at most `len` bytes into `cred`.
-        let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
-        let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
-        let ok = unsafe {
-            libc::getsockopt(fd, libc::SOL_SOCKET, libc::SO_PEERCRED, (&mut cred as *mut libc::ucred).cast(), &mut len)
-        } == 0;
-        ok.then_some(cred.uid)
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let (mut uid, mut gid) = (0, 0);
-        // SAFETY: getpeereid writes the two ids.
-        (unsafe { libc::getpeereid(fd, &mut uid, &mut gid) } == 0).then_some(uid)
     }
 }
 

@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 pub mod host;
+pub mod localapi;
 pub mod remote;
 pub mod tailscale;
 
@@ -33,6 +34,8 @@ impl Env {
             .env("SHELL", "/bin/sh")
             // never this machine's Tailscale: tests that want one put support::tailscale's fake on PATH
             .env("LEON_TAILSCALE", self.dir.path().join("no-tailscale"))
+            // the tailnet tests' seam (support::localapi) is set only by them
+            .env_remove("LEON_TEST_TAILNET")
             .env_remove("LEON_SESSION")
             .env_remove("LEON_BLOCK")
             .env_remove("LEON_SERVER")
