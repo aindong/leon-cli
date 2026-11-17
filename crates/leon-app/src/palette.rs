@@ -64,19 +64,28 @@ pub struct Item {
 
 /// The indexes of the items matching `query`, best first; an empty query keeps every item in order.
 /// A query character must appear in order in the title, the name or a keyword (a space matches
-/// any word break); runs and word starts score higher.
+/// any word break); runs and word starts score higher. A title that has every query word as a
+/// whole word of its own ranks above the rest ("log" puts "Tail the server log" above "Reload Config").
 pub fn filter(items: &[Item], query: &str) -> Vec<usize> {
-    let q: Vec<char> = query.trim().to_lowercase().chars().collect();
-    let mut scored: Vec<(u32, usize)> = items
+    let query = query.trim().to_lowercase();
+    let q: Vec<char> = query.chars().collect();
+    let mut scored: Vec<(bool, u32, usize)> = items
         .iter()
         .enumerate()
         .filter_map(|(i, it)| {
             let fields = std::iter::once(&it.title).chain([&it.name]).chain(&it.keywords);
-            fields.filter_map(|f| score(&q, f)).max().map(|s| (s, i))
+            fields.filter_map(|f| score(&q, f)).max().map(|s| (whole_words(&query, &it.title), s, i))
         })
         .collect();
-    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-    scored.into_iter().map(|(_, i)| i).collect()
+    scored.sort_by(|a, b| (b.0, b.1).cmp(&(a.0, a.1)).then(a.2.cmp(&b.2)));
+    scored.into_iter().map(|(_, _, i)| i).collect()
+}
+
+/// Every word of `query` (already lowercase) is a whole word of `title`.
+fn whole_words(query: &str, title: &str) -> bool {
+    let title = title.to_lowercase();
+    let words = title.split(|c: char| !c.is_alphanumeric());
+    !query.is_empty() && query.split_whitespace().all(|q| words.clone().any(|w| w == q))
 }
 
 fn is_break(c: char) -> bool {
