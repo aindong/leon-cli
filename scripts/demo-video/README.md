@@ -8,7 +8,7 @@ moments every time, driven over ssh. Nothing touches the host's own leon, screen
 
 | Path | What it is |
 |---|---|
-| `run-demo.sh` | On the host: `boot`, `push`, `setup`, `take`, `cue`, `render`, `retake`, `shot`, `check`, `stop`. The scenes and their timing are its `scene1`…`scene12` functions. |
+| `run-demo.sh` | On the host: `boot`, `push`, `setup`, `take`, `cue`, `render`, `retake`, `shot`, `check`, `stop`. The scenes and their timing are the `scene1`…`scene12` functions in `scenes.sh`, which it sources. |
 | `kit/guest.sh` | In the VM, as `demo`: reset, stage, start the app, the take's beats. |
 | `kit/bin/agent`, `kit/scenes/` | The scripted agent: reads a scene file, prints at a reading pace, reports its state with OSC 7501, asks its question and waits, and drives leon the way an agent with leon's skill does (`leon split`, `leon wait`, `leon capture`). No AI service runs. |
 | `kit/projects/` | Three small Python projects (stdlib only) whose tests really run; `.next/N/` is each agent's change, applied during the take. |
@@ -166,13 +166,13 @@ What it draws, and the limits it keeps:
 
 `run-demo.sh cue [BEATS]` (default: the last take's `take-beats.txt`) rebuilds the cue file of an earlier take without the VM: the
 scenes run on a virtual clock, re-anchored at each mark to the take's real beat times. Change a
-zoom or a caption in `run-demo.sh`, run `cue`, then `render`.
+zoom or a caption in `scenes.sh`, run `cue`, then `render`.
 
 ## Where the numbers in the captions come from
 
 Only leon's own measured numbers, never a comparison with another terminal. Each comes from a
 script in `scripts/perf/`; run it on the release build that is filmed, on the same Mac, and
-change the caption in `run-demo.sh` (and the storyboard) if the number moved.
+change the caption in `scenes.sh` (and the storyboard) if the number moved.
 
 | Caption | Measured by | Recorded in |
 |---|---|---|
