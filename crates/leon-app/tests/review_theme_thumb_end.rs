@@ -38,7 +38,7 @@ fn a_card_is_drawn_in_the_theme_a_change_heads_for(cx: &mut TestAppContext) {
     let card = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.thumb_pane(&w.id, &id).map(|(_, t)| t));
     assert!(ticks(cx, |cx| card(cx) == Some(LIGHT)), "the card is drawn in leon-light");
     // the window's change held at its start: its colours stay leon-light's
-    let t0 = Instant::now();
+    let t0 = cx.executor().now(); // GPUI's clock, which the motions read
     ws.update(cx, |ws, _| {
         ws.set_reduce_motion(false);
         ws.set_fade_clock(t0);

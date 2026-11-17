@@ -80,7 +80,7 @@ fn focus_left(ws: &Entity<Workspace>, cx: &mut VisualTestContext, ids: &[String]
 fn the_fade_moves_between_the_panes_on_the_apps_own_frames(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
-    let t0 = Instant::now();
+    let t0 = cx.executor().now(); // GPUI's clock, which the motions read
     let ids = panes(&s, &ws, cx, (2, false, t0));
     let t1 = t0 + ms(1000);
     let start = focus_left(&ws, cx, &ids, t1);
@@ -107,7 +107,7 @@ fn the_fade_moves_between_the_panes_on_the_apps_own_frames(cx: &mut TestAppConte
 fn reduce_motion_shows_no_frame_in_between(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
-    let t0 = Instant::now();
+    let t0 = cx.executor().now(); // GPUI's clock, which the motions read
     let ids = panes(&s, &ws, cx, (2, true, t0));
     let t1 = t0 + ms(1000);
     // every look from the key press on, the clock where a fade would be starting
@@ -131,7 +131,7 @@ fn reduce_motion_shows_no_frame_in_between(cx: &mut TestAppContext) {
 fn a_focus_that_moves_on_mid_fade_leaves_one_pane_at_full_strength(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
-    let t0 = Instant::now();
+    let t0 = cx.executor().now(); // GPUI's clock, which the motions read
     let ids = panes(&s, &ws, cx, (3, false, t0));
     let t1 = t0 + ms(1000);
     // from the third pane to the second...

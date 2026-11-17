@@ -51,11 +51,13 @@ impl Workspace {
         self.sliding() || self.fading() || self.theme_shifting() || self.overview_moving()
     }
 
-    /// Ask for the next animation frame while anything moves, noting whether it did (render).
+    /// Ask for the next animation frame while anything moves, noting that it did beside the call
+    /// (render): GPUI's test window drops the request, so tests read the note.
     pub(super) fn ask_frame(&mut self, window: &mut Window) {
-        self.fade.asked = self.animating();
-        if self.fade.asked {
+        self.fade.asked = false;
+        if self.animating() {
             window.request_animation_frame();
+            self.fade.asked = true;
         }
     }
 

@@ -3,8 +3,6 @@
 
 mod m10b_support;
 
-use std::time::Instant;
-
 use gpui::TestAppContext;
 use leon_app::floats::SLIDE;
 use m10b_support::*;
@@ -15,17 +13,13 @@ fn a_change_mid_way_keeps_the_dip(cx: &mut TestAppContext) {
     let (ws, cx) = open(cx, &s.app);
     ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let pane = ws.read_with(cx, |ws, _| ws.target_block()).expect("a pane");
-    let t0 = Instant::now();
-    ws.update(cx, |ws, _| {
-        ws.set_reduce_motion(false);
-        ws.set_fade_clock(t0);
-    });
+    let t0 = cx.executor().now(); // GPUI's clock, which the motions read
+    ws.update(cx, |ws, _| ws.set_reduce_motion(false));
     act(&ws, cx, "client.theme.change");
     cx.simulate_keystrokes("down");
-    ws.update(cx, |ws, cx| {
-        ws.set_fade_clock(t0 + SLIDE / 2);
-        cx.notify();
-    });
+    // half way through on GPUI's clock, the clock the motions read
+    cx.executor().advance_clock((t0 + SLIDE / 2).saturating_duration_since(cx.executor().now()));
+    ws.update(cx, |_, cx| cx.notify());
     cx.run_until_parked();
     let before = ws.read_with(cx, |ws, _| ws.pane_fade(&pane));
     cx.simulate_keystrokes("down"); // the next theme, at the same instant

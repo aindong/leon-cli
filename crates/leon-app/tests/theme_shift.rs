@@ -2,8 +2,8 @@
 //! slide's time, the panes' text dipping toward the background mid-way, and ends drawing the new
 //! theme with nothing left moving; with Reduce Motion the first frame is the new theme.
 //!
-//! The tests set the fade's clock, so no value depends on how fast the machine is; a frame is drawn
-//! by notifying the workspace (the test platform runs no animation frames).
+//! The tests move GPUI's clock, which the motions read, so no value depends on how fast the machine
+//! is; a frame is drawn by notifying the workspace (the test platform runs no animation frames).
 
 mod m10b_support;
 
@@ -15,13 +15,13 @@ use leon_app::theme::{Theme, DARK, LIGHT};
 use leon_app::view::Workspace;
 use m10b_support::*;
 
-/// A frame drawn with the fade's clock at `at`: (the colours the views draw with, still moving, the
-/// pane's fade). The pane's own theme (`pane_theme`) is what its tile paints, from the same field.
+/// A frame drawn with GPUI's clock moved on to `at` (the clock the motions read): (the colours the
+/// views draw with, still moving, the pane's fade). The pane's own theme (`pane_theme`) is what its
+/// tile paints, from the same field.
 fn frame(ws: &Entity<Workspace>, cx: &mut VisualTestContext, pane: &str, at: Instant) -> (Theme, bool, f32) {
-    ws.update(cx, |ws, cx| {
-        ws.set_fade_clock(at);
-        cx.notify();
-    });
+    let now = cx.executor().now();
+    cx.executor().advance_clock(at.saturating_duration_since(now));
+    ws.update(cx, |_, cx| cx.notify());
     cx.run_until_parked();
     ws.read_with(cx, |ws, _| {
         let fade = ws.pane_fade(pane);
@@ -38,11 +38,8 @@ fn a_change_cross_fades_then_rests(cx: &mut TestAppContext) {
     let (ws, cx) = open(cx, &s.app);
     ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let pane = ws.read_with(cx, |ws, _| ws.target_block()).expect("a pane");
-    let t0 = Instant::now();
-    ws.update(cx, |ws, _| {
-        ws.set_reduce_motion(false);
-        ws.set_fade_clock(t0);
-    });
+    let t0 = cx.executor().now(); // GPUI's clock, which the motions read
+    ws.update(cx, |ws, _| ws.set_reduce_motion(false));
     let rest = frame(&ws, cx, &pane, t0);
     act(&ws, cx, "client.theme.change");
     cx.simulate_keystrokes("down"); // leon-light, at t0
@@ -68,11 +65,7 @@ fn reduce_motion_draws_no_frame_in_between(cx: &mut TestAppContext) {
     let (ws, cx) = open(cx, &s.app);
     ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let pane = ws.read_with(cx, |ws, _| ws.target_block()).expect("a pane");
-    let t0 = Instant::now();
-    ws.update(cx, |ws, _| {
-        ws.set_reduce_motion(true);
-        ws.set_fade_clock(t0);
-    });
+    ws.update(cx, |ws, _| ws.set_reduce_motion(true));
     act(&ws, cx, "client.theme.change");
     cx.simulate_keystrokes("down");
     let first = ws.read_with(cx, |ws, _| (ws.drawn_theme(), ws.theme_shifting(), ws.pane_fade(&pane)));
