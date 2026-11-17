@@ -24,8 +24,9 @@ summary bullet per feature, linking its section here.
 #### Changed
 
 - Hiding or closing a float or drawer that a toggle opened, while it has the focus, gives the
-  focus back to the pane that had it when the toggle opened it (before, the top float, a drawer or
-  the first tile). One that isn't focused leaves the focus where it is. A popup is one per label
+  focus back to the pane the toggle was pressed in, in its own tab (before, the top float, a drawer
+  or the first tile of the overlay's tab). One that isn't focused leaves the focus where it is, and
+  one shown another way (the switcher, `leon float`) forgets where to go back. A popup is one per label
   per session: toggled from a pane in another directory, it shows the one already running.
 
 ### Server and Remote Hosts in Settings

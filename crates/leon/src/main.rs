@@ -175,11 +175,11 @@ pub enum Cmd {
         #[arg(last = true, requires = "new")]
         command: Vec<String>,
     },
-    /// Show or hide a labeled float or drawer; --create opens a scratch shell on first use.
+    /// Show or hide a labeled float or drawer; --create makes it on first use.
     Toggle {
         /// Exact, case-insensitive label of the float or drawer.
         label: String,
-        /// Create a bottom scratch-shell drawer if the label is absent.
+        /// Create it if the label is absent: a bottom scratch-shell drawer, or with --float a popup.
         #[arg(long)]
         create: bool,
         /// With --create: a centred float (a popup) instead of the bottom drawer.

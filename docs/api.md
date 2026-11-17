@@ -3719,7 +3719,7 @@ same facts for the server you run.
 |---|---|---|---|
 | `session_id` | string | yes |  |
 | `label` | string | yes | Exact case-insensitive block label, unique within this session. |
-| `create` | boolean |  | When true and no block has this label, create a login-shell drawer at the bottom of the active window, in the directory of its focused block (else the login shell's default). |
+| `create` | boolean |  | When true and no block has this label, create it in the active window, in the directory of its focused block (else the login shell's default): a login-shell drawer at the bottom, unless `float` or `options` say otherwise. |
 | `float` | boolean |  | With `create`: a float (at `bounds`) instead of the bottom drawer. |
 | `bounds` | `Bounds` \| null |  | With `float`: fractions of the whole window; default centered 80% by 80%. |
 | `options` | `TerminalOptions` \| null |  | With `create`: what runs (default a login shell) and where (default the focused block's directory). It closes when its program exits, as every block does, unless `exit` says not to. |
@@ -3770,7 +3770,7 @@ same facts for the server you run.
         "type": "string"
       },
       "create": {
-        "description": "When true and no block has this label, create a login-shell drawer at the bottom of the active\nwindow, in the directory of its focused block (else the login shell's default).",
+        "description": "When true and no block has this label, create it in the active window, in the directory of\nits focused block (else the login shell's default): a login-shell drawer at the bottom, unless\n`float` or `options` say otherwise.",
         "type": "boolean",
         "default": false
       },

@@ -48,6 +48,12 @@ app draws and moves them (M20b).
   `scratch` drawer, made on first use) and `pane.dock.left|right|bottom` are the app's own, in the
   palette and `leon actions`, with default keys in docs/shortcuts.md. Not yet: `pane.minimize_floating`,
   since hiding a float without a label needs a server method.
+- **Focus back.** A float or drawer that a toggle (`leon toggle`, ⌘J, a popup key) creates or
+  shows remembers the pane of the active tab the toggle came from (`State::back_to`, in memory
+  only). When it hides by a toggle or closes (its program exited) while it has the focus, that
+  pane gets the focus again, in its own tab, if it is still shown; else the usual pick. Showing it
+  another way (the switcher, `leon float`) forgets the pane. One popup per label per session: a
+  toggle from a pane in another directory shows the popup already running, where it was made.
 - **Going there.** The switcher lists every float and drawer as a block row (by label, else
   title, else program; `· hidden` when hidden). Going to one, or to an Activity row, is
   `session.focus_block`, which shows and raises a hidden overlay first.

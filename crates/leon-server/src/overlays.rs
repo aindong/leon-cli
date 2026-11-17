@@ -42,8 +42,9 @@ struct Toggle {
     session_id: String,
     /// Exact case-insensitive block label, unique within this session.
     label: String,
-    /// When true and no block has this label, create a login-shell drawer at the bottom of the active
-    /// window, in the directory of its focused block (else the login shell's default).
+    /// When true and no block has this label, create it in the active window, in the directory of
+    /// its focused block (else the login shell's default): a login-shell drawer at the bottom, unless
+    /// `float` or `options` say otherwise.
     #[serde(default)]
     create: bool,
     /// With `create`: a float (at `bounds`) instead of the bottom drawer.
@@ -121,8 +122,14 @@ pub fn add(r: &mut Registry) {
         "Show or hide a labeled float or drawer without stopping its program; optionally create it (a scratch shell, or a popup running a command).",
         |ctx, p: Toggle| {
             let mut st = ctx.state();
-            if p.bounds.is_some() && !p.float {
-                return Err(ApiError::bad_request("bounds needs float"));
+            if (p.float || p.options.is_some()) && !p.create {
+                return Err(ApiError::bad_request("float and options need create"));
+            }
+            if let Some(b) = &p.bounds {
+                if !p.float {
+                    return Err(ApiError::bad_request("bounds needs float"));
+                }
+                b.check()?;
             }
             if st.overlay_by_label(&p.session_id, &p.label)?.is_none() && p.create {
                 let (wid, place) = placement(&st, &p.session_id, None)?;

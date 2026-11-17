@@ -115,6 +115,17 @@ fn rect_sets_the_bounds_and_bad_input_creates_nothing() {
     ] {
         assert!(!e.run(args).status.success(), "refused: {args:?}");
     }
+    // the API refuses them too, and bad bounds even for a popup that exists already
+    let bad_bounds = serde_json::json!({"x": 0.5, "y": 0.5, "width": 0.9, "height": 0.9});
+    for params in [
+        serde_json::json!({"session_id": sid, "label": "y", "float": true}),
+        serde_json::json!({"session_id": sid, "label": "y", "options": {"command": ["sleep", "300"]}}),
+        serde_json::json!({"session_id": sid, "label": "r", "create": true, "bounds": {"x": 0.1, "y": 0.1, "width": 0.5, "height": 0.5}}),
+        serde_json::json!({"session_id": sid, "label": "r", "create": true, "float": true, "bounds": bad_bounds}),
+    ] {
+        assert!(!e.run(&["api", "call", "session.toggle", &params.to_string()]).status.success(), "refused: {params}");
+    }
+    assert_eq!(floats(&e, &sid)[0]["hidden"], false, "the existing popup wasn't toggled");
     assert_eq!(floats(&e, &sid).len(), 1, "nothing else was made");
     assert_eq!(e.view(&sid)["windows"][0]["layout"].to_string().matches("block:").count(), 1);
 }

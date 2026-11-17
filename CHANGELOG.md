@@ -28,9 +28,8 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
-- **Popups**: `leon toggle LABEL --create --float -- CMD` (and `leon.toggle{float=true, …}`) brings a
-  program up as a float over your work on one key and hides it on the next; it closes when the
-  program exits; `session.toggle` gains `float`, `bounds` and `options`, API `1.12.0` ([detail](docs/changelog-detail.md#popups)).
+- **Popups**: `leon toggle LABEL --create --float -- CMD` brings a program up over your work on one key
+  and hides it on the next; a toggled drawer gives the focus back too; API `1.12.0` ([detail](docs/changelog-detail.md#popups)).
 - **A Settings window with sections**: sections, search and a control for every setting in
   Settings (⌘,), with the keymap and `leon skill status` ([detail](docs/changelog-detail.md#a-settings-window-with-sections)).
 - **Server and Remote Hosts in Settings**: the server's state with Stop and Restart, and the hosts

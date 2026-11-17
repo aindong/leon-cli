@@ -278,27 +278,25 @@ impl State {
 
     /// Close a block, collapsing its split; a window left without blocks closes too.
     pub fn close_block(&mut self, session_id: &str, block_id: &str) -> Result<(), ApiError> {
-        let back = self.back_to.remove(block_id);
         let s = self.session_mut(session_id)?;
         let i = s.block_index(block_id)?;
         let w = s.window_index(&s.blocks[i].window_id)?;
         // an overlay only: one a toggle opened and then unfloated is a tile, with a tile's pick
-        let had_focus =
-            s.windows[w].focus.as_deref() == Some(block_id) && s.overlay(&s.windows[w].id).contains(block_id);
+        let had_focus = s.has_focus(w, block_id) && s.overlay(&s.windows[w].id).contains(block_id);
         s.blocks.remove(i);
         s.detach_placed(w, block_id);
-        if had_focus {
-            s.focus_back(w, back);
-        }
         let emptied = s.empty_window(w).then(|| s.windows[w].id.clone());
+        let back = self.back_to.remove(block_id).filter(|_| had_focus);
         self.emit(session_id, "block_closed", json!({ "block_id": block_id }));
-        match emptied {
+        let closed = match emptied {
             Some(window_id) => self.close_window(session_id, &window_id),
             None => {
                 self.touch(session_id);
                 Ok(())
             }
-        }
+        };
+        self.focus_back(session_id, back);
+        closed
     }
 
     /// A block's program exited: remember the status, and close the block unless it is kept open.
