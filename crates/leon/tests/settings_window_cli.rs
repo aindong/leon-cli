@@ -14,9 +14,9 @@ fn the_docs_describe_the_window() {
     let row = shortcuts.lines().find(|l| l.starts_with("| ⌘, |")).expect("the ⌘, row");
     assert!(row.contains("every setting in sections, with search"), "{row}");
     let changelog = include_str!("../../../CHANGELOG.md");
-    let unreleased = &changelog[changelog.find("## [Unreleased]").unwrap()..];
-    let next = unreleased[3..].find("\n## ").map_or(unreleased.len(), |i| i + 3);
-    assert!(unreleased[..next].contains("- **A Settings window with sections**"), "CHANGELOG.md [Unreleased]");
+    let release = &changelog[changelog.find("## [0.1.0]").unwrap()..];
+    let next = release[3..].find("\n## ").map_or(release.len(), |i| i + 3);
+    assert!(release[..next].contains("#a-settings-window-with-sections)"), "CHANGELOG.md [0.1.0]");
     let detail = include_str!("../../../docs/changelog-detail.md");
     assert!(detail.contains("### A Settings window with sections"), "its detail");
 }
