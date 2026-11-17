@@ -22,7 +22,7 @@ same facts for the server you run.
 - [session](#session): 28
 - [target](#target): 1
 - [block](#block): 5
-- [client](#client): 3
+- [client](#client): 4
 - [Block methods: dev.leon.terminal](#block-methods-devleonterminal): 14
 
 ## help
@@ -5152,6 +5152,99 @@ same facts for the server you run.
 </details>
 
 ## client
+
+### `client.geometry`
+
+*internal*. Tell the server how this client draws a window (pixels), so a float or drawer made there starts its program at the size the client gives it; the last report wins.
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes |  |
+| `window_id` | string | yes |  |
+| `area` | [number] | yes | The pane area [width, height] in the client's pixels: where tiles, drawers and floats go. |
+| `cell` | [number] | yes | One terminal cell [width, height]. |
+| `float_frame` | [number] | yes | What a float's frame takes from its text [across, down]. |
+| `drawer_frame` | [number] | yes | What a bottom drawer's frame and insets take from its share of the area [across, down]. |
+
+**Output:** none
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "ReportGeometry",
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "window_id": {
+        "type": "string"
+      },
+      "area": {
+        "description": "The pane area [width, height] in the client's pixels: where tiles, drawers and floats go.",
+        "type": "array",
+        "items": {
+          "type": "number",
+          "format": "float"
+        },
+        "minItems": 2,
+        "maxItems": 2
+      },
+      "cell": {
+        "description": "One terminal cell [width, height].",
+        "type": "array",
+        "items": {
+          "type": "number",
+          "format": "float"
+        },
+        "minItems": 2,
+        "maxItems": 2
+      },
+      "float_frame": {
+        "description": "What a float's frame takes from its text [across, down].",
+        "type": "array",
+        "items": {
+          "type": "number",
+          "format": "float"
+        },
+        "minItems": 2,
+        "maxItems": 2
+      },
+      "drawer_frame": {
+        "description": "What a bottom drawer's frame and insets take from its share of the area [across, down].",
+        "type": "array",
+        "items": {
+          "type": "number",
+          "format": "float"
+        },
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "session_id",
+      "window_id",
+      "area",
+      "cell",
+      "float_frame",
+      "drawer_frame"
+    ]
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Empty",
+    "type": "object"
+  }
+}
+```
+
+</details>
 
 ### `client.action`
 
