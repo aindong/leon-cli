@@ -136,10 +136,10 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   still turns movement off. Why: the cost of an animation is the subtree of the view it
   notifies; a clock in the window's poll redraws the whole window. Check: review, and a test that several working indicators draw no
   more frames a second than one.
-  Every motion (slides, fades, the theme change, the overview) reads
-  `cx.background_executor().now()`, faked in tests; the root asks for frames
-  while any moves. Not `with_animation`: its start, `Instant::now()` in element state, ignores
-  the test clock, and a motion turned back mid-way restarts.
+  Motion reads `cx.background_executor().now()` (faked in tests); the root, which draws the
+  drawers and overview and feeds the grids their fades, asks for frames while any moves.
+  Not `with_animation`: its `Instant::now()` start ignores the test clock and restarts a
+  motion turned back.
 - **R7. Big or dense content is painted, not laid out.** A pane's grid stays one `canvas` or a
   custom `Element` that shapes text runs per row and paints quads; a list that can grow long
   uses `uniform_list` or `list`. Why: GPUI lays out every element of a view that renders (taffy),
@@ -166,8 +166,7 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   `debug_selector` while elements are built, so a reused cached view adds nothing to it: a
   cached view keeps its own record, and a test reads that. Why: GPUI's test platform is deterministic and
   has no display link, so a test can say "this view did not render again", the property R3 and
-  R4 are for. A motion's test advances the test clock and draws the frames the app asks for
-  (`frame` in the tests; the test window runs none, R5). Check: review.
+  R4 are for. Motion tests advance the clock and draw the frames the app asked for (R5). Check: review.
 - **R11. GPUI is used as published.** crates.io GPUI 0.2.2: no fork, patch, vendored copy or
   `[patch]` entry, unless an amendment here names it. Why: a patch is paid for again at every
   upgrade, and the GPUI-side costs the baseline found are fixed upstream (below). Check: test (the Built against line matches `Cargo.lock`, and no
@@ -246,6 +245,7 @@ on the main thread, list the file here with its reason, and never use it to driv
 - Until the model is entities (phase 5), `render` reads the live model the reader thread writes
   off the UI thread. A frame drawn between that write and the poll's wake (a hover refresh, a
   resize, the display link first) shows a model the workspace has not reconciled yet, for one
-  frame: a destroyed selected session as the empty window. Phase 5's entities, changed only on the main thread, close it.
+  frame: a destroyed selected session as the empty window, a row just scrolled into history
+  blank in a pane scrolled back. Phase 5's entities, changed only on the main thread, close it.
 - What GPUI itself costs stays until an upgrade: the display link's idle ticks while the window
   is visible, and a key's echo waiting for the next tick. Neither is patched (R11).
