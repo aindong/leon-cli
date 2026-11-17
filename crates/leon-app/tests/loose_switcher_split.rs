@@ -10,10 +10,13 @@ use serde_json::json;
 
 #[gpui::test]
 fn cmd_enter_joins_a_pane_of_another_session_and_explains_another_machine(cx: &mut TestAppContext) {
-    let s = setup();
-    // the hosts list goes in a private state dir, and ssh to the added host fails at once
-    std::env::set_var("LEON_STATE_DIR", s.dir.path());
+    // the hosts list goes in a private state dir, and ssh to the added host fails at once: set
+    // before the server starts (the only test in this binary)
+    let state =
+        tempfile::Builder::new().permissions(std::os::unix::fs::PermissionsExt::from_mode(0o700)).tempdir().unwrap();
+    std::env::set_var("LEON_STATE_DIR", state.path());
     std::env::set_var("LEON_SSH", "false");
+    let s = setup();
     let (ws, cx) = open(cx, &s.app);
     let here = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
     let w0 = s.app.ctx().state().session(&here).unwrap().windows[0].id.clone();
