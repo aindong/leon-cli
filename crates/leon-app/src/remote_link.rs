@@ -113,6 +113,7 @@ pub(super) fn relink(shared: &Shared, limit: Duration) -> Option<(BufReader<Unix
                 (resume_or_attach(shared), Conn::open(&shared.socket, Some(CALL_TIMEOUT)))
             {
                 *lock(&shared.fetch) = fetch;
+                shared.resend_geometry(); // before Up: a popup made once it's up starts at its size
                 *lock(&shared.calls) = calls;
                 *lock(&shared.heard) = Instant::now();
                 *lock(&shared.ping) = None;
