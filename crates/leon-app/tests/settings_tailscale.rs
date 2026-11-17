@@ -54,6 +54,9 @@ fn the_tag_list_adds_and_removes_tags_and_refuses_a_bad_one(cx: &mut TestAppCont
     assert!(saved(&mut cx, &o));
     let (bad_why, bad_shown, bad_written) = (errors(&cx, &o)[1].clone(), drawn(&mut cx, "tag-error"), text(&o.config));
     cx.simulate_keystrokes("escape");
+    enter(&mut cx, "tag-field", "tag:a");
+    assert!(saved(&mut cx, &o));
+    let (dup_why, dup_written) = (errors(&cx, &o)[1].clone(), text(&o.config));
 
     click(&mut cx, "tag-remove-0");
     enter(&mut cx, "tag-field", "tag:ci");
@@ -64,6 +67,7 @@ fn the_tag_list_adds_and_removes_tags_and_refuses_a_bad_one(cx: &mut TestAppCont
     assert!(bad_why.is_some_and(|w| w.contains("tag:ci")), "a tag without tag: gets the setting's error");
     assert!(bad_shown, "drawn under the field");
     assert_eq!(bad_written, src, "and writes nothing");
+    assert_eq!((dup_why, dup_written.as_str()), (None, src), "a tag already there writes nothing");
     assert!(ok, "the window never showed {after}");
     assert_eq!(got, config_set_text(src, "serve_tailscale_tags", &after));
 }

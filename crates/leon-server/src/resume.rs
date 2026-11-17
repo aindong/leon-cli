@@ -1,8 +1,9 @@
-//! Resumable event streams (docs/architecture/hosts.md, "Remote hosts"). A subscriber attached with
-//! `resumable` has a token. When its connection ends, it is parked for `HOLD`, still queueing
-//! events (and still dropped past `MAX_BACKLOG`). `session.resume {resume, seq}` on another
-//! connection moves its queue there under the state lock, so no event slips between, and puts the
-//! kept lines after `seq` back in front: the client gets every event after the last it saw, once.
+//! Resumable event streams (docs/architecture/hosts.md, "Resume and reconnect"). A subscriber
+//! attached with `resumable` has a token. When its connection ends, it is parked for `HOLD`, still
+//! queueing events (and still dropped past `MAX_BACKLOG`). `session.resume {resume, seq}` on
+//! another connection moves its queue there under the state lock, so no event slips between, and
+//! puts the kept lines after `seq` back in front: the client gets every event after the last it
+//! saw, once.
 //! A resume while the old connection is still open (a link that died without closing) takes the
 //! stream over, and the old connection ends.
 

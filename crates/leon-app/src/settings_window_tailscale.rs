@@ -179,9 +179,12 @@ impl SettingsWindow {
     /// Add the typed tag once the list with it is a setting's; otherwise say why under the field.
     fn add_tag(&mut self, cx: &mut Context<Self>) {
         let (mut list, draft) = (self.tags(), self.tag.draft.trim().to_string());
-        if !list.contains(&draft) {
-            list.push(draft);
+        if list.contains(&draft) {
+            // already let in: nothing to write
+            (self.tag.draft, self.tag.error) = (String::new(), None);
+            return cx.notify();
         }
+        list.push(draft);
         self.write_field("serve_tailscale_tags", json!(list), |sw| &mut sw.tag, cx);
     }
 
