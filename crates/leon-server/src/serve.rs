@@ -268,6 +268,16 @@ fn lock(path: &Path) -> io::Result<std::fs::File> {
     Ok(f)
 }
 
+/// A connection's reader task, aborted when the connection ends, also when it is cut mid-way
+/// (tailnet.rs, when serving stops): the read half closes with it.
+struct Reader(tokio::task::JoinHandle<io::Result<()>>);
+
+impl Drop for Reader {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 /// One request line from the client, or the end of a line too long to read.
 enum Line {
     Text(Vec<u8>),
@@ -282,11 +292,10 @@ where
     W: AsyncWrite + Unpin,
 {
     let (tx, mut lines) = mpsc::channel(1);
-    let reader = tokio::spawn(read_lines(read, tx));
+    let _reader = Reader(tokio::spawn(read_lines(read, tx)));
     let sub = Arc::new(Subscriber::default());
     let mut screens = Screens::default();
     let result = serve_lines(&mut lines, &mut write, &sub, &mut screens, shared).await;
-    reader.abort();
     shared.ctx.park(&sub); // a resumable stream waits for its client to come back
     result
 }

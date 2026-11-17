@@ -176,7 +176,7 @@ fn not_found() -> String {
 
 fn locate() -> Result<Api, String> {
     if let Some(s) = seam() {
-        let path = s["localapi"].as_str().ok_or("LEON_TEST_TAILNET names no localapi")?;
+        let path = s["localapi"].as_str().ok_or("the test seam names no localapi")?;
         // SAFETY: geteuid has no preconditions.
         return Ok(Api::Socket(path.into(), unsafe { libc::geteuid() }));
     }
@@ -273,7 +273,7 @@ fn get(path: &str, most: usize) -> Result<Vec<u8>, String> {
         got.windows(4).position(|w| w == b"\r\n\r\n").ok_or("Tailscale's LocalAPI answer has no end of headers")?;
     let status = got.split(|&b| b == b'\n').next().unwrap_or_default();
     let status = String::from_utf8_lossy(status);
-    let mut words = status.split(' ');
+    let mut words = status.trim_end().split(' ');
     let (proto, code) = (words.next().unwrap_or(""), words.next().unwrap_or(""));
     if !matches!(proto, "HTTP/1.0" | "HTTP/1.1") || code != "200" {
         return Err(format!("Tailscale's LocalAPI said {}", shown_text(&status, 60)));

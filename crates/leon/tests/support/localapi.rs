@@ -99,7 +99,7 @@ impl Fake {
                             }
                             _ => Err(404),
                         };
-                        (body, a.delay)
+                        (body, if path.starts_with("/localapi/v0/whois") { a.delay } else { Duration::ZERO })
                     };
                     std::thread::sleep(delay);
                     let reply = match body {
@@ -130,6 +130,7 @@ impl Fake {
         self.answers.lock().unwrap().whois = v;
     }
 
+    /// How long whois (only) takes to answer.
     pub fn set_delay(&self, d: Duration) {
         self.answers.lock().unwrap().delay = d;
     }

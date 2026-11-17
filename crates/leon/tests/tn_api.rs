@@ -10,7 +10,7 @@ fn status_and_settings_report_serving() {
     let env = Env::new();
     let v = env.json(&["api", "call", "server.version"]);
     let api: Vec<u64> = v["api_version"].as_str().unwrap().split('.').map(|n| n.parse().unwrap()).collect();
-    assert!(api[0] == 1 && api[1] >= 9, "a minor bump for the new fields: {v}");
+    assert!(api[0] == 1 && api[1] >= 10, "a minor bump for the new fields: {v}");
     let st = env.json(&["server", "status", "--json"]);
     let t = &st["tailnet"];
     for k in ["state", "port", "addresses", "login", "reason", "last_refusal"] {

@@ -19,8 +19,9 @@ fn an_error_or_a_slow_answer_refuses() {
     s.fake.set_whois(Ok(support::localapi::whois(support::localapi::OWNER, &[])));
     s.fake.set_delay(Duration::from_secs(6));
     let t = Instant::now();
-    s.assert_turned_away();
+    s.assert_refused(); // a slow whois: the status answers, so the listener stays up
     assert!(t.elapsed() < Duration::from_millis(3500), "refused within 3 s: {:?}", t.elapsed());
+    assert!(s.log().contains("didn't answer"), "the log says why: {}", s.log());
 }
 
 #[test]

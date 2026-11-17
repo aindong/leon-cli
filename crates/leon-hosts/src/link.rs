@@ -237,8 +237,17 @@ fn serve_tailnet(conn: UnixStream, s: &Arc<Shared>) {
         }
     };
     let (Ok(mut from), Ok(mut up)) = (conn.try_clone(), tcp.try_clone()) else { return };
+    // whether the client asked anything: a server that closes without answering a question refused us
+    let asked = Arc::new(AtomicBool::new(false));
+    let asking = asked.clone();
     let _ = std::thread::Builder::new().name("leon-link-up".into()).spawn(move || {
-        crate::pump(&mut from, &mut up);
+        let mut first = [0u8; 1];
+        if from.read(&mut first).is_ok_and(|n| n == 1) {
+            asking.store(true, Ordering::SeqCst);
+            if up.write_all(&first).is_ok() {
+                crate::pump(&mut from, &mut up);
+            }
+        }
         let _ = up.shutdown(std::net::Shutdown::Write); // the server answers what it got, then closes
     });
     let (mut down, mut to) = (&tcp, &conn);
@@ -252,7 +261,7 @@ fn serve_tailnet(conn: UnixStream, s: &Arc<Shared>) {
             break;
         }
     }
-    if !answered {
+    if !answered && asked.load(Ordering::SeqCst) {
         s.failed(format!(
             "{} closed the connection without answering: its server lets in only your own machines, or it is stopping",
             s.name

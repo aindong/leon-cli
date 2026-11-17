@@ -74,11 +74,25 @@ impl Default for TailnetStatus {
 pub struct Tailnet {
     status: Mutex<TailnetStatus>,
     gate: Mutex<Gate>,
+    /// When a caller from outside the tailnet ranges, and one turned away for too many waiting,
+    /// were last logged: each once a `WINDOW` at most.
+    strays: Mutex<Option<Instant>>,
+    busy: Mutex<Option<Instant>>,
 }
 
 impl Tailnet {
     pub fn status(&self) -> TailnetStatus {
         crate::events::lock(&self.status).clone()
+    }
+
+    /// `refuse`, unless one like it was logged less than a `WINDOW` ago (`last`).
+    fn refuse_now_and_then(&self, last: &Mutex<Option<Instant>>, peer: SocketAddr, reason: &str) {
+        let mut at = crate::events::lock(last);
+        if at.is_none_or(|t| t.elapsed() >= WINDOW) {
+            *at = Some(Instant::now());
+            drop(at);
+            self.refuse(peer, &format!("{reason} (more such are closed unlogged for a minute)"));
+        }
     }
 
     /// One line in the server log, and the status's `last_refusal`.
@@ -88,6 +102,17 @@ impl Tailnet {
         let at = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs());
         crate::events::lock(&self.status).last_refusal = Some(Refusal { peer: peer.to_string(), reason, at });
     }
+}
+
+/// What a decision means for an address's refusal count.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Outcome {
+    /// Let in: the count is cleared.
+    In,
+    /// The caller was refused: it counts.
+    Refused,
+    /// tailscaled failed, not the caller: the count stays as it is.
+    Unsure,
 }
 
 /// The account serving started for: a changed one stops serving.
@@ -149,19 +174,20 @@ impl Gate {
         Ok(())
     }
 
-    /// The decision is made: `refused` counts against the address, a let-in clears its count.
-    fn leave(&mut self, ip: IpAddr, refused: bool) {
+    /// The decision is made: a refusal counts against the address, a let-in clears its count.
+    fn leave(&mut self, ip: IpAddr, outcome: Outcome) {
         match self.pending.get_mut(&ip) {
             Some(n) if *n > 1 => *n -= 1,
             _ => {
                 self.pending.remove(&ip);
             }
         }
-        match refused {
-            true => self.fails.entry(ip).or_insert((0, Instant::now(), false)).0 += 1,
-            false => {
+        match outcome {
+            Outcome::Refused => self.fails.entry(ip).or_insert((0, Instant::now(), false)).0 += 1,
+            Outcome::In => {
                 self.fails.remove(&ip);
             }
+            Outcome::Unsure => {}
         }
     }
 }
@@ -175,6 +201,14 @@ struct Serving {
     accepts: Vec<tokio::task::JoinHandle<()>>,
     /// Let-in connections end when this drops.
     _alive: watch::Sender<()>,
+}
+
+impl Drop for Serving {
+    /// A dropped `JoinHandle` only detaches its task: abort the accept loops, so their listeners
+    /// close however this goes away (`stop`, or the server aborting the supervisor).
+    fn drop(&mut self) {
+        self.accepts.iter().for_each(|a| a.abort());
+    }
 }
 
 /// Follow the settings and Tailscale's status for as long as the server runs: bind, rebind or
@@ -193,7 +227,13 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
             pin = None;
             continue;
         }
-        let want = match blocking(localapi::status).await.unwrap_or_else(|| Err("the LocalAPI call failed".into())) {
+        let status = tokio::time::timeout(DECIDE, tokio::task::spawn_blocking(localapi::status)).await;
+        let status = match status {
+            Ok(Ok(st)) => st,
+            Ok(Err(_)) => Err("the LocalAPI call failed".into()),
+            Err(_) => Err("tailscaled didn't answer in time".into()),
+        };
+        let want = match status {
             Err(e) => Err(e),
             Ok(me) if me.tagged => Err("this machine is tagged on the tailnet, so it has no owner to serve".into()),
             Ok(me) => {
@@ -221,8 +261,7 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
         }
         stop(&shared, &mut serving, port, Some("rebinding".into())).await;
         match bind(&shared, &addrs, port, &tags, &owner).await {
-            Ok(s) => {
-                let at: Vec<String> = addrs.iter().map(|ip| SocketAddr::new(*ip, port).to_string()).collect();
+            Ok((s, at)) => {
                 eprintln!("leon: tailnet: serving on {} for {}", at.join(", "), shown_text(&owner.login, 128));
                 let mut st = crate::events::lock(&shared.ctx.tailnet.status);
                 (st.state, st.port, st.addresses) = ("serving".into(), port, at);
@@ -237,11 +276,11 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
 /// Close the listeners and let-in connections, and say why (`None`: the setting is off). A new
 /// state or reason goes to the log once.
 async fn stop(shared: &Shared, serving: &mut Option<Serving>, port: u16, reason: Option<String>) {
-    if let Some(s) = serving.take() {
-        for a in &s.accepts {
+    if let Some(mut s) = serving.take() {
+        let accepts = std::mem::take(&mut s.accepts);
+        drop(s); // ends the let-in connections
+        for a in accepts {
             a.abort();
-        }
-        for a in s.accepts {
             let _ = a.await; // the listener is closed once its task is gone
         }
     }
@@ -263,30 +302,39 @@ async fn stop(shared: &Shared, serving: &mut Option<Serving>, port: u16, reason:
     }
 }
 
-/// Listen on `port` at each of `addrs` (never another address: they are on the tailnet).
+/// Listen on `port` at each of `addrs` (never another address: they are on the tailnet). One that
+/// can't be bound (IPv6 turned off, say) is logged and left out; none bound is an error. Returns
+/// what serves and where it listens.
 async fn bind(
     shared: &Arc<Shared>,
     addrs: &[IpAddr],
     port: u16,
     tags: &[String],
     owner: &Owner,
-) -> Result<Serving, String> {
+) -> Result<(Serving, Vec<String>), String> {
     let (alive, ended) = watch::channel(());
-    let mut accepts = Vec::new();
+    let (mut accepts, mut at, mut failed) = (Vec::new(), Vec::new(), None);
     for ip in addrs {
         debug_assert!(direct::on_tailnet(*ip));
-        let at = SocketAddr::new(*ip, port);
-        let listener = match TcpListener::bind(at).await {
-            Ok(l) => l,
-            Err(e) => {
-                accepts.iter().for_each(|a: &tokio::task::JoinHandle<()>| a.abort());
-                return Err(format!("can't listen on {at}: {e}"));
+        let addr = SocketAddr::new(*ip, port);
+        match TcpListener::bind(addr).await {
+            Ok(listener) => {
+                let (shared, tags, owner, ended) = (shared.clone(), tags.to_vec(), owner.clone(), ended.clone());
+                accepts.push(tokio::spawn(accept(listener, shared, tags, owner, ended)));
+                at.push(addr.to_string());
             }
-        };
-        let (shared, tags, owner, ended) = (shared.clone(), tags.to_vec(), owner.clone(), ended.clone());
-        accepts.push(tokio::spawn(accept(listener, shared, tags, owner, ended)));
+            Err(e) => {
+                let why = format!("can't listen on {addr}: {e}");
+                eprintln!("leon: tailnet: {why}");
+                failed = Some(why);
+            }
+        }
     }
-    Ok(Serving { addrs: addrs.to_vec(), port, tags: tags.to_vec(), owner: owner.clone(), accepts, _alive: alive })
+    let s = Serving { addrs: addrs.to_vec(), port, tags: tags.to_vec(), owner: owner.clone(), accepts, _alive: alive };
+    match (at.is_empty(), failed) {
+        (true, Some(why)) => Err(why),
+        _ => Ok((s, at)),
+    }
 }
 
 async fn accept(
@@ -306,7 +354,8 @@ async fn accept(
         };
         let tn = &shared.ctx.tailnet;
         if !direct::on_tailnet(peer.ip()) {
-            tn.refuse(peer, "not a machine's Tailscale address");
+            // no whois and no count to fill: a neighbour routing here costs nothing but a line
+            tn.refuse_now_and_then(&tn.strays, peer, "not a machine's Tailscale address");
             continue; // dropping the stream closes it
         }
         match crate::events::lock(&tn.gate).enter(peer.ip()) {
@@ -321,40 +370,49 @@ async fn accept(
                 continue;
             }
             Err(Turned::Busy) => {
-                tn.refuse(peer, "too many connections waiting to be let in");
+                tn.refuse_now_and_then(&tn.busy, peer, "too many connections waiting to be let in");
                 continue;
             }
         }
         let (shared, tags, owner, mut ended) = (shared.clone(), tags.clone(), owner.clone(), ended.clone());
         tokio::spawn(async move {
-            let decided = tokio::time::timeout(DECIDE, blocking(move || decide(peer, &owner, &tags))).await;
+            let mut job = tokio::task::spawn_blocking(move || decide(peer, &owner, &tags));
+            let decided = tokio::time::timeout(DECIDE, &mut job).await;
+            let late = decided.is_err();
             let decided = match decided {
-                Ok(Some(d)) => d,
-                Ok(None) => Err(("the LocalAPI call failed".into(), false)),
-                Err(_) => Err(("tailscaled didn't answer in time".into(), false)),
+                Ok(Ok(d)) => d,
+                Ok(Err(_)) => Err(("the LocalAPI call failed".into(), Outcome::Unsure)),
+                Err(_) => Err(("tailscaled didn't answer in time".into(), Outcome::Unsure)),
             };
             let tn = &shared.ctx.tailnet;
-            crate::events::lock(&tn.gate).leave(peer.ip(), matches!(decided, Err((_, true))));
-            if let Err((reason, _)) = decided {
-                return tn.refuse(peer, &reason); // and the stream closes unread
+            if let Err((reason, outcome)) = decided {
+                tn.refuse(peer, &reason);
+                drop(stream); // closed unread, at once
+                if late {
+                    let _ = job.await; // the slot is free only once its thread is: PENDING caps those too
+                }
+                return crate::events::lock(&tn.gate).leave(peer.ip(), outcome);
             }
+            crate::events::lock(&tn.gate).leave(peer.ip(), Outcome::In);
             shared.open.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             shared.touch();
             let guard = Open(shared.clone());
+            direct::keepalive(&stream); // a caller gone from the tailnet is noticed, as on its side
             let (read, write) = stream.into_split();
             tokio::select! {
+                biased; // serving stopped while this was decided: not one request is served
+                _ = ended.changed() => {}
                 _ = crate::serve::connection(read, write, &guard.0) => {}
-                _ = ended.changed() => {} // serving stopped: the connection closes
             }
         });
     }
 }
 
 /// Whether `peer` comes in: this machine is still signed in as `owner`, before and after whois,
-/// and whois says the peer is one of the owner's other machines. The error's flag says it was the
-/// peer that failed (it counts toward the rate limit), not tailscaled.
-fn decide(peer: SocketAddr, owner: &Owner, tags: &[String]) -> Result<(), (String, bool)> {
-    let ours = |e: String| (e, false);
+/// and whois says the peer is one of the owner's other machines. The error's outcome says whether
+/// it was the peer that failed (it counts toward the rate limit) or tailscaled.
+fn decide(peer: SocketAddr, owner: &Owner, tags: &[String]) -> Result<(), (String, Outcome)> {
+    let ours = |e: String| (e, Outcome::Unsure);
     let me = localapi::status().map_err(ours)?;
     owner.check(&me).map_err(ours)?;
     let who = localapi::whois(peer).map_err(ours)?;
@@ -363,12 +421,7 @@ fn decide(peer: SocketAddr, owner: &Owner, tags: &[String]) -> Result<(), (Strin
     if again.node != me.node {
         return Err(ours("Tailscale changed while deciding".into()));
     }
-    localapi::admit(&me, &who, tags).map_err(|e| (e, true))
-}
-
-/// A LocalAPI call, off the runtime's threads; None if it panicked.
-async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
-    tokio::task::spawn_blocking(f).await.ok()
+    localapi::admit(&me, &who, tags).map_err(|e| (e, Outcome::Refused))
 }
 
 #[cfg(test)]
@@ -381,7 +434,7 @@ mod tests {
         let ip: IpAddr = "100.64.0.9".parse().unwrap();
         for _ in 0..FAILS {
             assert!(g.enter(ip).is_ok());
-            g.leave(ip, true);
+            g.leave(ip, Outcome::Refused);
         }
         assert!(matches!(g.enter(ip), Err(Turned::Limited { first: true })));
         assert!(matches!(g.enter(ip), Err(Turned::Limited { first: false })), "logged once");
@@ -390,8 +443,11 @@ mod tests {
             assert!(g.enter(other).is_ok());
         }
         assert!(matches!(g.enter(other), Err(Turned::Busy)), "per address");
-        g.leave(other, false);
+        g.leave(other, Outcome::Refused);
+        g.leave(other, Outcome::Unsure);
+        assert_eq!(g.fails[&other].0, 1, "tailscaled failing doesn't clear or add to a count");
         assert!(g.enter(other).is_ok());
+        g.leave(other, Outcome::In);
         assert!(!g.fails.contains_key(&other), "a let-in clears its count");
         let mut full = Gate::default();
         for i in 0..MOST_ADDRS as u32 {
