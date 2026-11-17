@@ -43,6 +43,7 @@ pub fn plain_setup_with_config(init_lua: &str) -> Setup {
 }
 
 fn serve(init_lua: Option<&str>, pane_env: Vec<(String, String)>) -> Setup {
+    no_tailscale();
     let dir = private_dir();
     let config = init_lua.map(|lua| {
         let config = dir.path().join("init.lua");
@@ -59,9 +60,11 @@ fn serve(init_lua: Option<&str>, pane_env: Vec<(String, String)>) -> Setup {
     Setup { dir, app }
 }
 
-/// Never this machine's Tailscale: Add Host… reads the tailnet when a client is found.
+/// Never this machine's Tailscale: Add Host… reads the tailnet when a client is found. Set once per
+/// test binary, by the first `setup` before its server starts (every test sets the same value).
 pub fn no_tailscale() {
-    std::env::set_var("LEON_TAILSCALE", "/nonexistent/tailscale");
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| std::env::set_var("LEON_TAILSCALE", "/nonexistent/tailscale"));
 }
 
 pub fn open<'a>(cx: &'a mut TestAppContext, app: &Rc<Embedded>) -> (Entity<Workspace>, &'a mut VisualTestContext) {
