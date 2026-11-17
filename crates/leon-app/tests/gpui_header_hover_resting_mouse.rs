@@ -26,6 +26,7 @@ fn a_pane_split_in_under_a_resting_mouse_shows_working_controls(cx: &mut TestApp
         ws.read_with(cx, |ws, _| ws.grid_drew(&n)).is_some_and(|d| d.text.contains("n-ready"))
     };
     assert!(shows(cx, drew), "the new pane drew");
+    frames(&ws, cx); // the split's motion, to its end: the panes at their place
     assert_eq!(ws.read_with(cx, |ws, _| ws.target_block()), Some(a.clone()), "the old pane keeps the focus");
     let nt = at(cx, &format!("pane-{n}")).expect("the new pane's tile");
     let at_ = at(cx, &format!("pane-{a}")).expect("the old pane's tile");

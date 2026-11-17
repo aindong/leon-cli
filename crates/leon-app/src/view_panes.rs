@@ -46,9 +46,13 @@ impl Workspace {
         let t = placed.tiles;
         let l = w.layout.as_ref().map(|tree| panes::tiles(tree, w.zoomed.as_deref(), (t.w, t.h))).unwrap_or_default();
         let shift = |r: panes::Rect| panes::Rect { x: r.x + t.x, y: r.y + t.y, ..r };
-        let tiles = l.panes.into_iter().map(|p| (p.block_id, shift(p.rect), "pane"));
+        // where the tiles are this frame, while they move (view_layout.rs)
+        let tiles: Vec<_> = match self.layout_tiles(w) {
+            Some(frame) => frame.iter().map(|(id, r)| (id.clone(), *r, "pane")).collect(),
+            None => l.panes.into_iter().map(|p| (p.block_id, shift(p.rect), "pane")).collect(),
+        };
         let docks = placed.docks.into_iter().map(|d| (d.block_id, d.rect, "dock"));
-        tiles.chain(docks).chain(placed.floats.into_iter().map(|f| (f.block_id, f.rect, "float"))).collect()
+        tiles.into_iter().chain(docks).chain(placed.floats.into_iter().map(|f| (f.block_id, f.rect, "float"))).collect()
     }
 
     /// The active window's panes, placed by `panes::tiles` in the pane area (the window less the
@@ -77,6 +81,13 @@ impl Workspace {
             shift(&mut d.rect);
             shift(&mut d.split);
         }
+        // while panes move: where they are this frame, in drawing order, and no dividers
+        if let Some(frame) = self.layout_tiles(w) {
+            l.panes = frame.iter().map(|(id, r)| panes::Pane { block_id: id.clone(), rect: *r }).collect();
+        }
+        if self.layout_moving_panes() {
+            l.dividers.clear();
+        }
         let tiling = Tiling {
             target: target(w).map(str::to_string),
             several: l.panes.len() + placed.docks.len() + placed.floats.len() > 1,
@@ -90,6 +101,8 @@ impl Workspace {
         for p in &l.panes {
             if terms.contains(&p.block_id) {
                 out = out.child(self.pane_tile("pane", &p.block_id, p.rect, None, &tiling, cx));
+            } else if self.layout_ghosts().contains(&p.block_id) {
+                out = out.child(self.ghost_tile(&p.block_id, p.rect));
             }
         }
         for (i, d) in l.dividers.iter().enumerate() {
@@ -116,7 +129,12 @@ impl Workspace {
                     ),
             );
         }
-        self.render_overlays(out, placed, &terms, &tiling, (size, origin), cx)
+        let veil = self.veil();
+        self.render_overlays(out, placed, &terms, &tiling, (size, origin), cx).when(veil > 0., |d| {
+            // a tab or session switch fades in: the chrome over it, fading out (cached grids can't
+            // be drawn faint, so the veil goes over them, as the overview's does)
+            d.child(div().absolute().size_full().bg(gpui::Hsla::from(rgb(self.theme.chrome)).opacity(veil)))
+        })
     }
 
     /// One pane's tile at `rect`: its header (always on a float or drawer, which `grab` moves when

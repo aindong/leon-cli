@@ -48,7 +48,7 @@ impl Workspace {
     /// Whether anything moves: a drawer's slide, a fade, the theme's change, the overview's open
     /// or close. Render asks GPUI for the next frame while it holds (ADR R6).
     pub fn animating(&self) -> bool {
-        self.sliding() || self.fading() || self.theme_shifting() || self.overview_moving()
+        self.sliding() || self.fading() || self.theme_shifting() || self.overview_moving() || self.layout_moving()
     }
 
     /// Ask for the next animation frame while anything moves, noting that it did beside the call

@@ -219,6 +219,7 @@ pub struct Workspace {
     hover_rects: Vec<(String, panes::Rect, &'static str)>,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
+    layout: layout_view::LayoutUi,
     /// The translucent window (view_glass.rs).
     glass: glass_view::GlassUi,
     overview: overview_view::OverviewUi,
@@ -326,8 +327,7 @@ impl Workspace {
         let prepare = cx.observe_in(&cx.entity(), window, |ws, _, window, cx| {
             let seen = ws.screens_seen();
             ws.prepare();
-            ws.sync_grids(&seen, cx);
-            ws.sync_sections(window, cx);
+            ws.sync_views(&seen, window, cx);
         });
         let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
         let mut ws = Workspace {
@@ -390,6 +390,7 @@ impl Workspace {
             hovered_pane: None,
             hover_rects: Vec::new(),
             fade: fade_view::FadeUi::new(cx.background_executor().clone()),
+            layout: Default::default(),
             glass: glass_view::GlassUi::new(window.window_handle()),
             overview: Default::default(),
             updates,
@@ -408,6 +409,7 @@ impl Workspace {
         };
         let seen = ws.screens_seen();
         ws.prepare(); // the first frame comes before any notify
+        ws.note_layout(window);
         ws.sync_grids(&seen, cx);
         ws.note_reduce_transparency();
         ws.note_reduce_motion();
@@ -445,6 +447,8 @@ mod header;
 mod hosts_view;
 #[path = "view_keys.rs"]
 mod keys;
+#[path = "view_layout.rs"]
+mod layout_view;
 #[path = "view_look.rs"]
 mod look_view;
 #[path = "view_pulse.rs"]
