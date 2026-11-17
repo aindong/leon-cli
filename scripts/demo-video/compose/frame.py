@@ -133,7 +133,7 @@ class Renderer:
         h = w / self.aspect
         return (self.L.vx + (x - (cx - w / 2)) / w * self.L.vw, self.L.vy + (y - (cy - h / 2)) / h * self.L.vh)
 
-    def frame(self, src, t, out_t, fixed=None, captions=None, show_cursor=True):
+    def frame(self, src, t, out_t, fixed=None, captions=None, show_cursor=True, keys=True):
         L = self.L
         cam = self.camera(t, fixed)
         if self.blur and fixed is None:
@@ -152,7 +152,8 @@ class Renderer:
         img = img.convert("RGBA")
         if show_cursor:
             self.draw_cursor(img, t, cam)
-        self.draw_keys(img, t)
+        if keys:
+            self.draw_keys(img, t)
         self.draw_caption(img, out_t if captions is not None else t, captions)
         return img.convert("RGB")
 

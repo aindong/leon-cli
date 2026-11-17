@@ -68,6 +68,9 @@ pub struct Ctx {
     /// Set on top of this process's environment for every pane, under leon's own variables: what
     /// an embedding test gives its shells (a plain `sh`, a private home). Empty in leon's server.
     pub pane_env: Vec<(String, String)>,
+    /// Each window's geometry as a client last drew it (`client.geometry`): the most recent report
+    /// wins when several apps are attached. Runtime only, never saved.
+    geometry: Mutex<std::collections::HashMap<String, leon_core::overlays::Geometry>>,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -123,7 +126,51 @@ impl Ctx {
             log: None,
             tailnet: tailnet::Tailnet::default(),
             pane_env: Vec::new(),
+            geometry: Mutex::default(),
         }
+    }
+
+    /// What a terminal of block `block_id` runs with on top of this process's environment: the
+    /// embedder's `pane_env`, then leon's own variables, and a PATH that finds `leon`.
+    pub(crate) fn env_for(&self, session_id: &str, block_id: &str) -> Vec<(String, String)> {
+        let mut env = self.pane_env.clone(); // leon's variables after it, so they win
+        env.extend(
+            [
+                ("LEON_SESSION", session_id),
+                ("LEON_BLOCK", block_id),
+                ("LEON_SERVER", self.info.socket.as_str()),
+                ("TERM", "xterm-256color"),
+            ]
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string())),
+        );
+        // `leon` resolves in every terminal, even when the user's PATH lacks where it was installed
+        if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(std::path::PathBuf::from)) {
+            let path = std::env::var_os("PATH")
+                .filter(|p| !p.is_empty())
+                .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin".into());
+            // no empty entries: one would mean the current directory
+            let entries =
+                std::iter::once(dir.clone()).chain(std::env::split_paths(&path).filter(|p| !p.as_os_str().is_empty()));
+            // join_paths refuses a dir with ':' in it; then the terminal keeps the server's PATH
+            let joined = std::env::join_paths(entries).ok().and_then(|p| p.into_string().ok());
+            if let (Some(dir), Some(path)) = (dir.to_str(), joined) {
+                env.extend([("LEON_BIN_DIR".to_string(), dir.to_string()), ("PATH".to_string(), path)]);
+            }
+        }
+        env
+    }
+
+    /// Window `window_id`'s geometry as a client last reported it, if one has.
+    pub fn geometry(&self, window_id: &str) -> Option<leon_core::overlays::Geometry> {
+        events::lock(&self.geometry).get(window_id).copied()
+    }
+
+    /// Keep `g` as window `window_id`'s geometry, dropping the windows `st` no longer has.
+    pub(crate) fn set_geometry(&self, st: &State, window_id: &str, g: leon_core::overlays::Geometry) {
+        let mut map = events::lock(&self.geometry);
+        map.retain(|w, _| st.sessions.iter().any(|s| s.windows.iter().any(|x| &x.id == w)));
+        map.insert(window_id.to_string(), g);
     }
 
     /// The model. A handler that panicked mid-update leaves it usable, so a poisoned lock is taken anyway.

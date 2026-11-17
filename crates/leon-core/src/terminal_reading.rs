@@ -132,3 +132,22 @@ impl Reading {
         gone.into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
     }
 }
+
+/// Wait for what the exit report needs: the PTY's EOF and every read parsed, or, when no EOF comes
+/// within `wait` (a job holds the PTY, or the reader is behind), what was read by then parsed.
+pub(super) fn parsed_by_then(
+    eof: &mpsc::Receiver<()>,
+    drained: &mpsc::Receiver<()>,
+    read: &AtomicU64,
+    parsed: &AtomicU64,
+    wait: Duration,
+) {
+    if eof.recv_timeout(wait) == Err(mpsc::RecvTimeoutError::Disconnected) {
+        let _ = drained.recv(); // a bounded backlog: it finishes
+        return;
+    }
+    let read = read.load(Ordering::SeqCst);
+    // polled: the parser has no per-batch signal for a plain thread; it ends if the parser does
+    let tick = Duration::from_millis(5);
+    while parsed.load(Ordering::SeqCst) < read && drained.recv_timeout(tick) == Err(mpsc::RecvTimeoutError::Timeout) {}
+}

@@ -34,6 +34,57 @@ impl Bounds {
         }
     }
 }
+/// A window as a client draws it, in its pixels (`client.geometry`): what the server needs to work
+/// out the cells that client gives a float or drawer, so their program starts at that size. The
+/// sums repeat the app's (`floats::place`, `panes::text_rect`, `cells_in`) in the same f32 steps.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Geometry {
+    /// The pane area [width, height]: where the tiles, drawers and floats go.
+    pub area: [f32; 2],
+    /// One cell [width, height].
+    pub cell: [f32; 2],
+    /// What a float's frame (header, padding) takes from its text [across, down].
+    pub float_frame: [f32; 2],
+    /// What a drawer's frame and insets take from its share of the area [across, down].
+    pub drawer_frame: [f32; 2],
+}
+impl Geometry {
+    pub fn check(&self) -> Result<(), ApiError> {
+        let all = [self.area, self.cell, self.float_frame, self.drawer_frame].concat();
+        if all.iter().all(|v| v.is_finite() && *v >= 0.) && self.cell.iter().all(|c| *c > 0.) {
+            Ok(())
+        } else {
+            Err(ApiError::bad_request("geometry must be finite and not negative, with a cell bigger than zero"))
+        }
+    }
+    /// The (rows, columns) of a float at `b`.
+    pub fn float_cells(&self, b: Bounds) -> (u16, u16) {
+        let [aw, ah] = self.area;
+        let (x, y) = ((b.x as f32 * aw).round(), (b.y as f32 * ah).round());
+        let w = (b.width as f32 * aw).round().min(aw - x);
+        let h = (b.height as f32 * ah).round().min(ah - y);
+        self.cells(w - self.float_frame[0], h - self.float_frame[1])
+    }
+    /// The (rows, columns) of a bottom drawer at `size` added after the drawers in `o`, which must
+    /// have no bottom one (`drawer_frame` is a bottom drawer's: a side one loses other insets).
+    pub fn bottom_drawer_cells(&self, o: &Overlays, size: f64) -> (u16, u16) {
+        let [aw, ah] = self.area;
+        // the width the visible side drawers before it leave, as `floats::place` takes it
+        let tw = o
+            .docked
+            .iter()
+            .filter(|d| !d.hidden && d.side != DockSide::Bottom)
+            .fold(aw, |tw, d| tw - (aw * d.size as f32).round().min(tw));
+        let h = (ah * size as f32).round().min(ah);
+        self.cells(tw - self.drawer_frame[0], h - self.drawer_frame[1])
+    }
+    /// The cells in a text box of (w, h), at least one row of two (what `Terminal::resize` takes).
+    fn cells(&self, w: f32, h: f32) -> (u16, u16) {
+        let n = |len: f32, unit: f32, least: u16| ((len.max(0.) / unit).floor().max(0.) as u16).max(least);
+        (n(h, self.cell[1], 1), n(w, self.cell[0], 2))
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum DockSide {

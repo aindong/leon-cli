@@ -154,8 +154,15 @@ pub fn add(r: &mut Registry) {
                 (None, None) => return Err(ApiError::bad_request("give anchor_id or window_id")),
             };
             let place = Place { anchor, direction: p.direction, side: p.side, ratio, focus: p.focus };
-            let block_id =
-                blocks::open(ctx, &mut st, &p.session_id, &window_id, Layout::block(Some(p.layout)), Some(&place))?;
+            let block_id = blocks::open(
+                ctx,
+                &mut st,
+                &p.session_id,
+                &window_id,
+                Layout::block(Some(p.layout)),
+                Some(&place),
+                None,
+            )?;
             Ok(SplitCreated { block_id, window_id, revision: revision(&st, &p.session_id).revision })
         },
     );

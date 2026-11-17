@@ -43,7 +43,7 @@ leon.action{
   run = function()
     local result, err = leon.toggle{
       label = "git", create = true, float = true,
-      options = { command = { "sh", "-c", "git log --graph --oneline --decorate --color=always | less -R" } },
+      options = { command = { "sh", "-c", "git log --graph --oneline --decorate --color=always | less -Rc" } },
     }
     if not result then error(err, 0) end
     return result

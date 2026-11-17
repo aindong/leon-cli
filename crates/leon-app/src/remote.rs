@@ -30,6 +30,8 @@ mod conn;
 mod events;
 #[path = "remote_fetch.rs"]
 mod fetch_model;
+#[path = "remote_geometry.rs"]
+mod geometry;
 #[path = "remote_link.rs"]
 mod link;
 #[path = "remote_palette.rs"]
@@ -177,6 +179,8 @@ struct Shared {
     /// `palette`); unused once the server refused it (a leon older than M22b).
     palette: Mutex<Option<Value>>,
     palette_refused: AtomicBool,
+    /// The last `client.geometry` told, told again on a re-attach.
+    geometry: Mutex<Option<Value>>,
     alive: AtomicBool,
     closing: AtomicBool,
     /// Over a link: whether the connections are up.
@@ -298,6 +302,7 @@ impl Remote {
             watched: Mutex::default(),
             palette: Mutex::default(),
             palette_refused: AtomicBool::new(false),
+            geometry: Mutex::default(),
             alive: AtomicBool::new(true),
             closing: AtomicBool::new(false),
             link: Mutex::new(LinkState::Up),
