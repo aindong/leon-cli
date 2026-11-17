@@ -7,12 +7,14 @@ use leon_core::overlays::Geometry;
 impl Shared {
     /// Tell the server again what was last told, on a re-attach: it may have restarted, or missed
     /// it while a link was down. Off the UI's connection, as a re-attach's other calls are.
-    pub(super) fn resend_geometry(&self) {
+    /// Returns what it told.
+    pub(super) fn resend_geometry(&self) -> Option<Value> {
         // not held over the call: over a link it can take seconds, and the UI reports through it
         let last = lock(&self.geometry).clone();
-        if let Some(p) = last {
-            let _ = lock(&self.fetch).call("client.geometry", p);
+        if let Some(p) = &last {
+            let _ = lock(&self.fetch).call("client.geometry", p.clone());
         }
+        last
     }
 }
 

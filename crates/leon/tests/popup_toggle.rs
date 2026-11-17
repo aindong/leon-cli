@@ -190,7 +190,9 @@ fn recipe_popup(fake_less: bool) -> (Env, String, String, String) {
         std::fs::set_permissions(&p, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     }
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
-    assert!(e.cmd().env("PATH", &path).args(["server", "start"]).status().unwrap().success());
+    // the panes inherit the server's environment: a LESS=-E of the caller's would end the pager
+    let start = e.cmd().env("PATH", &path).env_remove("LESS").args(["server", "start"]).status();
+    assert!(start.unwrap().success());
     let (sid, _) = e.session();
 
     let docs = include_str!("../../../docs/lua/keys.md");
