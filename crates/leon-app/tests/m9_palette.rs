@@ -133,4 +133,7 @@ fn a_whole_word_is_two_letters_or_more_and_keeps_its_apostrophe() {
     assert_ne!(a.first().map(String::as_str), Some("Scroll Up a Page"), "{a:?}");
     let whats = titles(&items, "what's");
     assert_eq!(whats.first().map(String::as_str), Some("Hints: Copy What's on Screen"), "{whats:?}");
+    // equal fuzzy scores: only "What's" kept whole puts the second first
+    let pair = [item("a", "What'snext", &[]), item("b", "What's next", &[])];
+    assert_eq!(titles(&pair, "what's"), ["What's next", "What'snext"]);
 }
