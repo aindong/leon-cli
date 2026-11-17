@@ -1,7 +1,8 @@
 //! A `Link` makes a host look like a local server: a Unix socket in a fresh private dir under the
 //! runtime dir, served by threads in this process. Each connection to it runs ssh to the host's
 //! `leon server proxy` and copies bytes both ways, so any client that takes a socket path (the
-//! CLI, scripts, the app's `Remote`) works unchanged. Nothing listens on TCP. The link holds a
+//! CLI, scripts, the app's `Remote`) works unchanged. A `tailnet://` endpoint's connections are a
+//! checked TCP stream instead (`direct`); the link itself listens on no network. The link holds a
 //! flock on `lock` in its dir while it lives, which is how another link tells a dead one's dir.
 
 use std::io::{self, Read, Write};

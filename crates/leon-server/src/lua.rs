@@ -162,6 +162,12 @@ impl Ctx {
 }
 
 impl Ctx {
+    /// The effective settings and the config's generation (each good load bumps it).
+    pub(crate) async fn settings(&self) -> (leon_lua::Settings, u64) {
+        let l = self.lua.read().await;
+        (l.cfg.settings.clone(), l.generation)
+    }
+
     /// The config's resume setting, once the start-up load (`start_config`) has finished. Waits at
     /// most a second: nothing is served until the restore that asks is done. Past it, "never": the
     /// setting is unknown, so nothing is typed.

@@ -3385,6 +3385,7 @@ name = "leon-server"
 version = "0.1.0"
 dependencies = [
  "leon-core",
+ "leon-hosts",
  "leon-lua",
  "libc",
  "schemars",

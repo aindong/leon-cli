@@ -60,7 +60,7 @@ each other's pipes: pass `--test-threads=1`) and writes `$HOME/.cache/rosetta` (
 
 ## Decisions
 
-The decisions, in seven parts:
+The decisions, in eight parts:
 
 - [Protocol and clients](architecture/protocol-and-clients.md): the wire protocol, events, layout,
   the socket path, terminal emulation, Lua (config, runtime, bounds), the app, the screen transport,
@@ -77,6 +77,8 @@ The decisions, in seven parts:
   after a restart, terminal reads, packaging (Leon.app, Linux packages), the login shell's PATH,
   `LEON_BIN_DIR`, the API contract, tested docs, and naming.
 - [Hosts](architecture/hosts.md): remote hosts and reconnects, and the app's hosts.
+- [Serving over Tailscale](architecture/tailnet.md): the server's one network listener, who it
+  lets in, `tailnet://` endpoints, and the threat model.
 - [How leon uses GPUI](architecture/gpui.md): the app's view structure, redraws, animation,
   painting, input, async and tests as GPUI intends them, what may go beside GPUI, and that GPUI
   is used as published.

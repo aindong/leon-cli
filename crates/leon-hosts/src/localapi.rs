@@ -84,6 +84,7 @@ pub fn admit(me: &Me, peer: &Peer, tags: &[String]) -> Result<(), String> {
     }
     match (peer.user, &peer.login) {
         (Some(u), Some(l)) if u == me.user && *l == me.login && l != "tagged-devices" => Ok(()),
+        (_, Some(l)) if *l == me.login => Err(format!("it is another account with the login {}", shown_text(l, 128))),
         (_, Some(l)) => Err(format!(
             "it is signed in to Tailscale as {}, not as {}",
             shown_text(l, 128),

@@ -13,7 +13,7 @@ the server, the CLI and `leon attach`).
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.8.0`.
+one is `1.9.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -27,6 +27,19 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+### Serve over Tailscale
+
+#### Added
+
+- `leon.set("serve_tailscale", true)` (off by default) makes the server also listen on this
+  machine's Tailscale addresses, letting in only your own other machines, as tailscaled's
+  `whois` says, before it reads a byte; `serve_tailscale_port` (7297) and `serve_tailscale_tags`
+  go with it. `tailnet://HOST` endpoints reach such a server with no ssh. See
+  [docs/cli/hosts.md](docs/cli/hosts.md#serve-over-tailscale).
+- `server.status` reports `tailnet` (state, addresses, login, reason, last refusal) and
+  `server.settings` the three settings: new result fields on stable methods, so `api_version`
+  goes from `1.8.0` to `1.9.0`.
 
 ### A translucent window in Leon.app
 

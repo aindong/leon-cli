@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.8.0**. Every method is marked:
+API version **1.9.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -229,7 +229,7 @@ same facts for the server you run.
 
 ### `server.status`
 
-*stable*. Whether the server runs, its pid, version and socket.
+*stable*. Whether the server runs, its pid, version and socket, and whether it serves over Tailscale.
 
 **Input:** none
 
@@ -244,6 +244,26 @@ same facts for the server you run.
 | `autostarted` | boolean | yes | True when a client started this server on demand; it exits once idle. |
 | `sessions` | integer (uint) | yes |  |
 | `state_file` | string \| null |  | Where sessions are saved, while running and on stop; null when they aren't (the state dir isn't private). |
+| `tailnet` | `TailnetStatus` | yes | Serving over Tailscale (`serve_tailscale`): whether, where, for whom, and the last caller turned away. |
+
+**`TailnetStatus`:** What `server.status` says about serving over Tailscale.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `state` | string | yes | `off` (serve_tailscale is false), `serving`, or `stopped` (on, but not serving: `reason` says why). |
+| `port` | integer (uint16) | yes | The port it serves on (serve_tailscale_port). |
+| `addresses` | [string] | yes | Where it listens, as `ADDRESS:PORT`: this machine's Tailscale addresses only. |
+| `login` | string \| null |  | The Tailscale login it lets in: the one this machine was signed in as when serving started. |
+| `reason` | string \| null |  | Why it isn't serving. |
+| `last_refusal` | `Refusal` \| null |  | The last connection turned away. |
+
+**`Refusal`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `peer` | string | yes | The caller's `ADDRESS:PORT`. |
+| `reason` | string | yes |  |
+| `at` | integer (uint64) | yes | When, in seconds since the Unix epoch. |
 
 <details><summary>JSON Schemas</summary>
 
@@ -290,6 +310,10 @@ same facts for the server you run.
           "string",
           "null"
         ]
+      },
+      "tailnet": {
+        "description": "Serving over Tailscale (`serve_tailscale`): whether, where, for whom, and the last caller turned away.",
+        "$ref": "#/$defs/TailnetStatus"
       }
     },
     "required": [
@@ -298,8 +322,88 @@ same facts for the server you run.
       "version",
       "socket",
       "autostarted",
-      "sessions"
-    ]
+      "sessions",
+      "tailnet"
+    ],
+    "$defs": {
+      "TailnetStatus": {
+        "description": "What `server.status` says about serving over Tailscale.",
+        "type": "object",
+        "properties": {
+          "state": {
+            "description": "`off` (serve_tailscale is false), `serving`, or `stopped` (on, but not serving: `reason` says why).",
+            "type": "string"
+          },
+          "port": {
+            "description": "The port it serves on (serve_tailscale_port).",
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "addresses": {
+            "description": "Where it listens, as `ADDRESS:PORT`: this machine's Tailscale addresses only.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "login": {
+            "description": "The Tailscale login it lets in: the one this machine was signed in as when serving started.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "description": "Why it isn't serving.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_refusal": {
+            "description": "The last connection turned away.",
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Refusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "port",
+          "addresses"
+        ]
+      },
+      "Refusal": {
+        "type": "object",
+        "properties": {
+          "peer": {
+            "description": "The caller's `ADDRESS:PORT`.",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "at": {
+            "description": "When, in seconds since the Unix epoch.",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "peer",
+          "reason",
+          "at"
+        ]
+      }
+    }
   }
 }
 ```
@@ -351,7 +455,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.8.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.9.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -460,6 +564,9 @@ same facts for the server you run.
 | `fade_inactive_panes` | number | yes | How far the app fades the panes without the focus toward the window's background, from 0 (off) to 0.8. |
 | `check_for_updates` | boolean | yes | Leon.app looks for a newer release once a day; false, only when asked. |
 | `translucency` | number | yes | How much of the desktop shows through Leon.app's window, from 0 (opaque) to 0.8. |
+| `serve_tailscale` | boolean | yes | The server also listens on this machine's Tailscale addresses, letting in only your own machines (`server.status`'s `tailnet` says how it went). |
+| `serve_tailscale_port` | integer (uint16) | yes | The port it listens on there. |
+| `serve_tailscale_tags` | [string] | yes | Tagged machines it lets in too, by tag (`tag:ci`). |
 
 **`ThemeChoice`:** A theme name for each OS appearance (the same one for both unless init.lua gives two).
 
@@ -562,6 +669,24 @@ same facts for the server you run.
             "description": "How much of the desktop shows through Leon.app's window, from 0 (opaque) to 0.8.",
             "type": "number",
             "format": "double"
+          },
+          "serve_tailscale": {
+            "description": "The server also listens on this machine's Tailscale addresses, letting in only your own\nmachines (`server.status`'s `tailnet` says how it went).",
+            "type": "boolean"
+          },
+          "serve_tailscale_port": {
+            "description": "The port it listens on there.",
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "serve_tailscale_tags": {
+            "description": "Tagged machines it lets in too, by tag (`tag:ci`).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -574,7 +699,10 @@ same facts for the server you run.
           "resume",
           "fade_inactive_panes",
           "check_for_updates",
-          "translucency"
+          "translucency",
+          "serve_tailscale",
+          "serve_tailscale_port",
+          "serve_tailscale_tags"
         ]
       },
       "ThemeChoice": {

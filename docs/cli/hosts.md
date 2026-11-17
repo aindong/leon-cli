@@ -7,10 +7,11 @@ list that names them.
 
 `-H HOST` reaches the leon server on another machine (a devbox, a cloud VM, another Mac) through
 the system `ssh`, so `~/.ssh/config`, `ProxyJump`, keys and agents all work, and leon never sees a
-password. Nothing listens on a network port: leon runs `ssh -T … -- [USER@]HOST` and, on the
+password. Nothing listens on a network port (unless you turn on [serving over
+Tailscale](#serve-over-tailscale)): leon runs `ssh -T … -- [USER@]HOST` and, on the
 host, `leon server proxy` (found on `PATH`, else in `~/.local/bin`), which starts the host's
 server if none runs. `LEON_SSH` names another ssh program. An endpoint is only
-`ssh://[USER@]HOST[:PORT]` with plain names; anything else is refused (exit 2). Each connection is
+`ssh://[USER@]HOST[:PORT]` or `tailnet://HOST[:PORT]` with plain names; anything else is refused (exit 2). Each connection is
 one ssh session (`leon attach` opens three), so use keys or an agent, and `ControlMaster auto` in
 `~/.ssh/config` to share one login.
 
@@ -87,3 +88,49 @@ here: add the host by its `100.x` address instead (`tailscale status` shows it).
   else, on macOS, `/Applications/Tailscale.app/Contents/MacOS/Tailscale`.
 - **No Tailscale.** Not installed, stopped or signed out, `--tailscale` says so in one line and
   exits 1; everything else works as before.
+
+## Serve over Tailscale
+
+Off by default. With it on, this machine's server also listens on its Tailscale addresses (its
+`100.x` IPv4 and `fd7a:115c:a1e0::` IPv6, never another interface), and another of your machines
+reaches it directly, with no ssh and no sshd:
+
+```text
+leon config set serve_tailscale true          # on the machine to reach; its server must run
+leon server start
+leon server status                            # tailnet  serving on 100.64.0.5:7297, … for me@example.com
+leon -H tailnet://devbox ls                   # on another of your machines
+leon hosts add devbox tailnet://devbox.example-tailnet.ts.net
+```
+
+- **Who gets in**: only your own other machines. For each connection, before reading a byte,
+  the server asks the local tailscaled (its LocalAPI `whois`) who is calling, and lets the call
+  in only when that machine is signed in to Tailscale as the account this machine is signed in
+  as, and isn't tagged. A tagged machine gets in only if `serve_tailscale_tags` lists one of its
+  tags (`leon config set serve_tailscale_tags '["tag:ci"]'`). Anything else (another account, a
+  shared-in machine, this machine itself, tailscaled down or slow) is closed with no reply, and
+  the server log says why in one line (`leon server status` shows the last one). An address
+  refused 5 times in a minute is closed unasked for a minute.
+- **What a caller can do**: everything a local client can, since it is the same user on another
+  machine: run commands, type into any pane, read every screen. Turn it on only where that is
+  what you want.
+- **Every machine signed in as you counts as you**: anyone who can use one of your untagged
+  machines (another account on it, a program relaying the port with `tailscale serve`, `socat`
+  or ssh port forwarding) can come in. Never forward the port, and limit it in your tailnet
+  policy to your own devices, for example
+  `{"action": "accept", "src": ["autogroup:member"], "dst": ["autogroup:self:7297"]}`.
+- **The port** is `serve_tailscale_port` (default 7297): a number, never an address.
+- **When Tailscale stops, logs out or switches account**, the server stops listening and says so
+  (`leon server status`: `tailnet  stopped: …`). After a switch it serves again only once you run
+  `leon config reload` (or change a setting), and then for the account it is signed in as then.
+  Turning the setting off closes the listener and every connection it let in.
+- **`tailnet://HOST[:PORT]`** (default port 7297) is a host endpoint like `ssh://`, for `-H`,
+  `leon hosts add`, `leon attach` and the app. The client connects only to a Tailscale address
+  that its own tailscaled says is one of your untagged machines; a name that resolves elsewhere
+  is refused before anything is sent. There is no autostart: the far server must already run.
+- leon reads tailscaled's LocalAPI (status and whois only, never a change): its socket on Linux,
+  and the standalone Mac app's local port and token in `/Library/Tailscale`. The Mac App Store
+  build isn't supported yet: with it leon can't ask and lets no one in.
+
+The design and threat model are in
+[docs/architecture/tailnet.md](../architecture/tailnet.md).

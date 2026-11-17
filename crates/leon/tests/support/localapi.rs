@@ -38,8 +38,18 @@ pub struct Fake {
 
 /// A status as tailscaled's `status?peers=false` gives it: running, signed in as `login`, with `ips`.
 pub fn status(login: &str, ips: &[&str]) -> Value {
-    json!({ "BackendState": "Running", "Self": { "ID": SELF_NODE, "UserID": 7, "TailscaleIPs": ips, "Tags": null },
-            "User": { "7": { "ID": 7, "LoginName": login } } })
+    let user = id(login);
+    json!({ "BackendState": "Running", "Self": { "ID": SELF_NODE, "UserID": user, "TailscaleIPs": ips, "Tags": null },
+            "User": { user.to_string(): { "ID": user, "LoginName": login } } })
+}
+
+/// The user id the fake gives a login: the owner is 7, anyone else 8.
+fn id(login: &str) -> u64 {
+    if login == OWNER {
+        7
+    } else {
+        8
+    }
 }
 
 /// A whois answer for another machine signed in as `login`, with `tags`.
@@ -50,8 +60,9 @@ pub fn whois(login: &str, tags: &[&str]) -> Value {
 /// A whois answer for the machine `node` (a StableID; `SELF_NODE` is this one).
 pub fn whois_node(node: &str, login: &str, tags: &[&str]) -> Value {
     let tags = if tags.is_empty() { Value::Null } else { json!(tags) };
-    json!({ "Node": { "ID": 9, "StableID": node, "Name": "peer.example.ts.net.", "User": 8, "Tags": tags },
-            "UserProfile": { "ID": 8, "LoginName": login, "DisplayName": "Peer" } })
+    let user = id(login);
+    json!({ "Node": { "ID": 9, "StableID": node, "Name": "peer.example.ts.net.", "User": user, "Tags": tags },
+            "UserProfile": { "ID": user, "LoginName": login, "DisplayName": "Peer" } })
 }
 
 impl Fake {
