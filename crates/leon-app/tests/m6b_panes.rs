@@ -1,6 +1,8 @@
 //! M6b criteria 2–6: the workspace renders and drives split layouts, headless, against a real
 //! embedded server and real shells.
 
+mod m9_support;
+
 use std::os::unix::fs::PermissionsExt;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -21,6 +23,7 @@ struct Setup {
 }
 
 fn setup() -> Setup {
+    m9_support::plain_shell(); // the tests type into panes just made
     let dir = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
     let app = Rc::new(embedded::start_at(dir.path().join("server.sock")).unwrap());
     Setup { _dir: dir, app }
@@ -231,7 +234,9 @@ fn zoom_never_hides_where_input_goes(cx: &mut TestAppContext) {
     s.app
         .call("session.zoom_block", serde_json::json!({ "session_id": sid, "block_id": other, "zoom": true }))
         .unwrap();
-    cx.run_until_parked();
+    // the app hears of it by an event and a refetch, a moment later: type once it shows it
+    let zoomed = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.target_block()) == Some(other.clone());
+    assert!(m9_support::shows(cx, zoomed), "the app shows the zoom from the CLI");
     let shown = term(&s.app, &other);
     settle(&shown);
     cx.simulate_input("echo seen");
