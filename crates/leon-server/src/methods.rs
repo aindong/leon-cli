@@ -72,6 +72,8 @@ pub struct Status {
     pub blocks: usize,
     /// The file the server's output goes to; null when it has none (a server run in a terminal).
     pub log: Option<String>,
+    /// Serving over Tailscale (`serve_tailscale`): whether, where, for whom, and the last caller turned away.
+    pub tailnet: crate::tailnet::TailnetStatus,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -282,7 +284,7 @@ pub fn registry() -> Registry {
     });
     r.add(
         "server.status",
-        "Whether the server runs, its pid, version and socket, since when, and how many sessions and blocks.",
+        "Whether the server runs, its pid, version and socket, since when, how many sessions and blocks, and whether it serves over Tailscale.",
         |ctx, _: NoParams| {
             let st = ctx.state(); // once: a second lock in this statement would wait on the first
             let blocks = st.sessions.iter().map(|s| s.blocks.len()).sum();
@@ -297,6 +299,7 @@ pub fn registry() -> Registry {
                 started_at: ctx.started_at,
                 blocks,
                 log: ctx.log.clone(),
+                tailnet: ctx.tailnet.status(),
             })
         },
     );

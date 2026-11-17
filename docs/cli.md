@@ -353,7 +353,9 @@ with the text each terminal shows (in the private state dir, 0600).
 
 ### `leon server status`
 
-Show whether a server runs; exit 4 if not.
+Show whether a server runs; exit 4 if not. When [serving over
+Tailscale](cli/hosts.md#serve-over-tailscale) is on, a `tailnet` line says where it serves or why
+it stopped, and another the last connection it refused.
 
 ### `leon server proxy`
 

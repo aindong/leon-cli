@@ -26,7 +26,7 @@ fn the_warnings_say_what_stop_does() {
     );
 }
 
-/// A server from before API 1.10.0 has no start or block count: the page leaves them out
+/// A server from before API 1.11.0 has no start or block count: the page leaves them out
 /// instead of saying it has run since 1970.
 #[test]
 fn an_older_server_has_no_uptime_or_blocks() {

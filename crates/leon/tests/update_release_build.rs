@@ -63,4 +63,7 @@ fn a_release_build_ignores_the_test_seam() {
     assert!(has(b"LEON_RELEASE_URL"), "the search finds names that are there");
     let debug = std::fs::read(env!("CARGO_BIN_EXE_leon")).unwrap();
     assert!(debug.windows(16).any(|w| w == b"LEON_TEST_UPDATE"), "and a debug build does read it");
+    // the same for the tailnet seam, which points the LocalAPI at a fake and makes loopback the tailnet
+    assert!(!has(b"LEON_TEST_TAILNET"), "a release build has no code that reads LEON_TEST_TAILNET");
+    assert!(debug.windows(17).any(|w| w == b"LEON_TEST_TAILNET"), "and a debug build does read it");
 }

@@ -15,6 +15,7 @@ pub mod resume;
 pub mod screens;
 pub mod serve;
 pub mod settings;
+pub mod tailnet;
 
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -62,6 +63,8 @@ pub struct Ctx {
     pub started_at: u64,
     /// The file its output goes to, when it was started with one (`server.status`).
     pub log: Option<String>,
+    /// Serving over Tailscale (tailnet.rs).
+    pub tailnet: tailnet::Tailnet,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -115,6 +118,7 @@ impl Ctx {
             lua: lua::Shared::default(),
             started_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()),
             log: None,
+            tailnet: tailnet::Tailnet::default(),
         }
     }
 

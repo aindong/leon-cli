@@ -129,6 +129,8 @@ pub struct SettingsWindow {
     reduced: bool,
     handle: AnyWindowHandle,
     renders: usize,
+    /// `server.status`'s `tailnet`, fetched every 2 s (settings_window_tailscale.rs).
+    tailnet: Option<Value>,
     focus: FocusHandle,
     _appearance: Subscription,
     _activation: Subscription,
@@ -224,6 +226,7 @@ impl SettingsWindow {
             reduced: false,
             handle: window.window_handle(),
             renders: 0,
+            tailnet: None,
             focus,
             _appearance: appearance,
             _activation: activation,
@@ -240,6 +243,7 @@ impl SettingsWindow {
             Some(leon) => sw.read_agents(leon, cx),
             None => sw.agents = Some(Err("This isn't the leon binary: run leon skill status in a terminal".into())),
         }
+        sw.watch_tailnet(cx);
         sw
     }
 

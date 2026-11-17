@@ -38,6 +38,9 @@ thread_local! {
 pub struct Loaded {
     path: Option<PathBuf>,
     generation: u64,
+    /// Counts good loads that changed a `serve_tailscale*` setting: only those re-pin the account
+    /// served over Tailscale (tailnet.rs), never an unrelated `leon config set`.
+    serve_generation: u64,
     cfg: leon_lua::Config,
     /// None when no config file exists.
     jobs: Option<mpsc::Sender<Job>>,
@@ -124,7 +127,9 @@ async fn reload(ctx: &Arc<Ctx>, cur: &mut Loaded) -> Result<Reloaded, ApiError> 
     let path = cur.path.clone().or_else(leon_lua::config_path).ok_or_else(|| config_error("no config path"))?;
     let (cfg, jobs) = load(ctx, path.clone()).await?;
     let changed = cfg.settings != cur.cfg.settings;
-    *cur = Loaded { path: Some(path.clone()), generation: cur.generation + 1, cfg, jobs };
+    let serve = |s: &leon_lua::Settings| (s.serve_tailscale, s.serve_tailscale_port, s.serve_tailscale_tags.clone());
+    let serve_generation = cur.serve_generation + u64::from(serve(&cfg.settings) != serve(&cur.cfg.settings));
+    *cur = Loaded { path: Some(path.clone()), generation: cur.generation + 1, serve_generation, cfg, jobs };
     if changed {
         let view = serde_json::to_value(crate::settings::view(&cur.cfg)).expect("json");
         ctx.state().emit_global("settings_changed", view);
@@ -162,6 +167,12 @@ impl Ctx {
 }
 
 impl Ctx {
+    /// The effective settings, and how many loads changed a `serve_tailscale*` setting.
+    pub(crate) async fn settings(&self) -> (leon_lua::Settings, u64) {
+        let l = self.lua.read().await;
+        (l.cfg.settings.clone(), l.serve_generation)
+    }
+
     /// The config's resume setting, once the start-up load (`start_config`) has finished. Waits at
     /// most a second: nothing is served until the restore that asks is done. Past it, "never": the
     /// setting is unknown, so nothing is typed.

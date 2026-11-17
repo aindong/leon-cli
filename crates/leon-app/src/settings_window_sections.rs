@@ -96,7 +96,12 @@ pub(super) const ENTRIES: [Entry; 16] = [
     entry(Agents, "agents", "Coding agents", &["skill"]),
     entry(RemoteHosts, "hosts", "Remote hosts", &["hosts", "ssh", "add host", "tailnet"]),
     entry(Server, "server", "This Mac's server", &["server", "running", "restart", "stop", "socket", "log", "version"]),
-    entry(Server, "tailscale", "Tailscale", &["tailscale", "tailnet", "serve"]),
+    entry(
+        Server,
+        "tailscale",
+        "Tailscale",
+        &["tailscale", "tailnet", "serve", "serve_tailscale", "serve_tailscale_port", "serve_tailscale_tags"],
+    ),
 ];
 
 /// Whether the row `id` shows a setting from init.lua (blank until init.lua has been read).
@@ -308,7 +313,9 @@ impl SettingsWindow {
             "agents" => self.agents_intro(t).into_any_element(),
             "hosts" => self.hosts_intro(t, cx).into_any_element(),
             "server" => self.server_page(t, cx).into_any_element(),
-            "tailscale" => Self::subtitle(t, label).child(self.tailscale_section(t, cx)).into_any_element(),
+            "tailscale" => {
+                self.tailscale_section(t, cx).debug_selector(|| "tailscale-section".into()).into_any_element()
+            }
             "resume" => self.choice(t, "resume", label, rows::RESUME_NOTE, &rows::RESUME, cx).into_any_element(),
             "repeat_time" => self.stepper(t, "repeat_time", label, rows::REPEAT, cx).into_any_element(),
             "translucency" => self.stepper(t, "translucency", label, rows::TRANSLUCENCY, cx).into_any_element(),

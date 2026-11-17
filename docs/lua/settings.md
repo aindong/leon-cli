@@ -33,6 +33,9 @@ since every program in every session ends.
 | `fade_inactive_panes` | a number, 0 (off) to 0.8 | `0.35` |
 | `check_for_updates` | `true` or `false` ([updates.md](../updates.md)) | `true` |
 | `translucency` | a number, 0 (opaque) to 0.8 | `0.3` |
+| `serve_tailscale` | `true` or `false` ([cli/hosts.md](../cli/hosts.md#serve-over-tailscale)) | `false` |
+| `serve_tailscale_port` | a port, 1 to 65535 | `7297` |
+| `serve_tailscale_tags` | a list of tags such as `"tag:ci"`, at most 16 | `{}` |
 
 `theme` names a theme `leon theme list` shows (built in or imported); an unknown name is an error.
 
@@ -67,6 +70,10 @@ leon.set("fade_inactive_panes", 0)
 `translucency` is how much desktop shows through Leon.app, blurred, tinted by the theme.
 Text keeps 4.5:1 over any desktop (muted 3:1), or the theme's own if lower.
 Reduce Transparency and full screen are opaque, as is `leon.set("translucency", 0)`.
+
+`serve_tailscale` makes the server also listen on this machine's Tailscale addresses, on
+`serve_tailscale_port`, for your own other machines only (and tagged ones with a tag in
+`serve_tailscale_tags`); [cli/hosts.md](../cli/hosts.md#serve-over-tailscale) has the rest.
 
 `repeat_time` is how long a repeatable binding's keys work without the prefix ([keys.md](keys.md#repeat-keys)).
 

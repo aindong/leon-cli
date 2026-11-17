@@ -15,7 +15,7 @@ pub struct ServerInfo {
     pub version: String,
     pub socket: String,
     pub sessions: u64,
-    /// None from a server older than API 1.10.0, as is `started_at`.
+    /// None from a server older than API 1.11.0, as is `started_at`.
     pub blocks: Option<u64>,
     /// Seconds since the Unix epoch.
     pub started_at: Option<u64>,

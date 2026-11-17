@@ -18,7 +18,7 @@ summary bullet per feature, linking its section here.
   login; Add Host… opens the window's prompt, Rename checks the label as `leon hosts add` does,
   and Remove asks first.
 - `server.status` gains `started_at`, `blocks` and `log` (null for a server run in a terminal):
-  new result fields on a stable method, so `api_version` goes from `1.9.0` to `1.10.0`.
+  new result fields on a stable method, so `api_version` goes from `1.10.0` to `1.11.0`.
 
 ### A Settings window with sections
 
@@ -32,6 +32,24 @@ summary bullet per feature, linking its section here.
   stays read-only, with the line to change.
 - Shortcuts lists every key the app binds, with Edit in init.lua; Agents shows what
   `leon skill status` says, with the command that sets an agent up.
+
+### Serve over Tailscale
+
+#### Added
+
+- `leon.set("serve_tailscale", true)` (off by default) makes the server also listen on this
+  machine's Tailscale addresses (never another interface), on `serve_tailscale_port` (7297). It
+  lets a connection in only once tailscaled's `whois` says it comes from another of this
+  machine's owner's untagged machines (or a tag listed in `serve_tailscale_tags`), before reading
+  a byte; anything else is closed unanswered with one log line
+  ([docs/cli/hosts.md](cli/hosts.md#serve-over-tailscale), the threat model in
+  [architecture/tailnet.md](architecture/tailnet.md)).
+- `tailnet://HOST[:PORT]` endpoints reach such a server with no ssh, for `-H`, `leon hosts add`,
+  `leon attach` and the app; the client connects only to a machine its own tailscaled vouches for.
+- The Settings window has a Tailscale section: the switch, the port and tags, and how serving goes.
+- `server.status` reports `tailnet` (state, addresses, login, reason, last refusal) and
+  `server.settings` the three settings: new result fields on stable methods, so `api_version`
+  goes from `1.9.0` to `1.10.0`.
 
 ### An icon per program in Leon.app
 

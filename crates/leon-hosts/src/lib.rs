@@ -2,8 +2,10 @@
 //! `ssh://me@devbox:2222`, the hosts list that names them, and the `Link` that reaches one through
 //! the system ssh. Used by the CLI's `-H` and, later, by the app.
 
+pub mod direct;
 pub mod hosts;
 mod link;
+pub mod localapi;
 pub mod tailscale;
 
 use std::process::Command;
@@ -27,14 +29,17 @@ pub fn pump(from: &mut impl std::io::Read, to: &mut impl std::io::Write) {
     }
 }
 
-/// `ssh://[USER@]HOST[:PORT]`. Parsing is the guard: every part is a plain word that can't start
-/// with `-`, so nothing in an endpoint reaches ssh as an option or a shell as code.
+/// `ssh://[USER@]HOST[:PORT]`, or `tailnet://HOST[:PORT]` (a server serving over Tailscale, no
+/// ssh). Parsing is the guard: every part is a plain word that can't start with `-`, so nothing
+/// in an endpoint reaches ssh as an option or a shell as code.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Endpoint {
     pub user: Option<String>,
     /// A name (`devbox`, an ~/.ssh/config alias, an IPv4 address) or an IPv6 address without brackets.
     pub host: String,
     pub port: Option<u16>,
+    /// `tailnet://`: a direct connection (`direct::connect`), never ssh.
+    pub tailnet: bool,
 }
 
 /// A user or host name: letters, digits, `.`, `_`, `-`, not starting with `-`.
@@ -49,9 +54,17 @@ impl FromStr for Endpoint {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, String> {
-        let bad = |why: &str| format!("bad endpoint {s:?}: {why} (expected ssh://[USER@]HOST[:PORT])");
-        let rest = s.strip_prefix("ssh://").ok_or_else(|| bad("it must start with ssh://"))?;
+        let bad = |why: &str| {
+            format!("bad endpoint {s:?}: {why} (expected ssh://[USER@]HOST[:PORT] or tailnet://HOST[:PORT])")
+        };
+        let (tailnet, rest) = match s.strip_prefix("tailnet://") {
+            Some(rest) => (true, rest),
+            None => (false, s.strip_prefix("ssh://").ok_or_else(|| bad("it must start with ssh:// or tailnet://"))?),
+        };
         let (user, rest) = match rest.split_once('@') {
+            Some(_) if tailnet => {
+                return Err(bad("a tailnet:// endpoint has no user: the host's server is its own user's"))
+            }
             Some((u, r)) if word(u, 64) => (Some(u.to_string()), r),
             Some(_) => return Err(bad("the user name may only have letters, digits, . _ - and can't start with -")),
             None => (None, rest),
@@ -85,13 +98,13 @@ impl FromStr for Endpoint {
             }
             Some(_) => return Err(bad("the port must be 1 to 65535")),
         };
-        Ok(Endpoint { user, host: host.to_string(), port })
+        Ok(Endpoint { user, host: host.to_string(), port, tailnet })
     }
 }
 
 impl std::fmt::Display for Endpoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ssh://")?;
+        write!(f, "{}", if self.tailnet { "tailnet://" } else { "ssh://" })?;
         if let Some(u) = &self.user {
             write!(f, "{u}@")?;
         }
@@ -103,6 +116,28 @@ impl std::fmt::Display for Endpoint {
             write!(f, ":{p}")?;
         }
         Ok(())
+    }
+}
+
+/// The uid of the process at the other end of a Unix socket (std's `peer_cred` isn't stable).
+pub(crate) fn peer_uid(conn: &std::os::unix::net::UnixStream) -> Option<libc::uid_t> {
+    use std::os::unix::io::AsRawFd;
+    let fd = conn.as_raw_fd();
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: getsockopt writes at most `len` bytes into `cred`.
+        let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
+        let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+        let ok = unsafe {
+            libc::getsockopt(fd, libc::SOL_SOCKET, libc::SO_PEERCRED, (&mut cred as *mut libc::ucred).cast(), &mut len)
+        } == 0;
+        ok.then_some(cred.uid)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let (mut uid, mut gid) = (0, 0);
+        // SAFETY: getpeereid writes the two ids.
+        (unsafe { libc::getpeereid(fd, &mut uid, &mut gid) } == 0).then_some(uid)
     }
 }
 
@@ -187,6 +222,9 @@ mod tests {
             "ssh://10.0.0.2:22",
             "ssh://[::1]:2200",
             "ssh://u_1@[fe80::1]",
+            "tailnet://box",
+            "tailnet://box.example.ts.net:7300",
+            "tailnet://[fd7a:115c:a1e0::5]:7297",
         ] {
             let e: Endpoint = s.parse().unwrap();
             assert_eq!(e.to_string(), s);
@@ -217,6 +255,13 @@ mod tests {
             "ssh://ü",
             "ssh://a\nb",
             "ssh://@a",
+            "tailnet://",
+            "tailnet://me@box",
+            "tailnet://-x",
+            "tailnet://a:0",
+            "tailnet://a/b",
+            "tailnet://[fe80::1%en0]",
+            "tcp://box",
         ] {
             assert!(s.parse::<Endpoint>().is_err(), "{s:?} was accepted");
         }
