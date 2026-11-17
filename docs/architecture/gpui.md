@@ -136,6 +136,10 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   still turns movement off. Why: the cost of an animation is the subtree of the view it
   notifies; a clock in the window's poll redraws the whole window. Check: review, and a test that several working indicators draw no
   more frames a second than one.
+  Every motion (slides, fades, the theme change, the overview) reads
+  `cx.background_executor().now()`, faked in tests; the root asks for frames
+  while any moves. Not `with_animation`: its start, `Instant::now()` in element state, ignores
+  the test clock, and a motion turned back mid-way restarts.
 - **R7. Big or dense content is painted, not laid out.** A pane's grid stays one `canvas` or a
   custom `Element` that shapes text runs per row and paints quads; a list that can grow long
   uses `uniform_list` or `list`. Why: GPUI lays out every element of a view that renders (taffy),
@@ -162,7 +166,8 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   `debug_selector` while elements are built, so a reused cached view adds nothing to it: a
   cached view keeps its own record, and a test reads that. Why: GPUI's test platform is deterministic and
   has no display link, so a test can say "this view did not render again", the property R3 and
-  R4 are for. Check: review.
+  R4 are for. A motion's test advances the test clock and draws the frames the app asks for
+  (`frame` in the tests; the test window runs none, R5). Check: review.
 - **R11. GPUI is used as published.** crates.io GPUI 0.2.2: no fork, patch, vendored copy or
   `[patch]` entry, unless an amendment here names it. Why: a patch is paid for again at every
   upgrade, and the GPUI-side costs the baseline found are fixed upstream (below). Check: test (the Built against line matches `Cargo.lock`, and no
@@ -222,28 +227,25 @@ on the main thread, list the file here with its reason, and never use it to driv
 
 ## Consequences
 
-- Where the app is today (each moved by the refactor's phases): a root `Render` with cached
+- Where the app is today: a root `Render` with cached
   views the workspace gives their input and notifies on change: each pane's grid
   (`view_grid.rs`), and the sidebar, title bar and pane headers, which render through the
   workspace (`view_sections.rs`, the stop-gap under R4; R1, R3); the model work
   `render` did (`sync_pane`, `run_find`, `settle`) runs in `prepare`, an observer of every
   notify of the workspace, and for a pushed screen in the poll (phase 5 takes it over; R5); a
   poll that hashes what the root draws (no screens) and notifies the whole window
-  (`view_poll.rs`; R4); slides and fades clocked by that poll, the spinner by its own `Pulse`
-  (`view_pulse.rs`; R6); keys for the palette, find and modes handled by hand inside one `key_down`
+  (`view_poll.rs`; R4); motions on GPUI's clock, the spinner on its own `Pulse` (`view_pulse.rs`; R6); keys for the palette, find and modes handled by hand inside one `key_down`
   under one focus handle (R9); no `InputHandler`, so no input method (R9); every call to This
   Mac's server waits on the main thread, since its `Remote` has no queue (`Remote::enqueue`):
   actions, each key's write, `fit` in prepaint and `watch` in `prepare` (R8).
 - Already in line: panes paint through `canvas` (R7); std threads only in GPUI-free modules,
   reaching the UI through a wake channel (R8); tests on `TestAppContext` (R10); GPUI from
-  crates.io unpatched (R11). The overview's thumbnails and the panes' grids are cached views.
-- The refactor costs more types (an entity per pane, sidebar, title bar, overlay) and state
-  that moves out of `Workspace` behind `Entity` handles; tests that read `Workspace` fields read
-  the child entities instead.
+  crates.io unpatched (R11).
+- The refactor costs more types (an entity per pane, sidebar, title bar, overlay); tests read
+  the child entities, not `Workspace` fields.
 - Until the model is entities (phase 5), `render` reads the live model the reader thread writes
   off the UI thread. A frame drawn between that write and the poll's wake (a hover refresh, a
   resize, the display link first) shows a model the workspace has not reconciled yet, for one
-  frame: a destroyed selected session as the empty window, a row just scrolled into history
-  blank in a pane scrolled back. Phase 5's entities, changed only on the main thread, close it.
+  frame: a destroyed selected session as the empty window. Phase 5's entities, changed only on the main thread, close it.
 - What GPUI itself costs stays until an upgrade: the display link's idle ticks while the window
   is visible, and a key's echo waiting for the next tick. Neither is patched (R11).
