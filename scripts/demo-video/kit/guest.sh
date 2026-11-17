@@ -184,5 +184,5 @@ json.dump(s, open(p, "w"))' "$d/state/app.json"
     rm -rf "${t:?}"
     exit $rc ;;
 
-  *) sed -n '2,12s/^# \{0,1\}//p' "$0"; exit 2 ;;
+  *) sed -n '2,16s/^# \{0,1\}//p' "$0"; exit 2 ;;
 esac

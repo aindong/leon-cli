@@ -104,7 +104,7 @@ scene1() { # the empty state: the lion, "Keep your work in view", the shortcuts
   mark "1 empty state" # no caption: the empty state says it
   # zoomed on its top half from before the first frame (the move ends at -1.6 s, so the video
   # opens on it): the empty state's third row names two other products. It chains into scene 2's zoom
-  printf '{"t": -2.3, "type": "zoom", "region": [757, 271, 1365, 768], "until": 4.2}\n' >>"$cuefile"
+  printf '{"t": -2.3, "type": "zoom", "region": [757, 271, 1365, 768], "until": 4.6}\n' >>"$cuefile"
 }
 scene2() { # build up: a session, a shell, an agent beside it, then the others one by one
   at 4; mark "2 build-up"; k combo cmd+n
@@ -254,7 +254,7 @@ case "${1:-}" in
     # on the right edge (cropped off) the whole take, so the screen is never still
     guest key wiggle "$secs" &
     wig=$!
-    trap 'kill $rec $wig 2>/dev/null; ssh $(ssh_opts) "demo@$(cat "$work/.ip")" pkill -INT screencapture' EXIT
+    trap 'kill $rec $wig 2>/dev/null; ssh $(ssh_opts) "demo@$(cat "$work/.ip")" "pkill -INT screencapture; pkill -f \"[k]eypost wiggle\""' EXIT
     sleep 1.5 # the capture's own start; the edit trims this head
     t0=$(python3 -c 'import time; print(time.time())')
     : >"$work/take-beats.txt"
@@ -296,7 +296,7 @@ case "${1:-}" in
     src=$work/src
     rm -rf "${src:?}"
     mkdir -p "$src"
-    git -C "$repo" archive "$rev" | tar -x -C "$src"
+    git -C "$repo" archive "$rev" | tar -xm -C "$src" # -m: now as mtime, so cargo rebuilds what an older REV changed
     # its own target dir (kept between retakes, so a later commit builds incrementally); the
     # export has no .git, so the commit goes in by hand for `leon --version`
     (cd "$src" && LEON_GIT_HASH=${rev:0:12} cargo build --release -p leon --target-dir "$work/cargo")

@@ -1,12 +1,16 @@
 """The compositor's arithmetic: python3 -m unittest discover -s compose (in the venv)."""
 import json
 import math
+import re
 import tempfile
 import unittest
+from pathlib import Path
 
 from compose import SQUARE_CUT, frame_plan, pieces, soft, srt
 from draw import combo_caps, ease
 from frame import BASE, MAIN, Renderer, fit, lerp_cam, load_cue
+
+RUN_DEMO = (Path(__file__).resolve().parent.parent / "run-demo.sh").read_text()
 
 
 def cue(*zooms):
@@ -85,6 +89,23 @@ class TimelineTest(unittest.TestCase):
     def test_only_the_quit_join_is_hard(self):
         self.assertEqual([soft("main", i) for i in range(4)], [False, True, False, True])
         self.assertTrue(all(soft("square", i) for i in range(1, len(SQUARE_CUT) + 1)))
+
+
+class SceneOneTest(unittest.TestCase):
+    def test_the_opening_zoom_chains_into_scene_twos(self):
+        """the camera goes from scene 1's region straight to scene 2's, never home between them:
+        a full frame of the empty state shows its row that names other products"""
+        one = re.search(r'"t": (-?[\d.]+), "type": "zoom", "region": \[([\d, ]+)\], "until": ([\d.]+)', RUN_DEMO)
+        two = re.search(r'scene2\(\) \{.*?at ([\d.]+); zoom (\d+) (\d+) (\d+) (\d+) ([\d.]+)', RUN_DEMO, re.S)
+        rows = [{"t": 0, "type": "take", "lead": 1.5},
+                {"t": float(one[1]), "type": "zoom", "region": [int(x) for x in one[2].split(",")], "until": float(one[3])},
+                {"t": float(two[1]), "type": "zoom", "region": [int(two[i]) for i in range(2, 6)], "until": float(two[6])}]
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl") as f:
+            f.write("\n".join(json.dumps(r) for r in rows))
+            f.flush()
+            moves = Renderer(MAIN, load_cue(f.name)).moves
+        self.assertEqual(len(moves), 3)  # in at -0.8, on to scene 2, home after it
+        self.assertLess(moves[0][0], 0)  # zoomed before the first frame
 
 
 class SrtTest(unittest.TestCase):
