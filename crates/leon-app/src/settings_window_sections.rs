@@ -71,9 +71,15 @@ const fn entry(section: Section, id: &'static str, label: &'static str, keys: &'
 use Section::*;
 
 /// Every settings row, in the order each section shows them.
-pub(super) const ENTRIES: [Entry; 13] = [
+pub(super) const ENTRIES: [Entry; 14] = [
     entry(General, "resume", "Resume programs after a restart", &["resume"]),
     entry(General, "check_for_updates", "Look for updates once a day", &["check_for_updates"]),
+    entry(
+        General,
+        "tailscale",
+        "Tailscale",
+        &["tailscale", "tailnet", "serve", "serve_tailscale", "serve_tailscale_port", "serve_tailscale_tags"],
+    ),
     entry(Appearance, "theme", "Theme", &["theme"]),
     entry(Appearance, "translucency", "Translucency", &["translucency"]),
     entry(Appearance, "fade_inactive_panes", "Fade panes without the focus", &["fade_inactive_panes"]),
@@ -101,7 +107,7 @@ pub(super) fn matches(query: &str, texts: &[&str]) -> bool {
 impl SettingsWindow {
     /// Every setting a control changes (each of `leon_lua::settings::KEYS` must be one).
     pub fn controls() -> Vec<&'static str> {
-        ENTRIES.iter().flat_map(|e| e.keys).copied().filter(|k| *k != "skill").collect()
+        ENTRIES.iter().flat_map(|e| e.keys).copied().filter(|k| leon_lua::settings::KEYS.contains(k)).collect()
     }
 
     pub fn section(&self) -> Section {
@@ -280,6 +286,9 @@ impl SettingsWindow {
             "font" => self.font_section(t, cx).into_any_element(),
             "hint_patterns" => self.patterns(t, cx).into_any_element(),
             "agents" => self.agents_intro(t).into_any_element(),
+            "tailscale" => {
+                self.tailscale_section(t, cx).debug_selector(|| "tailscale-section".into()).into_any_element()
+            }
             "resume" => self.choice(t, "resume", label, rows::RESUME_NOTE, &rows::RESUME, cx).into_any_element(),
             "repeat_time" => self.stepper(t, "repeat_time", label, rows::REPEAT, cx).into_any_element(),
             "translucency" => self.stepper(t, "translucency", label, rows::TRANSLUCENCY, cx).into_any_element(),

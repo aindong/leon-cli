@@ -307,13 +307,15 @@ pub enum Cmd {
 pub enum HostsCmd {
     /// List the hosts.
     List,
-    /// Add a host: a LABEL and its ssh://[USER@]HOST[:PORT] endpoints (-H LABEL uses the first),
+    /// Add a host: a LABEL and its ssh://[USER@]HOST[:PORT] or tailnet://HOST[:PORT] endpoints
+    /// (-H LABEL uses the first),
     /// or a machine on your tailnet with --tailscale.
     Add {
         /// The name to use with -H; with --tailscale, the machine to add [default: pick one].
         #[arg(required_unless_present = "tailscale")]
         label: Option<String>,
-        /// Where it is: ssh://[USER@]HOST[:PORT] (HOST may be an ~/.ssh/config alias).
+        /// Where it is: ssh://[USER@]HOST[:PORT] (HOST may be an ~/.ssh/config alias), or
+        /// tailnet://HOST[:PORT] for a server serving over Tailscale.
         #[arg(required_unless_present = "tailscale", conflicts_with = "tailscale", value_name = "ENDPOINT")]
         endpoints: Vec<String>,
         /// An icon name for the app to show.

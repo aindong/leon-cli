@@ -33,6 +33,8 @@ mod patterns;
 mod rows;
 #[path = "settings_window_sections.rs"]
 mod sections;
+#[path = "settings_window_tailscale.rs"]
+mod tailscale;
 #[path = "settings_window_theme.rs"]
 mod theme_picker;
 
@@ -112,6 +114,8 @@ pub struct SettingsWindow {
     reduced: bool,
     handle: AnyWindowHandle,
     renders: usize,
+    /// `server.status`'s `tailnet`, fetched every 2 s (settings_window_tailscale.rs).
+    tailnet: Option<Value>,
     focus: FocusHandle,
     _appearance: Subscription,
     _activation: Subscription,
@@ -198,6 +202,7 @@ impl SettingsWindow {
             reduced: false,
             handle: window.window_handle(),
             renders: 0,
+            tailnet: None,
             focus,
             _appearance: appearance,
             _activation: activation,
@@ -211,6 +216,7 @@ impl SettingsWindow {
             Some(leon) => sw.read_agents(leon, cx),
             None => sw.agents = Some(Err("This isn't the leon binary: run leon skill status in a terminal".into())),
         }
+        sw.watch_tailnet(cx);
         sw
     }
 
@@ -446,7 +452,7 @@ impl Render for SettingsWindow {
             .text_size(px(UI_TEXT))
             .child(self.sidebar(&t, cx))
             .child(
-                div().flex_1().flex().flex_col().child(div().h(px(38.)).flex_none()).child(
+                div().flex_1().min_w(px(0.)).flex().flex_col().child(div().h(px(38.)).flex_none()).child(
                     div()
                         .id("settings-body")
                         .flex_1()
