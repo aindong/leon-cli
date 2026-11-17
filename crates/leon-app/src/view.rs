@@ -490,6 +490,8 @@ mod paint;
 mod panes_view;
 #[path = "view_poll.rs"]
 mod poll_view;
+#[path = "view_presence.rs"]
+mod presence;
 #[path = "view_scroll.rs"]
 mod scroll;
 #[path = "view_select.rs"]

@@ -28,9 +28,11 @@ impl Workspace {
         self.updates.daily(enabled, now);
     }
 
-    /// The notice, when there is one to show.
+    /// The notice as `prepare` saw it, when there is one to show (or one fading out, which takes
+    /// no clicks).
     pub(super) fn render_update(&self, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
-        let notice = self.updates.notice()?;
+        let (notice, look, live) = self.notice_drawn()?;
+        let notice = notice.clone();
         let t = &self.theme;
         let button = |name: &'static str, label: &'static str, primary: bool| {
             div()
@@ -56,13 +58,15 @@ impl Workspace {
                 Act::ReleasePage => ("update-page", "Release Page", false),
                 Act::Dismiss => ("update-dismiss", "Dismiss", false),
             };
-            row = row.child(button(name, label, primary).on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |ws, _, window, cx| {
-                    cx.stop_propagation();
-                    ws.update_act(&act, window, cx);
-                }),
-            ));
+            row = row.child(button(name, label, primary).when(live, |b| {
+                b.on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |ws, _, window, cx| {
+                        cx.stop_propagation();
+                        ws.update_act(&act, window, cx);
+                    }),
+                )
+            }));
         }
         let card = div()
             .id("update-notice")
@@ -79,6 +83,7 @@ impl Workspace {
             .child(div().child(notice.text))
             // a card with nothing to click (a step of an install) is the text alone
             .when(has_actions, |card| card.child(row));
+        let card = super::presence::presented(look, 340., card);
         Some(div().absolute().bottom(px(16.)).right(px(16.)).child(card).into_any_element())
     }
 

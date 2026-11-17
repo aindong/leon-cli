@@ -17,6 +17,7 @@ pub mod layout_motion;
 pub mod look;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod notify;
+pub mod overlay_motion;
 pub mod overview;
 pub mod palette;
 pub mod panes;
