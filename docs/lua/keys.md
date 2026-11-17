@@ -242,6 +242,8 @@ leon.bind("ctrl+alt+g", "git_popup")
 <!-- /popup-git -->
 
 The same from a shell: `leon toggle git --create --float -- sh -c 'git log --graph --oneline | less -Rc'`.
+
+![The git popup over a tab of an agent, its tests and a shell, showing the repository's history](../images/app-popup.png)
 `less` needs `-c` to show a log shorter than the popup from the top: without it, it writes the log
 at the bottom of the screen and leaves the rest blank.
 
