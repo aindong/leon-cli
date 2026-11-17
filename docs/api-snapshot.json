@@ -1,5 +1,5 @@
 {
-  "api_version": "1.7.0",
+  "api_version": "1.8.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -2765,6 +2765,10 @@
               },
               "check_for_updates": {
                 "type": "boolean"
+              },
+              "translucency": {
+                "type": "number",
+                "format": "double"
               }
             },
             "required": [
@@ -2776,7 +2780,8 @@
               "hint_patterns",
               "resume",
               "fade_inactive_panes",
-              "check_for_updates"
+              "check_for_updates",
+              "translucency"
             ]
           },
           "sources": {

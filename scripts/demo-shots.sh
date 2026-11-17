@@ -205,7 +205,7 @@ open_app() {
 close_app() { kill "$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true; app_pid=; sleep 1; }
 front() { osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $app_pid) to true" >/dev/null; sleep 0.5; }
 keys() { front; osascript -e "tell application \"System Events\" to $1"; sleep 0.8; }
-shot() { sleep 0.5; swift "$repo/scripts/winshot.swift" leon "$out/$1.png" >/dev/null; echo "demo-shots: $1.png"; }
+shot() { sleep 0.5; swift "$repo/scripts/winshot.swift" "$app_pid" "$out/$1.png" >/dev/null; echo "demo-shots: $1.png"; }
 
 open_app
 shot app-status
