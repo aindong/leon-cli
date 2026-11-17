@@ -10,16 +10,16 @@ use leon_app::view::Workspace;
 use serde_json::json;
 
 /// Open a tab in the workspace's session running `sh -c script`; returns its block once the app
-/// shows it and its screen has `ready` on it.
+/// shows it and its screen has `ready` on it (the tab before it may show `ready` too).
 pub fn tab_running(s: &Setup, ws: &Entity<Workspace>, cx: &mut VisualTestContext, script: &str, ready: &str) -> String {
     let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
     let layout = json!({ "block": { "options": { "command": ["sh", "-c", script] } } });
-    s.app.call("session.new_window", json!({ "session_id": sid, "layout": layout })).unwrap();
-    let mut id = String::new();
+    let tab = s.app.call("session.new_window", json!({ "session_id": sid, "layout": layout })).unwrap();
+    let id = tab["block_id"].as_str().unwrap().to_string();
     let shown = shows(cx, |cx| {
-        id = ws.read_with(cx, |ws, _| ws.target_block()).unwrap_or_default();
+        let target = ws.read_with(cx, |ws, _| ws.target_block());
         let text = ws.read_with(cx, |ws, _| ws.view_text(&id)).unwrap_or_default();
-        text.contains(ready)
+        target.as_ref() == Some(&id) && text.contains(ready)
     });
     assert!(shown, "the tab never showed {ready:?}");
     id

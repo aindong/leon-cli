@@ -1,7 +1,6 @@
 //! M10b criterion 6, the header part: each pane has a header above its terminal that names its
-//! program. Its own binary: its panes run /bin/sh, set in the environment before anything starts
-//! (a login zsh's prompt may set the title to user@host), which other tests running beside it in
-//! one binary must not see.
+//! program. Its own binary: its panes run a plain /bin/sh (`plain_shell`), set in the environment
+//! before anything starts, which other tests running beside it in one binary must not see.
 
 mod m10b_support;
 
@@ -10,7 +9,7 @@ use m10b_support::*;
 
 #[gpui::test]
 fn each_pane_has_a_header_above_its_terminal(cx: &mut TestAppContext) {
-    std::env::set_var("SHELL", "/bin/sh");
+    plain_shell();
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
     cx.simulate_keystrokes("cmd-d");

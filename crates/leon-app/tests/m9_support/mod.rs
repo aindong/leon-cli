@@ -155,6 +155,23 @@ pub fn stays(cx: &mut VisualTestContext, t: &Terminal, size: (u16, u16)) -> bool
     t.size() == size
 }
 
+/// Panes run a plain `sh` with a private home that holds no shell config, never this machine's:
+/// a login zsh's prompt may set the title to user@host or swallow a line typed before it. Call it
+/// before `setup()`. It sets the process's environment once, before the first shell starts.
+pub fn plain_shell() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let home = Path::new(env!("CARGO_TARGET_TMPDIR")).join("plain-home");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::env::set_var("SHELL", "/bin/sh");
+        std::env::set_var("HOME", &home);
+        // a login sh reads $ENV, and /etc/bashrc reads /etc/bashrc_$TERM_PROGRAM
+        std::env::remove_var("ENV");
+        std::env::remove_var("TERM_PROGRAM");
+    });
+}
+
 /// What `leon config set KEY VALUE` does: rewrite init.lua, then reload the running server.
 pub fn config_set(s: &Setup, key: &str, value: serde_json::Value) {
     leon_lua::rewrite::write_setting(&s.dir.path().join("init.lua"), key, &value).unwrap();

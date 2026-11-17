@@ -21,6 +21,7 @@ end, nil, { repeats = true })
 
 #[gpui::test]
 fn prefix_then_the_key_again(cx: &mut TestAppContext) {
+    plain_shell(); // the clock step below reads what a pane's prompt shows
     let s = setup_with_config(CONFIG);
     let km = s.app.call("client.keymap", json!({})).unwrap();
     assert_eq!(km["settings"]["repeat_time"], 2000);
@@ -54,5 +55,11 @@ fn prefix_then_the_key_again(cx: &mut TestAppContext) {
     };
     assert!(shows(cx, |cx| label(cx) == "runs 3"), "the function ran three times: {:?}", label(cx));
     assert_eq!(term(&s.app, &panes[1]).text(false), before, "and nothing was typed into the pane");
+
+    // the window is timed by GPUI's clock: past repeat_time, k is the pane's again
+    cx.executor().advance_clock(std::time::Duration::from_millis(2001));
+    cx.simulate_keystrokes("k");
+    let typed = shows(cx, |_| term(&s.app, &panes[1]).text(false).trim_end().ends_with('k'));
+    assert!(typed && label(cx) == "runs 3", "k went to the pane: {:?}", label(cx));
     s.app.stop();
 }
