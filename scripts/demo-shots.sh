@@ -160,9 +160,10 @@ here new site >/dev/null
 tab site site "Review the README" readme "state=done" >/dev/null
 here -s site window close 1 >/dev/null
 here new infra >/dev/null
-tab infra infra "Migrate the users table" migrate \
-  "state=blocked:kind=question:title=$(b64 'Run it on production now?')" >/dev/null
+migrate=$(tab infra infra "Migrate the users table" migrate \
+  "state=blocked:kind=question:title=$(b64 'Run it on production now?')")
 here -s infra window close 1 >/dev/null
+here -s infra split -b "$migrate" --focus=false -c "$home/src/infra" -- show "nvim 0042_users_email_unique.sql" "$d/sql.txt" >/dev/null
 
 # the window on the main display, sidebar style
 display=$(swift - 2>/dev/null <<'SWIFT'

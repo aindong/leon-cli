@@ -153,15 +153,15 @@ here server start >/dev/null
 here new auth >/dev/null
 claude=$(here -s auth run --keep-open -c "$home/src/auth" -- agent "$d/claude.txt")
 here -s auth window close 1 >/dev/null
-# the agent | its tests over a monitor | the access log
-tests=$(here -s auth split -b "$claude" --ratio 60 --focus=false -c "$home/src/auth" -- show tests.sh "$d/tests.txt" "state=done")
+# the agent, wide enough to split once more | its tests over a monitor
+tests=$(here -s auth split -b "$claude" --ratio 35 --focus=false -c "$home/src/auth" -- show tests.sh "$d/tests.txt" "state=done")
 here -s auth split -b "$tests" --split below --focus=false -c "$home/src/auth" -- show htop "$d/htop.txt" >/dev/null
-here -s auth split -b "$tests" --ratio 40 --focus=false -c "$home/src/auth" -- show "tail -f access.log" "$d/access.txt" >/dev/null
 here -s auth run --keep-open -c "$home/src/auth" -- show "dev server" "$d/server.txt" >/dev/null
 here new infra >/dev/null
-here -s infra run --keep-open -c "$home/src/infra" -- show "Migrate the users table" "$d/migrate.txt" \
-  "state=blocked:kind=question:title=$(b64 'Run it on production now?')" >/dev/null
+migrate=$(here -s infra run --keep-open -c "$home/src/infra" -- show "Migrate the users table" "$d/migrate.txt" \
+  "state=blocked:kind=question:title=$(b64 'Run it on production now?')")
 here -s infra window close 1 >/dev/null
+here -s infra split -b "$migrate" --focus=false -c "$home/src/infra" -- show "nvim 0042_users_email_unique.sql" "$d/sql.txt" >/dev/null
 here -s auth focus "$claude" >/dev/null
 
 display=$(swift - 2>/dev/null <<'SWIFT'
