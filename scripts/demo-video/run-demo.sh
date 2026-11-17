@@ -226,7 +226,7 @@ case "${1:-}" in
       "$0" take || rc=$?
       [ $rc -eq 0 ] && break
       [ $rc -eq 3 ] && [ $n -lt 3 ] || exit $rc
-      echo "retake: take $n stopped early; filming it again"
+      echo "retake: take $n stopped early or ran late; filming it again"
     done
     "$0" render
     echo "retake: $rev filmed and rendered in $work/renders" ;;

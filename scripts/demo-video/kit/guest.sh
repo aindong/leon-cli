@@ -226,10 +226,14 @@ json.dump(s, open(p, "w"))' "$d/state/app.json"
     python3 - <<'EOF'
 import glob, os, plistlib, shutil
 for m in glob.glob(os.path.expanduser("~/Library/Daemon Containers/*/Data/Library/Saved Application State/ApplicationMapping.plist")):
-    a = plistlib.load(open(m, "rb"))
-    for app, uuid in zip(a[::2], a[1::2]):
-        if app.get("protected", {}).get("signingIdentifier") == "com.apple.Terminal":
-            shutil.rmtree(os.path.join(os.path.dirname(m), uuid + ".savedState"), ignore_errors=True)
+    try:  # a file of another shape, or one we may not read, is not Terminal's: skip it
+        a = plistlib.load(open(m, "rb"))
+        for app, uuid in zip(a[::2], a[1::2]):
+            if isinstance(app, dict) and isinstance(uuid, str) and \
+                    app.get("protected", {}).get("signingIdentifier") == "com.apple.Terminal":
+                shutil.rmtree(os.path.join(os.path.dirname(m), uuid + ".savedState"), ignore_errors=True)
+    except Exception:
+        pass
 EOF
     ;;
   # init.lua has every banner off (scene 4's agent blocks off screen too): only the attach
