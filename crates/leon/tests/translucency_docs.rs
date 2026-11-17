@@ -3,11 +3,11 @@
 
 #[test]
 fn translucency_is_documented() {
-    let lua = include_str!("../../../docs/lua.md");
-    assert!(lua.contains("`translucency`"), "docs/lua.md lists the setting");
-    assert!(lua.contains("leon.set(\"translucency\", 0)"), "docs/lua.md shows how to make the window opaque");
+    let lua = include_str!("../../../docs/lua/settings.md");
+    assert!(lua.contains("`translucency`"), "docs/lua/settings.md lists the setting");
+    assert!(lua.contains("leon.set(\"translucency\", 0)"), "docs/lua/settings.md shows how to make the window opaque");
     for case in ["Reduce Transparency", "full screen"] {
-        assert!(lua.contains(case), "docs/lua.md says what {case} does");
+        assert!(lua.contains(case), "docs/lua/settings.md says what {case} does");
     }
     let cli = include_str!("../../../docs/cli/settings.md");
     assert!(cli.contains("translucency"), "docs/cli/settings.md names the key config get/set take");
