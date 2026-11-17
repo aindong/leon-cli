@@ -85,21 +85,23 @@ fn keys_typed_while_a_zoom_moves_reach_the_zoomed_pane(cx: &mut TestAppContext) 
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
     ws.update(cx, |ws, _| ws.set_reduce_motion(false));
-    let reads = "stty -echo; echo a-ready; read l; echo \"got:$l\"; exec sleep 300";
-    let a = tab_running(&s, &ws, cx, reads, "a-ready");
-    let b = split_running(&s, &ws, cx, &a, &quiet("b-ready"), "b-ready");
+    // each pane's program prints the line it reads, so the one the keys reached says so
+    let reads = |m: &str| format!("stty -echo; echo {m}; read l; echo \"got:$l\"; exec sleep 300");
+    let a = tab_running(&s, &ws, cx, &reads("a-ready"), "a-ready");
+    let b = split_running(&s, &ws, cx, &a, &reads("b-ready"), "b-ready");
     to_rest(&ws, cx);
     let sid = sid(&ws, cx);
 
     zoom(&s, &sid, &a, true);
     assert!(moving(&ws, cx), "the zoom moves");
     frame(&ws, cx, LAYOUT / 2);
-    assert!(ws.read_with(cx, |ws, _| ws.animating()), "still moving");
+    // the sibling the zoom covers is drawn only while the zoom moves (a focus fade animates too)
+    assert!(tile(cx, &b).is_some(), "still moving");
     cx.simulate_input("hi");
     cx.simulate_keystrokes("enter");
     let got = eventually(|| term(&s.app, &a).text(true).lines().any(|l| l.trim() == "got:hi"));
     let other = term(&s.app, &b).text(true);
     s.app.stop();
     assert!(got, "the zoomed pane's program read the line");
-    assert!(!other.contains("hi"), "its sibling got nothing: {other}");
+    assert!(!other.contains("got:"), "its sibling read nothing: {other}");
 }
