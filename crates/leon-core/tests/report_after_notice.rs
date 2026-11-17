@@ -52,5 +52,10 @@ fn the_title_is_reported_once_its_notice_is_handled() {
     let (notice, then) = seen.recv_timeout(Duration::from_secs(10)).expect("a title notice");
     assert_eq!(notice, "title fresh");
     assert_eq!(then, None, "while its notice is handled, the reported title is still the old one");
+    // the reader stores it once its notify returned, and the notice reached us from inside that notify
+    let end = Instant::now() + Duration::from_secs(10);
+    while t.title().as_deref() != Some("fresh") && Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(20));
+    }
     assert_eq!(t.title().as_deref(), Some("fresh"), "and the new one after");
 }

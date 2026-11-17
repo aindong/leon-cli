@@ -289,10 +289,12 @@ pub fn add(r: &mut Registry) {
         "Wait for a terminal's program to exit and return its status (128 + signal if killed).",
         |ctx, p: Wait| {
             let mut exits = ctx.exited.subscribe(); // before the check, so no exit slips between
-            let known = ctx.state().exit_status(&p.block_id);
-            if known.is_none() {
-                ctx.state().block(&p.block_id)?;
+                                                    // one lock for both: a program exiting between them leaves no block and was not yet a status
+            let st = ctx.state();
+            if st.exit_status(&p.block_id).is_none() {
+                st.block(&p.block_id)?;
             }
+            drop(st);
             let ctx = ctx.clone();
             let id = p.block_id;
             let wait = async move {
