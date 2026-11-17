@@ -36,28 +36,45 @@ if args.count == 2 && args[1] == "backdrop" {
 guard args.count == 4 || args.count == 5, let pid = Int(args[1]), let backdrop = Int(args[2]),
       let pad = Double(args.count == 5 ? args[4] : "0")
 else { print("usage: deskshot backdrop | deskshot PID BACKDROP_PID out.png [PAD]"); exit(2) }
-let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]] // front to back
 let owner = { (w: [String: Any]) in w[kCGWindowOwnerPID as String] as? Int }
 let bounds = { (w: [String: Any]) in CGRect(dictionaryRepresentation: w[kCGWindowBounds as String] as! CFDictionary)! }
-guard let win = list.first(where: { owner($0) == pid && ($0[kCGWindowLayer as String] as? Int) == 0 })
-else { print("deskshot: no window for pid \(pid)"); exit(1) }
-let rect = bounds(win).insetBy(dx: -pad, dy: -pad).integral
-guard let back = list.firstIndex(where: { owner($0) == backdrop && bounds($0).contains(rect) })
-else { print("deskshot: the backdrop doesn't cover \(rect)"); exit(1) }
-// the Dock keeps a clear window over the whole screen and draws only the Dock in it, outside the
-// visible frame; a shot inside that frame (menu bar and Dock excluded) can't show the Dock
 let screen = NSScreen.screens[0], v = screen.visibleFrame
 let visible = CGRect(x: v.minX, y: screen.frame.height - v.maxY, width: v.width, height: v.height) // top-left origin
-guard visible.contains(rect) else { print("deskshot: \(rect) isn't inside the screen's visible frame"); exit(1) }
-let dock = { (w: [String: Any]) in (w[kCGWindowOwnerName as String] as? String) == "Dock" }
-for w in list[..<back] where bounds(w).intersects(rect) && owner(w) != pid && !dock(w) {
-    print("deskshot: another program's window is over the shot (pid \(owner(w) ?? -1)); nothing captured")
-    exit(1)
+// the Dock keeps a clear window over the whole screen and draws the Dock in it only outside the
+// visible frame; an auto-hiding Dock can slide into that frame, so then nothing is exempt
+let autohide = CFPreferencesCopyAppValue("autohide" as CFString, "com.apple.dock" as CFString) as? Bool ?? false
+let clearDock = { (w: [String: Any]) in
+    !autohide && (w[kCGWindowOwnerName as String] as? String) == "Dock" && bounds(w) == CGRect(origin: .zero, size: screen.frame.size)
 }
+
+/// The rect to capture, when only PID's windows are in front of the backdrop there; else nil, said why.
+func check() -> CGRect? {
+    let no = { (why: String) -> CGRect? in print("deskshot: \(why); nothing captured"); return nil }
+    let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]] // front to back
+    guard let at = list.firstIndex(where: { owner($0) == pid && ($0[kCGWindowLayer as String] as? Int) == 0 })
+    else { return no("no window for pid \(pid)") }
+    let rect = bounds(list[at]).insetBy(dx: -pad, dy: -pad).integral
+    guard visible.contains(rect) else { return no("\(rect) isn't inside the screen's visible frame") }
+    guard let back = list.firstIndex(where: { owner($0) == backdrop && bounds($0).contains(rect) })
+    else { return no("the backdrop doesn't cover \(rect)") }
+    guard at < back else { return no("leon's window is behind the backdrop") }
+    if let w = list[..<back].first(where: { bounds($0).intersects(rect) && owner($0) != pid && !clearDock($0) }) {
+        return no("another program's window is over the shot (pid \(owner(w) ?? -1))")
+    }
+    return rect
+}
+
+guard let rect = check() else { exit(1) }
 let r = "\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width)),\(Int(rect.height))"
 let p = Process()
 p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
 p.arguments = ["-x", "-R\(r)", args[3]]
 try! p.run()
 p.waitUntilExit()
+// a window that came up while screencapture ran (a notification banner) fails the check again
+guard check() == rect else {
+    try? FileManager.default.removeItem(atPath: args[3])
+    print("deskshot: the screen changed during the capture; nothing kept")
+    exit(1)
+}
 exit(p.terminationStatus)

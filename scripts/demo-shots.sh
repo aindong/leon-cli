@@ -269,21 +269,25 @@ close_app() {
   drop_lock
 }
 front() { osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $app_pid) to true" >/dev/null; sleep 0.5; }
-# keys go only to the app this script started: anything else in front stops the run
-in_front() {
+# keys go only to the app this script started: the check and the key are one AppleScript, and
+# anything else in front stops the run
+keys() {
   front
+  osascript -e "tell application \"System Events\"
+    if (unix id of (first process whose frontmost is true)) is not $app_pid then error \"not leon\"
+    $1
+  end tell" >/dev/null || { echo "demo-shots: leon ($app_pid) isn't in front; no keys sent" >&2; exit 1; }
+  sleep 0.8
+}
+in_front() {
   local top
   top=$(osascript -e 'tell application "System Events" to unix id of first process whose frontmost is true')
   [ "$top" = "$app_pid" ] || { echo "demo-shots: pid $top is in front, not leon ($app_pid); stopping" >&2; exit 1; }
 }
-keys() {
-  in_front
-  osascript -e "tell application \"System Events\" to $1"
-  sleep 0.8
-}
 # shot NAME [PAD]: leon's frontmost window and PAD points around it, as the screen draws it over the
 # plain desktop; deskshot refuses when any other program's window is in the way
 shot() {
+  front
   in_front
   sleep 0.5
   "$d/deskshot" "$app_pid" "$desk_pid" "$out/$1.png" "${2:-0}"
