@@ -231,7 +231,7 @@ leon.action{
   run = function()
     local result, err = leon.toggle{
       label = "git", create = true, float = true,
-      options = { command = { "sh", "-c", "git log --graph --oneline --decorate --color=always | less -R" } },
+      options = { command = { "sh", "-c", "git log --graph --oneline --decorate --color=always | less -Rc" } },
     }
     if not result then error(err, 0) end
     return result
@@ -241,7 +241,9 @@ leon.bind("ctrl+alt+g", "git_popup")
 ```
 <!-- /popup-git -->
 
-The same from a shell: `leon toggle git --create --float -- sh -c 'git log --graph --oneline | less -R'`.
+The same from a shell: `leon toggle git --create --float -- sh -c 'git log --graph --oneline | less -Rc'`.
+`less` needs `-c` to show a log shorter than the popup from the top: without it, it writes the log
+at the bottom of the screen and leaves the rest blank.
 
 Attach also accepts the client action names `pane.float` and `pane.new_floating` in
 `leon.bind`; their GUI counterparts are part of M20b.

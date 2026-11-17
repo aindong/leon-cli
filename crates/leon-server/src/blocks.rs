@@ -64,8 +64,8 @@ impl Layout {
 }
 
 /// Start `spec` in window `window_id`, beside `place`'s anchor (None: as the empty window's only
-/// block). Call with the state lock held, so an instant exit can't be reported before the block is
-/// in the model.
+/// block), at `size` (`spawn`). Call with the state lock held, so an instant exit can't be
+/// reported before the block is in the model.
 pub fn open(
     ctx: &Arc<Ctx>,
     st: &mut State,
@@ -73,6 +73,7 @@ pub fn open(
     window_id: &str,
     spec: BlockSpec,
     place: Option<&Place>,
+    size: Option<(u16, u16)>,
 ) -> Result<String, ApiError> {
     if spec.flavor.as_deref().is_some_and(|f| f != SHELL_FLAVOR) {
         return Err(ApiError::bad_request(format!("unknown flavor; the only one is {SHELL_FLAVOR}")));
@@ -83,7 +84,7 @@ pub fn open(
         return Err(ApiError::bad_request("command needs at least a program name"));
     }
     let id = new_id("block");
-    let terminal = spawn(ctx, session_id, &id, o.command.unwrap_or_default(), o.cwd.map(PathBuf::from), &[])?;
+    let terminal = spawn(ctx, session_id, &id, o.command.unwrap_or_default(), o.cwd.map(PathBuf::from), &[], size)?;
     let keep_open = o.exit.is_some_and(|e| !e.on_completion);
     let block = Block {
         id: id.clone(),
@@ -97,8 +98,8 @@ pub fn open(
     Ok(id)
 }
 
-/// Start the terminal of block `block_id`, showing `shown` first (`Terminal::spawn_showing`); an
-/// empty `command` runs the login shell. Like `open`, call with the state lock held.
+/// Start block `block_id`'s terminal at `size`, showing `shown` first (`Terminal::spawn_sized`);
+/// an empty `command` runs the login shell. Like `open`, call with the state lock held.
 pub(crate) fn spawn(
     ctx: &Arc<Ctx>,
     session_id: &str,
@@ -106,36 +107,13 @@ pub(crate) fn spawn(
     command: Vec<String>,
     cwd: Option<PathBuf>,
     shown: &[u8],
+    size: Option<(u16, u16)>,
 ) -> Result<Terminal, ApiError> {
-    let mut env = ctx.pane_env.clone(); // leon's variables after it, so they win
-    env.extend(
-        [
-            ("LEON_SESSION", session_id),
-            ("LEON_BLOCK", block_id),
-            ("LEON_SERVER", ctx.info.socket.as_str()),
-            ("TERM", "xterm-256color"),
-        ]
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string())),
-    );
-    // `leon` resolves in every terminal, even when the user's PATH lacks where it was installed
-    if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(PathBuf::from)) {
-        let path = std::env::var_os("PATH")
-            .filter(|p| !p.is_empty())
-            .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin".into());
-        // no empty entries: one would mean the current directory
-        let entries =
-            std::iter::once(dir.clone()).chain(std::env::split_paths(&path).filter(|p| !p.as_os_str().is_empty()));
-        // join_paths refuses a dir with ':' in it; then the terminal keeps the server's PATH
-        let joined = std::env::join_paths(entries).ok().and_then(|p| p.into_string().ok());
-        if let (Some(dir), Some(path)) = (dir.to_str(), joined) {
-            env.extend([("LEON_BIN_DIR".to_string(), dir.to_string()), ("PATH".to_string(), path)]);
-        }
-    }
+    let env = ctx.env_for(session_id, block_id);
     let spec = Spec { command, cwd, env };
     let weak = Arc::downgrade(ctx);
     let block_id = block_id.to_string();
-    Terminal::spawn_showing(spec, shown, move |notice| {
+    Terminal::spawn_sized(spec, shown, size, move |notice| {
         let Some(ctx) = weak.upgrade() else { return };
         let exited = matches!(notice, Notice::Exited(_));
         ctx.state().notice(&block_id, notice);

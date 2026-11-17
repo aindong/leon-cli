@@ -49,8 +49,27 @@ impl Workspace {
     /// sections it shows (a closing pane's grid kept, the headers' widths).
     pub(super) fn sync_views(&mut self, seen: &grid_view::Screens, window: &Window, cx: &mut Context<Self>) {
         self.note_layout(window);
+        self.report_geometry(window);
         self.sync_grids(seen, cx);
         self.sync_sections(window, cx);
+    }
+
+    /// Tell the server how the active tab is drawn (`client.geometry`): the pane area, a cell, and
+    /// what `floats::place` and `panes::text_rect` take from a float or bottom drawer, which always
+    /// has a header. A float or drawer made there then starts at the size its grid fits. The pane
+    /// area is the window's, never a moving tile's; the remote sends only a change.
+    fn report_geometry(&self, window: &Window) {
+        let (Some(sid), Some(w)) = (self.session_id.as_deref(), self.active_window()) else { return };
+        let (cell_w, line_h) = cell_size(window, &self.font_family, self.font_size);
+        let (inset, header, pad) = (crate::panes::INSET, crate::panes::HEADER, crate::panes::PADDING);
+        let border = 1.; // a float's `border_1` (view_floats.rs)
+        let geometry = leon_core::overlays::Geometry {
+            area: self.pane_area(window).into(),
+            cell: [f32::from(cell_w), f32::from(line_h)],
+            float_frame: [2. * (pad + border), header + 2. * (pad + border)],
+            drawer_frame: [2. * inset + 2. * pad, inset + header + 2. * pad],
+        };
+        self.app.report_geometry(sid, &w.id, geometry);
     }
 
     /// Lay the active window's tiles out for this frame: start a motion when which panes show or the

@@ -1,10 +1,10 @@
 //! Floating blocks and drawers. Validate before spawning; placement mutations hold one state lock.
 use crate::blocks::{self, Layout};
 use crate::layout::{FocusBlock, SplitCreated};
-use crate::methods::{revision, Revision};
+use crate::methods::{revision, Empty, Revision};
 use crate::Registry;
 use leon_core::layout::{Direction, Side};
-use leon_core::overlays::{Bounds, DockSide};
+use leon_core::overlays::{Bounds, DockSide, Geometry};
 use leon_core::{ApiError, Place, State};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -56,6 +56,22 @@ struct Toggle {
     /// directory). It closes when its program exits, as every block does, unless `exit` says not to.
     options: Option<blocks::TerminalOptions>,
 }
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ReportGeometry {
+    session_id: String,
+    window_id: String,
+    /// The pane area [width, height] in the client's pixels: where tiles, drawers and floats go.
+    area: [f32; 2],
+    /// One terminal cell [width, height].
+    cell: [f32; 2],
+    /// What a float's frame takes from its text [across, down].
+    float_frame: [f32; 2],
+    /// What a bottom drawer's frame and insets take from its share of the area [across, down].
+    drawer_frame: [f32; 2],
+}
+/// The drawer `session.toggle` makes: a fraction of the window.
+const DRAWER: f64 = 0.3;
 fn placement(st: &State, sid: &str, wid: Option<&str>) -> Result<(String, Option<Place>), ApiError> {
     let s = st.session(sid)?;
     let w = match wid {
@@ -97,8 +113,9 @@ pub fn add(r: &mut Registry) {
             bounds.check()?;
             let mut st = ctx.state();
             let (window_id, place) = placement(&st, &p.session_id, p.window_id.as_deref())?;
-            let block_id =
-                blocks::open(ctx, &mut st, &p.session_id, &window_id, Layout::block(p.layout), place.as_ref())?;
+            let size = ctx.geometry(&window_id).map(|g| g.float_cells(bounds));
+            let spec = Layout::block(p.layout);
+            let block_id = blocks::open(ctx, &mut st, &p.session_id, &window_id, spec, place.as_ref(), size)?;
             let revision = st.float_block(&p.session_id, &block_id, bounds)?;
             Ok(SplitCreated { block_id, window_id, revision })
         },
@@ -151,17 +168,35 @@ pub fn add(r: &mut Registry) {
                         live.and_then(|(_, b)| b.terminal.shown_cwd()).filter(|d| std::path::Path::new(d).is_dir());
                 }
                 let spec = blocks::BlockSpec { label: Some(p.label), options, ..Default::default() };
-                let id = blocks::open(ctx, &mut st, &p.session_id, &wid, spec, place.as_ref())?;
+                // the size the client drawing this window will give it, so the program starts at it
+                let overlay = st.session(&p.session_id)?.overlay(&wid);
+                let size = ctx.geometry(&wid).map(|g| match p.float {
+                    true => g.float_cells(bounds),
+                    false => g.bottom_drawer_cells(&overlay, DRAWER),
+                });
+                let id = blocks::open(ctx, &mut st, &p.session_id, &wid, spec, place.as_ref(), size)?;
                 if p.float {
                     st.float_block(&p.session_id, &id, bounds)?;
                 } else {
-                    st.dock_block(&p.session_id, &id, DockSide::Bottom, 0.3)?;
+                    st.dock_block(&p.session_id, &id, DockSide::Bottom, DRAWER)?;
                 }
                 st.set_focus_back(&id, back);
             } else {
                 st.toggle_overlay(&p.session_id, &p.label)?;
             }
             Ok(revision(&st, &p.session_id))
+        },
+    );
+    r.add(
+        "client.geometry",
+        "Tell the server how this client draws a window (pixels), so a float or drawer made there starts its program at the size the client gives it; the last report wins.",
+        |ctx, p: ReportGeometry| {
+            let g = Geometry { area: p.area, cell: p.cell, float_frame: p.float_frame, drawer_frame: p.drawer_frame };
+            g.check()?;
+            let st = ctx.state();
+            st.session(&p.session_id)?.window_index(&p.window_id)?;
+            ctx.set_geometry(&st, &p.window_id, g);
+            Ok(Empty {})
         },
     );
 }

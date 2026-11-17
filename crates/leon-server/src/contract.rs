@@ -81,6 +81,7 @@ const STABILITY: &[(&str, Stability)] = &[
     ("client.action", Experimental),
     ("client.key", Experimental),
     ("client.keymap", Internal),
+    ("client.geometry", Internal),
     ("dev.leon.terminal.write", Stable),
     ("dev.leon.terminal.format", Stable),
     ("dev.leon.terminal.size", Stable),

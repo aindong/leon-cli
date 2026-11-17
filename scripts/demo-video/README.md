@@ -8,16 +8,17 @@ moments every time, driven over ssh. Nothing touches the host's own leon, screen
 
 | Path | What it is |
 |---|---|
-| `run-demo.sh` | On the host: `boot`, `push`, `setup`, `take`, `cue`, `render`, `retake`, `shot`, `check`, `stop`. The scenes and their timing are its `scene1`…`scene11` functions. |
+| `run-demo.sh` | On the host: `boot`, `push`, `setup`, `take`, `cue`, `render`, `retake`, `shot`, `check`, `stop`. The scenes and their timing are its `scene1`…`scene12` functions. |
 | `kit/guest.sh` | In the VM, as `demo`: reset, stage, start the app, the take's beats. |
 | `kit/bin/agent`, `kit/scenes/` | The scripted agent: reads a scene file, prints at a reading pace, reports its state with OSC 7501, asks its question and waits, and drives leon the way an agent with leon's skill does (`leon split`, `leon wait`, `leon capture`). No AI service runs. |
 | `kit/projects/` | Three small Python projects (stdlib only) whose tests really run; `.next/N/` is each agent's change, applied during the take. |
 | `kit/bin/tailscale` | A stand-in found through `LEON_TAILSCALE`: answers only `status --json`, with a made-up tailnet. |
 | `kit/bin/mklog.py`, `kit/bin/ticker` | The 400 MB coloured log for the speed scene, and the background jobs of the 50-tab overview. |
-| `kit/init.lua`, `kit/zshrc` | The take's leon config (font, theme, no banners, the `review` action, `docs/lua/keys.md`'s ctrl+alt+g git popup) and a neutral prompt. |
+| `kit/init.lua`, `kit/zshrc` | The take's leon config (font, theme, no banners until scene 10 turns one on, the `review` action, `docs/lua/keys.md`'s ctrl+alt+g git popup) and a neutral prompt. |
 | `keypost.swift` | Posts real key codes and clicks to the focused app in the VM, and keeps the parked pointer stepping during a take; `push` builds it. |
 | `vnc.py` | Screenshots of the headless VM over its VNC server. |
 | `cut.py` | Finds the second where the app reopens windowed after ⌘Q, so the edit can drop it. |
+| `lead.py` | Measures how far the raw take runs ahead of the script's clock, into the cue file. |
 | `compose/` | The compositor: `compose.py` (timeline, render, CLI), `frame.py` (layouts, camera, one frame), `draw.py` (gradient, keycaps, pointer, wordmark, cards), `test_compose.py`, `requirements.txt`. |
 | `frames.sh` | Contact sheets of a video at given seconds, for checking a take or a render frame by frame. |
 
@@ -58,9 +59,16 @@ These need a person once, over VNC (`tart run leon-demo --vnc-experimental` prin
    ```
 
    and a copy of `~demo/python` in that user's home. `run-demo.sh push` copies leon there.
+6. Banners, for the attach scene: in System Settings › Notifications, set "when mirroring or
+   sharing the display" to Allow Notifications (macOS counts the VM's display as shared and hides
+   every banner otherwise), and after the first `push` and `setup`, turn on Leon's "Allow
+   notifications" there (its first request comes while banners are hidden, so macOS records it as
+   denied). Check it after a `push` of a new build: `usernoted` in the VM's log says
+   `authorizationStatus: Denied` when it is off again.
 
 `guest.sh prefs` (run by `setup`) does the rest each time, safely: it hides the desktop widgets,
-turns off macOS's tips (their "See what's new" banner stays on screen until clicked), maps the made-up tailnet's `devbox.example-tailnet.ts.net` to the same account, and makes the
+turns off macOS's tips (their "See what's new" banner stays on screen until clicked), gives
+Terminal a "Demo" profile (its Clear Dark, opaque, 16 pt, no "Last login" line) for the attach scene, maps the made-up tailnet's `devbox.example-tailnet.ts.net` to the same account, and makes the
 400 MB log once.
 
 ## Making a take
@@ -70,8 +78,8 @@ scripts/bundle.sh
 scripts/demo-video/run-demo.sh boot    # headless, waits for ssh
 scripts/demo-video/run-demo.sh push    # Leon.app, the kit and keypost into the VM; leon onto the devbox
 scripts/demo-video/run-demo.sh check   # the projects' tests, before and after each agent's change
-scripts/demo-video/run-demo.sh setup   # clean: the empty state, the devbox staged, full screen
-scripts/demo-video/run-demo.sh take    # scenes 1-11, about 106 s; take 3-5 films only those
+scripts/demo-video/run-demo.sh setup   # clean: the empty state, the devbox staged, a terminal on the desktop, full screen
+scripts/demo-video/run-demo.sh take    # scenes 1-12, about 117 s; take 3-5 films only those
 scripts/demo-video/run-demo.sh stop
 ```
 
@@ -93,7 +101,11 @@ it runs in the foreground of its own ssh session; `screencapture -V` stops only 
 its time, so a take ends on panes that still print; after a pane closes, one still second ends
 `screencapture -v` early (with any leon build), so during a take the parked pointer steps 4 pt up
 and down the right edge, inside the strip the render crops off (`keypost wiggle`); ⌘K matches anywhere in a name, so the take
-types whole words; the pointer is parked on the right edge, inside what the render crops.
+types whole words; the pointer is parked on the right edge, inside what the render crops; the
+recorder's own start varies (from 0 to 1.5 s after it is asked, on 2026-11-17), so `take` measures
+the lead on the video (`lead.py`: the first frame that changes is scene 2's ⌘N) instead of
+trusting the 1.5 s it waits; one take in four stopped at 64 s with `screencapture: exit 0`, so
+check `take-raw.mov`'s length.
 
 ## Rendering
 
@@ -104,7 +116,9 @@ scripts/demo-video/run-demo.sh render
 That makes a venv in `target/demo-video/venv` from `compose/requirements.txt` once, finds the
 reopen's windowed second with `cut.py --print`, and renders, at `nice -n 10` with 4 processes:
 
-- `renders/leon-demo-main.mp4`: 16:9, 1920×1080, 60 fps: title card, the take, end card;
+- `renders/leon-demo-main.mp4`: 16:9, 1920×1080, 60 fps: a 3 s cold open (the 50-tab overview,
+  live, from the take's `5 overview` beat, without its caption or keycap), a cut to the empty
+  state and the take from there, end card;
 - `renders/leon-demo-square-30s.mp4`: 1:1, 1080×1080, 60 fps: the 30-second cut
   (`SQUARE_CUT` in `compose.py`), its pieces dissolving into each other;
 - an `.srt` beside each, and a silent stereo track in each, for a voice-over.
@@ -140,7 +154,7 @@ What it draws, and the limits it keeps:
 
 | `type` | Fields | Meaning |
 |---|---|---|
-| `take` | `lead`, `width`, `height` | first line: the raw video's size and lead |
+| `take` | `lead`, `width`, `height` | first line: the raw video's size and lead (measured by `lead.py`) |
 | `mark` | `name` | a scene or beat starts (also in `take-beats.txt`) |
 | `key` | `combo` (`cmd+shift+\`), `show` | a key sent; `show` puts it on screen as keycaps |
 | `type` | `text` | text typed (never shown as keycaps) |
@@ -181,6 +195,9 @@ input and lowers its capture rate.
 - Speed numbers are captions from the host's measurements (above), not filmed in the VM.
 - status-page's git history (the popup's `git log --graph`) is made up at `reset`: one real
   commit of the project, then empty commits and a merged branch with fixed dates.
+- The banner in scene 10 is leon's own (the app posts it when logtally's agent asks its second
+  question); only when the agent asks is scripted. leon is full screen in its own Space, so the
+  terminal is on the desktop and the shot shows one or the other, never both at once.
 
 ## Licences of what it uses
 

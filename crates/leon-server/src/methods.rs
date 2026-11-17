@@ -341,7 +341,7 @@ pub fn registry() -> Registry {
         }
         let mark = st.mark();
         let (session_id, window_id) = st.create_session(p.label.as_deref(), p.window_label.as_deref())?;
-        match blocks::open(ctx, &mut st, &session_id, &window_id, layout, None) {
+        match blocks::open(ctx, &mut st, &session_id, &window_id, layout, None, None) {
             Ok(block_id) => Ok(Created { session_id, window_id, block_id }),
             Err(e) => {
                 let _ = st.destroy_session(&session_id);
@@ -371,7 +371,7 @@ pub fn registry() -> Registry {
             let mut st = ctx.state();
             let (mark, active) = (st.mark(), st.session(&p.session_id)?.active);
             let window_id = st.new_window(&p.session_id, p.window_label.as_deref())?;
-            match blocks::open(ctx, &mut st, &p.session_id, &window_id, Layout::block(p.layout), None) {
+            match blocks::open(ctx, &mut st, &p.session_id, &window_id, Layout::block(p.layout), None, None) {
                 Ok(block_id) => {
                     Ok(WindowCreated { revision: revision(&st, &p.session_id).revision, window_id, block_id })
                 }
