@@ -24,9 +24,14 @@ impl Workspace {
     }
 
     /// How far pane `id` is faded in the frame last drawn: 0 at full strength, at most the
-    /// `fade_inactive_panes` setting.
+    /// `fade_inactive_panes` setting, or a theme change's dip while one fades in.
     pub fn pane_fade(&self, id: &str) -> f32 {
-        self.fade.fades.amount(id)
+        self.fade.fades.amount(id).max(self.theme_dip())
+    }
+
+    /// The fade's clock: now, or the time a test set.
+    pub(super) fn fade_now(&self) -> Instant {
+        self.fade.clock.unwrap_or_else(Instant::now)
     }
 
     /// The theme pane `id` is drawn with: the window's, faded as far as the pane is.
@@ -75,7 +80,7 @@ impl Workspace {
         let panes: Vec<(&str, bool)> =
             shown.iter().zip(&states).map(|(id, state)| (id.as_str(), needs_user(id, state))).collect();
         let targets = fade::targets(&panes, focused.as_deref(), self.look.fade);
-        let now = self.fade.clock.unwrap_or_else(Instant::now);
+        let now = self.fade_now();
         let mut fades = std::mem::take(&mut self.fade.fades);
         fades.aim(targets, now, &|| self.reduce_motion());
         self.fade.fades = fades;

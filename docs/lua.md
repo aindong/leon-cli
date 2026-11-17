@@ -245,7 +245,7 @@ them in place; a running app follows them on a reload. A bad value is a skipped 
 | `check_for_updates` | `true` or `false` ([updates.md](updates.md)) | `true` |
 | `translucency` | a number, 0 (opaque) to 0.8 | `0.3` |
 
-`theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored.
+`theme` names a theme `leon theme list` shows (built in or imported); an unknown name is an error.
 
 ```lua
 leon.set("theme", { dark = "leon-dark", light = "leon-light" })
@@ -276,8 +276,8 @@ leon.set("fade_inactive_panes", 0)
 ```
 
 `translucency` is how much of the desktop shows through the app's window, blurred and tinted
-by the theme. Over any desktop, a part where text would fall below 4.5:1 is drawn more opaque.
-Reduce Transparency and full screen are opaque, as is `leon.set("translucency", 0)`.
+by the theme, but never so much that text falls below 4.5:1. Reduce Transparency and
+full screen are opaque, as is `leon.set("translucency", 0)`.
 
 `repeat_time` is how long a repeatable binding's keys work without the prefix (above).
 

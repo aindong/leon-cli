@@ -85,14 +85,14 @@ of [the architecture](../architecture.md).
   focus that moves on mid-fade never jumps; a pane seen for the first time is drawn in place.
   The poll redraws only while a fade is on its way (`Workspace::fading`), so an idle app still
   draws nothing. `leon.set("fade_inactive_panes", N)` is the strength, 0 (off) to 0.8; the
-  default, 0.35, is the strongest step at which body text keeps 4.5:1 on leon-dark and
-  leon-light. The app reads it from `server.settings`. `leon attach` doesn't fade.
+  default, 0.35, is the strongest step at which body text keeps 4.5:1 on every built-in theme.
+  The app reads it from `server.settings`. `leon attach` doesn't fade.
 - **The translucent window.** `leon.set("translucency", N)` (0 to 0.8, default 0.3) asks GPUI for
   a blurred window background (`Window::set_background_appearance`, an `NSVisualEffectView`
   under the content that the system composites, so a desktop changing behind the window draws
   nothing in leon; leon sets the view's material, or macOS 27 doesn't blur: `view_glass.rs` in
-  gpui.md's Allowed outside GPUI) and draws the window's own colours with alpha (`glass.rs`). GPUI's renderer
-  adds alpha where fills overlap, so each pixel gets one translucent fill at most: the root fills
+  gpui.md's Allowed outside GPUI) and draws the window's own colours with alpha (`glass.rs`).
+  GPUI's renderer adds alpha where fills overlap, so each pixel gets one translucent fill at most: the root fills
   nothing, and the sidebar, the title bar, the panes area's gaps (`glass::gaps`, the area less
   the rounded tiles) and each tile fill themselves. Each alpha is what the setting asks, or
   more where text would read worse over some desktop than it must (white, black, or the grey
@@ -110,6 +110,12 @@ of [the architecture](../architecture.md).
   Floats, a drawer sliding out (over tiles that took its room back) and overlays (the palette,
   the overview, the find bar) stay opaque: they sit over other content. A program's own background colours are
   opaque; only default-background cells show through.
+- **A theme change fades in.** A new theme (Change Theme…, Settings, init.lua, the appearance)
+  moves every colour from the old theme's to the new one's over the same slide time, and every
+  pane, one that needs the user too, dips toward the window mid-way (at most 0.8), so its text,
+  which the server sends again in the new colours, fades out and back in. `render` asks GPUI for
+  animation frames only while it moves (ADR R6); Reduce Motion, and the first settings after a
+  launch, switch at once. The theme list's preview is drawn the same way.
 - **`leon notify`.** `dev.leon.terminal.report_status {state, title, msg}` (experimental) builds an
   OSC 7501 report (title and msg base64) and runs it through the same parser and store as PTY
   output, so every limit applies; text the parser would drop is refused (400) instead. `leon notify`

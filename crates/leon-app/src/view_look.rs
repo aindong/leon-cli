@@ -9,11 +9,6 @@ pub fn is_dark(a: gpui::WindowAppearance) -> bool {
 }
 
 impl Workspace {
-    /// The theme everything is drawn with now.
-    pub fn theme(&self) -> Theme {
-        self.theme
-    }
-
     pub fn font_family(&self) -> String {
         self.font_family.to_string()
     }
@@ -49,6 +44,8 @@ impl Workspace {
         }
         self.look = look;
         self.use_theme();
+        // after `use_theme`: the first settings are drawn at once, a change from then on fades
+        self.note_theme_names(&reply["settings"]);
         // a server older than the setting doesn't report it, and would have skipped a
         // `check_for_updates = false` as unknown: no look of the app's own until it does
         self.check_for_updates = reply["settings"]["check_for_updates"].as_bool();
@@ -72,20 +69,18 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Draw with the theme for the appearance now; scrollback fetched in the old colours goes.
+    /// Head for the theme for the appearance now (`follow_theme`), and have every host resolve its
+    /// screens in it.
     fn use_theme(&mut self) {
-        let t = self.look.theme(self.dark);
-        if t != self.theme {
-            self.theme = t;
-            self.term.panes.values_mut().for_each(|p| p.cache.clear());
-        }
+        self.follow_theme();
         self.send_palette();
     }
 
-    /// Have every host resolve its screens in the theme's colours (a host that just connected too).
+    /// Have every host resolve its screens in the theme's colours (a host that just connected too):
+    /// the theme a change is heading for, not one on the way.
     pub(super) fn send_palette(&self) {
         for (_, remote) in self.hosts.remotes() {
-            remote.set_palette(&self.theme);
+            remote.set_palette(&self.theme());
         }
     }
 }

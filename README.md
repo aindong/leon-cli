@@ -23,7 +23,7 @@ one needs you. It runs on macOS and Linux (the app is macOS only for now) and is
   them, read their screens and wait for programs, with fixed exit codes and `--json` output.
   `leon attach` shows a session in any terminal, over ssh too.
 - **The macOS app.** Sidebar or titlebar tabs, splits, floating panes, a scratch drawer, a
-  command palette, a session switcher, scrollback with find and copy mode, and themes.
+  command palette, a session switcher, scrollback with find and copy mode, and eight themes.
 - **Agents.** `leon skill setup` teaches Claude Code and Codex to work in panes beside
   themselves, and their panes offer to resume the same conversation after a restart.
 - **Status and attention.** A program that writes an OSC 7501 report (agents do) shows its state
@@ -310,7 +310,8 @@ leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 | ⌘B | Show or hide the sidebar |
 | ⌘⇧S | Tabs in the sidebar or in the titlebar (saved for the next launch) |
 | ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
-| ⌘, | Settings: the theme for dark and for light mode, font, notifications, copy on select; each change is written to init.lua |
+| ⌘, | Settings: theme for dark and light mode, font, notifications, copy on select (into init.lua) |
+| ⌘⇧T | Change theme, shown live as you move; ↩ keeps it, esc goes back |
 | ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
 | ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
 | ⌘⇧\, ⌘\ | Overview: every tab (⌘\: this session's), live; arrows and ↩ go, typing filters; resting on a tab previews it |
@@ -353,8 +354,8 @@ leon do name_session label=api
 leon do -e 'print(#leon.session.view().windows .. " tabs")'
 ```
 
-`leon theme import FILE` brings in a color scheme from another terminal's theme file. See
-[docs/lua.md](docs/lua.md) for every setting and function, and [docs/cli/settings.md](docs/cli/settings.md).
+`leon theme import FILE` brings in another terminal's theme. See [docs/lua.md](docs/lua.md) and
+[docs/cli/settings.md](docs/cli/settings.md).
 
 ## Roadmap
 
