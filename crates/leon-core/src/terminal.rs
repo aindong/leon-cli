@@ -40,7 +40,7 @@ mod start;
 mod status;
 #[path = "terminal_view.rs"]
 mod view;
-use reading::{Reading, Reported};
+use reading::{parsed_by_then, Reading, Reported};
 pub use view::Escapes;
 
 pub const NAMESPACE: &str = "dev.leon.terminal";
@@ -225,8 +225,20 @@ impl Terminal {
         shown: &[u8],
         notify: impl Fn(Notice) + Send + Sync + 'static,
     ) -> io::Result<Terminal> {
+        Self::spawn_sized(spec, shown, None, notify)
+    }
+
+    /// `spawn_showing` at `size` (None: 24x80, clamped as `resize` clamps): the program's first
+    /// look at its size is right.
+    pub fn spawn_sized(
+        spec: Spec,
+        shown: &[u8],
+        size: Option<(u16, u16)>,
+        notify: impl Fn(Notice) + Send + Sync + 'static,
+    ) -> io::Result<Terminal> {
         let notify: Notify = Arc::new(notify);
-        let size = PtySize { rows: ROWS, cols: COLS, pixel_width: 0, pixel_height: 0 };
+        let (rows, cols) = size.map_or((ROWS, COLS), |(r, c)| (r.clamp(1, MAX_SIZE.0), c.clamp(2, MAX_SIZE.1)));
+        let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
         let pair = start::open_pty(size)?;
         // portable-pty silently falls back to $HOME for a missing dir; refuse instead.
         if let Some(dir) = spec.cwd.as_ref().filter(|d| !d.is_dir()) {
@@ -272,7 +284,7 @@ impl Terminal {
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
         let seen = Arc::new(Mutex::new(Seen::default()));
         let listener = Listener { writer: writer.clone(), seen: seen.clone() };
-        let mut emulator = Term::new(config, &Size { rows: ROWS, cols: COLS }, listener);
+        let mut emulator = Term::new(config, &Size { rows, cols }, listener);
         let mut parser: Processor = Processor::new();
         let scrolled = Arc::new(AtomicUsize::new(0));
         view::feed(&mut emulator, &mut parser, &mut Escapes::default(), shown, &scrolled);
@@ -452,25 +464,6 @@ fn clean(s: &str) -> String {
         out.push(c);
     }
     out
-}
-
-/// Wait for what the exit report needs: the PTY's EOF and every read parsed, or, when no EOF comes
-/// within `wait` (a job holds the PTY, or the reader is behind), what was read by then parsed.
-fn parsed_by_then(
-    eof: &mpsc::Receiver<()>,
-    drained: &mpsc::Receiver<()>,
-    read: &AtomicU64,
-    parsed: &AtomicU64,
-    wait: Duration,
-) {
-    if eof.recv_timeout(wait) == Err(mpsc::RecvTimeoutError::Disconnected) {
-        let _ = drained.recv(); // a bounded backlog: it finishes
-        return;
-    }
-    let read = read.load(Ordering::SeqCst);
-    // polled: the parser has no per-batch signal for a plain thread; it ends if the parser does
-    let tick = Duration::from_millis(5);
-    while parsed.load(Ordering::SeqCst) < read && drained.recv_timeout(tick) == Err(mpsc::RecvTimeoutError::Timeout) {}
 }
 
 fn pty(e: impl std::fmt::Display) -> io::Error {

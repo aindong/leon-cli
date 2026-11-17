@@ -154,6 +154,7 @@ fn reattach(shared: &Shared) -> Option<BufReader<UnixStream>> {
             lock(&shared.fetch).call("server.version", json!({})).ok()?;
             let (r, w, snapshot) = attach(&shared.socket, false, CALL_TIMEOUT).ok()?;
             shared.restart_stream(&snapshot);
+            shared.resend_geometry(); // a restarted server has none
             (r, w)
         }
         Some(limit) => link::relink(shared, limit)?,
