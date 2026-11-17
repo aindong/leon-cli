@@ -6,8 +6,8 @@ fn doc(path: &str) -> String {
 
 #[test]
 fn the_docs_cover_m11() {
-    let lua = doc("docs/lua.md");
-    assert!(lua.contains("copy_on_select"), "lua.md documents the copy_on_select setting");
+    let lua = doc("docs/lua/settings.md");
+    assert!(lua.contains("copy_on_select"), "lua/settings.md documents the copy_on_select setting");
     let arch =
         ["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/state-and-hosts.md"]
             .map(doc)
@@ -22,8 +22,8 @@ fn the_docs_cover_m11() {
     ] {
         assert!(arch.contains(topic), "architecture.md covers {topic}");
     }
-    let readme = doc("README.md");
+    let readme = doc("docs/shortcuts.md");
     for key in ["⌘C", "⌘A", "⌘F", "⇧PageUp", "⌘↑"] {
-        assert!(readme.contains(key), "README lists {key}");
+        assert!(readme.contains(key), "docs/shortcuts.md lists {key}");
     }
 }

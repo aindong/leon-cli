@@ -92,6 +92,9 @@ pub struct State {
     pub sessions: Vec<Session>,
     /// Exit statuses of finished programs, newest last, so `wait` works after a block closed.
     exits: VecDeque<(String, i32)>,
+    /// Where the focus goes back when a toggled overlay hides or closes while focused, by
+    /// overlay block (`set_focus_back`).
+    pub(crate) back_to: HashMap<String, String>,
     /// Events not yet taken (events.rs).
     pub(crate) outbox: Vec<Event>,
     /// Sessions whose view changed since the events were last taken.
@@ -278,17 +281,22 @@ impl State {
         let s = self.session_mut(session_id)?;
         let i = s.block_index(block_id)?;
         let w = s.window_index(&s.blocks[i].window_id)?;
+        // an overlay only: one a toggle opened and then unfloated is a tile, with a tile's pick
+        let had_focus = s.has_focus(w, block_id) && s.overlay(&s.windows[w].id).contains(block_id);
         s.blocks.remove(i);
         s.detach_placed(w, block_id);
         let emptied = s.empty_window(w).then(|| s.windows[w].id.clone());
+        let back = self.back_to.remove(block_id).filter(|_| had_focus);
         self.emit(session_id, "block_closed", json!({ "block_id": block_id }));
-        match emptied {
+        let closed = match emptied {
             Some(window_id) => self.close_window(session_id, &window_id),
             None => {
                 self.touch(session_id);
                 Ok(())
             }
-        }
+        };
+        self.focus_back(session_id, back);
+        closed
     }
 
     /// A block's program exited: remember the status, and close the block unless it is kept open.

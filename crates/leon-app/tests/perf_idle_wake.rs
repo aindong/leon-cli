@@ -1,6 +1,6 @@
 //! Finding 3 of the performance baseline: the workspace's poll runs when woken or when something
 //! timed is due, never on a fixed 8 ms clock. GPUI's test clock only moves when asked, so `run_for`
-//! moves it with the real one (the spinner's frames and the find re-run come from the real clock).
+//! moves it with the real one, drawing only the animation frames the app asks for.
 mod m20b_support;
 
 use std::time::{Duration, Instant};
@@ -22,8 +22,7 @@ fn run_for(ws: &Entity<Workspace>, cx: &mut VisualTestContext, d: Duration) -> (
     while Instant::now() < end {
         let t = Instant::now();
         std::thread::sleep(Duration::from_millis(5));
-        cx.executor().advance_clock(t.elapsed());
-        cx.run_until_parked();
+        tick(ws, cx, t.elapsed()); // and the animation frames the app asks for, which the test window never runs
     }
     let after = ws.read_with(cx, |ws, _| ws.polls());
     (after.0 - before.0, after.1 - before.1)
@@ -42,19 +41,21 @@ fn an_idle_window_does_not_poll_on_a_clock(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn a_working_indicator_polls_and_redraws_at_the_spinner_pace(cx: &mut TestAppContext) {
+fn a_working_indicator_ticks_the_pulse_not_the_poll(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
     run_until(&focused(&s.app, &ws, cx), WORKING, "w-sent");
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.activity_rows().len()) == 1), "the pane reports working");
     run_for(&ws, cx, Duration::from_millis(300));
-    let (n, redraws) = run_for(&ws, cx, Duration::from_secs(1));
+    let ticks = ws.read_with(cx, |ws, cx| ws.pulse_state(cx).1);
+    let (n, _) = run_for(&ws, cx, Duration::from_secs(1));
+    let ticks = ws.read_with(cx, |ws, cx| ws.pulse_state(cx).1) - ticks;
     s.app.stop();
-    // 8 frames a second (125 ms each; the old poll ran about 125 times). Under load a slow step
-    // moves the test clock in one jump past a real clock that stands still, and the spinner's
-    // deadline (from the real clock) can come round a few times within it.
-    assert!((5..=40).contains(&n), "the poll ran {n} times in 1 s with a working indicator");
-    assert!(redraws >= 3, "the pulse moved only {redraws} times in 1 s");
+    // the spinner's clock is the Pulse's (GPUI phase 3), 8 ticks a second; the poll runs only
+    // when woken. Under load a slow step moves the test clock in one jump, and the timer can
+    // come round a few times within it.
+    assert!(n <= 5, "the poll ran {n} times in 1 s with a working indicator");
+    assert!((5..=40).contains(&ticks), "the Pulse ticked {ticks} times in 1 s");
 }
 
 #[gpui::test]
@@ -88,7 +89,8 @@ fn a_drawer_slides_to_rest_with_no_manual_redraw(cx: &mut TestAppContext) {
     let id = view_window(&s.app, &sid)["docked"][0]["block_id"].as_str().unwrap().to_string();
     let sel = format!("dock-{id}");
     assert!(shows(cx, |cx| drawn(cx, &sel)));
-    // its shell's prompt drawn and the first slide over: from here only the poll's clock moves it
+    // its shell's prompt drawn and the first slide over: from here only the frames the app asks for
+    // move it
     settle(&term(&s.app, &id));
     run_for(&ws, cx, Duration::from_millis(300));
     toggle(false);

@@ -9,7 +9,7 @@ use m10b_support::*;
 fn the_empty_state_lists_the_keys_that_matter(cx: &mut TestAppContext) {
     let s = setup_with_config(r#"leon.bind("cmd+k", "client.palette.toggle")"#);
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     cx.simulate_keystrokes("cmd-w");
     assert!(s.app.ctx().state().sessions.is_empty());
     assert!(drawn(cx, "empty-state"), "an empty state, not a blank pane area");

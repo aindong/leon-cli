@@ -271,7 +271,7 @@ impl Workspace {
     /// Start It Again: run this leon as it was started (`leon app` starts the server first), with
     /// its environment (the private LEON_* dirs), then quit. Not GPUI's restart, which `open`s an
     /// unbundled binary in Terminal with none of that environment.
-    pub(super) fn start_again(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn start_again(&mut self, cx: &mut Context<Self>) {
         let exe = match std::env::current_exe() {
             Ok(exe) => exe,
             Err(e) => return eprintln!("leon: can't find leon to start it again: {e}"),

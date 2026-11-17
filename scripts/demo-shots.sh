@@ -3,8 +3,11 @@
 # machine it runs on: a temp HOME whose zsh prompt is `auth %`, scripted programs instead of real
 # agents, private LEON_RUNTIME_DIR/STATE_DIR/CONFIG, and a devbox that is a second local server
 # behind a fake ssh. Keys go to leon's window through System Events (the terminal running this needs
-# Accessibility); shots are window-only (scripts/winshot.swift). Run it on an unlocked screen and
-# leave the mouse and keyboard alone for the minute it takes. Check the result with
+# Accessibility). A shot is leon's window as the screen draws it, translucency and all, over a plain
+# desktop window the script puts up itself (scripts/deskshot.swift checks that no other program's
+# window is in the shot). It takes the GUI lock (/tmp/leon-gui.lock) while an app is open and stops
+# if anything but leon comes to the front. Run it on an unlocked screen and leave the mouse and
+# keyboard alone for the three minutes it takes. Check the result with
 # `cargo test -p leon --test m13_privacy`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -47,16 +50,18 @@ EOF
 : >"$home/.config/leon/none.lua"
 
 # show TITLE TEXTFILE [OSC7501 PAIRS]: a "program" that sets its title and status and shows the
-# text, again after each resize (the app sizes the pane after it started)
+# text, again after each resize (the app sizes the pane after it started). Perl, not sh: the app
+# gives a pane whose program is `sh` the shell's icon, and this one's comes from its title.
 cat >"$home/bin/show" <<'EOF'
-#!/bin/sh
-printf '\033]2;%s\007' "$1"
-[ -n "${3:-}" ] && printf '\033]7501;%s\007' "$3"
-text=$2
-draw() { printf '\033[H\033[2J\033[3J'; cat "$text"; }
-trap draw WINCH
-draw
-while :; do sleep 100000 & wait $!; done
+#!/usr/bin/perl
+my ($title, $text, $report) = @ARGV;
+$| = 1;
+print "\e]2;$title\a";
+print "\e]7501;$report\a" if $report;
+sub draw { open(my $f, '<', $text) or return; local $/; print "\e[H\e[2J\e[3J", <$f>; }
+$SIG{WINCH} = \&draw;
+draw();
+sleep while 1;
 EOF
 chmod +x "$home/bin/show"
 b64() { printf %s "$1" | base64; }
@@ -138,6 +143,41 @@ $ make release
 [ 40%] Building CXX object src/CMakeFiles/core.dir/engine.cpp.o
 EOF
 
+txt routes <<'EOF'
+use axum::{routing::get, Router};
+
+pub fn routes() -> Router {
+    Router::new()
+        .route("/health", get(health))
+        .route("/v1/orders", get(orders::list).post(orders::create))
+        .layer(limits::per_key(100))
+}
+EOF
+txt pytest <<'EOF'
+============================= test session starts ==============================
+collected 42 items
+
+tests/test_orders.py ..........                                          [ 23%]
+tests/test_limits.py ........                                            [ 42%]
+tests/test_users.py ........................                             [100%]
+
+============================== 42 passed in 1.84s ==============================
+EOF
+txt caddy <<'EOF'
+INFO  using config from file  {"file": "Caddyfile"}
+INFO  serving initial configuration
+INFO  http.log.access  {"method": "GET", "uri": "/health", "status": 200}
+EOF
+txt htop <<'EOF'
+  CPU [|||||||||               24.1%]   Tasks: 212, 3 running
+  Mem [||||||||||||       6.12G/16.0G]   Load average: 1.42 1.20 0.98
+
+    PID  CPU% MEM%  Command
+   4121  31.0  2.4  api-server
+   4180  12.5  1.1  postgres
+   4202   3.2  0.4  worker --queue orders
+EOF
+
 # LEON_RELEASE_URL: the app's look for a release goes to a loopback port that refuses, not to GitHub
 base=(env -u LEON_SESSION -u LEON_BLOCK -u ZDOTDIR HOME="$home" SHELL=/bin/zsh PATH="$home/bin:$PATH" LEON_RELEASE_URL=http://127.0.0.1:9 LEON_TAILSCALE="$d/no-tailscale")
 here() { "${base[@]}" LEON_RUNTIME_DIR="$d/run" LEON_STATE_DIR="$d/state" LEON_CONFIG="$home/.config/leon/init.lua" "$leon" "$@"; }
@@ -155,9 +195,21 @@ exec env -u LEON_SESSION -u LEON_BLOCK HOME="$home" SHELL=/bin/zsh LEON_RUNTIME_
 EOF
 chmod +x "$d/ssh"
 
+# the machine-wide GUI lock: keys go to whichever app is frontmost, so one taker at a time holds
+# the screen, from an app's start to its close
+lock=/tmp/leon-gui.lock
+held=
+take_lock() {
+  until mkdir "$lock" 2>/dev/null; do echo "demo-shots: waiting for $lock" >&2; sleep 3; done
+  held=1
+}
+drop_lock() { [ -z "$held" ] || rmdir "$lock" 2>/dev/null || true; held=; }
 app_pid=
+desk_pid=
 cleanup() {
   [ -n "$app_pid" ] && kill "$app_pid" 2>/dev/null || true
+  [ -n "$desk_pid" ] && kill "$desk_pid" 2>/dev/null || true
+  drop_lock
   here --autostart=false server stop --discard >/dev/null 2>&1 || true
   dev --autostart=false server stop --discard >/dev/null 2>&1 || true
   rm -rf "${d:?}"
@@ -192,23 +244,60 @@ print(CGMainDisplayID())
 SWIFT
 )
 cat >"$d/state/app.json" <<EOF
-{"tab_style":"sidebar","pane_headers":true,"sidebar_width":230,"window":{"x":60,"y":60,"w":1440,"h":900},"display":$display,"collapsed_hosts":[]}
+{"tab_style":"sidebar","pane_headers":true,"sidebar_width":230,"window":{"x":160,"y":120,"w":1440,"h":900},"display":$display,"collapsed_hosts":[]}
 EOF
 
+ts=$d/no-tailscale
+# a plain desktop behind the window for its translucency (scripts/deskshot.swift), its own binary
+# so the window's owner is the pid we start
+swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift"
 open_app() {
+  take_lock
+  "$d/deskshot" backdrop &
+  desk_pid=$!
   "${base[@]}" LEON_RUNTIME_DIR="$d/run" LEON_STATE_DIR="$d/state" LEON_CONFIG="$home/.config/leon/init.lua" LEON_SSH="$d/ssh" \
-    "$leon" app >/dev/null 2>&1 &
+    LEON_TAILSCALE="$ts" "$leon" app >/dev/null 2>&1 &
   app_pid=$!
   sleep 4
   front
 }
-close_app() { kill "$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true; app_pid=; sleep 1; }
+close_app() {
+  kill "$app_pid" "$desk_pid" 2>/dev/null || true
+  wait "$app_pid" "$desk_pid" 2>/dev/null || true
+  app_pid= desk_pid=
+  sleep 1
+  drop_lock
+}
 front() { osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $app_pid) to true" >/dev/null; sleep 0.5; }
-keys() { front; osascript -e "tell application \"System Events\" to $1"; sleep 0.8; }
-shot() { sleep 0.5; swift "$repo/scripts/winshot.swift" leon "$out/$1.png" >/dev/null; echo "demo-shots: $1.png"; }
+# keys go only to the app this script started: the check and the key are one AppleScript, and
+# anything else in front stops the run
+keys() {
+  front
+  osascript -e "tell application \"System Events\"
+    if (unix id of (first process whose frontmost is true)) is not $app_pid then error \"not leon\"
+    $1
+  end tell" >/dev/null || { echo "demo-shots: leon ($app_pid) isn't in front; no keys sent" >&2; exit 1; }
+  sleep 0.8
+}
+in_front() {
+  local top
+  top=$(osascript -e 'tell application "System Events" to unix id of first process whose frontmost is true')
+  [ "$top" = "$app_pid" ] || { echo "demo-shots: pid $top is in front, not leon ($app_pid); stopping" >&2; exit 1; }
+}
+# shot NAME [PAD]: leon's frontmost window and PAD points around it, as the screen draws it over the
+# plain desktop; deskshot refuses when any other program's window is in the way
+shot() {
+  front
+  in_front
+  sleep 0.5
+  "$d/deskshot" "$app_pid" "$desk_pid" "$out/$1.png" "${2:-0}"
+  echo "demo-shots: $1.png"
+}
 
 open_app
 shot app-status
+shot app-translucent 80
+sips -Z 1760 "$out/app-translucent.png" >/dev/null # twice the README's width: sharp at half the bytes
 keys 'keystroke "p" using {command down, shift down}'
 keys 'keystroke "log"'
 shot app-palette
@@ -219,6 +308,23 @@ keys 'key code 53'
 keys 'keystroke "s" using {command down, shift down}'
 shot app-top
 keys 'keystroke "s" using {command down, shift down}'
+# the overview of every tab; Change Theme… resting on another theme (esc goes back); Settings
+keys 'keystroke "\\" using {command down, shift down}'
+sleep 1.5
+shot app-overview
+keys 'key code 53'
+keys 'keystroke "t" using {command down, shift down}'
+keys 'key code 125'
+keys 'key code 125'
+keys 'key code 125'
+sleep 1
+shot app-theme
+keys 'key code 53'
+keys 'keystroke "," using command down'
+sleep 1
+keys 'key code 125'
+shot app-settings
+keys 'keystroke "w" using command down'
 # a float over the split, then the scratch drawer open below the tiles; both closed again after
 notes=$(here -s auth float --new --label notes --rect 0.44,0.08,0.52,0.5 -- show "Release notes" "$d/notes.txt")
 sleep 1
@@ -265,11 +371,39 @@ sleep 4
 shot m16b-unreachable
 close_app
 
+# a busy tab bar, a tab per program and its icon, with the tabs in the titlebar; then Add Host…
+# listing a made-up tailnet (the demo kit's stand-in tailscale)
+here new shop >/dev/null
+agent=$(tab shop api "Add rate limiting" api "state=working:progress=30:title=$(b64 agent)")
+tab shop api "nvim src/routes.rs" routes >/dev/null
+tab shop api "pytest -q" pytest >/dev/null
+tab shop api "caddy run" caddy >/dev/null
+tab shop api "htop" htop >/dev/null
+tab shop api "ssh devbox" server >/dev/null
+here -s shop focus "$agent" >/dev/null 2>&1 || true
+ts=$repo/scripts/demo-video/kit/bin/tailscale
+open_app
+keys 'keystroke "k" using command down'
+keys 'keystroke "nvim"'
+keys 'key code 36'
+keys 'keystroke "s" using {command down, shift down}'
+sleep 1
+shot app-icons
+keys 'keystroke "s" using {command down, shift down}'
+keys 'keystroke "p" using {command down, shift down}'
+keys 'keystroke "add host"'
+keys 'key code 36'
+sleep 2
+shot app-tailnet
+keys 'key code 53'
+close_app
+ts=$d/no-tailscale
+
 # the empty state with a host: no session anywhere (the app makes one at start, so kill after)
 here hosts remove build-box >/dev/null
 dev kill api deploy >/dev/null
 open_app
-here kill auth site infra >/dev/null 2>&1 || true
+here kill auth site infra shop >/dev/null 2>&1 || true
 sleep 2
 shot m16b-empty-state
 close_app

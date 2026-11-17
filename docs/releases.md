@@ -26,7 +26,8 @@ of those ten files.
 Before the first release, do the one-time setup under [Secrets](#secrets).
 
 1. Set the version in `Cargo.toml`. Give `CHANGELOG.md` a `## [X.Y.Z]` section and move what is
-   under `[Unreleased]` into it: the release notes are that section's text and nothing else.
+   under `[Unreleased]` into it: the release notes are that section's text and nothing else, its
+   relative links made absolute to the tag on GitHub.
 2. Try it on your Mac: `scripts/release-dry-run.sh` builds the release (`scripts/release.sh`),
    signs it with a key made for the run, checks it, and then changes a byte to see the check fail.
    It needs Docker for the Linux packages; `--linux none` skips them.

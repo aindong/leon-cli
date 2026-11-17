@@ -33,6 +33,15 @@ pub struct Effective {
     pub fade_inactive_panes: f64,
     /// Leon.app looks for a newer release once a day; false, only when asked.
     pub check_for_updates: bool,
+    /// How much of the desktop shows through Leon.app's window, from 0 (opaque) to 0.8.
+    pub translucency: f64,
+    /// The server also listens on this machine's Tailscale addresses, letting in only your own
+    /// machines (`server.status`'s `tailnet` says how it went).
+    pub serve_tailscale: bool,
+    /// The port it listens on there.
+    pub serve_tailscale_port: u16,
+    /// Tagged machines it lets in too, by tag (`tag:ci`).
+    pub serve_tailscale_tags: Vec<String>,
 }
 
 /// A theme name for each OS appearance (the same one for both unless init.lua gives two).

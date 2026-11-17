@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use leon_app::fade::{frame, targets, theme, Fades};
 use leon_app::floats::SLIDE;
 use leon_app::render::{BgRect, Frame, Span};
-use leon_app::theme::{contrast, mix, DARK, LIGHT};
+use leon_app::theme::{contrast, mix, BUILTIN, DARK, LIGHT};
 use leon_lua::settings::FADE;
 
 const S: f32 = 0.4;
@@ -103,7 +103,7 @@ fn a_screens_own_colours_fade_the_same_way() {
 #[test]
 fn the_default_is_on_and_keeps_body_text_readable() {
     assert_ne!(theme(&DARK, FADE as f32), DARK, "the fade is on unless the config turns it off");
-    for (name, t) in [("leon-dark", DARK), ("leon-light", LIGHT)] {
+    for (name, t) in BUILTIN {
         let f = theme(&t, FADE as f32);
         let ratio = contrast(f.fg, f.bg);
         assert!(ratio >= 4.5, "{name}: faded body text is {ratio:.2}:1 on the faded pane");

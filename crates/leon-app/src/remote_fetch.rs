@@ -119,6 +119,7 @@ pub(super) fn fetch(c: &mut Conn) -> Result<Vec<Session>, ApiError> {
                 command: serde_json::from_value(b["command"].clone()).unwrap_or_default(),
                 title: text(&b["title"]),
                 cwd: text(&b["cwd"]),
+                foreground: b.get("foreground").map(text),
                 status: status.filter_map(|r| serde_json::from_value(r["record"].clone()).ok()).map(shown).collect(),
             });
         }

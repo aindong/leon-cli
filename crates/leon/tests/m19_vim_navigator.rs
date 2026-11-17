@@ -1,4 +1,4 @@
-//! M19 criterion 6 (.agent/plans/2026-11-15-m19-tmux-migrants.md): docs/lua.md's vim-navigator
+//! M19 criterion 6 (.agent/plans/2026-11-15-m19-tmux-migrants.md): docs/lua/keys.md's vim-navigator
 //! recipe works. ctrl+h moves to the pane on the left unless vim is the pane's foreground program,
 //! which gets the key instead; vim's side, `leon focus left` run from the pane, moves leon's focus.
 
@@ -8,11 +8,11 @@ mod support;
 use serde_json::json;
 use support::Env;
 
-/// The recipe: the `lua` block of docs/lua.md that mentions nvim.
+/// The recipe: the `lua` block of docs/lua/keys.md that mentions nvim.
 fn recipe() -> String {
-    let doc = std::fs::read_to_string(help_walk::repo().join("docs/lua.md")).unwrap();
+    let doc = std::fs::read_to_string(help_walk::repo().join("docs/lua/keys.md")).unwrap();
     let recipe = help_walk::blocks(&doc, "lua").into_iter().find(|b| b.contains("nvim"));
-    recipe.expect("docs/lua.md has the vim-navigator recipe")
+    recipe.expect("docs/lua/keys.md has the vim-navigator recipe")
 }
 
 fn focus(env: &Env, sid: &str) -> String {

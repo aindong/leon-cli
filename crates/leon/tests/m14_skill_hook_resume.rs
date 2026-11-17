@@ -8,7 +8,6 @@
 
 mod support;
 
-use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -23,17 +22,15 @@ fn start(id: &str) -> String {
 }
 
 /// Type `leon skill hook ARGS < file` into block `b` (with `prefix` env assignments) and wait for it to
-/// finish; returns how long it took.
-fn hook_in_block(env: &Env, b: &str, n: &mut u32, prefix: &str, args: &str, stdin: &str) -> Duration {
+/// finish.
+fn hook_in_block(env: &Env, b: &str, n: &mut u32, prefix: &str, args: &str, stdin: &str) {
     *n += 1;
     let input = env.dir.path().join(format!("in-{n}.json"));
     std::fs::write(&input, stdin).unwrap();
-    let t = Instant::now();
     let line = format!("{prefix} leon skill hook {args} < '{}'; echo hooked-{n}-$?\r", input.display());
     env.ok(&["-b", b, "send", &line]);
     let done = format!("hooked-{n}-0");
     env.screen_until(b, "the hook", |s| s.lines().any(|l| l.trim() == done));
-    t.elapsed()
 }
 
 #[test]
@@ -65,12 +62,21 @@ fn the_hook_records_each_agents_resume_command() {
         assert_eq!(resume(), codex, "{args} {stdin}");
     }
 
-    // A server that never answers: the hook gives up within a few seconds and still succeeds.
+    // A server that never answers: the hook gives up within a few seconds and still succeeds. The
+    // time is the hook's own, from its connect to its close, not the leon calls that drive the block.
     let dir = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
     let sock = dir.path().join("server.sock");
-    let _listener = std::os::unix::net::UnixListener::bind(&sock).unwrap(); // connects queue; no reply
+    let listener = std::os::unix::net::UnixListener::bind(&sock).unwrap();
+    let (tx, held) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let (mut conn, _) = listener.accept().unwrap();
+        let t = Instant::now();
+        let _ = std::io::copy(&mut conn, &mut std::io::sink()); // reads the call, never replies
+        let _ = tx.send(t.elapsed());
+    });
     let prefix = format!("LEON_SERVER='{}'", sock.display());
-    let took = hook_in_block(&env, &b, n, &prefix, "--agent claude", &start("c7583d2c"));
+    hook_in_block(&env, &b, n, &prefix, "--agent claude", &start("c7583d2c"));
+    let took = held.recv_timeout(Duration::from_secs(10)).expect("the hook never connected, or never let go");
     assert!(took < Duration::from_secs(3), "took {took:?}");
 }
 
@@ -81,16 +87,19 @@ fn an_agent_with_no_terminal_records_nothing() {
     env.ok(&["server", "start"]);
     let b = env.ok(&["run", "--", "/bin/sh"]);
     let s = env.json(&["ls", "--json"])[0]["session_id"].as_str().unwrap().to_string();
-    let mut c = env.cmd();
-    c.args(["skill", "hook", "--agent", "claude"])
+    // Its stdin is a file, there from the start: the hook waits only 1 s for its input, so a pipe
+    // written after the start can find it gone (and nothing read records nothing anyway).
+    let input = env.dir.path().join("in.json");
+    std::fs::write(&input, start("c7583d2c-3133-4d13-b5f0-45883f1cabcb")).unwrap();
+    let o = env
+        .cmd()
+        .args(["skill", "hook", "--agent", "claude"])
         .env("LEON_SESSION", &s)
         .env("LEON_BLOCK", &b)
         .env("LEON_SERVER", env.socket())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped());
-    let mut child = c.spawn().unwrap();
-    child.stdin.take().unwrap().write_all(start("c7583d2c-3133-4d13-b5f0-45883f1cabcb").as_bytes()).unwrap();
-    let o = child.wait_with_output().unwrap();
+        .stdin(std::fs::File::open(&input).unwrap())
+        .output()
+        .unwrap();
     assert!(o.status.success());
     assert_eq!(env.json(&["block", "inspect", &b, "--json"])["resume"], Value::Null);
 }

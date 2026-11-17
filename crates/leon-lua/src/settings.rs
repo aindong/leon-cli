@@ -1,4 +1,4 @@
-//! The settings `leon.set` takes (docs/lua.md "Settings"), typed and with their defaults; the one
+//! The settings `leon.set` takes (docs/lua/settings.md), typed and with their defaults; the one
 //! check both `leon.set` and `leon config set` use; and the themes a setting can name: leon's
 //! built-in ones and the files in `themes/` beside init.lua.
 
@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 12] = [
+pub const KEYS: [&str; 16] = [
     "theme",
     "font.family",
     "font.size",
@@ -23,6 +23,10 @@ pub const KEYS: [&str; 12] = [
     "resume",
     "fade_inactive_panes",
     "check_for_updates",
+    "translucency",
+    "serve_tailscale",
+    "serve_tailscale_port",
+    "serve_tailscale_tags",
 ];
 
 /// How far the app fades the panes without the focus toward the window's background, unless the
@@ -30,6 +34,17 @@ pub const KEYS: [&str; 12] = [
 pub const FADE: f64 = 0.35;
 /// The strongest fade a config can ask for: past it a faded pane can't be read.
 pub const FADE_MAX: f64 = 0.8;
+
+/// How much of the desktop shows through Leon.app's window, unless the config says (the app
+/// keeps text readable over any desktop whatever it is; docs/lua/settings.md).
+pub const TRANSLUCENCY: f64 = 0.3;
+/// The most a config can ask for: past it the chrome is hardly there.
+pub const TRANSLUCENCY_MAX: f64 = 0.8;
+
+/// The port the server listens on over the tailnet unless the config says (docs/cli/hosts.md).
+pub const TAILNET_PORT: u16 = 7297;
+/// The most tags `serve_tailscale_tags` holds.
+pub const MOST_TAGS: usize = 16;
 
 /// The app's own font size range (it clamps ⌘+ and ⌘- to it too).
 pub const FONT_SIZES: (f64, f64) = (8., 32.);
@@ -72,6 +87,14 @@ pub struct Settings {
     pub fade_inactive_panes: f64,
     /// Leon.app looks for a newer release once a day (docs/updates.md); false: only when asked.
     pub check_for_updates: bool,
+    /// How much of the desktop shows through the app's window, 0 (opaque) to `TRANSLUCENCY_MAX`.
+    pub translucency: f64,
+    /// The server also listens on this machine's Tailscale addresses, for your own machines only.
+    pub serve_tailscale: bool,
+    /// The port it listens on there.
+    pub serve_tailscale_port: u16,
+    /// Tagged machines let in besides yours: tags such as `tag:ci`.
+    pub serve_tailscale_tags: Vec<String>,
 }
 
 /// tmux's `repeat-time` default, in milliseconds, for a config that doesn't set `repeat_time`.
@@ -79,7 +102,7 @@ pub const REPEAT_TIME: u64 = 500;
 
 impl Default for Settings {
     /// Today's app: the dark theme whatever the OS, Menlo 13, every notification, 500 ms repeat,
-    /// unfocused panes faded by `FADE`, a daily look for a new release.
+    /// unfocused panes faded by `FADE`, a daily look for a new release, a translucent window.
     fn default() -> Self {
         let dark = "leon-dark".to_string();
         Settings {
@@ -93,6 +116,10 @@ impl Default for Settings {
             resume: Resume::Ask,
             fade_inactive_panes: FADE,
             check_for_updates: true,
+            translucency: TRANSLUCENCY,
+            serve_tailscale: false,
+            serve_tailscale_port: TAILNET_PORT,
+            serve_tailscale_tags: vec![],
         }
     }
 }
@@ -111,6 +138,10 @@ impl Settings {
             "resume": self.resume.as_str(),
             "fade_inactive_panes": self.fade_inactive_panes,
             "check_for_updates": self.check_for_updates,
+            "translucency": self.translucency,
+            "serve_tailscale": self.serve_tailscale,
+            "serve_tailscale_port": self.serve_tailscale_port,
+            "serve_tailscale_tags": self.serve_tailscale_tags,
         })
     }
 
@@ -176,6 +207,17 @@ impl Settings {
                 Some(a) if (0. ..=FADE_MAX).contains(&a) => self.fade_inactive_panes = a,
                 _ => return Err(format!("fade_inactive_panes must be a number from 0 (off) to {FADE_MAX}")),
             },
+            "translucency" => match v.as_f64() {
+                Some(a) if (0. ..=TRANSLUCENCY_MAX).contains(&a) => self.translucency = a,
+                _ => return Err(format!("translucency must be a number from 0 (opaque) to {TRANSLUCENCY_MAX}")),
+            },
+            "serve_tailscale" => self.serve_tailscale = flag()?,
+            // a port and nothing else: the addresses come from Tailscale, never from a setting
+            "serve_tailscale_port" => match v.as_f64() {
+                Some(p) if p.fract() == 0. && (1. ..=65535.).contains(&p) => self.serve_tailscale_port = p as u16,
+                _ => return Err("serve_tailscale_port is a port, a whole number from 1 to 65535".into()),
+            },
+            "serve_tailscale_tags" => self.serve_tailscale_tags = tags(v)?,
             _ if key.starts_with("notifications.") => {
                 return Err(format!("unknown setting {key:?}; the notification kinds are done, blocked and error"))
             }
@@ -206,6 +248,25 @@ fn hint_patterns(v: &Value) -> Result<Vec<String>, String> {
             Ok(p.to_string())
         })
         .collect()
+}
+
+/// At most `MOST_TAGS` Tailscale tags, each `tag:` and a name of letters, digits and `-`.
+fn tags(v: &Value) -> Result<Vec<String>, String> {
+    let bad = || format!("serve_tailscale_tags is a list of at most {MOST_TAGS} tags such as \"tag:ci\"");
+    let list = match v {
+        Value::Array(list) => list.as_slice(),
+        Value::Object(o) if o.is_empty() => &[],
+        _ => return Err(bad()),
+    };
+    if list.len() > MOST_TAGS {
+        return Err(bad());
+    }
+    let tag = |t: &str| {
+        t.strip_prefix("tag:").is_some_and(|n| {
+            !n.is_empty() && n.len() <= 64 && n.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        })
+    };
+    list.iter().map(|t| t.as_str().filter(|t| tag(t)).map(str::to_string).ok_or_else(bad)).collect()
 }
 
 /// A JSON value's type as Lua names it, for messages.

@@ -1,5 +1,5 @@
 {
-  "api_version": "1.7.0",
+  "api_version": "1.12.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -211,6 +211,87 @@
               "string",
               "null"
             ]
+          },
+          "started_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "blocks": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "log": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tailnet": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string"
+              },
+              "port": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "addresses": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "login": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "last_refusal": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "peer": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "peer",
+                      "reason",
+                      "at"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "state",
+              "port",
+              "addresses"
+            ]
           }
         },
         "required": [
@@ -219,7 +300,10 @@
           "version",
           "socket",
           "autostarted",
-          "sessions"
+          "sessions",
+          "started_at",
+          "blocks",
+          "tailnet"
         ]
       }
     },
@@ -1057,6 +1141,12 @@
                     "null"
                   ]
                 },
+                "foreground": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "resume": {
                   "type": [
                     "array",
@@ -1141,6 +1231,12 @@
             ]
           },
           "cwd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "foreground": {
             "type": [
               "string",
               "null"
@@ -2282,6 +2378,92 @@
           "create": {
             "type": "boolean",
             "default": false
+          },
+          "float": {
+            "type": "boolean",
+            "default": false
+          },
+          "bounds": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "y": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "width": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "height": {
+                    "type": "number",
+                    "format": "double"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "cwd": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "exit": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "on_completion": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "on_completion"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -2765,6 +2947,25 @@
               },
               "check_for_updates": {
                 "type": "boolean"
+              },
+              "translucency": {
+                "type": "number",
+                "format": "double"
+              },
+              "serve_tailscale": {
+                "type": "boolean"
+              },
+              "serve_tailscale_port": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "serve_tailscale_tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -2776,7 +2977,11 @@
               "hint_patterns",
               "resume",
               "fade_inactive_panes",
-              "check_for_updates"
+              "check_for_updates",
+              "translucency",
+              "serve_tailscale",
+              "serve_tailscale_port",
+              "serve_tailscale_tags"
             ]
           },
           "sources": {

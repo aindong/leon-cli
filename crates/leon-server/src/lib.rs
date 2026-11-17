@@ -15,6 +15,7 @@ pub mod resume;
 pub mod screens;
 pub mod serve;
 pub mod settings;
+pub mod tailnet;
 
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -58,6 +59,15 @@ pub struct Ctx {
     pub discard: AtomicBool,
     /// The loaded `init.lua` (lua.rs).
     lua: lua::Shared,
+    /// When this server started, in seconds since the Unix epoch (`server.status`).
+    pub started_at: u64,
+    /// The file its output goes to, when it was started with one (`server.status`).
+    pub log: Option<String>,
+    /// Serving over Tailscale (tailnet.rs).
+    pub tailnet: tailnet::Tailnet,
+    /// Set on top of this process's environment for every pane, under leon's own variables: what
+    /// an embedding test gives its shells (a plain `sh`, a private home). Empty in leon's server.
+    pub pane_env: Vec<(String, String)>,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -109,12 +119,24 @@ impl Ctx {
             state_file: Mutex::default(),
             discard: AtomicBool::new(false),
             lua: lua::Shared::default(),
+            started_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()),
+            log: None,
+            tailnet: tailnet::Tailnet::default(),
+            pane_env: Vec::new(),
         }
     }
 
     /// The model. A handler that panicked mid-update leaves it usable, so a poisoned lock is taken anyway.
     pub fn state(&self) -> StateGuard<'_> {
         StateGuard { state: events::lock(&self.state), subscribers: &self.subscribers }
+    }
+
+    /// Look at each terminal's program in front; a change is a `foreground_changed` event. Off
+    /// the state lock, since the event takes it.
+    pub fn check_foregrounds(&self) {
+        let terminals: Vec<_> =
+            self.state().sessions.iter().flat_map(|s| s.blocks.iter().map(|b| b.terminal.clone())).collect();
+        terminals.iter().for_each(|t| t.check_foreground());
     }
 
     pub fn is_autostarted(&self) -> bool {

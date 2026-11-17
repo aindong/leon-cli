@@ -6,6 +6,7 @@ pub mod copy_mode;
 pub mod embedded;
 pub mod fade;
 pub mod floats;
+pub mod glass;
 pub mod hosts;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod icons;
@@ -15,8 +16,10 @@ pub mod keymap;
 pub mod look;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod notify;
+pub mod overview;
 pub mod palette;
 pub mod panes;
+pub mod program_kind;
 pub mod remote;
 pub mod render;
 pub mod scrollback;

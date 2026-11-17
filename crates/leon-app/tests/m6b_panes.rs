@@ -1,6 +1,8 @@
 //! M6b criteria 2–6: the workspace renders and drives split layouts, headless, against a real
 //! embedded server and real shells.
 
+mod m9_support;
+
 use std::os::unix::fs::PermissionsExt;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -22,7 +24,8 @@ struct Setup {
 
 fn setup() -> Setup {
     let dir = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
-    let app = Rc::new(embedded::start_at(dir.path().join("server.sock")).unwrap());
+    // a plain shell: the tests type into panes just made
+    let app = Rc::new(embedded::start_with(dir.path().join("server.sock"), None, m9_support::plain_env()).unwrap());
     Setup { _dir: dir, app }
 }
 
@@ -231,7 +234,9 @@ fn zoom_never_hides_where_input_goes(cx: &mut TestAppContext) {
     s.app
         .call("session.zoom_block", serde_json::json!({ "session_id": sid, "block_id": other, "zoom": true }))
         .unwrap();
-    cx.run_until_parked();
+    // the app hears of it by an event and a refetch, a moment later: type once it shows it
+    let zoomed = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.target_block()) == Some(other.clone());
+    assert!(m9_support::shows(cx, zoomed), "the app shows the zoom from the CLI");
     let shown = term(&s.app, &other);
     settle(&shown);
     cx.simulate_input("echo seen");
@@ -361,10 +366,12 @@ fn signature_follows_every_visible_pane_and_nothing_hidden(cx: &mut TestAppConte
     settle(&ta);
     settle(&tb);
 
-    let before = sig(cx);
+    // a pushed screen redraws its own grid, not the window (GPUI phase 2, ADR R4)
+    let grid = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.grid_renders().get(&a).copied().unwrap_or(0));
+    let before = grid(cx);
     ta.write(b"echo unfocused\r").unwrap();
     wait_text(&ta, |x| has_line(x, "unfocused"));
-    assert!(changes(cx, &sig, before), "output in a visible, unfocused pane redraws");
+    assert!(changes(cx, &grid, before), "output in a visible, unfocused pane redraws its grid");
 
     let before = sig(cx);
     cx.simulate_keystrokes("cmd-shift-enter"); // zooms b, hiding a

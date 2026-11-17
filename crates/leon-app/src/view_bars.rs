@@ -11,12 +11,13 @@ impl Workspace {
             .flex()
             .flex_none()
             .items_center()
-            .gap(px(2.))
             .h(px(TITLEBAR))
             .pl(px(TRAFFIC_LIGHTS))
-            .pr(px(8.))
+            // five 28 pt buttons after the traffic lights fill the default 220 px sidebar exactly
+            .pr(px(2.))
             .child(self.tool("toolbar-sidebar", Icon::Sidebar, "client.sidebar.toggle", cx))
             .child(div().flex_1())
+            .child(self.tool("toolbar-overview", Icon::Grid, "client.overview.toggle", cx))
             .child(self.activity_button(cx))
             .child(self.tool("toolbar-palette", Icon::Command, "client.palette.toggle", cx))
             .child(self.tool("toolbar-new", Icon::Plus, "session.new", cx))
@@ -57,11 +58,12 @@ impl Workspace {
 
     /// The titlebar row over the panes: with the sidebar hidden it holds the toolbar's buttons;
     /// then the session's name, and in top style its tabs and a + for a new one.
-    pub(super) fn render_titlebar(&self, row: Option<&SessionRow>, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &self.theme;
-        let places = self.places();
+    /// Drawn from `input` (view_sections.rs).
+    pub(super) fn render_titlebar(&self, input: &TitleBarInput, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = &input.theme;
+        let row = input.row.as_ref();
         let frame = self.pulse();
-        let hidden = places.sidebar.is_none();
+        let hidden = input.hidden;
         let mut bar = div()
             .debug_selector(|| sel("titlebar".into()))
             .flex()
@@ -69,10 +71,13 @@ impl Workspace {
             .overflow_hidden()
             .items_center()
             .gap(px(4.))
+            // a cached view lays its element out as a root (GPUI view.rs, `layout_as_root`), where
+            // nothing stretches it: without a width the fill stops after the last tab
+            .w_full()
             .h(px(TITLEBAR))
             .pr(px(8.))
             .pl(px(if hidden { TRAFFIC_LIGHTS } else { 10. }))
-            .bg(rgb(t.chrome))
+            .bg(self.chrome_fill())
             .when(hidden, |d| d.child(self.tool("toolbar-sidebar", Icon::Sidebar, "client.sidebar.toggle", cx)));
         if let Some(row) = row {
             bar = bar.child(
@@ -84,7 +89,7 @@ impl Workspace {
                     .text_color(rgb(t.title))
                     .child(row.title.clone()),
             );
-            if places.top_tabs {
+            if input.top_tabs {
                 for (i, w) in row.windows.iter().enumerate() {
                     bar = bar.child(self.top_tab(i, w, i == row.active, row, frame, cx));
                 }
@@ -103,7 +108,8 @@ impl Workspace {
             }
         }
         bar.child(div().flex_1()).when(hidden, |d| {
-            d.child(self.activity_button(cx))
+            d.child(self.tool("toolbar-overview", Icon::Grid, "client.overview.toggle", cx))
+                .child(self.activity_button(cx))
                 .child(self.tool("toolbar-palette", Icon::Command, "client.palette.toggle", cx))
                 .child(self.tool("toolbar-new", Icon::Plus, "session.new", cx))
         })
@@ -120,8 +126,12 @@ impl Workspace {
     ) -> impl IntoElement {
         let t = &self.theme;
         let (sid, wid) = (row.id.clone(), w.id.clone());
+        let hovered = (row.host, row.id.clone(), w.id.clone());
         div()
             .id(SharedString::from(format!("tab-{i}")))
+            .on_hover(
+                cx.listener(move |ws, on: &bool, window, cx| ws.hover_tab(*on, hovered.clone(), false, window, cx)),
+            )
             .debug_selector(|| sel(format!("tab-{i}")))
             .group(SharedString::from(format!("tab-{i}")))
             .flex()
@@ -137,8 +147,9 @@ impl Workspace {
             .cursor_pointer()
             .when(active, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
             .when(!active, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
+            .children(w.program.map(|k| program_mark(k, format!("tab-program-{i}"), t.muted)))
             .child(div().flex_1().overflow_hidden().min_w(px(0.)).line_clamp(1).text_ellipsis().child(w.title.clone()))
-            .children(w.status.map(|s| status_mark(s, frame, t)))
+            .children(w.status.map(|s| status_mark(s, frame, t).debug_selector(move || sel(format!("tab-status-{i}")))))
             .when(i < 9, |d| {
                 d.child(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(format!("⌘{}", i + 1)))
             })
@@ -169,7 +180,8 @@ impl Workspace {
 pub(crate) struct Tip(pub(crate) SharedString, pub(crate) Theme);
 
 impl Render for Tip {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        drawing(cx);
         let t = &self.1;
         div()
             .debug_selector(|| sel("tooltip".into()))
@@ -197,6 +209,12 @@ impl Workspace {
         let theme = self.theme;
         move |_, cx| cx.new(|_| Tip(text.clone(), theme)).into()
     }
+}
+
+/// A program's glyph (`program_kind`) in `color`, named `<at>-<kind>` (`tab-program-0-editor`).
+pub(super) fn program_mark(kind: Kind, at: String, color: u32) -> gpui::Div {
+    let name = format!("{at}-{}", kind.name());
+    div().flex_none().debug_selector(move || sel(name)).child(kind.icon().at(ROW_ICON, color))
 }
 
 /// A status icon in its state's colour (a tab, a sidebar row, a pane header), with the progress

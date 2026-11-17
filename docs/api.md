@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.7.0**. Every method is marked:
+API version **1.12.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -229,7 +229,7 @@ same facts for the server you run.
 
 ### `server.status`
 
-*stable*. Whether the server runs, its pid, version and socket.
+*stable*. Whether the server runs, its pid, version and socket, since when, how many sessions and blocks, and whether it serves over Tailscale.
 
 **Input:** none
 
@@ -244,6 +244,29 @@ same facts for the server you run.
 | `autostarted` | boolean | yes | True when a client started this server on demand; it exits once idle. |
 | `sessions` | integer (uint) | yes |  |
 | `state_file` | string \| null |  | Where sessions are saved, while running and on stop; null when they aren't (the state dir isn't private). |
+| `started_at` | integer (uint64) | yes | When the server started, in seconds since the Unix epoch. |
+| `blocks` | integer (uint) | yes | The blocks in every session. |
+| `log` | string \| null |  | The file the server's output goes to; null when it has none (a server run in a terminal). |
+| `tailnet` | `TailnetStatus` | yes | Serving over Tailscale (`serve_tailscale`): whether, where, for whom, and the last caller turned away. |
+
+**`TailnetStatus`:** What `server.status` says about serving over Tailscale.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `state` | string | yes | `off` (serve_tailscale is false), `serving`, or `stopped` (on, but not serving: `reason` says why). |
+| `port` | integer (uint16) | yes | The port it serves on (serve_tailscale_port). |
+| `addresses` | [string] | yes | Where it listens, as `ADDRESS:PORT`: this machine's Tailscale addresses only. |
+| `login` | string \| null |  | The Tailscale login it lets in: the one this machine was signed in as when serving started. |
+| `reason` | string \| null |  | Why it isn't serving. |
+| `last_refusal` | `Refusal` \| null |  | The last connection turned away. |
+
+**`Refusal`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `peer` | string | yes | The caller's `ADDRESS:PORT`. |
+| `reason` | string | yes |  |
+| `at` | integer (uint64) | yes | When, in seconds since the Unix epoch. |
 
 <details><summary>JSON Schemas</summary>
 
@@ -290,6 +313,29 @@ same facts for the server you run.
           "string",
           "null"
         ]
+      },
+      "started_at": {
+        "description": "When the server started, in seconds since the Unix epoch.",
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      },
+      "blocks": {
+        "description": "The blocks in every session.",
+        "type": "integer",
+        "format": "uint",
+        "minimum": 0
+      },
+      "log": {
+        "description": "The file the server's output goes to; null when it has none (a server run in a terminal).",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "tailnet": {
+        "description": "Serving over Tailscale (`serve_tailscale`): whether, where, for whom, and the last caller turned away.",
+        "$ref": "#/$defs/TailnetStatus"
       }
     },
     "required": [
@@ -298,8 +344,90 @@ same facts for the server you run.
       "version",
       "socket",
       "autostarted",
-      "sessions"
-    ]
+      "sessions",
+      "started_at",
+      "blocks",
+      "tailnet"
+    ],
+    "$defs": {
+      "TailnetStatus": {
+        "description": "What `server.status` says about serving over Tailscale.",
+        "type": "object",
+        "properties": {
+          "state": {
+            "description": "`off` (serve_tailscale is false), `serving`, or `stopped` (on, but not serving: `reason` says why).",
+            "type": "string"
+          },
+          "port": {
+            "description": "The port it serves on (serve_tailscale_port).",
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "addresses": {
+            "description": "Where it listens, as `ADDRESS:PORT`: this machine's Tailscale addresses only.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "login": {
+            "description": "The Tailscale login it lets in: the one this machine was signed in as when serving started.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "description": "Why it isn't serving.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_refusal": {
+            "description": "The last connection turned away.",
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Refusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "port",
+          "addresses"
+        ]
+      },
+      "Refusal": {
+        "type": "object",
+        "properties": {
+          "peer": {
+            "description": "The caller's `ADDRESS:PORT`.",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "at": {
+            "description": "When, in seconds since the Unix epoch.",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "peer",
+          "reason",
+          "at"
+        ]
+      }
+    }
   }
 }
 ```
@@ -351,7 +479,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.7.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.12.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -459,6 +587,10 @@ same facts for the server you run.
 | `resume` | string | yes | What a restored block does with its program's resume command: `ask`, `always` or `never`. |
 | `fade_inactive_panes` | number | yes | How far the app fades the panes without the focus toward the window's background, from 0 (off) to 0.8. |
 | `check_for_updates` | boolean | yes | Leon.app looks for a newer release once a day; false, only when asked. |
+| `translucency` | number | yes | How much of the desktop shows through Leon.app's window, from 0 (opaque) to 0.8. |
+| `serve_tailscale` | boolean | yes | The server also listens on this machine's Tailscale addresses, letting in only your own machines (`server.status`'s `tailnet` says how it went). |
+| `serve_tailscale_port` | integer (uint16) | yes | The port it listens on there. |
+| `serve_tailscale_tags` | [string] | yes | Tagged machines it lets in too, by tag (`tag:ci`). |
 
 **`ThemeChoice`:** A theme name for each OS appearance (the same one for both unless init.lua gives two).
 
@@ -556,6 +688,29 @@ same facts for the server you run.
           "check_for_updates": {
             "description": "Leon.app looks for a newer release once a day; false, only when asked.",
             "type": "boolean"
+          },
+          "translucency": {
+            "description": "How much of the desktop shows through Leon.app's window, from 0 (opaque) to 0.8.",
+            "type": "number",
+            "format": "double"
+          },
+          "serve_tailscale": {
+            "description": "The server also listens on this machine's Tailscale addresses, letting in only your own\nmachines (`server.status`'s `tailnet` says how it went).",
+            "type": "boolean"
+          },
+          "serve_tailscale_port": {
+            "description": "The port it listens on there.",
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "serve_tailscale_tags": {
+            "description": "Tagged machines it lets in too, by tag (`tag:ci`).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -567,7 +722,11 @@ same facts for the server you run.
           "hint_patterns",
           "resume",
           "fade_inactive_panes",
-          "check_for_updates"
+          "check_for_updates",
+          "translucency",
+          "serve_tailscale",
+          "serve_tailscale_port",
+          "serve_tailscale_tags"
         ]
       },
       "ThemeChoice": {
@@ -840,7 +999,7 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
-| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory). |
 | `exit` | `ExitOptions` \| null |  |  |
 
 **`ExitOptions`:**
@@ -952,7 +1111,7 @@ same facts for the server you run.
             }
           },
           "cwd": {
-            "description": "Working directory; defaults to `$HOME`.",
+            "description": "Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).",
             "type": [
               "string",
               "null"
@@ -1504,7 +1663,7 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
-| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory). |
 | `exit` | `ExitOptions` \| null |  |  |
 
 **`ExitOptions`:**
@@ -1601,7 +1760,7 @@ same facts for the server you run.
             }
           },
           "cwd": {
-            "description": "Working directory; defaults to `$HOME`.",
+            "description": "Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).",
             "type": [
               "string",
               "null"
@@ -1877,6 +2036,7 @@ same facts for the server you run.
 | `exit_code` | integer (int32) \| null |  | Set once the program exited (only seen on blocks kept open). |
 | `title` | string \| null |  | The last title the program set (OSC 0/2). |
 | `cwd` | string \| null |  | Where the program is: its cwd, else its last OSC 7 path, else where it started. |
+| `foreground` | string \| null |  | The program in front (a shell's job, else the shell): the name of the PTY's foreground process, never its arguments; null once it exited or when another user owns it (`sudo`). Each change is a `foreground_changed` event; this is the value the last one carried (the server looks every 200 ms). |
 | `resume` | [string] \| null |  | What runs to resume the program after a restart, if it registered one (`set_resume`). |
 
 <details><summary>JSON Schemas</summary>
@@ -1964,6 +2124,13 @@ same facts for the server you run.
               "null"
             ]
           },
+          "foreground": {
+            "description": "The program in front (a shell's job, else the shell): the name of the PTY's foreground\nprocess, never its arguments; null once it exited or when another user owns it (`sudo`).\nEach change is a `foreground_changed` event; this is the value the last one carried (the\nserver looks every 200 ms).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "resume": {
             "description": "What runs to resume the program after a restart, if it registered one (`set_resume`).",
             "type": [
@@ -2014,6 +2181,7 @@ same facts for the server you run.
 | `exit_code` | integer (int32) \| null |  | Set once the program exited (only seen on blocks kept open). |
 | `title` | string \| null |  | The last title the program set (OSC 0/2). |
 | `cwd` | string \| null |  | Where the program is: its cwd, else its last OSC 7 path, else where it started. |
+| `foreground` | string \| null |  | The program in front (a shell's job, else the shell): the name of the PTY's foreground process, never its arguments; null once it exited or when another user owns it (`sudo`). Each change is a `foreground_changed` event; this is the value the last one carried (the server looks every 200 ms). |
 | `resume` | [string] \| null |  | What runs to resume the program after a restart, if it registered one (`set_resume`). |
 
 <details><summary>JSON Schemas</summary>
@@ -2091,6 +2259,13 @@ same facts for the server you run.
           "null"
         ]
       },
+      "foreground": {
+        "description": "The program in front (a shell's job, else the shell): the name of the PTY's foreground\nprocess, never its arguments; null once it exited or when another user owns it (`sudo`).\nEach change is a `foreground_changed` event; this is the value the last one carried (the\nserver looks every 200 ms).",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
       "resume": {
         "description": "What runs to resume the program after a restart, if it registered one (`set_resume`).",
         "type": [
@@ -2159,7 +2334,7 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
-| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory). |
 | `exit` | `ExitOptions` \| null |  |  |
 
 **`ExitOptions`:**
@@ -2306,7 +2481,7 @@ same facts for the server you run.
             }
           },
           "cwd": {
-            "description": "Working directory; defaults to `$HOME`.",
+            "description": "Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).",
             "type": [
               "string",
               "null"
@@ -3191,7 +3366,7 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
-| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory). |
 | `exit` | `ExitOptions` \| null |  |  |
 
 **`ExitOptions`:**
@@ -3326,7 +3501,7 @@ same facts for the server you run.
             }
           },
           "cwd": {
-            "description": "Working directory; defaults to `$HOME`.",
+            "description": "Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).",
             "type": [
               "string",
               "null"
@@ -3536,7 +3711,7 @@ same facts for the server you run.
 
 ### `session.toggle`
 
-*stable*. Show or hide a labeled float or drawer without stopping its program; optionally create a scratch shell.
+*stable*. Show or hide a labeled float or drawer without stopping its program; optionally create it (a scratch shell, or a popup running a command).
 
 **Input:** 
 
@@ -3544,13 +3719,39 @@ same facts for the server you run.
 |---|---|---|---|
 | `session_id` | string | yes |  |
 | `label` | string | yes | Exact case-insensitive block label, unique within this session. |
-| `create` | boolean |  | When true and no block has this label, create a login-shell drawer at the bottom of the active window, in the directory of its focused block (else the login shell's default). |
+| `create` | boolean |  | When true and no block has this label, create it in the active window, in the directory of its focused block (else the login shell's default): a login-shell drawer at the bottom, unless `float` or `options` say otherwise. |
+| `float` | boolean |  | With `create`: a float (at `bounds`) instead of the bottom drawer. |
+| `bounds` | `Bounds` \| null |  | With `float`: fractions of the whole window; default centered 80% by 80%. |
+| `options` | `TerminalOptions` \| null |  | With `create`: what runs (default a login shell) and where (default the focused block's directory). It closes when its program exits, as every block does, unless `exit` says not to. |
 
 **Output:** 
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `revision` | integer (uint64) | yes |  |
+
+**`Bounds`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `x` | number | yes |  |
+| `y` | number | yes |  |
+| `width` | number | yes |  |
+| `height` | number | yes |  |
+
+**`TerminalOptions`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory). |
+| `exit` | `ExitOptions` \| null |  |  |
+
+**`ExitOptions`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `on_completion` | boolean | yes | Close the block when its program exits (default true); false keeps it open. |
 
 <details><summary>JSON Schemas</summary>
 
@@ -3569,16 +3770,119 @@ same facts for the server you run.
         "type": "string"
       },
       "create": {
-        "description": "When true and no block has this label, create a login-shell drawer at the bottom of the active\nwindow, in the directory of its focused block (else the login shell's default).",
+        "description": "When true and no block has this label, create it in the active window, in the directory of\nits focused block (else the login shell's default): a login-shell drawer at the bottom, unless\n`float` or `options` say otherwise.",
         "type": "boolean",
         "default": false
+      },
+      "float": {
+        "description": "With `create`: a float (at `bounds`) instead of the bottom drawer.",
+        "type": "boolean",
+        "default": false
+      },
+      "bounds": {
+        "description": "With `float`: fractions of the whole window; default centered 80% by 80%.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Bounds"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "options": {
+        "description": "With `create`: what runs (default a login shell) and where (default the focused block's\ndirectory). It closes when its program exits, as every block does, unless `exit` says not to.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/TerminalOptions"
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     },
     "additionalProperties": false,
     "required": [
       "session_id",
       "label"
-    ]
+    ],
+    "$defs": {
+      "Bounds": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ]
+      },
+      "TerminalOptions": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "argv to run directly; omitted runs the login shell.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "description": "Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ExitOptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExitOptions": {
+        "type": "object",
+        "properties": {
+          "on_completion": {
+            "description": "Close the block when its program exits (default true); false keeps it open.",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "on_completion"
+        ]
+      }
+    }
   },
   "output_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -5665,7 +5969,7 @@ the method's full name as `method` and its input as `args`. The output is `block
 | `cursor` | `Cursor` \| null |  |  |
 | `app_cursor` | boolean | yes |  |
 | `bracketed_paste` | boolean | yes |  |
-| `scrolled` | integer (uint) |  | The absolute number of the screen's top row: how many lines were ever pushed into the scrollback. History line `scrolled - 1` is just above the screen; appended output never renumbers a line (docs/architecture.md, "Scrollback in the app"). |
+| `scrolled` | integer (uint) |  | The absolute number of the screen's top row: how many lines were ever pushed into the scrollback. History line `scrolled - 1` is just above the screen; appended output never renumbers a line (docs/architecture/protocol-and-clients.md, "Scrollback in the app"). |
 | `history` | integer (uint) |  | Lines kept in the scrollback: the oldest is `scrolled - history`. |
 | `alt_screen` | boolean |  |  |
 | `alternate_scroll` | boolean |  | `?1007`: on the alternate screen the wheel becomes arrow keys. |
@@ -5764,7 +6068,7 @@ the method's full name as `method` and its input as `args`. The output is `block
         "type": "boolean"
       },
       "scrolled": {
-        "description": "The absolute number of the screen's top row: how many lines were ever pushed into the\nscrollback. History line `scrolled - 1` is just above the screen; appended output never\nrenumbers a line (docs/architecture.md, \"Scrollback in the app\").",
+        "description": "The absolute number of the screen's top row: how many lines were ever pushed into the\nscrollback. History line `scrolled - 1` is just above the screen; appended output never\nrenumbers a line (docs/architecture/protocol-and-clients.md, \"Scrollback in the app\").",
         "type": "integer",
         "format": "uint",
         "minimum": 0,

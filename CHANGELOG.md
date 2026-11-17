@@ -13,7 +13,7 @@ the server, the CLI and `leon attach`).
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.7.0`.
+one is `1.12.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -28,170 +28,49 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
-### Output throughput
-
-#### Changed
-
-- A big `cat` of text and colour is 44% faster (80 to 115 MB/s on the perf harness's 100 MB
-  file): leon's own scans of the output skip what they don't follow, and the screen push no longer
-  holds the terminal's lock while it builds a frame (docs/performance-cat.md).
-
-### Updates in Leon.app
-
-#### Added
-
-- Leon.app looks for a newer release once a day, in the background, and shows a quiet notice in
-  the window when one exists: its version, its release notes, and Install. Nothing is downloaded
-  or replaced until you choose Install (or "Install Update" in the command palette); the notice
-  then shows each step, and when it is done, Restart opens the new version with your sessions as
-  they were. Dismissing the notice hides it until a newer version comes out. "Check for Updates"
-  in the palette looks at once. It checks and installs what `leon self-update` does
-  ([docs/updates.md](docs/updates.md)).
-- A Leon.app that Homebrew installed shows the `brew upgrade --cask` command to copy instead of
-  Install. An app run from where macOS put a download (App Translocation) says to move it to
-  Applications first, and an install that macOS's App Management setting refuses says where to
-  allow it.
-- `leon.set("check_for_updates", false)` turns the daily look off: the app then makes no request
-  of its own. `server.settings` reports `check_for_updates`, a new result field on a stable
-  method, so `api_version` goes from `1.6.0` to `1.7.0`.
-
-#### Security
-
-- A release server elsewhere can no longer redirect an update to this machine over https either
-  (`https://127.0.0.1`, `[::1]` with or without a zone, `localhost`, `127.1`, a %-escaped name
-  and the like); before, only plain http to a loopback address was refused. An address that is
-  not ASCII is refused outright. What is downloaded was, and is, verified against the release key.
-
-### Memory
-
-#### Changed
-
-- A font change in Leon.app (⌘=, ⌘-, ⌘0, `font.size` or `font.family` in init.lua) now
-  fits only the panes on screen. A pane in another tab or session, a hidden float or drawer, or a pane a
-  zoom covers keeps its size until it is shown, and is fitted then, as after a window resize.
-  Resizing a pane reallocates its whole history at the new width, so before, one font change
-  could grow the server by hundreds of MiB for panes nobody was looking at. A program in a hidden
-  pane gets its resize when the pane is shown; `capture` and `dev.leon.terminal.size` report the
-  old size until then. A pane that only `leon attach` shows keeps the size attach gave it. ⌘0 at
-  the size the font already has, or an init.lua reload that leaves the font, resizes nothing.
-- On macOS the server hands freed memory back to the system when a pane's history goes (its
-  session killed, its block closed), so its footprint follows what it holds instead of climbing
-  between closes. Closes within 100 ms share one give-back, on a thread of its own.
-
-### Fading the panes without the focus
-
-#### Added
-
-- Leon.app fades every pane but the focused one toward the window's background (its text, its
-  background and its header), so the eye rests on the focused pane. When the focus moves, the
-  pane losing it fades out and the pane gaining it fades in over 120 ms; with Reduce Motion the
-  change is immediate. A pane alone in its tab is not faded.
-- The fade never hides what you are waiting for: a pane's status indicator keeps its colour, and
-  a pane that needs you (blocked, an error, a finish you haven't looked at) is not faded at all.
-- `leon.set("fade_inactive_panes", N)` sets how strong the fade is, from 0 to 0.8 (the default
-  is 0.35, where body text keeps a contrast of 4.5:1 on leon-dark and leon-light); 0 turns it
-  off. `leon config get` and `leon config set` take it, and a value out of range is refused.
-- `server.settings` reports `fade_inactive_panes`. A new result field on a stable method raises
-  `api_version` from `1.5.0` to `1.6.0`.
-
-### Updates
-
-#### Added
-
-- `leon self-update` installs the newest release: it verifies the signed manifest against the
-  keys built into leon, takes a release only if it is newer, checks the file's sha256 and
-  signature, and swaps the new leon in atomically. `--check` only reports, and exits 10 when a
-  newer release exists. A leon installed by Homebrew or from a `.deb` is told the command that
-  updates it instead. leon never checks on its own. `LEON_RELEASE_URL` points it at a mirror.
-  [docs/updates.md](docs/updates.md) has the checks and what each refusal means.
-
-#### Fixed
-
-- A pane whose program can't be executed is refused like one that isn't there: `leon run`,
-  `block.create` and `session.create` fail with `bad_request`, name the program and the OS's
-  reason ("can't run its interpreter /no/such/interp: No such file or directory" for a script
-  whose `#!` interpreter is missing, "Exec format error" for a file that isn't a program), and
-  leave no block behind. Before, the pane showed `fatal runtime error: assertion failed` and
-  the program's exit was 134 (or a binary ran as a `/bin/sh` script). A script without a `#!`
-  line still runs with `/bin/sh`.
-
-### Releases
-
-#### Added
-
-- A release workflow (`.github/workflows/release.yml`): a tag `vX.Y.Z` builds the app for macOS
-  on arm64 and x86_64, the CLI tarballs, and the Linux tarballs and `.deb`s, signs every file with
-  minisign, and publishes a GitHub Release with a manifest (`latest.json`) at a stable address.
-  Started by hand it stops at a draft. [docs/releases.md](docs/releases.md) has the manifest
-  format, the secrets and key rotation.
-- `leon-<version>-<arch>-macos.tar.gz`: the CLI alone for macOS, from `scripts/release.sh`.
-- A Homebrew tap, `aindong/homebrew-leon`, with a cask for Leon.app and a formula for the CLI,
-  rewritten by each release.
-- `scripts/release-dry-run.sh` builds, signs and checks a release locally with a throwaway key;
-  `scripts/release-verify.sh` checks any release's sums, manifest and signatures.
-
-### Daily-driver polish
-
-#### Added
-
-- `leon run --wait` prints the program's text after the block ID once it exits (what
-  `leon capture --trim` shows) when stdout is not a terminal, so an agent gets the output and the
-  status in one call. `--output[=true|false]` turns it on or off. The block stays open until it
-  has been read, then closes (unless `--keep-open`). (F5)
-- `leon wait --text TEXT` waits until a block's screen or scrollback shows `TEXT`: a prompt, a
-  "ready" line. It exits 1 after `--for` or if the block closes first. (F6)
-
-#### Changed
-
-- `leon skill setup` without `--agent` also sets up Claude Code or Codex when `claude` or `codex` is
-  on PATH, even before its first run, and says for each agent why it was picked. With none found
-  it says so, and to pass `--agent`. An agent home dir it creates is private (0700). (F4)
-- The README's first commands, the agent guide and docs/agents.md wait for Python's prompt before
-  typing into it, and for its answer before reading it; a test runs the README's block. (F6)
-- The scratch drawer (⌘J, `leon toggle scratch --create`, `session.toggle` with `create`) opens in
-  the directory of the active window's focused block instead of `~`, when its program is still
-  running (an exited one's directory is only what its output last said). (F14)
-
-#### Fixed
-
-- A one-shot `claude -p` (`--print`, or `-p` among other short flags, `-cp`) in a pane no longer
-  registers a resume command. (F10)
-- Keys typed into `leon -H … attach` while the link is stalled no longer arrive in part (the
-  research run left `ec` of `echo …⏎` at the remote prompt). After a quiet second, keys wait for
-  a probe of the link; if it fails they are all dropped, and so are keys typed while it
-  reconnects, and the status bar says how many were not sent. A paste waits in the same line, so
-  it can't pass keys typed before it. (F12)
-- On macOS, opening a host (`-H`, the app's hosts) could wait 30 s and then fail with `the leon
-  server can't be reached: Resource temporarily unavailable`. The ssh started for one of a
-  link's connections could inherit the pipes of another that was starting at the same moment,
-  which then was never served. ssh now gets its stdin, stdout and stderr and nothing else.
-- A clicked notification wakes every window, not only the one opened last.
-- A program started by `leon.exec` gets its stdin, stdout and stderr and nothing else: it could
-  hold the terminal of a pane that was opening at the same moment, which then never saw its own
-  program exit.
-
-No schema changed, so `api_version` stays `1.5.0`.
-
-### M22b — Themes and settings in the app
-
-#### Added
-
-- The app draws with init.lua's `theme`, `font.family` and `font.size`: panes, the window around
-  them and the status colours. A `{ dark, light }` theme follows the macOS appearance and switches
-  with it. Changes apply when the config reloads, without a restart.
-- A Settings window (⌘,, "Settings…" in the leon menu and the palette; action `client.settings`):
-  the theme for dark and for light mode with a preview of each, font family and size,
-  notifications per kind and copy on select. Each change is written to init.lua by
-  `leon config set`'s code; a setting set by code it can't rewrite shows read-only with its
-  `file:line`.
-- `block.watch` and `dev.leon.terminal.lines` take an optional `palette` (`fg`, `bg`, `cursor`,
-  `ansi`) that the connection's screens and lines are resolved with; without it they are
-  leon-dark's, as before. Both methods are Experimental, so `api_version` is unchanged.
-
-#### Changed
-
-- leon-light: the selected row is a step deeper than a hovered one, and the accent, secondary and
-  status colours are a little darker, so all of them read at 4.5:1 on every surface.
+- **Popups**: `leon toggle LABEL --create --float -- CMD` brings a program up over your work on one key
+  and hides it on the next; a toggled drawer gives the focus back too; API `1.12.0` ([detail](docs/changelog-detail.md#popups)).
+- **A Settings window with sections**: sections, search and a control for every setting in
+  Settings (⌘,), with the keymap and `leon skill status` ([detail](docs/changelog-detail.md#a-settings-window-with-sections)).
+- **Server and Remote Hosts in Settings**: the server's state with Stop and Restart, and the hosts
+  with Add, Rename and Remove; `server.status` gains `started_at`, `blocks` and `log`, API `1.11.0`
+  ([detail](docs/changelog-detail.md#server-and-remote-hosts-in-settings)).
+- **Serve over Tailscale**: with `serve_tailscale` on, the server also listens on its Tailscale
+  addresses for your own other machines only, and `tailnet://HOST` reaches it without ssh;
+  `server.status` reports `tailnet`, API `1.10.0` ([detail](docs/changelog-detail.md#serve-over-tailscale)).
+- **An icon per program in Leon.app**: each pane's header, tab, sidebar row and overview card
+  shows what kind of program runs in it; `session.list_blocks` reports `foreground`, API `1.9.0`
+  ([detail](docs/changelog-detail.md#an-icon-per-program-in-leonapp)).
+- **A translucent window in Leon.app**: a blur of the desktop behind the window, tinted by the
+  theme, set with `translucency`; API `1.8.0` ([detail](docs/changelog-detail.md#a-translucent-window-in-leonapp)).
+- **Themes**: six new built-in themes, Change Theme… in the palette (⌘⇧T) with a live preview,
+  and a fade between themes ([detail](docs/changelog-detail.md#themes)).
+- **Terminals under load**: a program that writes and exits at once no longer leaves an empty
+  pane, and panes no longer fail to open with "failed to openpty"
+  ([detail](docs/changelog-detail.md#terminals-under-load)).
+- **The overview in Leon.app**: ⌘⇧\ shows every tab of every session and host as a live card, and
+  resting on a tab shows its thumbnail ([detail](docs/changelog-detail.md#the-overview-in-leonapp)).
+- **Output throughput**: a big `cat` is 44% faster
+  ([detail](docs/changelog-detail.md#output-throughput)).
+- **Updates in Leon.app**: the app looks for a new release once a day and installs it when you
+  choose Install (`check_for_updates` turns it off; API `1.7.0`)
+  ([detail](docs/changelog-detail.md#updates-in-leonapp)).
+- **Memory**: a font change resizes only the panes on screen, so it no longer grows the server by
+  hundreds of MiB, and on macOS a closed pane's memory goes back to the system
+  ([detail](docs/changelog-detail.md#memory)).
+- **Fading the panes without the focus**: every pane but the focused one fades, set with
+  `fade_inactive_panes`; API `1.6.0` ([detail](docs/changelog-detail.md#fading-the-panes-without-the-focus)).
+- **Updates**: `leon self-update` installs the newest signed release
+  ([docs/updates.md](docs/updates.md)), and a program that can't run is refused with the reason
+  ([detail](docs/changelog-detail.md#updates)).
+- **Releases**: a release workflow (`.github/workflows/release.yml`) builds, signs and publishes
+  every package, with a Homebrew tap ([detail](docs/changelog-detail.md#releases)).
+- **Daily-driver polish**: `leon run --wait` prints the output, `leon wait --text`, a smarter
+  `leon skill setup`, and fixes for `leon attach` over a stalled link and opening hosts on macOS
+  ([detail](docs/changelog-detail.md#daily-driver-polish)).
+- **M22b — Themes and settings in the app**: the app draws with init.lua's theme and font, and a
+  Settings window (⌘,) writes them to init.lua
+  ([detail](docs/changelog-detail.md#m22b--themes-and-settings-in-the-app)).
 
 ## [0.1.0] - not yet tagged
 
@@ -250,27 +129,6 @@ The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
   drops a server; writes and spawned calls have timeouts. All 14 app findings have their own tests
   (`crates/*/tests/hard_*.rs`).
 
-### Fixed in the daily-driver test
-
-- `leon run`, `split`, `float --new` and Lua find programs on your shell's PATH (login and rc
-  files), even when Leon.app started the server from Finder with launchd's bare PATH.
-- With `-H`, `run`, `split` and `new` start in the host's home or an absolute `--cwd` there, not
-  this machine's directory, and fail within 15 s while the host is unreachable.
-- Sessions are saved while the server runs, so a crash no longer restores an older save.
-- A resume command is offered at one restart, not at every one after it.
-- `leon -H … attach` says when it is reconnecting; its splits keep a remote pane's directory.
-- A program not on PATH fails with one line instead of listing every PATH entry.
-- ⌘K puts what needs you (blocked, error, done) first among equally good matches.
-- Activity rows are titled by the block's label, its program's title or its status title, not
-  the program's name, and a long line ends at a word with "…".
-- A pane header too narrow for its directory cuts the middle (`~/src/…/api/routes`); hovering it
-  shows the whole path.
-- Restored blocks keep the title their program had set until it sets a new one.
-- When `leon server stop` stops the server, the app says so and offers Start It Again or Quit,
-  instead of closing.
-- Key events with key code 0 and text of their own (automation, some accessibility tools) type
-  that text instead of `a`.
-
 ### Added
 
 - The app's leon menu has **About leon**, showing `leon --version`'s string.
@@ -282,5 +140,5 @@ The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
 
 ### The milestones
 
-Each milestone that built 0.1.0, with what it added, changed and fixed, is in
-[docs/changelog-milestones.md](docs/changelog-milestones.md).
+Each milestone that built 0.1.0, with what it added, changed and fixed, and the fixes from the
+daily-driver test are in [docs/changelog-milestones.md](docs/changelog-milestones.md).

@@ -1,5 +1,6 @@
 //! `LEON_FRAME_STATS=1`: how long frames take to build. `LEON_FRAME_LOG=PATH`: also every frame
-//! and keystroke, one line each, for scripts/perf (docs/performance.md, "Measuring the app").
+//! and keystroke, one line each, for scripts/perf (docs/performance.md, "The app end to end
+//! (scripts/perf)").
 
 use std::io::Write;
 use std::time::{Duration, Instant};
@@ -31,6 +32,19 @@ struct Log {
     echoed: Option<(u64, u64, u64)>,
     /// Whether a pane with text was drawn yet (start-up: the first prompt).
     text: bool,
+    /// The overview opened at this stamp: its first frame, then the one with every thumbnail's
+    /// screen, are logged at their display tick (`overview`, `overview-filled`).
+    overview: Option<Opening>,
+}
+
+/// The overview opening: when, whether a frame of it was painted since the last tick, whether
+/// one had every thumbnail's screen, and whether its first frame is logged yet.
+#[derive(Clone, Copy, Default)]
+struct Opening {
+    at: u64,
+    painted: bool,
+    filled: bool,
+    logged: bool,
 }
 
 /// A pane's cursor (line, column), if shown.
@@ -52,8 +66,14 @@ impl Stats {
     }
 
     fn with(stats: bool, log: Option<std::fs::File>) -> Stats {
-        let log =
-            log.map(|f| Log { out: std::io::BufWriter::new(f), frame: None, key: None, echoed: None, text: false });
+        let log = log.map(|f| Log {
+            out: std::io::BufWriter::new(f),
+            frame: None,
+            key: None,
+            echoed: None,
+            text: false,
+            overview: None,
+        });
         Stats { enabled: stats || log.is_some(), log, ..Stats::default() }
     }
 
@@ -86,24 +106,27 @@ impl Stats {
         log.key = Some((stamped, now, block, cursor));
     }
 
-    /// Pane `block` was painted with its cursor at `cursor`. True for the frame's first pane: the
-    /// caller then asks for `presented` at the next display tick.
-    pub(super) fn painted(&mut self, block: &str, cursor: Option<(usize, usize)>, has_text: bool) -> bool {
-        let start = self.render_start.take();
-        if let Some(start) = start {
-            let took = start.elapsed();
-            self.frames += 1;
-            self.total += took;
-            self.max = self.max.max(took);
-            self.since.get_or_insert_with(Instant::now);
+    /// The window's paint ended (the root's last element; a pane's grid is cached and may not
+    /// paint): the frame counts from its render start. True when one rendered: the caller then
+    /// asks for `presented` at the next display tick.
+    pub(super) fn frame_end(&mut self) -> bool {
+        let Some(start) = self.render_start.take() else { return false };
+        let took = start.elapsed();
+        self.frames += 1;
+        self.total += took;
+        self.max = self.max.max(took);
+        self.since.get_or_insert_with(Instant::now);
+        if let Some(log) = self.log.as_mut() {
+            let now = uptime_ns();
+            log.frame = Some((now - took.as_nanos() as u64, now));
         }
-        let Some(log) = self.log.as_mut() else { return false };
+        true
+    }
+
+    /// Pane `block` was painted with its cursor at `cursor`: a key's echo, or the first text.
+    pub(super) fn painted(&mut self, block: &str, cursor: Option<(usize, usize)>, has_text: bool) {
+        let Some(log) = self.log.as_mut() else { return };
         let now = uptime_ns();
-        match (start, log.frame.as_mut()) {
-            (Some(start), _) => log.frame = Some((now - start.elapsed().as_nanos() as u64, now)),
-            (None, Some((_, end))) => *end = now,
-            (None, None) => {}
-        }
         if log.key.as_ref().is_some_and(|(_, _, b, c)| b == block && *c != cursor) {
             let (stamped, handler, _, _) = log.key.take().unwrap();
             log.echoed = Some((stamped, handler, now));
@@ -112,7 +135,26 @@ impl Stats {
             log.text = true;
             let _ = writeln!(log.out, "text {now}");
         }
-        start.is_some()
+    }
+
+    /// The overview opened, on the key AppKit stamped at `stamped` (now when unknown). Said on
+    /// stderr under `LEON_FRAME_STATS`, so scripts/idle-frames.sh knows it opened.
+    pub(super) fn overview_opened(&mut self, stamped: Option<u64>) {
+        if !self.enabled {
+            return;
+        }
+        eprintln!("leon overview: open");
+        if let Some(log) = self.log.as_mut() {
+            log.overview = Some(Opening { at: stamped.unwrap_or_else(uptime_ns), ..Opening::default() });
+        }
+    }
+
+    /// An overview frame was painted; `filled` when every thumbnail had its screen.
+    pub(super) fn overview_drawn(&mut self, filled: bool) {
+        if let Some(o) = self.log.as_mut().and_then(|l| l.overview.as_mut()) {
+            o.painted = true;
+            o.filled |= filled;
+        }
     }
 
     /// The display tick after the frame was submitted (not when it was presented: the drawable
@@ -125,6 +167,17 @@ impl Stats {
         }
         if let Some((stamped, handler, paint)) = log.echoed.take() {
             let _ = writeln!(log.out, "key {stamped} {handler} {paint} {now}");
+        }
+        if let Some(o) = log.overview.as_mut().filter(|o| o.painted) {
+            if !o.logged {
+                let _ = writeln!(log.out, "overview {} {now}", o.at);
+                o.logged = true;
+            }
+            o.painted = false;
+            if o.filled {
+                let _ = writeln!(log.out, "overview-filled {} {now}", o.at);
+                log.overview = None;
+            }
         }
         let _ = log.out.flush();
     }
@@ -163,11 +216,13 @@ mod tests {
         s.key(uptime_ns() - 2_000_000, "b1".into(), Some((0, 5)));
         // a frame that draws the pane unmoved, and another pane moving, are not the echo
         s.render_start = Some(Instant::now());
-        assert!(s.painted("b1", Some((0, 5)), true));
-        assert!(!s.painted("b2", Some((3, 1)), true));
+        s.painted("b1", Some((0, 5)), true);
+        s.painted("b2", Some((3, 1)), true);
+        assert!(s.frame_end() && !s.frame_end(), "a frame ends once");
         s.presented();
         s.render_start = Some(Instant::now());
-        assert!(s.painted("b1", Some((0, 6)), true));
+        s.painted("b1", Some((0, 6)), true);
+        assert!(s.frame_end());
         s.presented();
         assert!(!s.wants_text(), "the first text is logged once");
         // a stamp from the future is refused; two keys before an echo are an overlap, unmatched
@@ -176,6 +231,7 @@ mod tests {
         s.key(uptime_ns(), "b1".into(), Some((0, 6)));
         s.render_start = Some(Instant::now());
         s.painted("b1", Some((0, 7)), true);
+        s.frame_end();
         s.presented();
 
         let text = std::fs::read_to_string(&path).unwrap();

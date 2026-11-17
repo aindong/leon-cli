@@ -16,7 +16,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command};
 
-use portable_pty::CommandBuilder;
+use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
 
 use super::Spec;
 use crate::spawn;
@@ -25,6 +25,8 @@ use crate::spawn;
 const SH: &str = "/bin/sh";
 /// How much of a refused file is read to tell a script from a binary (bash's sample).
 const SAMPLE: usize = 80;
+/// How many times a PTY open is issued while the kernel asks for it again (`open_pty`).
+const OPEN_TRIES: usize = 5;
 
 /// The login shell `spec` runs when its command is empty: `$SHELL` (the spec's, else this
 /// process's) if executable, else the passwd entry's.
@@ -39,6 +41,24 @@ fn builder(spec: &Spec) -> CommandBuilder {
         b.env(k, v);
     }
     b
+}
+
+/// `openpty`, issued again when macOS's `/dev/ptmx` open fails with xnu's internal EREDRIVEOPEN
+/// (-6, "reissue the open"), which leaks out while other processes open and close PTYs.
+pub(super) fn open_pty(size: PtySize) -> io::Result<PtyPair> {
+    let mut tries = 1;
+    loop {
+        match native_pty_system().openpty(size) {
+            Err(e) if tries < OPEN_TRIES && reissue(&e.to_string()) => tries += 1,
+            opened => return opened.map_err(super::pty),
+        }
+    }
+}
+
+/// Whether portable-pty's error is that -6. Its text is all there is: the errno is gone by now
+/// (formatting "Unknown error: -6" sets another).
+pub(super) fn reissue(error: &str) -> bool {
+    error.contains("Os { code: -6,")
 }
 
 /// Start `spec` with the PTY slave at `tty` as its stdio and controlling terminal.

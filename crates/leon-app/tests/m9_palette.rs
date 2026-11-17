@@ -50,7 +50,7 @@ fn the_palette_opens_filters_runs_and_closes(cx: &mut TestAppContext) {
              run = function(ctx) leon.session.set_label{ label = "hi from lua" } end }"#,
     );
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     assert!(!ws.read_with(cx, |ws, _| ws.palette_open()));
     cx.simulate_keystrokes("cmd-shift-p");
     assert!(ws.read_with(cx, |ws, _| ws.palette_open()), "cmd-shift-p opens the palette");
@@ -109,4 +109,31 @@ fn the_palette_opens_filters_runs_and_closes(cx: &mut TestAppContext) {
     assert!(eventually(|| label().as_deref() == Some("hi from lua")), "the config action ran: {:?}", label());
     assert!(!t.text(true).contains("greet"), "typing in the palette didn't reach the shell");
     s.app.stop();
+}
+
+#[test]
+fn a_whole_word_of_the_title_ranks_above_matches_inside_words() {
+    // the real rows: the app's actions and the demo config's one
+    let mut items: Vec<Item> = leon_app::palette::BUILTINS.iter().map(|(n, t)| item(n, t, &[])).collect();
+    items.push(item("tail_log", "Tail the server log", &[]));
+    let top = |q: &str, n: usize| titles(&items, q).into_iter().take(n).collect::<Vec<_>>();
+    assert_eq!(top("log", 1), ["Tail the server log"], "{:?}", titles(&items, "log"));
+    assert_eq!(top("theme", 1), ["Change Theme…"], "{:?}", titles(&items, "theme"));
+    let split = top("split", 2);
+    assert!(split.iter().all(|t| t.starts_with("Split ")), "{:?}", titles(&items, "split"));
+}
+
+#[test]
+fn a_whole_word_is_two_letters_or_more_and_keeps_its_apostrophe() {
+    let items: Vec<Item> = leon_app::palette::BUILTINS.iter().map(|(n, t)| item(n, t, &[])).collect();
+    // "What's" is one word, and one letter typed is the start of a word, not a word
+    let s = titles(&items, "s");
+    assert_ne!(s.first().map(String::as_str), Some("Hints: Copy What's on Screen"), "{s:?}");
+    let a = titles(&items, "a");
+    assert_ne!(a.first().map(String::as_str), Some("Scroll Up a Page"), "{a:?}");
+    let whats = titles(&items, "what's");
+    assert_eq!(whats.first().map(String::as_str), Some("Hints: Copy What's on Screen"), "{whats:?}");
+    // equal fuzzy scores: only "What's" kept whole puts the second first
+    let pair = [item("a", "What'snext", &[]), item("b", "What's next", &[])];
+    assert_eq!(titles(&pair, "what's"), ["What's next", "What'snext"]);
 }

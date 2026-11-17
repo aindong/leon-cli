@@ -21,8 +21,11 @@ pub(super) struct FloatUi {
     seen: HashMap<String, HashMap<String, bool>>,
     /// Drawers sliding: when it started, and whether in (else out).
     slides: HashMap<String, (Instant, bool)>,
-    /// Reduce Motion as set by a test; None asks the system.
+    /// Reduce Motion as set by a test; None takes the system's.
     reduce_motion: Option<bool>,
+    /// The system's Reduce Motion, read at launch and when the window becomes active (back from
+    /// System Settings), not on every frame of a motion: each read asks the accessibility prefs.
+    system_reduce: bool,
     /// What the last frame placed, and where the pane area's corner was in the window.
     placed: RefCell<(Placed, (f32, f32))>,
 }
@@ -33,14 +36,19 @@ impl Workspace {
         self.floats.reduce_motion = Some(on);
     }
 
-    /// Whether a drawer is sliding: true until the frame after its slide ended has been drawn (the
-    /// poll redraws while this holds, so a slide's last frame is its end).
+    /// Whether a drawer is sliding: true until the frame after its slide ended has been drawn
+    /// (render asks for frames while this holds, so a slide's last frame is its end).
     pub fn sliding(&self) -> bool {
         !self.floats.slides.is_empty()
     }
 
     pub(super) fn reduce_motion(&self) -> bool {
-        self.floats.reduce_motion.unwrap_or_else(system_reduce_motion)
+        self.floats.reduce_motion.unwrap_or(self.floats.system_reduce)
+    }
+
+    /// Read the system's Reduce Motion again (launch, and the window becoming active).
+    pub(super) fn note_reduce_motion(&mut self) {
+        self.floats.system_reduce = system_reduce_motion();
     }
 
     /// The active window's overlays, as the app last heard them.
@@ -59,7 +67,8 @@ impl Workspace {
     /// frame (not for a window seen the first time: opening the app slides nothing), and forget
     /// the slides that are over.
     pub(super) fn note_slides(&mut self) {
-        self.floats.slides.retain(|_, (at, _)| at.elapsed() < SLIDE);
+        let t = self.motion_now();
+        self.floats.slides.retain(|_, (at, _)| t.saturating_duration_since(*at) < SLIDE);
         let Some(w) = self.active_window() else { return };
         let now: HashMap<String, bool> =
             self.overlays_of(&w).docked.iter().map(|d| (d.block_id.clone(), d.hidden)).collect();
@@ -75,7 +84,7 @@ impl Workspace {
                     // turned back mid-slide: carry on from the part shown now
                     let shown = self.slide_of(&id).unwrap_or(if coming { 0. } else { 1. });
                     let done = if coming { shown } else { 1. - shown };
-                    let start = Instant::now().checked_sub(floats::slide_at(done)).unwrap_or_else(Instant::now);
+                    let start = t.checked_sub(floats::slide_at(done)).unwrap_or(t);
                     self.floats.slides.insert(id, (start, coming));
                 }
             }
@@ -83,10 +92,15 @@ impl Workspace {
         self.floats.seen.insert(w.id.clone(), now);
     }
 
+    /// Which way drawer `id` slides now: in (true), out (false), or not at all (tests).
+    pub fn slide_direction(&self, id: &str) -> Option<bool> {
+        self.floats.slides.get(id).map(|(_, coming)| *coming)
+    }
+
     /// A drawer's shown part while it slides (rising in, falling out).
     fn slide_of(&self, id: &str) -> Option<f32> {
         let (at, coming) = self.floats.slides.get(id)?;
-        floats::slide(at.elapsed(), false).map(|s| if *coming { s } else { 1. - s })
+        floats::slide(self.motion_now().saturating_duration_since(*at), false).map(|s| if *coming { s } else { 1. - s })
     }
 
     /// The active window's overlays placed in a pane area of `size`.
@@ -115,7 +129,9 @@ impl Workspace {
     ) -> Div {
         for d in placed.docks.iter().filter(|d| terms.contains(&d.block_id)) {
             let tile = self.pane_tile("dock", &d.block_id, d.rect, None, tiling, cx);
-            out = out.child(if d.leaving { tile } else { tile.occlude() });
+            // sliding out over the tiles: opaque, so no pixel gets two translucent fills (glass.rs)
+            let opaque = || self.pane_fill("float", &self.pane_theme(&d.block_id));
+            out = out.child(if d.leaving { tile.bg(opaque()) } else { tile.occlude() });
             let Some(h) = d.handle else { continue };
             let grab = Grab::Dock { side: d.side, size: d.size, area };
             let across = d.side != DockSide::Bottom;
@@ -321,6 +337,21 @@ fn system_reduce_motion() -> bool {
             return false;
         }
         let on: Bool = msg_send![ws, accessibilityDisplayShouldReduceMotion];
+        on.as_bool()
+    }
+}
+
+/// System Settings › Accessibility › Display › Reduce transparency (GPUI has no read for it).
+pub(crate) fn system_reduce_transparency() -> bool {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject, Bool};
+    let Some(cls) = AnyClass::get(c"NSWorkspace") else { return false };
+    unsafe {
+        let ws: *mut AnyObject = msg_send![cls, sharedWorkspace];
+        if ws.is_null() {
+            return false;
+        }
+        let on: Bool = msg_send![ws, accessibilityDisplayShouldReduceTransparency];
         on.as_bool()
     }
 }

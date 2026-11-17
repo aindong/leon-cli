@@ -1,6 +1,7 @@
-//! `leon attach`: the terminal client (docs/architecture.md, "The terminal client"). It is the
-//! app's client code (`leon_app::remote`, its keymap and layout) drawn with ratatui instead of
-//! GPUI: one more client of the server, so detaching leaves every program running.
+//! `leon attach`: the terminal client (docs/architecture/protocol-and-clients.md, "The terminal
+//! client"). It is the app's client code (`leon_app::remote`, its keymap and layout) drawn with
+//! ratatui instead of GPUI: one more client of the server, so detaching leaves every program
+//! running.
 
 mod draw;
 mod host;

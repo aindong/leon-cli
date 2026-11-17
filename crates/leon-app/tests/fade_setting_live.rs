@@ -24,8 +24,7 @@ fn config_set(s: &Setup, n: f64) {
 fn rests_at(ws: &Entity<Workspace>, cx: &mut VisualTestContext, ids: [&str; 2], want: [f32; 2]) -> [f32; 2] {
     let now = |ws: &Workspace| ids.map(|id| ws.pane_fade(id));
     shows(cx, |cx| {
-        cx.executor().advance_clock(POLL);
-        cx.run_until_parked();
+        tick(ws, cx, POLL);
         ws.read_with(cx, |ws, _| !ws.fading() && now(ws) == want)
     });
     ws.read_with(cx, |ws, _| now(ws))
@@ -35,7 +34,7 @@ fn rests_at(ws: &Entity<Workspace>, cx: &mut VisualTestContext, ids: [&str; 2], 
 fn the_app_follows_the_setting(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"fade_inactive_panes\", 0)\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let first = ws.read_with(cx, |ws, _| ws.target_block()).expect("a pane");
     act(&ws, cx, "pane.split.right");
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.target_block().is_some_and(|t| t != first))), "no split");

@@ -73,6 +73,17 @@ pub fn add(list: &mut Vec<Host>, host: Host) -> Result<(), String> {
     Ok(())
 }
 
+/// Rename the host `old` in `list` to `new`, checked as `add` checks a label. `list` is unchanged
+/// when it fails.
+pub fn rename(list: &mut [Host], old: &str, new: &str) -> Result<(), String> {
+    let i = list.iter().position(|h| h.label == old).ok_or_else(|| format!("no host {old:?}"))?;
+    if old != new {
+        check_new_label(list, new)?;
+    }
+    list[i].label = new.to_string();
+    Ok(())
+}
+
 /// A label that is good and not taken in `list`.
 pub fn check_new_label(list: &[Host], label: &str) -> Result<(), String> {
     check_label(label)?;

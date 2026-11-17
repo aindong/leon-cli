@@ -11,7 +11,7 @@ use m9_support::*;
 fn closing_settings_keeps_the_app_closing_the_workspace_quits(cx: &mut TestAppContext) {
     let s = setup_with_config("");
     let (ws, vcx) = open(cx, &s.app);
-    ws.update(vcx, |ws, _| ws.sync_keymap());
+    ws.update(vcx, |ws, cx| ws.sync_keymap(cx));
     vcx.simulate_keystrokes("cmd-,");
     vcx.run_until_parked();
     let settings = vcx.windows().into_iter().find_map(|w| w.downcast::<SettingsWindow>()).expect("Settings opened");

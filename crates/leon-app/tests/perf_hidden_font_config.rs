@@ -8,7 +8,7 @@ use serde_json::json;
 fn a_font_from_init_lua_fits_only_the_shown_panes(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"font.size\", 13)\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let shown = focused(&s.app, &ws, cx);
     let (_, block) = hidden_session(&s.app, &ws, cx);
     let hidden = term(&s.app, &block);
@@ -16,10 +16,7 @@ fn a_font_from_init_lua_fits_only_the_shown_panes(cx: &mut TestAppContext) {
     let before = shown.size();
 
     config_set(&s, "font.size", json!(15));
-    ws.update(cx, |ws, cx| {
-        ws.sync_keymap();
-        cx.notify();
-    });
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let fitted = shows(cx, |_| shown.size() != before);
     let got = shown.size();
     let kept = stays(cx, &hidden, (24, 80));

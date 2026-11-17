@@ -7,6 +7,9 @@ use super::*;
 use crate::hosts::Machine;
 use crate::palette::Item;
 
+#[path = "view_hosts_edit.rs"]
+mod edit;
+
 /// What the palette asks for.
 #[derive(Clone)]
 pub(super) enum Ask {
@@ -156,26 +159,21 @@ impl Workspace {
     }
 
     /// What the sidebar says about a host on the tailnet: who you are there.
-    fn tailnet_line(&self, m: &Machine) -> Option<String> {
+    pub(super) fn tailnet_line(&self, m: &Machine) -> Option<String> {
         let tailnet = self.hosts.tailnet()?.ok()?;
         tailnet.machine_for(m.host.as_ref()?).map(|_| tailnet.identity())
     }
 
     /// A machine's label: a dot for its state, the name, and under it who you are on the tailnet,
     /// and a note while not connected.
-    pub(super) fn host_label(&self, h: usize, m: &Machine, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &self.theme;
-        let state = m.state();
-        let dot = match state {
+    pub(super) fn host_label(&self, h: usize, m: &HostLabel, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
+        let dot = match m.state {
             HostState::Connected => t.done,
             HostState::Connecting | HostState::Reconnecting { .. } => t.working,
             HostState::NeedsLogin(_) => t.blocked,
             HostState::Unreachable(_) => t.error,
         };
-        let label = m.label.clone();
-        let collapsed = self.host_collapsed(&label);
-        // collapsed, the label counts what it hides
-        let sessions = m.remote().map(|r| r.model().sessions.len()).filter(|n| *n > 0);
+        let (label, collapsed, sessions, state) = (m.label.clone(), m.collapsed, m.sessions, &m.state);
         div()
             .flex()
             .flex_col()
@@ -210,7 +208,7 @@ impl Workspace {
                     })
                     .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.toggle_host(&label, cx))),
             )
-            .children(self.tailnet_line(m).map(|line| {
+            .children(m.tailnet.clone().map(|line| {
                 div()
                     .debug_selector(|| sel(format!("host-tailnet-{h}")))
                     .pl(px(20.))
@@ -293,7 +291,8 @@ impl Workspace {
             false => Ask::HostLabel,
         };
         let query = typed.clone().unwrap_or_default();
-        self.palette = Some(Palette { query, selected: 0, ask: Some((ask, None)), switch: false, note: None });
+        self.palette =
+            Some(Palette { query, selected: 0, ask: Some((ask, None)), switch: false, note: None, themes: None });
         if typed.is_some_and(|t| !t.is_empty()) {
             return self.ask_enter(cx); // the label typed into the tailnet's search
         }
@@ -350,7 +349,7 @@ impl Workspace {
             }
             Err(e) => {
                 let ask = Some((Ask::Tailnet, Some(e)));
-                self.palette = Some(Palette { query, selected: 0, ask, switch: false, note: None });
+                self.palette = Some(Palette { query, selected: 0, ask, switch: false, note: None, themes: None });
             }
         }
         cx.notify();

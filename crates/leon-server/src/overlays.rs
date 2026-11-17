@@ -42,10 +42,19 @@ struct Toggle {
     session_id: String,
     /// Exact case-insensitive block label, unique within this session.
     label: String,
-    /// When true and no block has this label, create a login-shell drawer at the bottom of the active
-    /// window, in the directory of its focused block (else the login shell's default).
+    /// When true and no block has this label, create it in the active window, in the directory of
+    /// its focused block (else the login shell's default): a login-shell drawer at the bottom, unless
+    /// `float` or `options` say otherwise.
     #[serde(default)]
     create: bool,
+    /// With `create`: a float (at `bounds`) instead of the bottom drawer.
+    #[serde(default)]
+    float: bool,
+    /// With `float`: fractions of the whole window; default centered 80% by 80%.
+    bounds: Option<Bounds>,
+    /// With `create`: what runs (default a login shell) and where (default the focused block's
+    /// directory). It closes when its program exits, as every block does, unless `exit` says not to.
+    options: Option<blocks::TerminalOptions>,
 }
 fn placement(st: &State, sid: &str, wid: Option<&str>) -> Result<(String, Option<Place>), ApiError> {
     let s = st.session(sid)?;
@@ -110,24 +119,45 @@ pub fn add(r: &mut Registry) {
     );
     r.add(
         "session.toggle",
-        "Show or hide a labeled float or drawer without stopping its program; optionally create a scratch shell.",
+        "Show or hide a labeled float or drawer without stopping its program; optionally create it (a scratch shell, or a popup running a command).",
         |ctx, p: Toggle| {
             let mut st = ctx.state();
+            if (p.float || p.options.is_some()) && !p.create {
+                return Err(ApiError::bad_request("float and options need create"));
+            }
+            if let Some(b) = &p.bounds {
+                if !p.float {
+                    return Err(ApiError::bad_request("bounds needs float"));
+                }
+                b.check()?;
+            }
             if st.overlay_by_label(&p.session_id, &p.label)?.is_none() && p.create {
                 let (wid, place) = placement(&st, &p.session_id, None)?;
-                if st.session(&p.session_id)?.overlay(&wid).docked.iter().any(|d| d.side == DockSide::Bottom) {
+                let bounds = p.bounds.unwrap_or_default();
+                bounds.check()?;
+                let dock = st.session(&p.session_id)?.overlay(&wid).docked.iter().any(|d| d.side == DockSide::Bottom);
+                if dock && !p.float {
                     return Err(ApiError::bad_request("bottom already has a dock"));
                 }
                 // the session's current directory: where the focused pane's live program is, if that
                 // still exists; an exited one's cwd is only the last OSC 7 path its output named
                 let s = st.session(&p.session_id)?;
-                let focused = s.windows[s.active].focus.as_deref().and_then(|id| st.block(id).ok());
+                let back = s.windows[s.active].focus.clone();
+                let focused = back.as_deref().and_then(|id| st.block(id).ok());
                 let live = focused.filter(|(_, b)| b.exit_code.is_none());
-                let cwd = live.and_then(|(_, b)| b.terminal.shown_cwd()).filter(|d| std::path::Path::new(d).is_dir());
-                let options = blocks::TerminalOptions { cwd, ..Default::default() };
+                let mut options = p.options.unwrap_or_default();
+                if options.cwd.is_none() {
+                    options.cwd =
+                        live.and_then(|(_, b)| b.terminal.shown_cwd()).filter(|d| std::path::Path::new(d).is_dir());
+                }
                 let spec = blocks::BlockSpec { label: Some(p.label), options, ..Default::default() };
                 let id = blocks::open(ctx, &mut st, &p.session_id, &wid, spec, place.as_ref())?;
-                st.dock_block(&p.session_id, &id, DockSide::Bottom, 0.3)?;
+                if p.float {
+                    st.float_block(&p.session_id, &id, bounds)?;
+                } else {
+                    st.dock_block(&p.session_id, &id, DockSide::Bottom, 0.3)?;
+                }
+                st.set_focus_back(&id, back);
             } else {
                 st.toggle_overlay(&p.session_id, &p.label)?;
             }

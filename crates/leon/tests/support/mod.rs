@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 pub mod host;
+pub mod localapi;
 pub mod remote;
 pub mod tailscale;
 
@@ -33,6 +34,8 @@ impl Env {
             .env("SHELL", "/bin/sh")
             // never this machine's Tailscale: tests that want one put support::tailscale's fake on PATH
             .env("LEON_TAILSCALE", self.dir.path().join("no-tailscale"))
+            // the tailnet tests' seam (support::localapi) is set only by them
+            .env_remove("LEON_TEST_TAILNET")
             .env_remove("LEON_SESSION")
             .env_remove("LEON_BLOCK")
             .env_remove("LEON_SERVER")
@@ -80,7 +83,15 @@ impl Env {
     /// A session whose first block runs `sleep 300`; returns (session id, block id).
     pub fn session(&self) -> (String, String) {
         let b = self.ok(&["run", "--", "sleep", "300"]);
-        let v = self.json(&["block", "inspect", &b, "--json"]);
+        // the server reports `sleep` in front on its 200 ms look, as an event: until a snapshot
+        // shows it, a stream attached now could start with it
+        let end = Instant::now() + Duration::from_secs(10);
+        let mut v = self.json(&["block", "inspect", &b, "--json"]);
+        while v["foreground"] != "sleep" && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(20));
+            v = self.json(&["block", "inspect", &b, "--json"]);
+        }
+        assert_eq!(v["foreground"], "sleep", "the server reported the program in front: {v}");
         let s = self.json(&["ls", "--json"])[0]["session_id"].as_str().unwrap().to_string();
         assert_eq!(v["block_id"], b.as_str());
         (s, b)
@@ -159,14 +170,21 @@ impl Stream {
         self.lines.recv_timeout(timeout).ok()
     }
 
-    /// The next event, unwrapped: (type or block-event name, payload, the whole line).
+    /// The next event, unwrapped: (type or block-event name, payload, the whole line). A
+    /// `foreground_changed` is skipped (its seq still checked): the server's 200 ms look sends it
+    /// at no fixed place among the others (`foreground_event.rs` reads it).
     pub fn next(&mut self) -> Ev {
-        let line = self.line(Duration::from_secs(10)).expect("timed out waiting for an event");
-        let v: Value = serde_json::from_str(&line).unwrap_or_else(|e| panic!("event not JSON ({e}): {line}"));
-        let seq = v["seq"].as_u64().unwrap_or_else(|| panic!("event without seq: {line}"));
-        assert_eq!(seq, self.seq + 1, "seq must rise by exactly one: {line}");
-        self.seq = seq;
-        Ev::new(&v["event"])
+        loop {
+            let line = self.line(Duration::from_secs(10)).expect("timed out waiting for an event");
+            let v: Value = serde_json::from_str(&line).unwrap_or_else(|e| panic!("event not JSON ({e}): {line}"));
+            let seq = v["seq"].as_u64().unwrap_or_else(|| panic!("event without seq: {line}"));
+            assert_eq!(seq, self.seq + 1, "seq must rise by exactly one: {line}");
+            self.seq = seq;
+            let e = Ev::new(&v["event"]);
+            if e.name != "foreground_changed" {
+                return e;
+            }
+        }
     }
 
     /// Skip events until one named `name` arrives (each still checked for gaps).

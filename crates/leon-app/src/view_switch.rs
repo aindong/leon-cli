@@ -35,7 +35,7 @@ impl Workspace {
 
     /// Why the switcher's last ⌘↩ couldn't split, while it says so.
     pub fn switcher_note(&self) -> Option<String> {
-        self.palette.as_ref().filter(|p| p.switch)?.note.clone()
+        self.palette.as_ref().filter(|p| p.switch || p.themes.is_some())?.note.clone()
     }
 
     /// The open switcher's rows as shown (`host › session › tab`, ` › block` for a block row).
@@ -71,7 +71,14 @@ impl Workspace {
         let Some(a) = args.filter(|a| a["session_id"].is_string()) else {
             self.palette = match self.palette {
                 Some(_) => None,
-                None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: true, note: None }),
+                None => Some(Palette {
+                    query: String::new(),
+                    selected: 0,
+                    ask: None,
+                    switch: true,
+                    note: None,
+                    themes: None,
+                }),
             };
             cx.notify();
             return;
@@ -87,8 +94,14 @@ impl Workspace {
             match self.palette.as_mut() {
                 Some(p) => p.note = Some(note), // ⌘↩ left it open: the row stays picked
                 None => {
-                    self.palette =
-                        Some(Palette { query: String::new(), selected: 0, ask: None, switch: true, note: Some(note) })
+                    self.palette = Some(Palette {
+                        query: String::new(),
+                        selected: 0,
+                        ask: None,
+                        switch: true,
+                        note: Some(note),
+                        themes: None,
+                    })
                 }
             }
             cx.notify();

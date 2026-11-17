@@ -34,7 +34,7 @@ pub fn run(server: Remote) {
         let saved = settings_path().map(|p| Settings::load(&p)).unwrap_or_default();
         let on = saved.display.and_then(|id| cx.displays().into_iter().find(|d| u32::from(d.id()) == id));
         let display = on.clone().or_else(|| cx.primary_display());
-        let screen = display.as_ref().map(|d| chrome::Frame { x: 0., y: 0., ..frame(d.bounds()) });
+        let screen = display.as_ref().map(|d| chrome::Frame { x: 0., y: 0., ..state::frame(d.bounds()) });
         let f = chrome::window_frame(on.and(saved.window), screen.as_slice());
         let bounds = Bounds::new(point(px(f.x), px(f.y)), size(px(f.w), px(f.h)));
         let options = WindowOptions {

@@ -10,34 +10,30 @@ const ROW: f32 = 30.;
 const LABEL: f32 = 24.;
 
 impl Workspace {
-    pub(super) fn render_sidebar(
-        &self,
-        rows: &[SessionRow],
-        list: SidebarList,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let t = &self.theme;
+    /// Drawn from `input` (view_sections.rs).
+    pub(super) fn render_sidebar(&self, input: &SidebarInput, cx: &mut Context<Self>) -> impl IntoElement {
+        let (t, rows, list) = (&input.theme, &input.rows, input.list);
         let frame = self.pulse();
         let mut items = div().flex().flex_col().gap(px(1.)).px(px(8.)).pt(px(4.));
-        let machines = self.hosts.machines();
+        let machines = &input.hosts;
         // with hosts, each machine's label goes before its sessions (rows come in machine order)
         let activity = list == SidebarList::Activity;
-        let grouped = self.grouped() && !activity;
+        let grouped = input.grouped && !activity;
         let mut labelled = 0;
         for (i, row) in rows.iter().enumerate().filter(|_| !activity) {
             while grouped && labelled <= row.host {
-                items = items.child(self.host_label(labelled, &machines[labelled], cx));
+                items = items.child(self.host_label(labelled, &machines[labelled], t, cx));
                 labelled += 1;
             }
-            if grouped && self.host_collapsed(&machines[row.host].label) {
+            if grouped && machines[row.host].collapsed {
                 continue;
             }
-            let selected = self.session_id.as_deref() == Some(row.id.as_str());
+            let selected = input.selected.as_deref() == Some(row.id.as_str());
             if list == SidebarList::SessionsOnly {
                 items = items.child(self.session_row(i, row, selected, frame, cx));
                 continue;
             }
-            let open = !self.collapsed.contains(&row.id);
+            let open = !input.collapsed.contains(&row.id);
             items = items.child(self.session_label(i, row, open, frame, cx));
             if !open {
                 continue;
@@ -45,11 +41,15 @@ impl Workspace {
             for (w, win) in row.windows.iter().enumerate() {
                 let current = selected && w == row.active;
                 let sid = row.id.clone();
+                let hovered = (row.host, row.id.clone(), win.id.clone());
                 items =
                     items.child(
                         div()
                             .id(SharedString::from(format!("row-{i}-{w}")))
                             .debug_selector(|| sel(format!("row-{i}-{w}")))
+                            .on_hover(cx.listener(move |ws, on: &bool, window, cx| {
+                                ws.hover_tab(*on, hovered.clone(), true, window, cx)
+                            }))
                             .flex()
                             .flex_none()
                             .items_center()
@@ -60,6 +60,7 @@ impl Workspace {
                             .cursor_pointer()
                             .when(current, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
                             .when(!current, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
+                            .children(win.program.map(|k| program_mark(k, format!("row-program-{i}-{w}"), t.muted)))
                             .child(
                                 div()
                                     .flex_1()
@@ -89,13 +90,13 @@ impl Workspace {
             items = items.child(div().h(px(6.)));
         }
         while grouped && labelled < machines.len() {
-            items = items.child(self.host_label(labelled, &machines[labelled], cx));
+            items = items.child(self.host_label(labelled, &machines[labelled], t, cx));
             labelled += 1;
         }
         if activity {
-            items = self.render_activity(cx);
+            items = self.render_activity(&input.activity, input.width, t, cx);
         }
-        let width = self.settings.sidebar_width;
+        let width = input.width;
         div()
             .id("sidebar")
             .debug_selector(|| sel("sidebar".into()))
@@ -105,7 +106,7 @@ impl Workspace {
             .flex_none()
             .w(px(width))
             .h_full()
-            .bg(rgb(t.chrome))
+            .bg(self.chrome_fill())
             .child(self.render_toolbar(cx))
             .child(div().id("sidebar-list").flex_1().overflow_y_scroll().child(items))
             .child(

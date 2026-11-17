@@ -5,28 +5,25 @@ use super::*;
 
 /// The widest a header's title gets, and what the header's other parts take from a pane's width
 /// (the padding, the icon, a status mark and the hidden controls, which keep their room).
-const TITLE_MAX: f32 = 320.;
-const HEADER_PARTS: f32 = 170.;
+pub(super) const TITLE_MAX: f32 = 320.;
+pub(super) const HEADER_PARTS: f32 = 170.;
 
 impl Workspace {
-    /// `width`: the pane's, which the title shares with the header's other parts.
-    pub(super) fn render_header(
-        &self,
-        id: &str,
-        focused: bool,
-        width: f32,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let t = &self.pane_theme(id); // faded with its pane, but for the status colours
-        let shown = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
-        let caption = self.header_caption(id);
-        let frame = self.pulse();
+    /// What pane `id`'s host badge takes from its header.
+    pub(super) fn badge_width(&self, id: &str) -> f32 {
         // shortcut: the host badge's width from its length, not measured; fine for short labels
-        let badge = self.pane_host(id).map_or(0., |h| h.chars().count() as f32 * 7. + 16.);
-        let (title, tip) = self.header_title(id, (width - HEADER_PARTS - badge).min(TITLE_MAX), cx);
-        let theme = self.theme;
-        let group = SharedString::from(format!("pane-{id}"));
-        let overlay = self.is_overlay(id);
+        self.pane_host(id).map_or(0., |h| h.chars().count() as f32 * 7. + 16.)
+    }
+
+    /// Drawn from `input` (view_sections.rs), whose title is already cut to the pane's width.
+    pub(super) fn render_header(&self, input: &HeaderInput, cx: &mut Context<Self>) -> impl IntoElement {
+        let id = input.id.as_str();
+        let t = &input.theme; // faded with its pane, but for the status colours
+        let (shown, caption, focused) = (input.state, input.caption.clone(), input.focused);
+        let frame = self.pulse();
+        let (title, tip) = input.title.clone();
+        let theme = input.window_theme;
+        let overlay = input.overlay;
         let control = |what: &'static str, icon: Icon, action: &'static str, cx: &mut Context<Self>| {
             let (block, name) = (id.to_string(), format!("header-{what}-{id}"));
             div()
@@ -56,7 +53,8 @@ impl Workspace {
             .flex()
             .flex_none()
             .gap(px(2.))
-            .when(!focused, |d| d.invisible().group_hover(group.clone(), |d| d.visible()))
+            // the pane hovered is an input: a hover group outside a cached view never matches
+            .when(!focused && !input.hovered, |d| d.invisible())
             // a float or drawer goes back into the tiles rather than splitting or zooming
             .when(!overlay, |d| {
                 d.child(control("split-right", Icon::SplitRight, "pane.split.right", cx))
@@ -71,11 +69,14 @@ impl Workspace {
             .flex_none()
             .items_center()
             .gap(px(6.))
+            // laid out as a cached view's root, like the title bar: the caption's flex_1 needs a
+            // width to push the controls to the right end
+            .w_full()
             .h(px(panes::HEADER))
             .pl(px(10.))
             .pr(px(4.))
             .text_size(px(SECONDARY_TEXT))
-            .child(div().flex_none().text_color(rgb(t.muted)).child(Icon::Terminal.at(ROW_ICON, t.muted)))
+            .child(program_mark(input.program, format!("header-program-{id}"), t.muted))
             .child(
                 div()
                     .id(SharedString::from(format!("header-title-{id}")))
@@ -93,7 +94,7 @@ impl Workspace {
                     .text_color(rgb(if focused { t.title } else { t.text }))
                     .child(title),
             )
-            .children(self.pane_host(id).map(|host| {
+            .children(input.host.clone().map(|host| {
                 div()
                     .debug_selector(|| sel(format!("header-host-{id}")))
                     .flex_none()
@@ -182,6 +183,7 @@ impl Workspace {
         div()
             .debug_selector(|| sel("empty-state".into()))
             .flex_1()
+            .bg(self.chrome_fill())
             .flex()
             .flex_col()
             .items_center()
@@ -212,6 +214,7 @@ impl Workspace {
         div()
             .debug_selector(|| sel("server-stopped".into()))
             .flex_1()
+            .bg(self.chrome_fill())
             .flex()
             .flex_col()
             .items_center()

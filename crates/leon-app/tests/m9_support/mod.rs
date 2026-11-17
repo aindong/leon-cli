@@ -24,26 +24,47 @@ fn private_dir() -> tempfile::TempDir {
 
 /// A server with no config.
 pub fn setup() -> Setup {
-    let dir = private_dir();
-    let app = Rc::new(embedded::start_at(dir.path().join("server.sock")).unwrap());
-    Setup { dir, app }
+    serve(None, Vec::new())
 }
 
 /// A server that loads `init_lua` as its config; returns once the load has finished.
 pub fn setup_with_config(init_lua: &str) -> Setup {
+    serve(Some(init_lua), Vec::new())
+}
+
+/// `setup`, with every pane in a plain shell (`plain_env`).
+pub fn plain_setup() -> Setup {
+    serve(None, plain_env())
+}
+
+/// `setup_with_config`, with every pane in a plain shell (`plain_env`).
+pub fn plain_setup_with_config(init_lua: &str) -> Setup {
+    serve(Some(init_lua), plain_env())
+}
+
+fn serve(init_lua: Option<&str>, pane_env: Vec<(String, String)>) -> Setup {
+    no_tailscale();
     let dir = private_dir();
-    let config = dir.path().join("init.lua");
-    std::fs::write(&config, init_lua).unwrap();
-    let app = Rc::new(embedded::start_configured(dir.path().join("server.sock"), config).unwrap());
-    // client.keymap waits for the load that started with the server
-    let km = app.call("client.keymap", serde_json::json!({})).unwrap();
-    assert!(km["generation"].as_u64().unwrap() >= 1, "the config loaded: {km}");
+    let config = init_lua.map(|lua| {
+        let config = dir.path().join("init.lua");
+        std::fs::write(&config, lua).unwrap();
+        config
+    });
+    let loads = config.is_some();
+    let app = Rc::new(embedded::start_with(dir.path().join("server.sock"), config, pane_env).unwrap());
+    if loads {
+        // client.keymap waits for the load that started with the server
+        let km = app.call("client.keymap", serde_json::json!({})).unwrap();
+        assert!(km["generation"].as_u64().unwrap() >= 1, "the config loaded: {km}");
+    }
     Setup { dir, app }
 }
 
-/// Never this machine's Tailscale: Add Host… reads the tailnet when a client is found.
+/// Never this machine's Tailscale: Add Host… reads the tailnet when a client is found. Set once per
+/// test binary, by the first `setup` before its server starts (every test sets the same value).
 pub fn no_tailscale() {
-    std::env::set_var("LEON_TAILSCALE", "/nonexistent/tailscale");
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| std::env::set_var("LEON_TAILSCALE", "/nonexistent/tailscale"));
 }
 
 pub fn open<'a>(cx: &'a mut TestAppContext, app: &Rc<Embedded>) -> (Entity<Workspace>, &'a mut VisualTestContext) {
@@ -77,6 +98,40 @@ pub fn term(app: &Embedded, block_id: &str) -> Arc<Terminal> {
 pub fn focused(app: &Embedded, ws: &Entity<Workspace>, cx: &mut VisualTestContext) -> Arc<Terminal> {
     let id = ws.read_with(cx, |ws, _| ws.target_block()).expect("the active window has a terminal");
     term(app, &id)
+}
+
+/// Draw the animation frame the app asked for, `step` later on GPUI's clock. GPUI's test window
+/// never runs `on_next_frame`, so this does what `request_animation_frame` would (notify the
+/// view that asked); it fails if the last render asked for no frame, so a motion only moves here
+/// when the app itself asks (ADR R6, R10).
+pub fn frame(ws: &Entity<Workspace>, cx: &mut VisualTestContext, step: Duration) {
+    assert!(ws.read_with(cx, |ws, _| ws.frame_asked()), "the app asked for no frame");
+    cx.executor().advance_clock(step);
+    ws.update(cx, |_, cx| cx.notify());
+    cx.run_until_parked();
+}
+
+/// Draw the frames the app asks for, each a display frame (16 ms) on, until it asks for none: a
+/// motion runs to its end. Returns how many; fails past 100 (a motion that never ends).
+pub fn frames(ws: &Entity<Workspace>, cx: &mut VisualTestContext) -> usize {
+    let mut n = 0;
+    while ws.read_with(cx, |ws, _| ws.frame_asked()) {
+        assert!(n < 100, "the app kept asking for frames");
+        frame(ws, cx, Duration::from_millis(16));
+        n += 1;
+    }
+    n
+}
+
+/// Move GPUI's clock on by `step`, drawing the animation frame the app asked for if it asked for
+/// one (`frame`); with nothing moving it only runs what the clock set off (timers).
+pub fn tick(ws: &Entity<Workspace>, cx: &mut VisualTestContext, step: Duration) {
+    if ws.read_with(cx, |ws, _| ws.frame_asked()) {
+        frame(ws, cx, step);
+    } else {
+        cx.executor().advance_clock(step);
+        cx.run_until_parked();
+    }
 }
 
 /// Poll `pred` for up to 10 s, letting the window run between tries; returns whether it came
@@ -153,6 +208,20 @@ pub fn stays(cx: &mut VisualTestContext, t: &Terminal, size: (u16, u16)) -> bool
         std::thread::sleep(Duration::from_millis(20));
     }
     t.size() == size
+}
+
+/// What a plain-shell server gives every pane, so it never runs this machine's shell config (a
+/// login zsh's prompt may set the title to user@host, or swallow a line typed before it): `/bin/sh`,
+/// a private home that holds no shell config, and no `$ENV` or `/etc/bashrc_$TERM_PROGRAM` to read.
+/// The server sets it on each pane; this process's environment stays as it is.
+pub fn plain_env() -> Vec<(String, String)> {
+    let home = Path::new(env!("CARGO_TARGET_TMPDIR")).join("plain-home");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+    [("SHELL", "/bin/sh"), ("HOME", home.to_str().unwrap()), ("ENV", ""), ("TERM_PROGRAM", "")]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
 }
 
 /// What `leon config set KEY VALUE` does: rewrite init.lua, then reload the running server.

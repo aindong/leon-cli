@@ -1,5 +1,6 @@
-//! The terminal methods a client uses beyond the screen (docs/architecture.md, "Scrollback in
-//! the app"): history ranges, find, selections, links; and mouse events for `block.event`.
+//! The terminal methods a client uses beyond the screen (docs/architecture/protocol-and-clients.md,
+//! "Scrollback in the app"): history ranges, find, selections, links; and mouse events for
+//! `block.event`.
 
 use leon_core::mouse::{self, Action, Button};
 use leon_core::screen::Lines;

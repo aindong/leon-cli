@@ -1,4 +1,5 @@
-//! The app's link to a leon server over its socket (docs/architecture.md, "The app attaches").
+//! The app's link to a leon server over its socket (docs/architecture/protocol-and-clients.md,
+//! "The app attaches").
 //! Three connections: one for the UI's calls (keys, layout changes), one that refetches the model,
 //! and one that receives events and screens. A thread reads the last: a screen line patches that
 //! block's frame, and an event means the model is refetched once the lines that came with it are
@@ -112,6 +113,9 @@ pub struct Block {
     /// The title the program set, and where it is (`session.list_blocks`).
     pub title: Option<String>,
     pub cwd: Option<String>,
+    /// The program in front (`foreground`): None from a server older than that field, `Some(None)`
+    /// when the server names none (the program exited, or another user's is in front).
+    pub foreground: Option<Option<String>>,
     /// Program-status records, least recently reported first.
     pub status: Vec<Record>,
 }
@@ -130,6 +134,8 @@ pub struct Model {
     pub screens: HashMap<String, Arc<Frame>>,
     /// Per block, how many screen updates came: what a redraw check compares.
     pub screen_updates: HashMap<String, u64>,
+    /// How many times the sessions were fetched (each `refresh`, on any thread).
+    pub fetches: u64,
 }
 
 impl Model {
@@ -213,6 +219,7 @@ impl Shared {
         }
         // screens go with the watch set (`Remote::watch`), not here: a refetch can skip a session
         m.sessions = sessions;
+        m.fetches += 1;
         drop(m);
         drop(c);
         self.bump();
@@ -252,6 +259,8 @@ pub struct Remote {
     queue: Option<Sender<Job>>,
     /// Per block: the size last asked for and the size the screen had then (`fit`).
     asked: Mutex<HashMap<String, Asked>>,
+    /// Calls the app made into this remote: each call, queued job, spawn and watch (tests).
+    asks: AtomicU64,
 }
 
 impl Remote {
@@ -320,7 +329,7 @@ impl Remote {
                 Some(tx)
             }
         };
-        Ok(Remote { shared, queue, asked: Mutex::default() })
+        Ok(Remote { shared, queue, asked: Mutex::default(), asks: AtomicU64::new(0) })
     }
 
     /// The model as last received. Hold it briefly: the reader thread waits for it.
@@ -332,6 +341,7 @@ impl Remote {
     /// connection that failed (the server closed it, a reply never came) is replaced for the next
     /// call; this one is not sent again, since it may have been done.
     pub fn call(&self, method: &str, params: Value) -> Result<Value, ApiError> {
+        self.asks.fetch_add(1, Ordering::Relaxed);
         self.shared.call(method, params)
     }
 
@@ -346,6 +356,7 @@ impl Remote {
     /// Run a method on a connection of its own without waiting: config actions and key bindings
     /// run Lua for up to 30 s, which must not stall the UI. `done` gets the reply on that thread.
     pub fn spawn(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
+        self.asks.fetch_add(1, Ordering::Relaxed);
         let (socket, method) = (self.shared.socket.clone(), method.to_string());
         let wait = leon_core::secs_from_env("LEON_SPAWN_WAIT_SECS", SPAWN_TIMEOUT); // tests shorten it
         std::thread::spawn(move || {
@@ -371,11 +382,15 @@ impl Remote {
     /// size it has now (each ask is a round trip, and the screen follows a moment later).
     pub fn fit(&self, session_id: &str, block_id: &str, rows: u16, cols: u16) {
         let shown = self.model().screens.get(block_id).map_or((0, 0), |f| (f.lines, f.cols));
-        if shown == (rows as usize, cols as usize) {
+        let mut asked = lock(&self.asked);
+        // a screen of this size is stale if another size was asked for since: ask again
+        let last = asked.get(block_id).map(|(size, _)| *size);
+        if shown == (rows as usize, cols as usize) && last.is_none_or(|size| size == (rows, cols)) {
             return;
         }
         let ask = ((rows, cols), shown);
-        if lock(&self.asked).insert(block_id.to_string(), ask) != Some(ask) {
+        if asked.insert(block_id.to_string(), ask) != Some(ask) {
+            drop(asked);
             self.resize(session_id, block_id, rows, cols);
         }
     }
@@ -384,6 +399,7 @@ impl Remote {
     /// others' screens go too: they would go stale, and `fit` must not trust them; the server
     /// sends a whole screen when one is watched again.
     pub fn watch(&self, ids: Vec<String>) {
+        self.asks.fetch_add(1, Ordering::Relaxed);
         let mut watched = lock(&self.shared.watched);
         if *watched != ids {
             if let Err(e) = self.shared.send_watch(&ids) {
@@ -395,6 +411,16 @@ impl Remote {
             drop(m);
             *watched = ids;
         }
+    }
+
+    /// How many calls the app made into this remote (`asks`): a `watch` that changes nothing counts.
+    pub fn asks(&self) -> u64 {
+        self.asks.load(Ordering::Relaxed)
+    }
+
+    /// The blocks whose screens the server pushes now.
+    pub fn watched(&self) -> Vec<String> {
+        lock(&self.shared.watched).clone()
     }
 
     /// Whether the server still answers (false once it stopped).

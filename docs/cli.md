@@ -235,7 +235,7 @@ Call a block method, such as `size` or `program_status`, or a full name like
 `dev.leon.terminal.size`. `ARGS` is a JSON object, `@file`, or `-` for stdin.
 
 `set_resume` registers the command that resumes this block's program after a restart (`null`
-clears it); a restored block offers it by the config's `resume` setting (see [lua.md](lua.md)):
+clears it); a restored block offers it by the config's `resume` setting (see [lua/settings.md](lua/settings.md)):
 
 ```sh
 leon block call set_resume '{"command": ["claude", "--resume", "c7583d2c-3133-4d13-b5f0-45883f1cabcb"]}'
@@ -353,7 +353,9 @@ with the text each terminal shows (in the private state dir, 0600).
 
 ### `leon server status`
 
-Show whether a server runs; exit 4 if not.
+Show whether a server runs; exit 4 if not. When [serving over
+Tailscale](cli/hosts.md#serve-over-tailscale) is on, a `tailnet` line says where it serves or why
+it stopped, and another the last connection it refused.
 
 ### `leon server proxy`
 
@@ -429,7 +431,10 @@ raised. `--unfloat` returns a float or drawer to the tiles; its terminal keeps r
 Show/hide a float or drawer by its exact, case-insensitive label within `-s/--session`.
 Labels must be unique there. Hidden terminals keep running.
 `--create` opens a scratch login shell docked to the bottom on first use, in the directory of
-the active window's focused block (the session's current directory); subsequent calls toggle it. A bottom panel already occupying that side makes creation fail.
+the active window's focused block (the session's current directory); subsequent calls toggle it. A bottom panel already occupying that side makes creation fail (not with `--float`).
+With `--create`: `--float` makes a popup (a float at `--rect`, default `0.1,0.1,0.8,0.8`)
+instead; `-- CMD` runs CMD instead of a shell. It closes when its program exits, giving the
+focus back, unless `--keep-open`. See [lua/keys.md](lua/keys.md#a-popup-on-a-key).
 
 ### `leon dock left|right|bottom`
 

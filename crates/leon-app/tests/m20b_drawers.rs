@@ -8,12 +8,9 @@ use leon_app::embedded;
 use m20b_support::*;
 use serde_json::json;
 
-/// Let any slide finish and draw a fresh frame (the app's poll does that; the test's clock never
-/// fires it).
+/// Let any slide finish: the frames the app asks for, to its end.
 fn after_slide(ws: &gpui::Entity<leon_app::view::Workspace>, cx: &mut gpui::VisualTestContext) {
-    std::thread::sleep(std::time::Duration::from_millis(200));
-    ws.update(cx, |_, cx| cx.notify());
-    cx.run_until_parked();
+    frames(ws, cx);
 }
 
 fn near_px(a: gpui::Pixels, b: f32) -> bool {
@@ -54,10 +51,9 @@ fn a_bottom_drawer_takes_its_share_and_its_divider_resizes_it(cx: &mut TestAppCo
     cx.run_until_parked();
 
     app.call("session.toggle", json!({ "session_id": sid, "label": "scratch" })).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(200));
-    // the app's poll redraws while a drawer slides; the test's clock never fires it
+    // the hide arrives by an event; then the slide out, on the frames the app asks for
     let gone = shows(cx, |cx| {
-        ws.update(cx, |_, cx| cx.notify());
+        tick(&ws, cx, std::time::Duration::from_millis(16));
         !drawn(cx, &format!("dock-{id}"))
     });
     assert!(gone, "hidden: gone once its slide ends");

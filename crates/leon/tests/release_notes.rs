@@ -15,7 +15,9 @@ fn section(changelog: &str, version: &str) -> String {
 #[test]
 fn notes_are_this_versions_changelog_section() {
     let changelog = std::fs::read_to_string(repo().join("CHANGELOG.md")).unwrap();
-    let want = section(&changelog, VERSION);
+    // its links point at the tag (release_notes_links.rs)
+    let want = section(&changelog, VERSION)
+        .replace("](docs/", &format!("](https://github.com/aindong/leon-cli/blob/v{VERSION}/docs/"));
     assert!(want.len() > 200, "CHANGELOG.md has a section for {VERSION}");
     let o = script("release-notes.sh", &[VERSION], &[]);
     assert!(o.status.success(), "{}", text(&o));

@@ -92,6 +92,35 @@ pub(super) fn kill_group(pid: i32, exited: &Mutex<bool>) {
     }
 }
 
+/// A program started but not yet handed to its exit thread. Dropped on an error or a panic after
+/// the spawn, it kills the program's group, reaps it and lets go of the PTY, so a failed start
+/// leaves no program on a PTY nobody reads. `disarm` it once the exit thread owns these.
+pub(super) struct Started(Option<(i32, Held)>);
+
+impl Started {
+    pub(super) fn new(pid: i32, held: Held) -> Started {
+        Started(Some((pid, held)))
+    }
+
+    pub(super) fn disarm(mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for Started {
+    fn drop(&mut self) {
+        let Some((pid, held)) = self.0.take() else { return };
+        // SAFETY: only signals; unreaped, the program keeps its group ID ours.
+        if unsafe { libc::kill(-pid, libc::SIGKILL) } == 0 {
+            reap(pid);
+        } else {
+            // not signalled (a setuid program that changed its uid): don't block the caller on it
+            std::thread::spawn(move || reap(pid));
+        }
+        lock(&held).take(); // the reads end once nothing holds the PTY's other end
+    }
+}
+
 impl Drop for Terminal {
     /// Hang up the program, and kill it if it still runs after a grace period.
     fn drop(&mut self) {

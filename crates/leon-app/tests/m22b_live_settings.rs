@@ -9,7 +9,7 @@ use serde_json::json;
 fn settings_apply_live(cx: &mut TestAppContext) {
     let s = setup_with_config("-- mine\nleon.set(\"font.size\", 13)\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     assert_eq!(ws.read_with(cx, |ws, _| ws.theme()), DARK);
     let id = print_red_y(&s, &ws, cx);
 
@@ -18,7 +18,7 @@ fn settings_apply_live(cx: &mut TestAppContext) {
     config_set(&s, "font.family", json!("Monaco"));
     config_set(&s, "copy_on_select", json!(true));
     config_set(&s, "notifications.done", json!(false));
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let got = ws.read_with(cx, |ws, _| {
         (ws.theme(), ws.font_size(), ws.font_family(), ws.copy_on_select(), ws.notify_settings().done)
     });
@@ -40,7 +40,7 @@ fn settings_apply_live(cx: &mut TestAppContext) {
 fn a_pair_switches_with_the_appearance(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"theme\", { dark = \"leon-dark\", light = \"leon-light\" })\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let id = print_red_y(&s, &ws, cx);
     let light = ws.read_with(cx, |ws, _| ws.theme());
     let light_panes = shows(cx, |cx| pane(&ws, cx, &id) == (Some(LIGHT.fg), Some(LIGHT.ansi[1])));
@@ -65,7 +65,7 @@ fn an_imported_theme_draws(cx: &mut TestAppContext) {
     let (ws, cx) = open(cx, &s.app);
     let id = print_red_y(&s, &ws, cx);
     config_set(&s, "theme", json!("harbor"));
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let t = ws.read_with(cx, |ws, _| ws.theme());
     let panes = shows(cx, |cx| pane(&ws, cx, &id).0 == Some(0xe0e0e0));
     s.app.stop();

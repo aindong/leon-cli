@@ -39,7 +39,8 @@ impl Workspace {
             return;
         }
         if let Some(c) = chord.as_ref().filter(|_| self.pending.is_empty()) {
-            let now = Instant::now();
+            // GPUI's clock: the wall clock in the app, the test clock in a test (ADR R10)
+            let now = cx.background_executor().now();
             if let Some((b, prefix)) = repeat.press(c, now, |p, k| self.keymap.repeatable(p, k)) {
                 self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, now);
                 self.run_binding(b, prefix, c, window, cx);
@@ -64,7 +65,7 @@ impl Workspace {
                 }
                 Pressed::Run(b) => {
                     let prefix = std::mem::take(&mut self.pending);
-                    self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, Instant::now());
+                    self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, cx.background_executor().now());
                     self.run_binding(b, prefix, c, window, cx);
                     cx.stop_propagation();
                     return;
@@ -124,6 +125,7 @@ impl Workspace {
             "session.new" => self.new_session_on(self.host_arg(args), cx),
             "session.switch" => self.switch_action(args, cx),
             "client.host.add" => self.ask_host(args, cx),
+            "client.theme.change" => self.theme_action(args, cx),
             "client.tab.new" => self.new_tab(&NewTab, window, cx),
             "client.tab.next" => self.step_tab(1, cx),
             "client.tab.previous" => self.step_tab(-1, cx),
@@ -164,6 +166,7 @@ impl Workspace {
                 self.activity = !self.activity;
                 cx.notify();
             }
+            "client.overview.toggle" | "client.overview.session.toggle" => self.toggle_overview(name, cx),
             "client.tab_style.toggle" => self.toggle_tab_style(cx),
             "client.settings" => self.open_settings(cx),
             "client.pane_header.reveal" => self.toggle_pane_headers(cx),
@@ -173,7 +176,14 @@ impl Workspace {
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
-                    None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: false, note: None }),
+                    None => Some(Palette {
+                        query: String::new(),
+                        selected: 0,
+                        ask: None,
+                        switch: false,
+                        note: None,
+                        themes: None,
+                    }),
                 };
                 cx.notify();
             }
@@ -196,15 +206,7 @@ impl Workspace {
             "client.update.install" => self.updates.install(),
             "client.update.restart" => self.restart_for_update(cx),
             n if n.starts_with("client.update.") => self.update_named(n, window, cx),
-            "client.config.reload" => {
-                let (inbox, wake) = (self.inbox.clone(), self.wake.clone());
-                self.hosts.local().spawn("server.config_reload", json!({}), move |r| {
-                    report("the config reload", r);
-                    lock(&inbox).asking = false;
-                    wake(); // the poll asks for the new keymap
-                });
-                self.keymap_asked = None;
-            }
+            "client.config.reload" => self.reload_config(),
             n if !n.contains('.') => {
                 let (sid, block) = self.local_target().map(|(s, b)| (Some(s), Some(b))).unwrap_or_default();
                 let p = json!({ "action": n, "args": args, "origin": origin, "session_id": sid, "block_id": block });
@@ -212,6 +214,18 @@ impl Workspace {
             }
             other => eprintln!("leon: the app has no action {other}"),
         }
+    }
+
+    /// Have This Mac's server load init.lua again; the poll then asks for the new keymap and
+    /// settings at once.
+    pub(super) fn reload_config(&mut self) {
+        let (inbox, wake) = (self.inbox.clone(), self.wake.clone());
+        self.hosts.local().spawn("server.config_reload", json!({}), move |r| {
+            report("the config reload", r);
+            lock(&inbox).asking = false;
+            wake(); // the poll asks for the new keymap
+        });
+        self.keymap_asked = None;
     }
 
     /// The config's actions run on This Mac's server (the keymap is This Mac's), so they get the
@@ -269,6 +283,9 @@ impl Workspace {
         if p.switch {
             return self.switcher_items(&p.query);
         }
+        if let Some(list) = &p.themes {
+            return self.theme_items(list, &p.query);
+        }
         let items = self.palette_items();
         palette::filter(&items, &p.query).into_iter().map(|i| items[i].clone()).collect()
     }
@@ -279,6 +296,19 @@ impl Workspace {
 
     pub(super) fn palette_selected(&self) -> usize {
         self.palette.as_ref().map_or(0, |p| p.selected)
+    }
+
+    /// What the palette's field says while nothing is typed.
+    pub fn palette_prompt(&self) -> String {
+        if let Some((prompt, _)) = self.ask_rows() {
+            return prompt;
+        }
+        match self.palette.as_ref() {
+            Some(p) if p.themes.is_some() => self.theme_prompt(),
+            Some(p) if p.switch => "Go to a session, tab or block…",
+            _ => "Type an action…",
+        }
+        .to_string()
     }
 
     pub(super) fn palette_query(&self) -> String {
@@ -305,9 +335,12 @@ impl Workspace {
             Some("client.palette.toggle") => Some(false),
             _ => None,
         };
-        let toggle = want_switch.is_some_and(|w| self.palette.as_ref().is_some_and(|p| p.switch == w));
+        // the theme list is neither: ⌘⇧P goes to the actions, its own key (⌘⇧T) closes it
+        let themes = self.palette.as_ref().is_some_and(|p| p.themes.is_some());
+        let toggle = want_switch.is_some_and(|w| self.palette.as_ref().is_some_and(|p| p.switch == w && !themes))
+            || (themes && bound.as_deref() == Some("client.theme.change"));
         if let (Some(w), false, Some(p)) = (want_switch, toggle, self.palette.as_mut()) {
-            (p.switch, p.query, p.selected, p.ask, p.note) = (w, String::new(), 0, None, None);
+            (p.switch, p.query, p.selected, p.ask, p.note, p.themes) = (w, String::new(), 0, None, None, None);
             cx.notify();
             return;
         }
