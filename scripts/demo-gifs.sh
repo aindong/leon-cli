@@ -119,27 +119,49 @@ chmod +x "$home/bin/agent" "$home/bin/show"
 cat >"$d/claude.txt" <<'EOF'
 > Fix the flaky login test in auth/session_test.rs
 
+  I'll read the test first, then run it a few times to see
+  how it fails.
+
+  Read auth/session_test.rs (212 lines)
   The test sleeps 50 ms and then checks the session expired.
   On a busy machine the check runs before the timer fires.
+
+  Update auth/session_test.rs
+   - std::thread::sleep(Duration::from_millis(50));
+   + clock.advance(Duration::from_secs(61));
 
   Running the tests beside me:
     leon split --label tests -- cargo test -p auth
 EOF
 cat >"$d/tests.txt" <<'EOF'
+   Compiling auth v0.4.0 (/src/auth)
+    Finished `test` profile in 4.21s
+     Running unittests src/lib.rs
+
 running 18 tests
 test session::tests::refresh_keeps_the_id ... ok
 test session::tests::expired_session_is_rejected ... ok
+test session::tests::login_sets_a_cookie ... ok
 test token::tests::round_trip ... ok
+test token::tests::rejects_a_bad_signature ... ok
+
+test result: ok. 18 passed; 0 failed; finished in 0.31s
 EOF
 cat >"$d/server.txt" <<'EOF'
 listening on http://127.0.0.1:8080
 GET /login 200 3ms
 POST /session 201 12ms
 GET /me 200 2ms
+GET /orders 200 9ms
+POST /orders 201 21ms
+GET /orders/1042 200 4ms
+POST /session 401 2ms
+POST /session 201 11ms
 EOF
 cat >"$d/migrate.txt" <<'EOF'
 > Migrate the users table to the new schema
 
+  Wrote migrations/0042_users_email_unique.sql
   Dry run on staging: 18,204 rows, 0 conflicts.
 
   Run it on production now?
@@ -187,7 +209,7 @@ print(CGMainDisplayID())
 SWIFT
 )
 cat >"$d/state/app.json" <<EOF
-{"tab_style":"sidebar","pane_headers":true,"sidebar_width":210,"window":{"x":60,"y":60,"w":1200,"h":760},"display":$display,"collapsed_hosts":[]}
+{"tab_style":"sidebar","pane_headers":true,"sidebar_width":230,"window":{"x":160,"y":120,"w":1440,"h":900},"display":$display,"collapsed_hosts":[]}
 EOF
 
 swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift" 2>/dev/null
@@ -218,7 +240,7 @@ sleep 1
 rec=$!
 sleep 1.2
 keys 'keystroke "d" using command down' 1            # split right: the panes make room
-typ "ls"; keys 'key code 36' 1
+typ "leon block ls"; keys 'key code 36' 1.2
 keys 'keystroke "]" using {command down, shift down}' 1.3   # the next tab fades in, and back
 keys 'keystroke "[" using {command down, shift down}' 1
 keys 'keystroke "p" using {command down, shift down}' 0.6   # the palette: split below
@@ -243,14 +265,14 @@ app_pid= desk_pid=
 rmdir "$lock" 2>/dev/null || true
 held=
 
-gif() { # IN_ARGS... OUT: a 1100 px wide GIF, one palette, repeated frames dropped (the size)
+gif() { # IN_ARGS... OUT: a ${width:-1100} px wide GIF, one palette, repeated frames dropped (the size)
   local out=${*: -1}
   ffmpeg -loglevel error -y "${@:1:$#-1}" -vf \
-    "fps=${fps:-10},scale=1100:-1:flags=lanczos,mpdecimate,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
+    "fps=${fps:-10},scale=${width:-1100}:-1:flags=lanczos,mpdecimate,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
     -loop 0 "$out"
 }
-# 20 a second: the app's moves last 100 to 160 ms
-fps=20 gif -i "$d/app.mov" "$out/demo-app.gif"
+# 20 a second: the app's moves last 100 to 160 ms; the window at its size in points
+fps=20 width=1440 gif -i "$d/app.mov" "$out/demo-app.gif"
 echo "demo-gifs: demo-app.gif"
 
 # the CLI, in vhs's headless terminal: bash with a `$ ` prompt and its own private server
