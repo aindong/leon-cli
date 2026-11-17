@@ -14,6 +14,6 @@ fn the_overview_is_documented() {
         assert!(arch.contains(word), "docs/architecture/attention.md covers {word:?}");
     }
     let changelog = include_str!("../../../CHANGELOG.md");
-    let unreleased = changelog.split("## [Unreleased]").nth(1).unwrap().split("\n## [").next().unwrap();
-    assert!(unreleased.contains("⌘⇧\\"), "CHANGELOG.md's Unreleased section has the overview");
+    let release = changelog.split("## [0.1.0]").nth(1).unwrap().split("\n## [").next().unwrap();
+    assert!(release.contains("⌘⇧\\"), "CHANGELOG.md's 0.1.0 section has the overview");
 }
