@@ -32,9 +32,13 @@ fn a_silent_program_its_end_and_the_exit_are_each_one_event() {
     let env = Env::new();
     let b = env.ok(&["run", "--keep-open", "--", "sh"]);
     let s = env.json(&["ls", "--json"])[0]["session_id"].as_str().unwrap().to_string();
-    env.screen_until(&b, "the prompt", |t| t.contains('$'));
     let mut ev = env.events(&["-s", &s]);
-    let sh = block(&env, &s, &b)["foreground"].as_str().expect("the shell is in front").to_string();
+    env.screen_until(&b, "the prompt", |t| t.contains('$'));
+    // the shell's own name once it settles (macOS's `sh` starts bash): the last report while quiet
+    let sh = changes(&mut ev, &b, Duration::from_millis(1000)).last().and_then(|v| v.as_str().map(String::from));
+    let sh =
+        sh.or_else(|| block(&env, &s, &b)["foreground"].as_str().map(String::from)).expect("the shell is reported");
+    assert_eq!(block(&env, &s, &b)["foreground"], sh.as_str(), "the snapshot gives what the last event said");
 
     env.ok(&["-b", &b, "send", "sleep 4321\r"]);
     // over a second of silence, five ticks or more: one event

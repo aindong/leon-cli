@@ -38,14 +38,17 @@ fn every_place_shows_the_shown_panes_kind(cx: &mut TestAppContext) {
 
     act(&ws, cx, "client.tab_style.toggle");
     assert!(shows(cx, |cx| drawn(cx, "tab-program-0-shell")), "a top tab shows it");
+    let tab = at(cx, "tab-program-0-shell").unwrap();
+    let mark = at(cx, "tab-status-0").expect("the tab still shows the status");
+    assert!(tab.right() <= mark.left(), "the tab's status mark stays after the glyph: {tab:?} {mark:?}");
     act(&ws, cx, "pane.focus.right");
     assert!(shows(cx, |cx| drawn(cx, "tab-program-0-editor")), "and follows the focus");
 
     cx.simulate_keystrokes("cmd-shift-\\");
     let wid = ws.read_with(cx, |ws, _| ws.overview_cards().first().map(|c| c.window_id.clone())).expect("a card");
     assert!(shows(cx, |cx| drawn(cx, &format!("card-program-{wid}-editor"))), "the card shows it too");
-    let card_status = at(cx, &format!("card-status-{wid}"));
+    let card_status = at(cx, &format!("card-status-{wid}")).expect("the card still shows the status");
     let card_glyph = at(cx, &format!("card-program-{wid}-editor")).unwrap();
-    assert!(card_status.is_none_or(|m| m.right() <= card_glyph.left()), "a card's status mark stays first");
+    assert!(card_status.right() <= card_glyph.left(), "a card's status mark stays first");
     s.app.stop();
 }

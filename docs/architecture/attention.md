@@ -101,8 +101,9 @@ of [the architecture](../architecture.md).
   member's when a pipeline's first process is gone. Only its name, never its arguments, and
   null for another user's process. Its 200 ms tick sends `foreground_changed` on a change, so
   the app redraws through the refetch it already does for any event. One table maps names to
-  kinds; a name it doesn't know is an agent when the block has an OSC 7501 report (agents run as
-  interpreters, and a record they leave outlives them), else generic. A server without the field
+  kinds. A name it doesn't know (an interpreter: a `#!` script reads as one) is looked up by the
+  pane title's first word, which shells set to the running command; else it is an agent when the
+  block has an OSC 7501 report (a record an agent leaves outlives it), else generic. A server without the field
   falls back to argv0.
 - **`leon notify`.** `dev.leon.terminal.report_status {state, title, msg}` (experimental) builds an
   OSC 7501 report (title and msg base64) and runs it through the same parser and store as PTY

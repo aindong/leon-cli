@@ -4,6 +4,7 @@
 //! arguments, so an interpreter (`node`, `python`) or a build tool is generic: guessing from
 //! them would be wrong as often as right.
 
+#[cfg(all(feature = "gui", target_os = "macos"))]
 use crate::icons::Icon;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -43,10 +44,7 @@ pub const PROGRAMS: &[(Kind, &[&str])] = &[
             "memcached",
         ],
     ),
-    (
-        Kind::Test,
-        &["pytest", "jest", "vitest", "mocha", "rspec", "phpunit", "ctest", "bats", "prove", "tox", "nextest"],
-    ),
+    (Kind::Test, &["pytest", "jest", "vitest", "mocha", "rspec", "phpunit", "ctest", "prove", "tox", "nextest"]),
     (Kind::Monitor, &["top", "htop", "btop", "atop", "iotop", "nvtop", "glances", "watch", "iftop", "nload", "bmon"]),
     (Kind::Remote, &["ssh", "mosh", "mosh-client", "telnet", "sftp", "ftp", "et"]),
 ];
@@ -55,6 +53,7 @@ impl Kind {
     pub const ALL: [Kind; 8] =
         [Kind::Shell, Kind::Agent, Kind::Editor, Kind::Server, Kind::Test, Kind::Monitor, Kind::Remote, Kind::Generic];
 
+    #[cfg(all(feature = "gui", target_os = "macos"))]
     pub fn icon(self) -> Icon {
         match self {
             Kind::Shell => Icon::Terminal,
@@ -85,29 +84,41 @@ impl Kind {
 
 /// The kind the table gives `name`, any case; Generic for a name it doesn't have.
 pub fn kind_of(name: &str) -> Kind {
+    // longer than any program's name (a remote server's text is uncapped): not looked at
+    if name.len() > 32 {
+        return Kind::Generic;
+    }
     let name = name.to_lowercase();
     PROGRAMS.iter().find(|(_, names)| names.contains(&name.as_str())).map_or(Kind::Generic, |(k, _)| *k)
 }
 
 /// A pane's kind. `foreground` is the block's field: None from an older server, which falls back
-/// to argv0 of `command`; `Some(None)`, nothing the server may name, is Generic. A name the table
-/// doesn't know is an agent when the block has an OSC 7501 report (`agent`): an agent runs as an
-/// interpreter or its own binary, and a record it left (`done`, `idle`) outlives it, so a
-/// program the table knows wins.
-pub fn kind_for(foreground: Option<Option<&str>>, command: &[String], agent: bool) -> Kind {
+/// to argv0 of `command`; `Some(None)`, nothing the server may name, is Generic. A name that gives
+/// no kind (an interpreter: a `#!` script reads as one, `jest` as `node`) is looked for in the
+/// first word of `title`, which shells set to the running command; else it is an agent when the
+/// block has an OSC 7501 report (`agent`). A program the table knows wins: a record an agent left
+/// (`done`, `idle`) outlives it.
+pub fn kind_for(foreground: Option<Option<&str>>, command: &[String], title: Option<&str>, agent: bool) -> Kind {
     let named = match foreground {
         None => kind_of(&crate::switcher::program_name(command)),
-        Some(name) => name.map_or(Kind::Generic, kind_of),
+        Some(None) => return Kind::Generic,
+        Some(Some(name)) => kind_of(name),
     };
-    if agent && named == Kind::Generic {
-        return Kind::Agent;
+    if named != Kind::Generic {
+        return named;
     }
-    named
+    let word = title.and_then(|t| t.split_whitespace().next()).map(|w| w.rsplit('/').next().unwrap_or(w));
+    match word.map(kind_of) {
+        Some(k) if !matches!(k, Kind::Generic | Kind::Shell) => k,
+        _ if agent => Kind::Agent,
+        _ => Kind::Generic,
+    }
 }
 
 /// [`kind_for`] a block as the app fetched it.
 pub fn kind_of_block(b: &crate::remote::Block) -> Kind {
-    kind_for(b.foreground.as_ref().map(Option::as_deref), &b.command, !b.status.is_empty())
+    let foreground = b.foreground.as_ref().map(Option::as_deref);
+    kind_for(foreground, &b.command, b.title.as_deref(), !b.status.is_empty())
 }
 
 /// The kind of the pane tab `w` shows (`Session::named_tile`); None for an empty tab.

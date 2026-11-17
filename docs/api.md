@@ -1877,7 +1877,7 @@ same facts for the server you run.
 | `exit_code` | integer (int32) \| null |  | Set once the program exited (only seen on blocks kept open). |
 | `title` | string \| null |  | The last title the program set (OSC 0/2). |
 | `cwd` | string \| null |  | Where the program is: its cwd, else its last OSC 7 path, else where it started. |
-| `foreground` | string \| null |  | The program in front (a shell's job, else the shell): the name of the PTY's foreground process, never its arguments; null once it exited or when another user owns it (`sudo`). Each change is a `foreground_changed` event. |
+| `foreground` | string \| null |  | The program in front (a shell's job, else the shell): the name of the PTY's foreground process, never its arguments; null once it exited or when another user owns it (`sudo`). Each change is a `foreground_changed` event; this is the value the last one carried (the server looks every 200 ms). |
 | `resume` | [string] \| null |  | What runs to resume the program after a restart, if it registered one (`set_resume`). |
 
 <details><summary>JSON Schemas</summary>
@@ -1966,7 +1966,7 @@ same facts for the server you run.
             ]
           },
           "foreground": {
-            "description": "The program in front (a shell's job, else the shell): the name of the PTY's foreground\nprocess, never its arguments; null once it exited or when another user owns it (`sudo`).\nEach change is a `foreground_changed` event.",
+            "description": "The program in front (a shell's job, else the shell): the name of the PTY's foreground\nprocess, never its arguments; null once it exited or when another user owns it (`sudo`).\nEach change is a `foreground_changed` event; this is the value the last one carried (the\nserver looks every 200 ms).",
             "type": [
               "string",
               "null"
@@ -2022,7 +2022,7 @@ same facts for the server you run.
 | `exit_code` | integer (int32) \| null |  | Set once the program exited (only seen on blocks kept open). |
 | `title` | string \| null |  | The last title the program set (OSC 0/2). |
 | `cwd` | string \| null |  | Where the program is: its cwd, else its last OSC 7 path, else where it started. |
-| `foreground` | string \| null |  | The program in front (a shell's job, else the shell): the name of the PTY's foreground process, never its arguments; null once it exited or when another user owns it (`sudo`). Each change is a `foreground_changed` event. |
+| `foreground` | string \| null |  | The program in front (a shell's job, else the shell): the name of the PTY's foreground process, never its arguments; null once it exited or when another user owns it (`sudo`). Each change is a `foreground_changed` event; this is the value the last one carried (the server looks every 200 ms). |
 | `resume` | [string] \| null |  | What runs to resume the program after a restart, if it registered one (`set_resume`). |
 
 <details><summary>JSON Schemas</summary>
@@ -2101,7 +2101,7 @@ same facts for the server you run.
         ]
       },
       "foreground": {
-        "description": "The program in front (a shell's job, else the shell): the name of the PTY's foreground\nprocess, never its arguments; null once it exited or when another user owns it (`sudo`).\nEach change is a `foreground_changed` event.",
+        "description": "The program in front (a shell's job, else the shell): the name of the PTY's foreground\nprocess, never its arguments; null once it exited or when another user owns it (`sudo`).\nEach change is a `foreground_changed` event; this is the value the last one carried (the\nserver looks every 200 ms).",
         "type": [
           "string",
           "null"

@@ -161,7 +161,8 @@ pub struct BlockView {
     pub cwd: Option<String>,
     /// The program in front (a shell's job, else the shell): the name of the PTY's foreground
     /// process, never its arguments; null once it exited or when another user owns it (`sudo`).
-    /// Each change is a `foreground_changed` event.
+    /// Each change is a `foreground_changed` event; this is the value the last one carried (the
+    /// server looks every 200 ms).
     pub foreground: Option<String>,
     /// What runs to resume the program after a restart, if it registered one (`set_resume`).
     pub resume: Option<Vec<String>>,
@@ -178,7 +179,7 @@ fn view(b: &Block) -> BlockView {
         exit_code: b.exit_code,
         title: b.terminal.title(),
         cwd: b.terminal.shown_cwd(),
-        foreground: b.terminal.foreground(),
+        foreground: b.terminal.reported_foreground(),
         resume: b.terminal.resume(),
     }
 }

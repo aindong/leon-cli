@@ -145,7 +145,7 @@ impl Workspace {
             .when(!active, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
             .children(w.program.map(|k| program_mark(k, format!("tab-program-{i}"), t.muted)))
             .child(div().flex_1().overflow_hidden().min_w(px(0.)).line_clamp(1).text_ellipsis().child(w.title.clone()))
-            .children(w.status.map(|s| status_mark(s, frame, t)))
+            .children(w.status.map(|s| status_mark(s, frame, t).debug_selector(move || sel(format!("tab-status-{i}")))))
             .when(i < 9, |d| {
                 d.child(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(format!("⌘{}", i + 1)))
             })

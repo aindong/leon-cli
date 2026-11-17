@@ -6,7 +6,12 @@ use super::*;
 
 /// `pid`'s name, cleaned as a title is, if the server's user owns it; else None.
 pub fn owned_process_name(pid: i32) -> Option<String> {
-    let (uid, name) = (pid > 0).then(|| read(pid)).flatten()?;
+    ours((pid > 0).then(|| read(pid)).flatten())
+}
+
+/// The name of what `read` gave, cleaned, if the server's user owns it.
+fn ours(read: Option<(u32, String)>) -> Option<String> {
+    let (uid, name) = read?;
     // SAFETY: geteuid can't fail.
     (uid == unsafe { libc::geteuid() }).then(|| clean(&name)).filter(|n| !n.is_empty())
 }
@@ -44,21 +49,37 @@ fn members(group: i32, _shell: i32) -> Vec<i32> {
 #[cfg(target_os = "linux")]
 fn read(pid: i32) -> Option<(u32, String)> {
     use std::os::unix::fs::MetadataExt;
-    let uid = std::fs::metadata(format!("/proc/{pid}")).ok()?.uid();
-    let comm = std::fs::read(format!("/proc/{pid}/comm")).ok()?;
+    // the owner and the name from one open, so a reused pid can't pair one process's with another's
+    let mut f = std::fs::File::open(format!("/proc/{pid}/comm")).ok()?;
+    let uid = f.metadata().ok()?.uid();
+    let mut comm = Vec::new();
+    f.read_to_end(&mut comm).ok()?;
     Some((uid, String::from_utf8_lossy(&comm).trim_end_matches('\n').to_string()))
 }
 
-/// The pids in process group `group` among `shell`'s children (a pipeline it started).
+/// The pids in process group `group` among `shell`'s descendants (a pipeline it, or a shell it
+/// started, ran), looked at up to `MEMBERS_SEEN` of them.
 #[cfg(target_os = "linux")]
 fn members(group: i32, shell: i32) -> Vec<i32> {
-    let children = std::fs::read_to_string(format!("/proc/{shell}/task/{shell}/children")).unwrap_or_default();
+    const MEMBERS_SEEN: usize = 512;
+    let children = |pid: i32| {
+        let list = std::fs::read_to_string(format!("/proc/{pid}/task/{pid}/children")).unwrap_or_default();
+        list.split_whitespace().filter_map(|p| p.parse::<i32>().ok()).collect::<Vec<_>>()
+    };
     let group_of = |pid: i32| {
         // `pid (comm) state ppid pgrp …`; comm may hold spaces and parens
         let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-        stat[stat.rfind(')')? + 2..].split(' ').nth(2)?.parse::<i32>().ok()
+        stat.get(stat.rfind(')')? + 2..)?.split(' ').nth(2)?.parse::<i32>().ok()
     };
-    children.split_whitespace().filter_map(|p| p.parse().ok()).filter(|&p| group_of(p) == Some(group)).collect()
+    let (mut seen, mut next) = (Vec::new(), children(shell));
+    while let Some(pid) = next.pop() {
+        if seen.len() == MEMBERS_SEEN {
+            break;
+        }
+        seen.push(pid);
+        next.extend(children(pid));
+    }
+    seen.into_iter().filter(|&p| group_of(p) == Some(group)).collect()
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
@@ -87,15 +108,27 @@ impl Terminal {
         }
         // shortcut: a pid can exit and be reused between these reads, naming another process of
         // ours for one look; the owner check holds either way
-        if read(group).is_some() {
-            return owned_process_name(group); // another user's leader (`sudo`) is nothing
+        if let Some(leader) = read(group) {
+            return ours(Some(leader)); // another user's leader (`sudo`) is nothing
+        }
+        // SAFETY: signal 0 only checks. EPERM: the leader is there but another user's, which
+        // macOS won't let us read; nothing, as on Linux
+        if unsafe { libc::kill(group, 0) } == -1 && io::Error::last_os_error().raw_os_error() == Some(libc::EPERM) {
+            return None;
         }
         // the leader is gone (`cat f | less`): the newest member, usually the pipeline's last
         members(group, self.pid).into_iter().max().and_then(owned_process_name)
     }
 
-    /// Report `foreground` as a notice if it changed since the last report. The server calls it
-    /// on its tick, since a program that starts silently (`sleep`) prints nothing to notice.
+    /// The foreground program as last reported (`check_foreground`): what a snapshot of the
+    /// block gives, so it sits between the same events as the rest of the snapshot.
+    pub fn reported_foreground(&self) -> Option<String> {
+        lock(&self.reported).foreground.clone()
+    }
+
+    /// Report `foreground` as a notice if it changed since the last report. The server's tick is
+    /// its one caller (two at once could send their notices in the other order), since a program
+    /// that starts silently (`sleep`) prints nothing to notice.
     pub fn check_foreground(&self) {
         let now = self.foreground();
         {
