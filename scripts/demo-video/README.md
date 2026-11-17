@@ -105,7 +105,8 @@ types whole words; the pointer is parked on the right edge, inside what the rend
 recorder's own start varies (from 0 to 1.5 s after it is asked, on 2026-11-17), so `take` measures
 the lead on the video (`lead.py`: the first frame that changes is scene 2's ⌘N) instead of
 trusting the 1.5 s it waits; one take in four stopped at 64 s with `screencapture: exit 0`, so
-check `take-raw.mov`'s length.
+`take` exits 3 when the recording is more than 2 s short, and `retake` then films it again from
+`setup` (up to 3 tries).
 
 ## Rendering
 
