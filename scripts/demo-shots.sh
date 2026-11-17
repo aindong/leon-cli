@@ -36,11 +36,9 @@ mkdir -p "$home/bin" "$home/.config/leon" "$home/src/auth" "$home/src/site" "$ho
 # a plain desktop behind the window for its translucency (scripts/deskshot.swift), its own binary
 # so the window's owner is the pid we start
 swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift" 2>/dev/null
-# the window: 70% of the screen, centred; the font grown from 13 pt at 1440 pt wide, so the text
-# reads the same size where the README shows the picture at its column's width
-read -r wx wy ww wh < <("$d/deskshot" window 70)
-font=$(((13 * ww + 720) / 1440))
-echo "demo-shots: a ${ww} x ${wh} pt window at $wx,$wy, font $font pt"
+# the window: 80% of the screen, centred, with room for a pane or two more
+read -r wx wy ww wh < <("$d/deskshot" window 80)
+echo "demo-shots: a ${ww} x ${wh} pt window at $wx,$wy"
 # a neutral shell: no user or host in the prompt or the title
 cat >"$home/.zshrc" <<'EOF'
 PROMPT='%1~ %% '
@@ -55,7 +53,6 @@ leon.bind("ctrl+b>%", "pane.split.right")
 leon.bind("ctrl+b>\"", "pane.split.down")
 leon.bind("ctrl+b>z", "pane.zoom")
 EOF
-echo "leon.set(\"font.size\", $font)" >>"$home/.config/leon/init.lua"
 # ctrl+alt+g: docs/lua/keys.md's popup recipe, as it is there
 awk '/<!-- popup-git -->/{on=1;next} /<!-- \/popup-git -->/{on=0} on && !/^```/' docs/lua/keys.md >>"$home/.config/leon/init.lua"
 # the popup's history: a made-up author and fixed dates, so the same hashes every run
@@ -78,7 +75,7 @@ awk '/<!-- popup-git -->/{on=1;next} /<!-- \/popup-git -->/{on=0} on && !/^```/'
   c; git merge -q --no-ff expiry -m "merge expiry"
   c; git commit -q --allow-empty -m "login: rate limit by address"
   c; git commit -q --allow-empty -m "logout clears the cookie on every path"
-  c; git commit -q --allow-empty -m "tokens: rotate the signing key weekly"
+  c; git commit -q --allow-empty -m "tokens: rotate keys weekly"
   git checkout -q -b fix-flaky-login
 )
 : >"$home/.config/leon/none.lua"
@@ -127,6 +124,19 @@ txt claude <<'EOF'
 
   Running the tests beside me:
     leon split --label tests -- cargo test -p auth
+
+  18 passed, 0 failed. Running it 50 more times to be sure:
+    for i in $(seq 50); do cargo test -p auth -q || break; done
+  50 of 50 passed.
+
+  The same sleep is in two more tests:
+    tests/session_test.rs:88   idle_session_expires
+    tests/session_test.rs:141  refresh_after_expiry_fails
+  Moving both to the test clock.
+
+  Update tests/session_test.rs
+   - thread::sleep(Duration::from_secs(2));
+   + clock.advance(Duration::from_secs(3601));
 EOF
 txt tests <<'EOF'
    Compiling auth v0.4.0 (/src/auth)
@@ -227,11 +237,35 @@ EOF
 txt htop <<'EOF'
   CPU [|||||||||               24.1%]   Tasks: 212, 3 running
   Mem [||||||||||||       6.12G/16.0G]   Load average: 1.42 1.20 0.98
+  Swp [                      0K/2.00G]   Uptime: 3 days, 04:12:55
 
     PID  CPU% MEM%  Command
    4121  31.0  2.4  api-server
    4180  12.5  1.1  postgres
    4202   3.2  0.4  worker --queue orders
+   4210   2.9  0.3  worker --queue emails
+   3988   1.4  0.8  redis-server
+   4301   0.9  0.2  caddy run
+   4122   0.6  0.1  cargo test -p auth
+   4377   0.3  0.1  leon server
+EOF
+txt access <<'EOF'
+GET  /health          200   1ms
+GET  /login           200   3ms
+POST /session         201  12ms
+GET  /me              200   2ms
+GET  /orders          200   9ms
+POST /orders          201  21ms
+GET  /orders/1042     200   4ms
+GET  /orders/1043     404   2ms
+POST /session         401   2ms
+POST /session         201  11ms
+GET  /me              200   2ms
+GET  /health          200   1ms
+DELETE /session       204   3ms
+GET  /login           200   3ms
+POST /session         201  10ms
+GET  /orders?page=2   200  14ms
 EOF
 
 # LEON_RELEASE_URL: the app's look for a release goes to a loopback port that refuses, not to GitHub
@@ -281,9 +315,12 @@ here new auth >/dev/null
 claude=$(here -s auth run --keep-open -c "$home/src/auth" -- show "Fix the flaky login test" "$d/claude.txt" \
   "state=working:progress=60:title=$(b64 Claude):msg=$(b64 'running the tests')")
 here -s auth window close 1 >/dev/null
-tests=$(here -s auth split -b "$claude" --focus=false -c "$home/src/auth" -- show tests.sh "$d/tests.txt")
+# the agent | its tests over a shell | a monitor over the access log
+tests=$(here -s auth split -b "$claude" --ratio 60 --focus=false -c "$home/src/auth" -- show tests.sh "$d/tests.txt")
+mon=$(here -s auth split -b "$tests" --ratio 45 --focus=false -c "$home/src/auth" -- show htop "$d/htop.txt")
+here -s auth split -b "$mon" --split below --focus=false -c "$home/src/auth" -- show "tail -f access.log" "$d/access.txt" >/dev/null
 shell=$(here -s auth split -b "$tests" --split below --focus=false -c "$home/src/auth")
-here -s auth send -b "$shell" 'git --no-pager log --oneline -6' >/dev/null
+here -s auth send -b "$shell" 'git --no-pager log --oneline --graph' >/dev/null
 here -s auth send-key -b "$shell" enter >/dev/null
 tab auth auth "dev server" server >/dev/null
 here -s auth focus "$claude" >/dev/null 2>&1 || true
@@ -340,8 +377,8 @@ in_front() {
   [ "$top" = "$app_pid" ] || { echo "demo-shots: pid $top is in front, not leon ($app_pid); stopping" >&2; exit 1; }
 }
 # shot NAME [PAD]: leon's frontmost window and PAD points around it, as the screen draws it over the
-# plain desktop; deskshot refuses when any other program's window is in the way. Kept at a pixel a
-# point: twice the README's column, sharp at a quarter of the bytes
+# plain desktop; deskshot refuses when any other program's window is in the way. Kept 1760 px wide:
+# twice the README's column, sharp at a fraction of the bytes
 shot() {
   front
   in_front
@@ -353,7 +390,7 @@ shot() {
     [ "$n" = 3 ] && exit 1
     sleep 1
   done
-  sips -Z $((ww + 2 * ${2:-0})) "$out/$1.png" >/dev/null
+  sips -Z 1760 "$out/$1.png" >/dev/null
   echo "demo-shots: $1.png"
 }
 
