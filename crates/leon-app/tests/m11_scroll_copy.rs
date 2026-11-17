@@ -124,7 +124,7 @@ fn drag_word_line_extend_rectangle_and_select_all(cx: &mut TestAppContext) {
 fn copy_on_select_when_the_config_says_so(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"copy_on_select\", true)\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let id = tab_running(&s, &ws, cx, SCRIPT, "10000");
     let r = row_of(&ws, cx, &id, "9999");
     let (from, to) = (cell(&ws, cx, &id, r, 0), cell(&ws, cx, &id, r, 3));

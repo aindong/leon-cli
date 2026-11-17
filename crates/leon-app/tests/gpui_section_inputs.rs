@@ -212,7 +212,7 @@ fn an_unfocused_pane_s_header_shows_working_controls_on_hover(cx: &mut TestAppCo
 fn every_section_renders_on_the_theme(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"theme\", { dark = \"leon-dark\", light = \"leon-light\" })\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let id = tab_running(&s, &ws, cx, &quiet("theme-ready"), "theme-ready");
     let dark = ws.read_with(cx, |ws, _| ws.theme()) == leon_app::theme::DARK;
     let (sidebar, header) = (section_renders(&ws, cx, "sidebar"), section_renders(&ws, cx, &format!("header-{id}")));

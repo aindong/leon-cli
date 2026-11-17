@@ -9,7 +9,7 @@ use m9_support::*;
 fn no_config_draws_dark_menlo_13(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let (theme, family, size) = ws.read_with(cx, |ws, _| (ws.theme(), ws.font_family(), ws.font_size()));
     let t = focused(&s.app, &ws, cx);
     run_until(&t, "printf '\\112\\033[31m\\121\\033[0m\\n'; echo done", "done");

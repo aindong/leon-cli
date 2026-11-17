@@ -28,7 +28,7 @@ fn prefix_then_the_key_again(cx: &mut TestAppContext) {
     assert_eq!(h["repeats"], true, "client.keymap carries repeats: {h}");
 
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
     for _ in 0..2 {
         cx.simulate_keystrokes("cmd-d");

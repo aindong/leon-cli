@@ -201,7 +201,7 @@ fn the_window_s_activation_is_what_the_grid_draws(cx: &mut TestAppContext) {
 fn the_theme_is_what_the_grid_draws(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"theme\", { dark = \"leon-dark\", light = \"leon-light\" })\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let id = tab_running(&s, &ws, cx, LINES, "seq-done");
     let before = ws.read_with(cx, |ws, _| ws.theme());
     ws.update_in(cx, |ws, _, cx| ws.set_appearance(false, cx));

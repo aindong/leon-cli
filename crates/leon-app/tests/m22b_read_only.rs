@@ -28,7 +28,7 @@ fn read_only_says_what_config_set_says() {
 fn the_window_shows_it_read_only(cx: &mut TestAppContext) {
     let s = setup_with_config(SRC);
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     cx.simulate_keystrokes("cmd-,");
     cx.run_until_parked();
     let sw: WindowHandle<SettingsWindow> =

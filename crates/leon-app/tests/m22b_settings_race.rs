@@ -10,7 +10,7 @@ fn two_quick_theme_clicks_keep_both(cx: &mut TestAppContext) {
     let s = setup_with_config("-- mine\n");
     let config = s.dir.path().join("init.lua");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     cx.simulate_keystrokes("cmd-,");
     cx.run_until_parked();
     let sw: WindowHandle<SettingsWindow> =

@@ -299,9 +299,22 @@ impl Workspace {
         out
     }
 
-    /// Section `name`'s input now (the debug check).
+    /// Section `name`'s input now (the debug check), building only that one.
     fn input_of(&self, name: &str, window: &Window, cx: &App) -> Option<Input> {
-        self.section_inputs(window, cx).into_iter().find(|(n, _)| n == name).map(|(_, i)| i)
+        match name {
+            "sidebar" => self.sidebar_input(&self.rows()).map(Input::Sidebar),
+            "titlebar" => self.titlebar_input(&self.rows()).map(Input::TitleBar),
+            _ => {
+                let id = name.strip_prefix("header-")?;
+                if self.stopped || self.overview_shown() {
+                    return None;
+                }
+                let (w, terms) = self.shown()?;
+                let (_, rect, kind) = self.pane_rects(&w, window).into_iter().find(|(p, _, _)| p == id)?;
+                (terms.iter().any(|t| t == id) && self.header_shown(id, kind))
+                    .then(|| Input::Header(self.header_input(id, rect.w, cx)))
+            }
+        }
     }
 
     /// Give each section what it draws now, notifying the ones that changed; make the sections that

@@ -178,14 +178,15 @@ impl Workspace {
     }
 
     /// Fetch the keymap and the settings and apply them now, waiting for the server (tests, and
-    /// nothing on a hot path).
-    pub fn sync_keymap(&mut self) {
+    /// nothing on a hot path); what they change redraws.
+    pub fn sync_keymap(&mut self, cx: &mut Context<Self>) {
         if let Ok(km) = self.hosts.local().call("client.keymap", json!({})) {
             self.use_keymap(&km);
         }
         if let Ok(settings) = self.hosts.local().call("server.settings", json!({})) {
             self.apply_settings(&settings);
         }
+        cx.notify();
     }
 }
 
