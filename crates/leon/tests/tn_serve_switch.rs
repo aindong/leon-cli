@@ -1,12 +1,12 @@
 //! Serve over Tailscale (.agent/plans/2026-11-17-serve-over-tailscale.md), criterion 7: Tailscale switched to
-//! another account stops serving until a config reload says to serve the new one.
+//! another account stops serving until serve_tailscale is turned off and on again.
 
 mod support;
 
 use support::localapi::{status, whois, Serving};
 
 #[test]
-fn another_account_stops_serving_until_a_reload() {
+fn another_account_stops_serving_until_turned_off_and_on() {
     let s = Serving::start("");
     let mut before = s.admitted();
     let other = "other@example.com";
@@ -23,8 +23,10 @@ fn another_account_stops_serving_until_a_reload() {
         closed.is_ok() || closed.unwrap_err().kind() == std::io::ErrorKind::ConnectionReset,
         "a connection let in before the switch is closed"
     );
-    let out = s.cmd().args(["config", "reload"]).output().unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    for on in ["false", "true"] {
+        let out = s.cmd().args(["config", "set", "serve_tailscale", on]).output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    }
     let t = s.until("serving again", |t| t["state"] == "serving");
     assert_eq!(t["login"], other, "{t}");
     assert_eq!(s.status_over_tcp()["result"]["state"], "running");

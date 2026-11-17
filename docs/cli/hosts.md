@@ -121,8 +121,9 @@ leon hosts add devbox tailnet://devbox.example-tailnet.ts.net
   `{"action": "accept", "src": ["autogroup:member"], "dst": ["autogroup:self:7297"]}`.
 - **The port** is `serve_tailscale_port` (default 7297): a number, never an address.
 - **When Tailscale stops, logs out or switches account**, the server stops listening and says so
-  (`leon server status`: `tailnet  stopped: …`). After a switch it serves again only once you run
-  `leon config reload` (or change a setting), and then for the account it is signed in as then.
+  (`leon server status`: `tailnet  stopped: …`). After a switch it serves again only once you turn
+  `serve_tailscale` off and on, and then for the account it is signed in as then; no other
+  setting change does that.
   Turning the setting off closes the listener and every connection it let in.
 - **`tailnet://HOST[:PORT]`** (default port 7297) is a host endpoint like `ssh://`, for `-H`,
   `leon hosts add`, `leon attach` and the app. The client connects only to a Tailscale address

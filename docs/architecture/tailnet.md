@@ -34,9 +34,11 @@ of [the architecture](../architecture.md); the ssh path it sits beside is in [Ho
   listed in `serve_tailscale_tags` (exact match). No answer is cached. Anything else, tailscaled
   down, slow or answering an error included, closes the connection unread and unanswered, with one
   log line `leon: tailnet: refused ADDR: REASON` and the status's `last_refusal`.
-- **The owner is pinned.** The first good status after a config load fixes the account served
-  (user id and login). A status that later says another account, or a tagged machine, stops
-  serving with a reason (`Tailscale is now signed in as …`); the next config reload pins again.
+- **The owner is pinned.** The first good status after a load that changed a `serve_tailscale*`
+  setting fixes the account served (user id and login). A status that later says another account,
+  or a tagged machine, stops serving with a reason (`Tailscale is now signed in as …`); only
+  turning `serve_tailscale` off and on pins again, never an unrelated `leon config set`. A status
+  call still out when the next 2 s tick comes is awaited again, not doubled.
   Stopped (off, logged out, tailscaled gone, switched, no address) closes the listeners and every
   connection they let in, and the server log and `server.status`'s `tailnet` say why.
 - **Limits.** A caller outside the tailnet ranges is closed before any whois and leaves no
@@ -52,7 +54,8 @@ of [the architecture](../architecture.md); the ssh path it sits beside is in [Ho
   Unix socket keeps its peer-uid check, and each connection, instead of ssh, is
   `direct::connect`: resolve the name, keep the addresses `on_tailnet` accepts, ask the local
   tailscaled's whois about each, `admit` it as the server would (one of your untagged machines,
-  not this one), and connect to that checked address. A connection closed before any answer
+  not this one), and connect to that checked address, from one of this machine's Tailscale
+  addresses (else Tailscale went away meanwhile, and nothing is sent). A connection closed before any answer
   reads as "its server lets in only your own machines". No autostart.
 - **Tests** run a fake LocalAPI (an HTTP server on a Unix socket in a private dir, answering
   status and whois from JSON the test sets) through `LEON_TEST_TAILNET =
@@ -79,11 +82,14 @@ caller let in here can run anything as the user, so the rule is as strict as "ma
   that from leon (it is the right machine): residual, on a shared machine leave this off.
 - **Your other machines**: Tailscale identity is per machine. Anyone who can act on one of your
   untagged machines (another account there, a relay through `tailscale serve`, `socat`, ssh
-  forwarding, an auth-key node you didn't tag) is "you". The docs say not to forward the port and
-  to limit it to `autogroup:self` in the tailnet policy.
+  forwarding, an auth-key node you didn't tag, a subnet router or home gateway of yours that
+  masquerades its LAN onto the tailnet) is "you". The docs say not to forward the port and to
+  limit it to `autogroup:self` in the tailnet policy.
 - **A fake LocalAPI**: socket paths need a root peer and the Mac app's files must be root's alone.
   On macOS, if tailscaled stops, a local user who binds its old localhost port gets the token and
-  can answer whois; the Tailscale CLI trusts the same files the same way. Residual.
+  can answer whois, admit their own connection to this machine's address, and so get a shell as
+  you: on a shared Mac this is privilege escalation, so leave serving off there. The Tailscale
+  CLI trusts the same files the same way. Residual.
 - **Account changes**: a switch, logout or stop is seen at the next connection (status before and
   after whois) and within 2 s by the supervisor, which closes the listener and the connections it
   let in.

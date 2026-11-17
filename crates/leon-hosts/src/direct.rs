@@ -51,6 +51,11 @@ pub fn keepalive(s: &impl std::os::unix::io::AsRawFd) {
     }
 }
 
+/// Loopback, when the tests' seam stands it in for the tailnet.
+fn on_loopback(ip: IpAddr) -> bool {
+    ip.is_loopback() && localapi::loopback_is_tailnet()
+}
+
 /// Connect to `host:port` over the tailnet: only to a Tailscale address that whois says is one of
 /// this user's other untagged machines, and to that checked address, not the name again.
 pub fn connect(host: &str, port: u16) -> Result<TcpStream, String> {
@@ -71,10 +76,13 @@ pub fn connect(host: &str, port: u16) -> Result<TcpStream, String> {
         match localapi::whois(a).and_then(|p| localapi::admit(&me, &p, &[])) {
             Err(e) => why = format!("won't connect to {host} ({}): {e}", a.ip()),
             Ok(()) => match TcpStream::connect_timeout(&a, CONNECT) {
-                Ok(s) => {
+                // from one of this machine's Tailscale addresses, or Tailscale went away meanwhile and
+                // the connection left by another route
+                Ok(s) if s.local_addr().is_ok_and(|l| me.ips.contains(&l.ip()) || on_loopback(l.ip())) => {
                     keepalive(&s);
                     return Ok(s);
                 }
+                Ok(_) => why = format!("Tailscale went away while connecting to {host}"),
                 Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
                     why = format!(
                         "nothing answers on {host} port {port}: turn on serve_tailscale there (leon config set \

@@ -127,7 +127,7 @@ impl Owner {
         match (me.user, &me.login) == (self.user, &self.login) && !me.tagged {
             true => Ok(()),
             false => Err(format!(
-                "Tailscale is now signed in as {}, not {}: run `leon config reload` to serve as {0}",
+                "Tailscale is now signed in as {}, not {}: turn serve_tailscale off and on to serve as {0}",
                 shown_text(&me.login, 128),
                 shown_text(&self.login, 128)
             )),
@@ -215,8 +215,10 @@ impl Drop for Serving {
 /// stop as they change. The server aborts it on stop, which drops what is serving.
 pub(crate) async fn supervise(shared: Arc<Shared>) {
     let mut serving: Option<Serving> = None;
-    // the account to serve, pinned at the first good status after each config load
+    // the account to serve, pinned at the first good status after a serve_tailscale* setting changed
     let mut pin: Option<(u64, Owner)> = None;
+    // a status call still out: a hung tailscaled gets one thread, not one per tick
+    let mut job: Option<tokio::task::JoinHandle<Result<localapi::Me, String>>> = None;
     let mut tick = tokio::time::interval(POLL);
     loop {
         tick.tick().await;
@@ -227,11 +229,15 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
             pin = None;
             continue;
         }
-        let status = tokio::time::timeout(DECIDE, tokio::task::spawn_blocking(localapi::status)).await;
-        let status = match status {
-            Ok(Ok(st)) => st,
-            Ok(Err(_)) => Err("the LocalAPI call failed".into()),
-            Err(_) => Err("tailscaled didn't answer in time".into()),
+        let polled =
+            tokio::time::timeout(DECIDE, job.get_or_insert_with(|| tokio::task::spawn_blocking(localapi::status)))
+                .await;
+        let status = match polled {
+            Ok(done) => {
+                job = None;
+                done.unwrap_or_else(|_| Err("the LocalAPI call failed".into()))
+            }
+            Err(_) => Err("tailscaled didn't answer in time".into()), // the same call is awaited next tick
         };
         let want = match status {
             Err(e) => Err(e),

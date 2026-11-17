@@ -114,7 +114,8 @@ pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                     st["sessions"],
                     st["socket"].as_str().unwrap_or("")
                 );
-                let (t, text) = (&st["tailnet"], |v: &Value| v.as_str().unwrap_or("").to_string());
+                // the host's words, as the app shows them: no control characters
+                let (t, text) = (&st["tailnet"], |v: &Value| leon_hosts::shown_text(v.as_str().unwrap_or(""), 300));
                 match text(&t["state"]).as_str() {
                     "serving" => {
                         let at: Vec<String> = t["addresses"].as_array().into_iter().flatten().map(text).collect();
