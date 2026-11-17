@@ -17,8 +17,9 @@ A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first (its decis
   `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`, and a stable schema change also
   needs an `API_VERSION` bump and a CHANGELOG.md entry first.
 - Docs are tested: a new or changed command/flag needs `docs/cli.md`, a new app shortcut needs the
-  table in `docs/shortcuts.md`, and `sh`/`lua` blocks in the docs must run. CHANGELOG.md's
-  `[Unreleased]` entries stay short (a few lines each); the detail lives in the docs the entry links to. Packaging: `scripts/bundle.sh`, `scripts/install.sh`;
+  table in `docs/shortcuts.md`, and `sh`/`lua` blocks in the docs must run. A new feature adds one summary bullet to CHANGELOG.md's
+  `[Unreleased]` (one or two lines, linking its detail), and any more under
+  `docs/changelog-detail.md`'s "Since 0.1.0" heading (`pub_doc_links` checks every link). Packaging: `scripts/bundle.sh`, `scripts/install.sh`;
   a release: `scripts/release.sh` (every package from a clean clone, with `scripts/notices.sh`'s
   license notices, which need the crates fetched: build first). Work lands on `dev`; a
   release is a PR from `dev` to `main`, then a tag `vX.Y.Z` on `main`, which publishes it

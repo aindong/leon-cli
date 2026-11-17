@@ -7,7 +7,11 @@ fn foreground_is_documented() {
         integrators.contains("`foreground_changed {foreground}`"),
         "docs/integrators.md names the event and its payload"
     );
+    let detail = include_str!("../../../docs/changelog-detail.md");
+    assert!(
+        detail.contains("`foreground_changed`") && detail.contains("never its arguments"),
+        "the changelog's detail"
+    );
     let changelog = include_str!("../../../CHANGELOG.md");
-    assert!(changelog.contains("`foreground_changed`") && changelog.contains("never its arguments"), "CHANGELOG.md");
     assert!(changelog.contains(leon_server::API_VERSION), "CHANGELOG.md names the API version");
 }

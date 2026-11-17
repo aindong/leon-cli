@@ -9,10 +9,11 @@ fn read(name: &str) -> String {
 
 #[test]
 fn the_docs_say_what_changed() {
-    let changelog = read("CHANGELOG.md");
-    let unreleased = changelog.split("## [Unreleased]").nth(1).unwrap().split("\n## [").next().unwrap();
+    // [Unreleased]'s detail moved to docs/changelog-detail.md (file-size limit)
+    let detail = read("docs/changelog-detail.md");
+    let unreleased = detail.split("## Since 0.1.0: the detail").nth(1).unwrap().split("\n## ").next().unwrap();
     for topic in ["run --wait", "--output", "wait --text", "skill setup", "PATH", "claude -p", "not sent", "drawer"] {
-        assert!(unreleased.contains(topic), "CHANGELOG [Unreleased] should mention {topic}");
+        assert!(unreleased.contains(topic), "the changelog's Since 0.1.0 detail should mention {topic}");
     }
 
     let cli = read("docs/cli.md");
