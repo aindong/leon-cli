@@ -54,5 +54,11 @@ fn prefix_then_the_key_again(cx: &mut TestAppContext) {
     };
     assert!(shows(cx, |cx| label(cx) == "runs 3"), "the function ran three times: {:?}", label(cx));
     assert_eq!(term(&s.app, &panes[1]).text(false), before, "and nothing was typed into the pane");
+
+    // the window is timed by GPUI's clock: past repeat_time, k is the pane's again
+    cx.executor().advance_clock(std::time::Duration::from_millis(2001));
+    cx.simulate_keystrokes("k");
+    let typed = shows(cx, |_| term(&s.app, &panes[1]).text(false) != before);
+    assert!(typed && label(cx) == "runs 3", "k went to the pane: {:?}", label(cx));
     s.app.stop();
 }

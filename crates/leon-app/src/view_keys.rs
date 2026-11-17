@@ -39,7 +39,8 @@ impl Workspace {
             return;
         }
         if let Some(c) = chord.as_ref().filter(|_| self.pending.is_empty()) {
-            let now = Instant::now();
+            // GPUI's clock: the wall clock in the app, the test clock in a test (ADR R10)
+            let now = cx.background_executor().now();
             if let Some((b, prefix)) = repeat.press(c, now, |p, k| self.keymap.repeatable(p, k)) {
                 self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, now);
                 self.run_binding(b, prefix, c, window, cx);
@@ -64,7 +65,7 @@ impl Workspace {
                 }
                 Pressed::Run(b) => {
                     let prefix = std::mem::take(&mut self.pending);
-                    self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, Instant::now());
+                    self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, cx.background_executor().now());
                     self.run_binding(b, prefix, c, window, cx);
                     cx.stop_propagation();
                     return;
