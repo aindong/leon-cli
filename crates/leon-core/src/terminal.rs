@@ -26,6 +26,9 @@ use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
 #[path = "terminal_cwd.rs"]
 mod cwd;
 use cwd::{process_cwd, pwd_path, pwd_url};
+#[path = "terminal_foreground.rs"]
+mod foreground;
+pub use foreground::owned_process_name;
 #[path = "terminal_process.rs"]
 mod process;
 use process::{reap, wait_exit, Registered, Started};
@@ -76,6 +79,8 @@ pub enum Notice {
     Pwd(String),
     Bell,
     ProgramStatus(Change),
+    /// The program in front changed (`Terminal::check_foreground`): its name, or None.
+    Foreground(Option<String>),
 }
 
 type Notify = Arc<dyn Fn(Notice) + Send + Sync>;

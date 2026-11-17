@@ -160,6 +160,7 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
                     && shared.last_activity.lock().unwrap_or_else(|e| e.into_inner()).elapsed() >= opts.idle_exit;
                 if idle { break; }
                 shared.ctx.sweep_parked();
+                shared.ctx.check_foregrounds(); // a program that starts silently prints nothing to notice
                 if let Some(file) = &state_file {
                     autosave.tick(&shared.ctx, file);
                 }

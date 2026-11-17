@@ -3,6 +3,27 @@
 The detail of each milestone that built 0.1.0, newest first, moved here from
 [CHANGELOG.md](../CHANGELOG.md) to keep that file short; each section is as it was written.
 
+### Fixed in the daily-driver test
+
+- `leon run`, `split`, `float --new` and Lua find programs on your shell's PATH (login and rc
+  files), even when Leon.app started the server from Finder with launchd's bare PATH.
+- With `-H`, `run`, `split` and `new` start in the host's home or an absolute `--cwd` there, not
+  this machine's directory, and fail within 15 s while the host is unreachable.
+- Sessions are saved while the server runs, so a crash no longer restores an older save.
+- A resume command is offered at one restart, not at every one after it.
+- `leon -H … attach` says when it is reconnecting; its splits keep a remote pane's directory.
+- A program not on PATH fails with one line instead of listing every PATH entry.
+- ⌘K puts what needs you (blocked, error, done) first among equally good matches.
+- Activity rows are titled by the block's label, its program's title or its status title, not
+  the program's name, and a long line ends at a word with "…".
+- A pane header too narrow for its directory cuts the middle (`~/src/…/api/routes`); hovering it
+  shows the whole path.
+- Restored blocks keep the title their program had set until it sets a new one.
+- When `leon server stop` stops the server, the app says so and offers Start It Again or Quit,
+  instead of closing.
+- Key events with key code 0 and text of their own (automation, some accessibility tools) type
+  that text instead of `a`.
+
 ### Joined panes, their events, long socket paths (API `1.5.0`)
 
 #### Fixed
