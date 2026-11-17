@@ -33,8 +33,8 @@ impl Workspace {
         self.floats.reduce_motion = Some(on);
     }
 
-    /// Whether a drawer is sliding: true until the frame after its slide ended has been drawn (the
-    /// poll redraws while this holds, so a slide's last frame is its end).
+    /// Whether a drawer is sliding: true until the frame after its slide ended has been drawn
+    /// (render asks for frames while this holds, so a slide's last frame is its end).
     pub fn sliding(&self) -> bool {
         !self.floats.slides.is_empty()
     }
@@ -59,7 +59,8 @@ impl Workspace {
     /// frame (not for a window seen the first time: opening the app slides nothing), and forget
     /// the slides that are over.
     pub(super) fn note_slides(&mut self) {
-        self.floats.slides.retain(|_, (at, _)| at.elapsed() < SLIDE);
+        let t = self.motion_now();
+        self.floats.slides.retain(|_, (at, _)| t.saturating_duration_since(*at) < SLIDE);
         let Some(w) = self.active_window() else { return };
         let now: HashMap<String, bool> =
             self.overlays_of(&w).docked.iter().map(|d| (d.block_id.clone(), d.hidden)).collect();
@@ -75,7 +76,7 @@ impl Workspace {
                     // turned back mid-slide: carry on from the part shown now
                     let shown = self.slide_of(&id).unwrap_or(if coming { 0. } else { 1. });
                     let done = if coming { shown } else { 1. - shown };
-                    let start = Instant::now().checked_sub(floats::slide_at(done)).unwrap_or_else(Instant::now);
+                    let start = t.checked_sub(floats::slide_at(done)).unwrap_or(t);
                     self.floats.slides.insert(id, (start, coming));
                 }
             }
@@ -86,7 +87,7 @@ impl Workspace {
     /// A drawer's shown part while it slides (rising in, falling out).
     fn slide_of(&self, id: &str) -> Option<f32> {
         let (at, coming) = self.floats.slides.get(id)?;
-        floats::slide(at.elapsed(), false).map(|s| if *coming { s } else { 1. - s })
+        floats::slide(self.motion_now().saturating_duration_since(*at), false).map(|s| if *coming { s } else { 1. - s })
     }
 
     /// The active window's overlays placed in a pane area of `size`.

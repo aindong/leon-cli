@@ -19,9 +19,7 @@ fn a_click_on_a_drawer_sliding_out_leaves_it_hidden(cx: &mut TestAppContext) {
     app.call("session.toggle", json!({ "session_id": sid, "label": "scratch", "create": true })).unwrap();
     let id = view_window(&app, &sid)["docked"][0]["block_id"].as_str().unwrap().to_string();
     assert!(shows(cx, |cx| drawn(cx, &format!("dock-{id}"))));
-    std::thread::sleep(std::time::Duration::from_millis(200));
-    ws.update(cx, |_, cx| cx.notify());
-    cx.run_until_parked();
+    frames(&ws, cx); // the slide in, to its end
 
     app.call("session.toggle", json!({ "session_id": sid, "label": "scratch" })).unwrap();
     let b = in_slide_frame(&ws, cx, &format!("dock-{id}")).expect("still drawn while it slides out");

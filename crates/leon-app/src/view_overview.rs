@@ -104,7 +104,7 @@ impl Workspace {
             return;
         }
         let scope = self.overview_scope(all);
-        let motion = (!self.reduce_motion()).then(|| (true, Instant::now()));
+        let motion = (!self.reduce_motion()).then(|| (true, self.motion_now()));
         let mut o =
             Overview { scope, query: String::new(), chosen: None, selected: 0, motion, closing: false, reveal: true };
         let current = self.active_window().map(|w| w.id);
@@ -131,7 +131,7 @@ impl Workspace {
     fn close_overview(&mut self, go: bool, cx: &mut Context<Self>) {
         let cards = self.overview_cards();
         let current = self.active_window().map(|w| w.id);
-        let reduce = self.reduce_motion();
+        let (reduce, now) = (self.reduce_motion(), self.motion_now());
         let Some(o) = self.overview.open.as_mut() else { return };
         let pick = cards.get(o.at(&cards)).cloned().filter(|_| go);
         let here = cards.iter().position(|c| Some(&c.window_id) == current.as_ref());
@@ -141,7 +141,7 @@ impl Workspace {
         // back to a tab the filter hides: no card stands for it, so nothing moves
         let still = reduce || (!go && here.is_none());
         o.closing = true;
-        o.motion = (!still).then(|| (false, Instant::now()));
+        o.motion = (!still).then_some((false, now));
         if still {
             self.overview.open = None;
         }
@@ -170,7 +170,8 @@ impl Workspace {
     /// The motion now: (opening, the part done 0–1), or None when nothing moves.
     fn overview_motion(&self) -> Option<(bool, f32)> {
         let (opening, at) = self.overview.open.as_ref()?.motion?;
-        crate::floats::slide(at.elapsed(), self.reduce_motion()).map(|p| (opening, p))
+        crate::floats::slide(self.motion_now().saturating_duration_since(at), self.reduce_motion())
+            .map(|p| (opening, p))
     }
 
     /// The grid as laid out for the window's width, in the pane area's shape.
@@ -180,6 +181,12 @@ impl Workspace {
         let (w, h) = self.overview.area;
         let (width, height) = self.overview.window;
         overview::fit(groups, width.max(1.), height - TITLEBAR, if w > 0. { h / w } else { 0.6 })
+    }
+
+    /// Whether the overview moves: opening or closing (a closing one until `settle_overview` drops
+    /// it: its motion can end between a read of the clock and render's).
+    pub(super) fn overview_moving(&self) -> bool {
+        self.overview_motion().is_some() || self.overview.open.as_ref().is_some_and(|o| o.closing)
     }
 
     /// Drop an overview whose closing motion is over.
@@ -222,11 +229,6 @@ impl Workspace {
             self.overview.scroll.set_offset(point(px(0.), px(-y)));
         }
         let motion = self.overview_motion();
-        // while closing, ask for frames until `settle_overview` drops it: its motion can end
-        // between that read of the clock and this one
-        if motion.is_some() || closing {
-            window.request_animation_frame();
-        }
         let frame = self.pulse();
         let mut grid = div().relative().w_full().h(px(l.height));
         for (r, gi, host) in &l.labels {

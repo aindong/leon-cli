@@ -10,14 +10,13 @@ use m10b_support::*;
 
 /// The default strength.
 const S: f32 = leon_lua::settings::FADE as f32;
-/// The app's poll timer: a wait moves it on and never asks for a redraw itself.
+/// One step of GPUI's clock: a wait moves it on, drawing only the frames the app asks for.
 const POLL: std::time::Duration = std::time::Duration::from_millis(8);
 
 /// Pane `id`'s fade once the fades are at rest and it is `want` (else what it was).
 fn rests_at(ws: &Entity<Workspace>, cx: &mut VisualTestContext, id: &str, want: f32) -> f32 {
     shows(cx, |cx| {
-        cx.executor().advance_clock(POLL);
-        cx.run_until_parked();
+        tick(ws, cx, POLL);
         ws.read_with(cx, |ws, _| !ws.fading() && ws.pane_fade(id) == want)
     });
     ws.read_with(cx, |ws, _| ws.pane_fade(id))

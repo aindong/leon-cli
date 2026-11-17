@@ -71,7 +71,7 @@ impl Workspace {
     /// (a launch draws the configured theme straight away). Runs before every frame (`prepare`).
     pub(super) fn follow_theme(&mut self) {
         let want = self.theme();
-        let now = self.fade_now();
+        let now = self.motion_now();
         if want != self.themes.to {
             let moving = self.themes.settled && !self.reduce_motion();
             (self.themes.from, self.themes.to, self.themes.held) = (self.theme, want, self.themes.dip);

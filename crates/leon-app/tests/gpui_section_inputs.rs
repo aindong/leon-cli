@@ -217,7 +217,9 @@ fn every_section_renders_on_the_theme(cx: &mut TestAppContext) {
     let dark = ws.read_with(cx, |ws, _| ws.theme()) == leon_app::theme::DARK;
     let (sidebar, header) = (section_renders(&ws, cx, "sidebar"), section_renders(&ws, cx, &format!("header-{id}")));
     ws.update_in(cx, |ws, _, cx| ws.set_appearance(!dark, cx));
+    // the change fades in on the frames the app asks for
     let both = shows(cx, |cx| {
+        tick(&ws, cx, std::time::Duration::from_millis(16));
         section_renders(&ws, cx, "sidebar") > sidebar && section_renders(&ws, cx, &format!("header-{id}")) > header
     });
     s.app.stop();

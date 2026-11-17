@@ -388,7 +388,7 @@ impl Workspace {
             pulse_root: None,
             hovered_pane: None,
             hover_rects: Vec::new(),
-            fade: Default::default(),
+            fade: fade_view::FadeUi::new(cx.background_executor().clone()),
             glass: glass_view::GlassUi::new(window.window_handle()),
             overview: Default::default(),
             updates,

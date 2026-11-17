@@ -3,7 +3,7 @@
 //! a focus that moves on before a fade ended leaves exactly one pane at full strength.
 //!
 //! The tests set the fade's clock, so no value here depends on how fast the machine is, and they
-//! only move the app's own poll timer on: a redraw comes from the app or not at all.
+//! draw only the frames the app asks GPUI for (`tick`): a redraw comes from the app or not at all.
 
 mod m10b_support;
 
@@ -16,7 +16,7 @@ use m10b_support::*;
 
 /// The default strength.
 const S: f32 = leon_lua::settings::FADE as f32;
-/// The app's poll timer.
+/// One frame's step of GPUI's clock.
 const POLL: Duration = Duration::from_millis(8);
 
 /// One look at the app: each pane's fade, and whether a fade is moving.
@@ -26,11 +26,10 @@ fn ms(n: u64) -> Duration {
     Duration::from_millis(n)
 }
 
-/// What the app shows once its poll has run with the fade's clock at `at`.
+/// What the app shows once it drew the frame it asked for, with the fade's clock at `at`.
 fn look(ws: &Entity<Workspace>, cx: &mut VisualTestContext, ids: &[String], at: Instant) -> Look {
     ws.update(cx, |ws, _| ws.set_fade_clock(at));
-    cx.executor().advance_clock(POLL);
-    cx.run_until_parked();
+    tick(ws, cx, POLL);
     ws.read_with(cx, |ws, _| (ids.iter().map(|id| ws.pane_fade(id)).collect(), ws.fading()))
 }
 
@@ -66,8 +65,8 @@ fn panes(
 }
 
 /// With the clock at `at`, move the focus one pane to the left; returns the app's first look that
-/// knows. The poll's next tick draws a model that changed, so one look after the model has the
-/// new focus is that frame.
+/// knows. The model's change redraws, so one look after the model has the new focus is that
+/// frame.
 fn focus_left(ws: &Entity<Workspace>, cx: &mut VisualTestContext, ids: &[String], at: Instant) -> Look {
     ws.update(cx, |ws, _| ws.set_fade_clock(at));
     let before = ws.read_with(cx, |ws, _| ws.target_block());

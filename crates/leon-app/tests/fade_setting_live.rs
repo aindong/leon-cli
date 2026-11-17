@@ -24,8 +24,7 @@ fn config_set(s: &Setup, n: f64) {
 fn rests_at(ws: &Entity<Workspace>, cx: &mut VisualTestContext, ids: [&str; 2], want: [f32; 2]) -> [f32; 2] {
     let now = |ws: &Workspace| ids.map(|id| ws.pane_fade(id));
     shows(cx, |cx| {
-        cx.executor().advance_clock(POLL);
-        cx.run_until_parked();
+        tick(ws, cx, POLL);
         ws.read_with(cx, |ws, _| !ws.fading() && now(ws) == want)
     });
     ws.read_with(cx, |ws, _| now(ws))

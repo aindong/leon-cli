@@ -78,7 +78,10 @@ fn thumbnails_are_never_faded(cx: &mut TestAppContext) {
     let ids = leaves(&w);
     let focused = ws.read_with(cx, |ws, _| ws.target_block()).unwrap();
     let other = ids.iter().find(|id| **id != focused).unwrap().clone();
-    let faded = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.pane_theme(&other) != ws.theme()));
+    let faded = shows(cx, |cx| {
+        tick(&ws, cx, std::time::Duration::from_millis(16)); // the fade, on the frames the app asks for
+        ws.read_with(cx, |ws, _| ws.pane_theme(&other) != ws.theme())
+    });
     assert!(faded, "the pane without the focus is faded on screen");
 
     act(&ws, cx, "client.overview.toggle");
