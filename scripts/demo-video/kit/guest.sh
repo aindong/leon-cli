@@ -219,7 +219,19 @@ json.dump(s, open(p, "w"))' "$d/state/app.json"
   unterminal)
     pkill -f 'leon attach' 2>/dev/null || true
     pkill -x Terminal 2>/dev/null || true
-    rm -rf "$HOME/Library/Saved Application State/com.apple.Terminal.savedState" ;; # nothing to restore
+    # gone first: a Terminal still quitting writes its windows back, and the next take reopens them
+    for _ in $(seq 50); do pgrep -x Terminal >/dev/null || break; sleep 0.1; done
+    rm -rf "$HOME/Library/Saved Application State/com.apple.Terminal.savedState" # nothing to restore
+    # macOS 27 keeps them in a daemon's container instead, under the UUID its mapping gives Terminal
+    python3 - <<'EOF'
+import glob, os, plistlib, shutil
+for m in glob.glob(os.path.expanduser("~/Library/Daemon Containers/*/Data/Library/Saved Application State/ApplicationMapping.plist")):
+    a = plistlib.load(open(m, "rb"))
+    for app, uuid in zip(a[::2], a[1::2]):
+        if app.get("protected", {}).get("signingIdentifier") == "com.apple.Terminal":
+            shutil.rmtree(os.path.join(os.path.dirname(m), uuid + ".savedState"), ignore_errors=True)
+EOF
+    ;;
   # init.lua has every banner off (scene 4's agent blocks off screen too): only the attach
   # scene's is on. A blocked state the app sees before it has the new setting posts nothing
   banner) leon config set notifications.blocked true >/dev/null ;;
