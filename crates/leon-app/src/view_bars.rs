@@ -143,8 +143,9 @@ impl Workspace {
             .cursor_pointer()
             .when(active, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
             .when(!active, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
+            .children(w.program.map(|k| program_mark(k, format!("tab-program-{i}"), t.muted)))
             .child(div().flex_1().overflow_hidden().min_w(px(0.)).line_clamp(1).text_ellipsis().child(w.title.clone()))
-            .children(w.status.map(|s| status_mark(s, frame, t)))
+            .children(w.status.map(|s| status_mark(s, frame, t).debug_selector(move || sel(format!("tab-status-{i}")))))
             .when(i < 9, |d| {
                 d.child(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(format!("⌘{}", i + 1)))
             })
@@ -204,6 +205,12 @@ impl Workspace {
         let theme = self.theme;
         move |_, cx| cx.new(|_| Tip(text.clone(), theme)).into()
     }
+}
+
+/// A program's glyph (`program_kind`) in `color`, named `<at>-<kind>` (`tab-program-0-editor`).
+pub(super) fn program_mark(kind: Kind, at: String, color: u32) -> gpui::Div {
+    let name = format!("{at}-{}", kind.name());
+    div().flex_none().debug_selector(move || sel(name)).child(kind.icon().at(ROW_ICON, color))
 }
 
 /// A status icon in its state's colour (a tab, a sidebar row, a pane header), with the progress

@@ -52,6 +52,7 @@ pub fn model(sessions: Vec<(&str, Vec<Tab>)>) -> Model {
                 command: vec!["/bin/zsh".into()],
                 title: Some(title.into()),
                 cwd: None,
+                foreground: None,
                 status,
             });
         }

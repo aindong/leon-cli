@@ -22,6 +22,7 @@ fn a_float_row_named_by_its_program_hides_nothing() {
         command: vec!["/usr/bin/\u{202e}hs.lave".into()],
         title: None,
         cwd: None,
+        foreground: None,
         status: vec![],
     };
     let s = Session {

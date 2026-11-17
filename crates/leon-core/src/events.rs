@@ -94,6 +94,7 @@ impl State {
             Notice::Title(title) => ("title_changed", json!({ "title": title })),
             Notice::Pwd(pwd) => ("pwd_changed", json!({ "pwd": pwd })),
             Notice::Bell => ("bell", json!({})),
+            Notice::Foreground(name) => ("foreground_changed", json!({ "foreground": name })),
             Notice::ProgramStatus(change) => {
                 let name = match change {
                     Change::Changed { .. } => "program_status_changed",
