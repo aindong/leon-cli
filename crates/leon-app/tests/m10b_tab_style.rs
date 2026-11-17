@@ -80,7 +80,7 @@ fn no_state_draws_tabs_twice(cx: &mut TestAppContext) {
 fn the_toggle_is_in_the_palette_and_bindable_from_lua(cx: &mut TestAppContext) {
     let s = setup_with_config(r#"leon.bind("ctrl+alt+t", "client.tab_style.toggle")"#);
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     cx.simulate_keystrokes("cmd-shift-p");
     cx.simulate_input("tab style");
     let rows = ws.read_with(cx, |ws, _| ws.palette_rows());

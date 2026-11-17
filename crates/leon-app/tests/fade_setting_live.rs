@@ -35,7 +35,7 @@ fn rests_at(ws: &Entity<Workspace>, cx: &mut VisualTestContext, ids: [&str; 2], 
 fn the_app_follows_the_setting(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"fade_inactive_panes\", 0)\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let first = ws.read_with(cx, |ws, _| ws.target_block()).expect("a pane");
     act(&ws, cx, "pane.split.right");
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.target_block().is_some_and(|t| t != first))), "no split");

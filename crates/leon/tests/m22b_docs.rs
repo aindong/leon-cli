@@ -9,6 +9,6 @@ fn m22b_documented() {
     assert!(cli.contains("⌘,"), "docs/cli/settings.md points at the Settings window");
     let arch = include_str!("../../../docs/architecture/state-and-hosts.md");
     assert!(arch.contains("(M22b)"), "docs/architecture has the app half of the settings decision");
-    let changelog = include_str!("../../../CHANGELOG.md");
-    assert!(changelog.contains("### M22b"), "CHANGELOG.md has an M22b entry");
+    let changelog = include_str!("../../../docs/changelog-detail.md");
+    assert!(changelog.contains("### M22b"), "the changelog's detail has an M22b entry");
 }

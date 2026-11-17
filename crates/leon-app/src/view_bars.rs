@@ -58,11 +58,12 @@ impl Workspace {
 
     /// The titlebar row over the panes: with the sidebar hidden it holds the toolbar's buttons;
     /// then the session's name, and in top style its tabs and a + for a new one.
-    pub(super) fn render_titlebar(&self, row: Option<&SessionRow>, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &self.theme;
-        let places = self.places();
+    /// Drawn from `input` (view_sections.rs).
+    pub(super) fn render_titlebar(&self, input: &TitleBarInput, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = &input.theme;
+        let row = input.row.as_ref();
         let frame = self.pulse();
-        let hidden = places.sidebar.is_none();
+        let hidden = input.hidden;
         let mut bar = div()
             .debug_selector(|| sel("titlebar".into()))
             .flex()
@@ -85,7 +86,7 @@ impl Workspace {
                     .text_color(rgb(t.title))
                     .child(row.title.clone()),
             );
-            if places.top_tabs {
+            if input.top_tabs {
                 for (i, w) in row.windows.iter().enumerate() {
                     bar = bar.child(self.top_tab(i, w, i == row.active, row, frame, cx));
                 }

@@ -47,3 +47,28 @@ pub fn run_for(cx: &mut VisualTestContext, d: std::time::Duration) {
         cx.run_until_parked();
     }
 }
+
+/// How many times section `name` rendered (`sidebar`, `titlebar`, `header-<block>`).
+pub fn section_renders(ws: &Entity<Workspace>, cx: &mut VisualTestContext, name: &str) -> u64 {
+    ws.read_with(cx, |ws, _| ws.section_renders().get(name).copied().unwrap_or(0))
+}
+
+/// Whether section `name` renders again within 10 s after `change`.
+pub fn renders_again(
+    ws: &Entity<Workspace>,
+    cx: &mut VisualTestContext,
+    name: &str,
+    change: impl FnOnce(&mut VisualTestContext),
+) -> bool {
+    cx.run_until_parked();
+    let before = section_renders(ws, cx, name);
+    change(cx);
+    shows(cx, |cx| section_renders(ws, cx, name) > before)
+}
+
+/// A program that says it is working (OSC 7501), then stays.
+pub const WORKING: &str = r"stty -echo; printf '\033]7501;state=working\007'; echo w-ready; exec sleep 300";
+/// A program that prints its marker and stays quiet.
+pub fn quiet(marker: &str) -> String {
+    format!("stty -echo; echo {marker}; exec sleep 300")
+}
