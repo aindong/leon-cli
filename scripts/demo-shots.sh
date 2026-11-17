@@ -33,6 +33,14 @@ chmod 700 "$d"
 mkdir -m 700 -p "$d/run" "$d/state" "$d/dev/run" "$d/dev/state"
 home=$d/home
 mkdir -p "$home/bin" "$home/.config/leon" "$home/src/auth" "$home/src/site" "$home/src/infra" "$home/src/api" "$home/src/deploy"
+# a plain desktop behind the window for its translucency (scripts/deskshot.swift), its own binary
+# so the window's owner is the pid we start
+swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift" 2>/dev/null
+# the window: 70% of the screen, centred; the font grown from 13 pt at 1440 pt wide, so the text
+# reads the same size where the README shows the picture at its column's width
+read -r wx wy ww wh < <("$d/deskshot" window 70)
+font=$(((13 * ww + 720) / 1440))
+echo "demo-shots: a ${ww} x ${wh} pt window at $wx,$wy, font $font pt"
 # a neutral shell: no user or host in the prompt or the title
 cat >"$home/.zshrc" <<'EOF'
 PROMPT='%1~ %% '
@@ -47,6 +55,32 @@ leon.bind("ctrl+b>%", "pane.split.right")
 leon.bind("ctrl+b>\"", "pane.split.down")
 leon.bind("ctrl+b>z", "pane.zoom")
 EOF
+echo "leon.set(\"font.size\", $font)" >>"$home/.config/leon/init.lua"
+# ctrl+alt+g: docs/lua/keys.md's popup recipe, as it is there
+awk '/<!-- popup-git -->/{on=1;next} /<!-- \/popup-git -->/{on=0} on && !/^```/' docs/lua/keys.md >>"$home/.config/leon/init.lua"
+# the popup's history: a made-up author and fixed dates, so the same hashes every run
+(
+  export GIT_AUTHOR_NAME=demo GIT_AUTHOR_EMAIL=demo@example.com GIT_COMMITTER_NAME=demo GIT_COMMITTER_EMAIL=demo@example.com
+  n=0
+  c() { n=$((n + 1)); export GIT_AUTHOR_DATE="@$((1793000000 + n * 86400)) +0000" GIT_COMMITTER_DATE="@$((1793000000 + n * 86400)) +0000"; }
+  cd "$home/src/auth"
+  mkdir src tests
+  printf '[package]\nname = "auth"\nversion = "0.4.0"\n' >Cargo.toml
+  : >README.md; : >src/lib.rs; : >src/session.rs; : >src/token.rs; : >tests/session_test.rs
+  git init -q --template= -b main .
+  c; git add -A; git commit -q -m "sessions: a cookie per login"
+  c; git commit -q --allow-empty -m "tokens: sign with the key from the vault"
+  git checkout -q -b expiry
+  c; git commit -q --allow-empty -m "sessions expire after an hour idle"
+  c; git commit -q --allow-empty -m "a test clock instead of sleeps"
+  git checkout -q main
+  c; git commit -q --allow-empty -m "refresh keeps the session id"
+  c; git merge -q --no-ff expiry -m "merge expiry"
+  c; git commit -q --allow-empty -m "login: rate limit by address"
+  c; git commit -q --allow-empty -m "logout clears the cookie on every path"
+  c; git commit -q --allow-empty -m "tokens: rotate the signing key weekly"
+  git checkout -q -b fix-flaky-login
+)
 : >"$home/.config/leon/none.lua"
 
 # show TITLE TEXTFILE [OSC7501 PAIRS]: a "program" that sets its title and status and shows the
@@ -77,9 +111,19 @@ txt claude <<'EOF'
   The test sleeps 50 ms and then checks the session expired.
   On a busy machine the check runs before the timer fires.
 
+  Ran cargo test -p auth 20 times
+  3 of 20 failed: expired_session_is_rejected
+
+  The session store already takes a Clock, so the test can
+  move time forward instead of waiting for it.
+
   Update auth/session_test.rs
    - std::thread::sleep(Duration::from_millis(50));
    + clock.advance(Duration::from_secs(61));
+
+  Update auth/session.rs
+   - if Instant::now() > self.expires_at {
+   + if self.clock.now() > self.expires_at {
 
   Running the tests beside me:
     leon split --label tests -- cargo test -p auth
@@ -90,17 +134,37 @@ txt tests <<'EOF'
      Running unittests src/lib.rs
 
 running 18 tests
+test session::tests::clock_advances ... ok
 test session::tests::refresh_keeps_the_id ... ok
 test session::tests::expired_session_is_rejected ... ok
+test session::tests::idle_session_expires ... ok
 test session::tests::login_sets_a_cookie ... ok
+test session::tests::logout_clears_the_cookie ... ok
 test token::tests::round_trip ... ok
 test token::tests::rejects_a_bad_signature ... ok
+test token::tests::rejects_an_old_key ... ok
+test token::tests::rotates_weekly ... ok
+
+test result: ok. 18 passed; 0 failed; finished in 0.31s
+
+     Running tests/session_test.rs
+
+running 6 tests
+......
+test result: ok. 6 passed; 0 failed; finished in 0.12s
 EOF
 txt server <<'EOF'
 listening on http://127.0.0.1:8080
 GET /login 200 3ms
 POST /session 201 12ms
 GET /me 200 2ms
+GET /orders 200 9ms
+POST /orders 201 21ms
+GET /orders/1042 200 4ms
+POST /session 401 2ms
+POST /session 201 11ms
+GET /me 200 2ms
+DELETE /session 204 3ms
 EOF
 txt readme <<'EOF'
 > Review the README for the 0.4 release
@@ -226,7 +290,9 @@ claude=$(here -s auth run --keep-open -c "$home/src/auth" -- show "Fix the flaky
   "state=working:progress=60:title=$(b64 Claude):msg=$(b64 'running the tests')")
 here -s auth window close 1 >/dev/null
 tests=$(here -s auth split -b "$claude" --focus=false -c "$home/src/auth" -- show tests.sh "$d/tests.txt")
-here -s auth split -b "$tests" --split below --focus=false -c "$home/src/auth" >/dev/null
+shell=$(here -s auth split -b "$tests" --split below --focus=false -c "$home/src/auth")
+here -s auth send -b "$shell" 'git log --oneline -6' >/dev/null
+here -s auth send-key -b "$shell" enter >/dev/null
 tab auth auth "dev server" server >/dev/null
 here -s auth focus "$claude" >/dev/null 2>&1 || true
 here new site >/dev/null
@@ -237,20 +303,17 @@ tab infra infra "Migrate the users table" migrate \
   "state=blocked:kind=question:title=$(b64 'Run it on production now?')" >/dev/null
 here -s infra window close 1 >/dev/null
 
-# the window: 1440 x 900 points on the main display, sidebar style
+# the window on the main display, sidebar style
 display=$(swift - 2>/dev/null <<'SWIFT'
 import CoreGraphics
 print(CGMainDisplayID())
 SWIFT
 )
 cat >"$d/state/app.json" <<EOF
-{"tab_style":"sidebar","pane_headers":true,"sidebar_width":230,"window":{"x":160,"y":120,"w":1440,"h":900},"display":$display,"collapsed_hosts":[]}
+{"tab_style":"sidebar","pane_headers":true,"sidebar_width":230,"window":{"x":$wx,"y":$wy,"w":$ww,"h":$wh},"display":$display,"collapsed_hosts":[]}
 EOF
 
 ts=$d/no-tailscale
-# a plain desktop behind the window for its translucency (scripts/deskshot.swift), its own binary
-# so the window's owner is the pid we start
-swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift"
 open_app() {
   take_lock
   "$d/deskshot" backdrop &
@@ -285,19 +348,20 @@ in_front() {
   [ "$top" = "$app_pid" ] || { echo "demo-shots: pid $top is in front, not leon ($app_pid); stopping" >&2; exit 1; }
 }
 # shot NAME [PAD]: leon's frontmost window and PAD points around it, as the screen draws it over the
-# plain desktop; deskshot refuses when any other program's window is in the way
+# plain desktop; deskshot refuses when any other program's window is in the way. Kept at a pixel a
+# point: twice the README's column, sharp at a quarter of the bytes
 shot() {
   front
   in_front
   sleep 0.5
   "$d/deskshot" "$app_pid" "$desk_pid" "$out/$1.png" "${2:-0}"
+  sips -Z $((ww + 2 * ${2:-0})) "$out/$1.png" >/dev/null
   echo "demo-shots: $1.png"
 }
 
 open_app
 shot app-status
 shot app-translucent 80
-sips -Z 1760 "$out/app-translucent.png" >/dev/null # twice the README's width: sharp at half the bytes
 keys 'keystroke "p" using {command down, shift down}'
 keys 'keystroke "log"'
 shot app-palette
@@ -336,6 +400,12 @@ shot app-drawer
 scratch=$(here -s auth block ls --json | python3 -I -c 'import json,sys; print([b["block_id"] for b in json.load(sys.stdin) if b.get("label") == "scratch"][0])')
 here -s auth block close "$notes" >/dev/null
 here -s auth block close "$scratch" >/dev/null
+# the git popup over the agent (ctrl+alt+g, docs/lua/keys.md), hidden again after
+here -s auth focus "$claude" >/dev/null
+keys 'keystroke "g" using {control down, option down}'
+sleep 1
+shot app-popup
+keys 'keystroke "g" using {control down, option down}'
 close_app
 
 # a devbox with an agent waiting for permission and a failed deploy

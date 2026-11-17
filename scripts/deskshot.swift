@@ -4,6 +4,8 @@
 //   deskshot PID BACKDROP out [PAD] capture PID's frontmost window, PAD points around it, from the
 //                                  screen; only when every window in front of the backdrop there is
 //                                  PID's and the backdrop (pid BACKDROP) covers it all (else exit 1)
+//   deskshot window PCT            print "x y w h": PCT % of the main screen's visible frame, centred,
+//                                  in points from the top left (for leon's app.json)
 //   deskshot record PID BACKDROP out.mov [PAD]
 //                                  the same rect as a 30 fps video, no cursor, until SIGTERM or
 //                                  SIGINT; the check runs on every frame, and a take any frame of
@@ -15,6 +17,14 @@ import ScreenCaptureKit
 
 let record = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "record"
 let args = record ? Array(CommandLine.arguments.dropFirst()) : CommandLine.arguments
+
+if args.count == 3 && args[1] == "window", let pct = Double(args[2]) {
+    let s = NSScreen.screens[0], v = s.visibleFrame
+    let (w, h) = ((v.width * pct / 100).rounded(), (v.height * pct / 100).rounded())
+    let top = s.frame.height - v.maxY // the visible frame's top, from the top left
+    print(Int(v.minX + (v.width - w) / 2), Int(top + (v.height - h) / 2), Int(w), Int(h))
+    exit(0)
+}
 
 if args.count == 2 && args[1] == "backdrop" {
     // top to bottom from slate blue to muted violet, one flat colour a row (a dithered gradient
