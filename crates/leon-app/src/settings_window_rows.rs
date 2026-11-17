@@ -39,6 +39,14 @@ fn percent(v: f64) -> String {
     }
 }
 
+fn see_through(v: f64) -> String {
+    if v == 0. {
+        "Opaque".into()
+    } else {
+        percent(v)
+    }
+}
+
 fn points(v: f64) -> String {
     format!("{v} pt")
 }
@@ -58,7 +66,7 @@ pub(super) const TRANSLUCENCY: Steps = Steps {
     min: 0.,
     max: leon_lua::settings::TRANSLUCENCY_MAX,
     whole: false,
-    show: percent,
+    show: see_through,
     range: "0 (opaque) to 80%",
 };
 const FONT_SIZE: Steps =
