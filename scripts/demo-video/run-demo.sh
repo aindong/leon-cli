@@ -232,15 +232,19 @@ case "${1:-}" in
     secs=${TAKE_SECS:-106}
     # screencapture hangs when it is started in the background inside the VM, so it runs in the
     # foreground of its own ssh session, and that session is in the background here
-    ssh $(ssh_opts) "demo@$(cat "$work/.ip")" "rm -f ~/take.mov; screencapture -v -V $secs -x ~/take.mov </dev/null" &
+    ssh $(ssh_opts) "demo@$(cat "$work/.ip")" "rm -f ~/take.mov; screencapture -v -V $secs -x ~/take.mov </dev/null 2>~/take.err; echo \"screencapture: exit \$? \$(cat ~/take.err)\" >&2" &
     rec=$!
-    trap 'kill $rec 2>/dev/null; ssh $(ssh_opts) "demo@$(cat "$work/.ip")" pkill -INT screencapture' EXIT
+    # after a pane closes, a still second ends the VM's recorder early: the parked pointer steps
+    # on the right edge (cropped off) the whole take, so the screen is never still
+    guest key wiggle "$secs" &
+    wig=$!
+    trap 'kill $rec $wig 2>/dev/null; ssh $(ssh_opts) "demo@$(cat "$work/.ip")" pkill -INT screencapture' EXIT
     sleep 1.5 # the capture's own start; the edit trims this head
     t0=$(python3 -c 'import time; print(time.time())')
     : >"$work/take-beats.txt"
     printf '{"t": 0, "type": "take", "lead": 1.5, "width": 2880, "height": 1620}\n' >"$cuefile"
     for ((n = from; n <= to; n++)); do "scene$n"; done
-    wait "$rec"
+    wait "$rec" "$wig"
     trap - EXIT
     ssh $(ssh_opts) "demo@$(cat "$work/.ip")" 'cat ~/take.mov' >"$work/take-raw.mov"
     # 60 fps constant rate at 1080p for editors. The crop keeps 16:9 and takes 32 px off the right:
