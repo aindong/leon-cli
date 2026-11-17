@@ -88,10 +88,10 @@ of [the architecture](../architecture.md).
   default, 0.35, is the strongest step at which body text keeps 4.5:1 on leon-dark and
   leon-light. The app reads it from `server.settings`. `leon attach` doesn't fade.
 - **The translucent window.** `leon.set("translucency", N)` (0 to 0.8, default 0.3) asks GPUI for
-  a blurred window background (`Window::set_background_appearance`; GPUI 0.2.2's blur shows
-  nothing on macOS 27, so the desktop shows through sharp there; an `NSVisualEffectView`
+  a blurred window background (`Window::set_background_appearance`, an `NSVisualEffectView`
   under the content that the system composites, so a desktop changing behind the window draws
-  nothing in leon) and draws the window's own colours with alpha (`glass.rs`). GPUI's renderer
+  nothing in leon; leon sets the view's material, or macOS 27 doesn't blur: `view_glass.rs` in
+  gpui.md's Allowed outside GPUI) and draws the window's own colours with alpha (`glass.rs`). GPUI's renderer
   adds alpha where fills overlap, so each pixel gets one translucent fill at most: the root fills
   nothing, and the sidebar, the title bar, the panes area's gaps (`glass::gaps`, the area less
   the rounded tiles) and each tile fill themselves. Each alpha is what the setting asks, or
@@ -104,7 +104,7 @@ of [the architecture](../architecture.md).
   faded by `fade_inactive_panes` too, so a faded pane keeps its fade's contrast and the focused
   pane is never the paler one; with the default fade the panes stay nearly opaque (0.95 on
   leon-dark) and the chrome carries the translucency (0.82 on leon-dark, 0.79 on leon-light,
-  where the floor stops each from 0.2 up). An inactive window looks the same (GPUI's effect view stays
+  where the floor stops each from 0.2 up). An inactive window keeps its blur (GPUI's effect view stays
   active). The window is opaque, exactly as before, in full screen, with Reduce Transparency on
   (read when the window becomes active), at 0, and until the server's settings first arrive.
   Floats, a drawer sliding out (over tiles that took its room back) and overlays (the palette,

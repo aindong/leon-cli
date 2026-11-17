@@ -15,6 +15,8 @@ pub(super) struct GlassUi {
     glass: Glass,
     /// What GPUI was asked for, oldest first: GPUI's test window keeps no background.
     set: Vec<Bg>,
+    /// How many blur views had their material set after each `Blurred`, oldest first.
+    blur_views: Vec<usize>,
     /// Reduce Transparency as set by a test; None asks the system.
     reduce_transparency: Option<bool>,
     /// Reduce Transparency when last asked (on activation: it is changed in System Settings).
@@ -31,12 +33,68 @@ impl GlassUi {
         GlassUi {
             glass: Glass::OPAQUE,
             set: Vec::new(),
+            blur_views: Vec::new(),
             reduce_transparency: None,
             reduced: false,
             known: false,
             window,
         }
     }
+}
+
+/// Keep at most `KEEP` of `log`, then add `x`.
+fn keep<T>(log: &mut Vec<T>, x: T) {
+    if log.len() == KEEP {
+        log.remove(0);
+    }
+    log.push(x);
+}
+
+/// GPUI 0.2.2's blur view (class `BlurredView`) has the `Selection` material, which macOS 27
+/// doesn't blur: give each in the app `UnderWindowBackground` (21), as upstream GPUI's
+/// `90d8514059` does (docs/architecture/gpui.md, Allowed outside GPUI). Main thread only; GPUI
+/// makes the view in `set_background_appearance(Blurred)`. Returns how many it set.
+#[cfg(target_os = "macos")]
+fn set_blur_material() -> usize {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject, Bool};
+    const UNDER_WINDOW_BACKGROUND: isize = 21;
+    let (Some(blur), Some(app)) = (AnyClass::get(c"BlurredView"), AnyClass::get(c"NSApplication")) else {
+        return 0;
+    };
+    let mut n = 0;
+    unsafe {
+        let app: *mut AnyObject = msg_send![app, sharedApplication];
+        let windows: *mut AnyObject = msg_send![app, windows];
+        let count: usize = msg_send![windows, count];
+        for i in 0..count {
+            let w: *mut AnyObject = msg_send![windows, objectAtIndex: i];
+            let content: *mut AnyObject = msg_send![w, contentView];
+            if content.is_null() {
+                continue;
+            }
+            let views: *mut AnyObject = msg_send![content, subviews];
+            let count: usize = msg_send![views, count];
+            for j in 0..count {
+                let v: *mut AnyObject = msg_send![views, objectAtIndex: j];
+                let is_blur: Bool = msg_send![v, isKindOfClass: blur];
+                if !is_blur.as_bool() {
+                    continue; // GPUI's own view: no `material`
+                }
+                let material: isize = msg_send![v, material];
+                if material != UNDER_WINDOW_BACKGROUND {
+                    let _: () = msg_send![v, setMaterial: UNDER_WINDOW_BACKGROUND];
+                    n += 1;
+                }
+            }
+        }
+    }
+    n
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_blur_material() -> usize {
+    0
 }
 
 /// `color` with `alpha`.
@@ -53,6 +111,11 @@ impl Workspace {
     /// The window backgrounds GPUI was asked for, oldest first.
     pub fn backgrounds_set(&self) -> &[Bg] {
         &self.glass.set
+    }
+
+    /// How many blur views had their material set after each `Blurred`, oldest first.
+    pub fn blur_views_set(&self) -> &[usize] {
+        &self.glass.blur_views
     }
 
     /// Use Reduce Transparency as `on` says whatever the system does (tests); None asks the system.
@@ -76,10 +139,18 @@ impl Workspace {
         let bg = if glass.translucent() { Bg::Blurred } else { Bg::Opaque };
         if self.glass.set.last() != Some(&bg) {
             window.set_background_appearance(bg);
-            if self.glass.set.len() == KEEP {
-                self.glass.set.remove(0);
+            keep(&mut self.glass.set, bg);
+            if bg == Bg::Blurred {
+                // each Blurred after an Opaque is a new view, with GPUI's material again
+                let n = set_blur_material();
+                if n == 0 && cfg!(target_os = "macos") {
+                    static ONCE: std::sync::Once = std::sync::Once::new();
+                    ONCE.call_once(|| {
+                        eprintln!("leon: no blur view from GPUI to set; the desktop shows through unblurred")
+                    });
+                }
+                keep(&mut self.glass.blur_views, n);
             }
-            self.glass.set.push(bg);
         }
         if glass != self.glass.glass {
             self.glass.glass = glass;

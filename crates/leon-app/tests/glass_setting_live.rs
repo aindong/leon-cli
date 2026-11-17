@@ -1,7 +1,8 @@
 //! A running app follows `translucency`: a blurred window with translucent chrome when it is
 //! above 0, opaque at 0 without a restart, and opaque with Reduce Transparency on (read again
 //! when the window becomes active) or in full screen. GPUI's test window keeps no background, so
-//! the app's own log of what it asked GPUI for (`backgrounds_set`) is what is checked.
+//! the app's own log of what it asked GPUI for (`backgrounds_set`), and of the blur views it set
+//! after each `Blurred` (`blur_views_set`), is what is checked.
 
 mod m10b_support;
 
@@ -59,6 +60,11 @@ fn the_window_follows_the_setting(cx: &mut TestAppContext) {
     assert_eq!(again.0, Some(Bg::Blurred));
     let set = ws.read_with(cx, |ws, _| ws.backgrounds_set().to_vec());
     assert!(set.ends_with(&[Bg::Blurred, Bg::Opaque, Bg::Blurred]), "GPUI is asked only when it changes: {set:?}");
+    // each Blurred makes a new blur view, so its material is set again each time; GPUI's test
+    // window has none, so there is nothing to set and nothing breaks
+    let fixed = ws.read_with(cx, |ws, _| ws.blur_views_set().to_vec());
+    let blurred = set.iter().filter(|b| **b == Bg::Blurred).count();
+    assert_eq!(fixed, vec![0; blurred], "one look per Blurred: {fixed:?} for {set:?}");
 }
 
 #[gpui::test]
