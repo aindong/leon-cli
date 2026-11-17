@@ -15,9 +15,10 @@ pub struct ServerInfo {
     pub version: String,
     pub socket: String,
     pub sessions: u64,
-    pub blocks: u64,
+    /// None from a server older than API 1.10.0, as is `started_at`.
+    pub blocks: Option<u64>,
     /// Seconds since the Unix epoch.
-    pub started_at: u64,
+    pub started_at: Option<u64>,
     /// The file its output goes to, when it has one.
     pub log: Option<String>,
     /// It saves its sessions when it stops (it has a state file).
@@ -25,13 +26,14 @@ pub struct ServerInfo {
 }
 
 impl ServerInfo {
-    fn parse(s: &Value) -> ServerInfo {
-        let n = |k: &str| s[k].as_u64().unwrap_or(0);
+    /// From a `server.status` reply (an older server's too).
+    pub fn parse(s: &Value) -> ServerInfo {
+        let n = |k: &str| s[k].as_u64();
         let text = |k: &str| s[k].as_str().map(String::from);
         ServerInfo {
             version: text("version").unwrap_or_default(),
             socket: text("socket").unwrap_or_default(),
-            sessions: n("sessions"),
+            sessions: n("sessions").unwrap_or(0),
             blocks: n("blocks"),
             started_at: n("started_at"),
             log: text("log"),
@@ -122,10 +124,19 @@ impl SettingsWindow {
                 return;
             }
             let _ = this.update(cx, |sw, cx| {
-                sw.restarting = restart;
-                sw.restart_when_stopped(cx);
+                if restart && Self::workspace(cx).is_none() {
+                    sw.error = Some("The server stopped. leon's window is closed: open leon to start it again.".into());
+                } else if restart {
+                    sw.restarting = true;
+                    sw.restart_when_stopped(cx);
+                }
                 sw.read_server(cx);
             });
+            if restart {
+                // a window that never sees the server go must not relaunch leon at some later stop
+                cx.background_executor().timer(std::time::Duration::from_secs(10)).await;
+                let _ = this.update(cx, |sw, _| sw.restarting = false);
+            }
         })
         .detach();
     }
@@ -172,13 +183,16 @@ impl SettingsWindow {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(div().size(px(8.)).rounded_full().bg(rgb(t.done)))
-                    .child(format!("Running for {}", running_for(info.started_at, now))),
+                    .child(Icon::Done.at(ROW_ICON, t.done))
+                    .child(match info.started_at {
+                        Some(at) => format!("Running for {}", running_for(at, now)),
+                        None => "Running".into(),
+                    }),
             )
             .child(fact("Version", info.version.clone()))
             .child(fact("Socket", shown(&info.socket)))
             .child(fact("Sessions", info.sessions.to_string()))
-            .child(fact("Blocks", info.blocks.to_string()));
+            .children(info.blocks.map(|b| fact("Blocks", b.to_string())));
         if let Some(log) = info.log.clone() {
             out = out.child(fact("Log", shown(&log)).child(text_button(
                 t,

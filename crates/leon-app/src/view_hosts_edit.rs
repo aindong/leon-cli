@@ -42,6 +42,10 @@ impl Workspace {
             _ => {}
         }
         drop(later);
+        // everything else that holds a machine's index follows it
+        self.attention.forget_host(i);
+        self.notifier.forget_host(i);
+        self.overview_forget_host(i);
         self.hosts.remove(i);
         self.settings.collapsed_hosts.retain(|l| l != label);
         self.save_settings();

@@ -26,17 +26,26 @@ fn the_warnings_say_what_stop_does() {
     );
 }
 
+/// A server from before API 1.10.0 has no start or block count: the page leaves them out
+/// instead of saying it has run since 1970.
+#[test]
+fn an_older_server_has_no_uptime_or_blocks() {
+    let old = json!({ "state": "running", "pid": 1, "version": "0.0.9", "socket": "/s", "autostarted": false, "sessions": 2 });
+    let i = leon_app::settings_window::ServerInfo::parse(&old);
+    assert_eq!((i.sessions, i.blocks, i.started_at, i.log, i.saves), (2, None, None, None, false));
+}
+
 #[gpui::test]
 fn the_page_shows_this_macs_server(cx: &mut TestAppContext) {
     let (o, mut cx) = open_settings(cx, "");
     o.s.app.call("session.create", json!({})).unwrap();
     click(&mut cx, "section-server");
     let info = |cx: &mut VisualTestContext| o.sw.read_with(cx, |sw, _| sw.server_info()).unwrap();
-    assert!(shows(&mut cx, |cx| matches!(info(cx), Some(Ok(i)) if i.blocks == 1)), "{:?}", info(&mut cx));
+    assert!(shows(&mut cx, |cx| matches!(info(cx), Some(Ok(i)) if i.blocks == Some(1))), "{:?}", info(&mut cx));
     let i = info(&mut cx).unwrap().unwrap();
     let status = o.s.app.call("server.status", json!({})).unwrap();
-    assert_eq!((i.sessions, i.blocks, i.version.as_str()), (1, 1, env!("CARGO_PKG_VERSION")));
-    assert_eq!(i.started_at, status["started_at"].as_u64().unwrap());
+    assert_eq!((i.sessions, i.blocks, i.version.as_str()), (1, Some(1), env!("CARGO_PKG_VERSION")));
+    assert_eq!(i.started_at, status["started_at"].as_u64());
     assert_eq!(i.socket, o.s.app.socket().display().to_string());
     assert!(!i.saves && i.log.is_none(), "an embedded server saves nothing and logs nowhere: {i:?}");
     let seen = ["server-running", "server-stop", "tailscale-section"].map(|s| drawn(&mut cx, s));
@@ -103,7 +112,11 @@ fn restart_asks_first_then_stops_and_starts_leon_again(cx: &mut TestAppContext) 
 fn search_finds_the_server(cx: &mut TestAppContext) {
     let (o, mut cx) = open_settings(cx, "");
     cx.simulate_input("restart");
-    let got = o.sw.read_with(&cx, |sw, _| sw.shown()).unwrap();
+    let restart = o.sw.read_with(&cx, |sw, _| sw.shown()).unwrap();
+    cx.simulate_keystrokes("escape");
+    cx.simulate_input("stop");
+    let stop = o.sw.read_with(&cx, |sw, _| sw.shown()).unwrap();
     o.s.app.stop();
-    assert!(got.contains(&"server".to_string()), "{got:?}");
+    assert!(restart.contains(&"server".to_string()), "{restart:?}"); // and Resume, "after a restart"
+    assert_eq!(stop, ["server"]);
 }

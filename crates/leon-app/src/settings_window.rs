@@ -184,6 +184,9 @@ impl SettingsWindow {
                 sw.reload(cx);
                 sw.read_shortcuts(cx);
                 sw.read_server(cx);
+                if sw._workspace.is_none() {
+                    sw.follow_workspace(cx); // leon's window opened since
+                }
             }
         });
         // full screen has nothing behind it to show

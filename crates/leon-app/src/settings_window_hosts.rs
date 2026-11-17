@@ -61,6 +61,9 @@ impl SettingsWindow {
                 return;
             }
             let _ = this.update(cx, |sw, cx| {
+                if sw.rename.host.as_deref() == Some(label.as_str()) {
+                    sw.rename.host = None; // its field goes with it
+                }
                 let done = Self::workspace(cx).map(|w| w.update(cx, |ws, _, cx| ws.remove_host(&label, cx)));
                 if let Some(Ok(Err(e))) = done {
                     sw.error = Some(format!("can't remove {label}: {e}"));

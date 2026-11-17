@@ -102,6 +102,13 @@ fn remote_hosts_lists_renames_removes_and_adds(cx: &mut TestAppContext) {
     assert_eq!(rows, ["This Mac", "login-box", "ci"]);
     assert!(shows(cx, |cx| line(cx, "unreachable-box").is_none()));
 
+    // search finds a host by its label
+    cx.simulate_input("login");
+    let found = sw.read_with(cx, |sw, _| sw.shown()).unwrap();
+    assert_eq!(found, ["host:login-box"]);
+    cx.simulate_keystrokes("escape");
+    click(cx, "section-hosts");
+
     // Add Host… opens the main window's prompt (Tailscale's machines first)
     click(cx, "hosts-add");
     let open = ws.read_with(cx, |ws, _| ws.palette_open());

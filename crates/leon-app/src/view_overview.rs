@@ -32,6 +32,19 @@ pub(super) struct Overview {
 }
 
 impl Overview {
+    /// The machine at `removed` went (a host removed in Settings): a scope on a later machine
+    /// follows it up one; false when the scope was the removed machine's session.
+    pub(super) fn forget_host(&mut self, removed: usize) -> bool {
+        match &mut self.scope {
+            Scope::Session { host, .. } if *host == removed => false,
+            Scope::Session { host, .. } if *host > removed => {
+                *host -= 1;
+                true
+            }
+            _ => true,
+        }
+    }
+
     /// The selected card's place in `cards`: its tab's, wherever that is now, so a tab closing or
     /// opening before it doesn't move the selection to another tab.
     fn at(&self, cards: &[Card]) -> usize {
@@ -65,6 +78,14 @@ pub(super) struct OverviewUi {
 }
 
 impl Workspace {
+    /// The machine at `removed` went: the open overview follows its machine, and closes when that
+    /// was the one removed.
+    pub(super) fn overview_forget_host(&mut self, removed: usize) {
+        if self.overview.open.as_mut().is_some_and(|o| !o.forget_host(removed)) {
+            self.overview.open = None;
+        }
+    }
+
     pub fn overview_open(&self) -> bool {
         self.overview.open.as_ref().is_some_and(|o| !o.closing)
     }
