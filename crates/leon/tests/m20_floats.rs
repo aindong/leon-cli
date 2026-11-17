@@ -71,7 +71,7 @@ assert(leon.float{block_id=f.block_id})
     e.ok(&["-s", &sid, "do", script.to_str().unwrap()]);
     assert_eq!(e.window(&sid, 0)["floating"].as_array().unwrap().len(), 1);
     // This is the documented recipe, loaded by the server on reload.
-    let docs = include_str!("../../../docs/lua.md");
+    let docs = include_str!("../../../docs/lua/keys.md");
     let recipe = docs
         .split("<!-- m20-scratch -->")
         .nth(1)

@@ -1,5 +1,5 @@
 //! M15 criterion 7 (.agent/plans/2026-11-15-m15-linux-server-cli.md): the docs say how leon runs on
-//! Linux: a platform matrix in the architecture, a Linux install in the README, and what `leon` does
+//! Linux: a platform matrix in the architecture, a Linux install in docs/install.md, and what `leon` does
 //! without the app in docs/cli.md.
 
 mod help_walk;
@@ -31,8 +31,8 @@ fn the_architecture_has_a_platform_matrix() {
 
 #[test]
 fn the_readme_says_how_to_install_on_linux() {
-    let readme = doc("README.md");
-    let s = section(&readme, "### Linux").expect("README.md has a `### Linux` install section");
+    let install = doc("docs/install.md");
+    let s = section(&install, "## Linux").expect("docs/install.md has a `## Linux` install section");
     for word in ["tar", "dpkg", ".deb", "cargo"] {
         assert!(s.contains(word), "the Linux install mentions {word}: {s}");
     }

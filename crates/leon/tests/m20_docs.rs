@@ -4,7 +4,7 @@ fn m20_documented_contract() {
     for text in ["### `leon float", "### `leon toggle", "### `leon dock", "--rect", "--unfloat", "--size", "--create"] {
         assert!(cli.contains(text), "missing {text}");
     }
-    let lua = include_str!("../../../docs/lua.md");
+    let lua = include_str!("../../../docs/lua/keys.md");
     for text in ["leon.float", "leon.toggle", "leon.dock", "<!-- m20-scratch -->"] {
         assert!(lua.contains(text), "missing {text}");
     }

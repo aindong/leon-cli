@@ -1,6 +1,6 @@
 //! M19 criteria 5 and 12 (.agent/plans/2026-11-15-m19-tmux-migrants.md): the docs cover repeat
 //! keys, shifted symbols, the tmux preset, the vim-navigator recipe, copy mode and hints; the
-//! palette and `leon actions` list the new actions. (docs/lua.md's `lua` blocks themselves are run
+//! palette and `leon actions` list the new actions. (docs/lua/*.md's `lua` blocks themselves are run
 //! by m7b_lua_doc.)
 
 mod help_walk;
@@ -10,16 +10,16 @@ fn doc(path: &str) -> String {
     std::fs::read_to_string(help_walk::repo().join(path)).unwrap()
 }
 
-/// The fenced `lua` blocks of docs/lua.md.
+/// The fenced `lua` blocks of docs/lua/keys.md.
 fn lua_blocks() -> Vec<String> {
-    help_walk::blocks(&doc("docs/lua.md"), "lua")
+    help_walk::blocks(&doc("docs/lua/keys.md"), "lua")
 }
 
 #[test]
 fn lua_md_has_the_preset_and_the_recipe() {
-    let lua = doc("docs/lua.md");
+    let lua = doc("docs/lua/keys.md") + &doc("docs/lua/settings.md");
     for word in ["repeats = true", "repeat_time", "hint_patterns", "shift+", "client.copy_mode", "client.hints"] {
-        assert!(lua.contains(word), "docs/lua.md documents {word}");
+        assert!(lua.contains(word), "docs/lua/ documents {word}");
     }
     let preset = lua_blocks().into_iter().find(|b| b.contains("tmux")).expect("a tmux-style preset");
     for key in [
@@ -47,9 +47,9 @@ fn lua_md_has_the_preset_and_the_recipe() {
 
 #[test]
 fn readme_architecture_and_changelog() {
-    let readme = doc("README.md");
+    let readme = doc("docs/shortcuts.md");
     for key in ["⌘⇧C", "⌘⇧H"] {
-        assert!(readme.contains(key), "README lists {key}");
+        assert!(readme.contains(key), "docs/shortcuts.md lists {key}");
     }
     let arch =
         ["docs/architecture.md", "docs/architecture/protocol-and-clients.md", "docs/architecture/keys-copy-hints.md"]

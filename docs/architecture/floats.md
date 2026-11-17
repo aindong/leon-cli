@@ -46,7 +46,7 @@ app draws and moves them (M20b).
   nothing, so opening the app is still.
 - **Actions.** `pane.float`, `pane.new_floating`, `pane.unfloat`, `pane.scratch.toggle` (the
   `scratch` drawer, made on first use) and `pane.dock.left|right|bottom` are the app's own, in the
-  palette and `leon actions`, with default keys in the README. Not yet: `pane.minimize_floating`,
+  palette and `leon actions`, with default keys in docs/shortcuts.md. Not yet: `pane.minimize_floating`,
   since hiding a float without a label needs a server method.
 - **Going there.** The switcher lists every float and drawer as a block row (by label, else
   title, else program; `· hidden` when hidden). Going to one, or to an Activity row, is
