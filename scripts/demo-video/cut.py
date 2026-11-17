@@ -3,9 +3,9 @@
 --print only prints the cut as A:B (seconds of IN), for compose.py --cut.
 
 After ⌘Q the desktop shows (bright wallpaper), then the app opens windowed over it and goes full
-screen. The edit keeps the first second of desktop ("the app is gone") and cuts straight to the
-first full-screen frame after it. Frames are told apart by their mean luma: the dark app full
-screen is about 44, windowed over the wallpaper about 64, the desktop about 104. The run used is
+screen. The edit keeps two seconds of desktop ("the app is gone", long enough to read its caption)
+and cuts straight to the first full-screen frame after it. Frames are told apart by their mean
+luma: the dark app full screen is about 44, windowed over the wallpaper about 64, the desktop about 104. The run used is
 the first bright one after the "11 quit" beat in BEATS (take-beats.txt), so the light-theme moment
 earlier is never taken for it.
 """
@@ -52,7 +52,7 @@ for t, y in after:
     if y <= BRIGHT:
         break
     last = t
-keep_until = first + 1.0
+keep_until = min(first + 2.0, last)
 # 0.35 s more: the first dark frames are macOS's full-screen animation, the window still see-through
 resume = next((t for t, y in frames if t > last and y <= BRIGHT), None)
 resume = resume + 0.35 if resume is not None else None
