@@ -35,8 +35,8 @@ impl Workspace {
         Some((w, ids))
     }
 
-    /// Each pane of window `w` with its rect's size and kind (`pane`, `dock`, `float`), as
-    /// `render_panes` lays them out (a slide moves a drawer, never resizes it).
+    /// Each pane of window `w` with its rect in the pane area and kind (`pane`, `dock`, `float`,
+    /// back to front), as `render_panes` lays them out (a slide moves a drawer, never resizes it).
     pub(super) fn pane_rects(
         &self,
         w: &leon_core::Window,
@@ -45,7 +45,8 @@ impl Workspace {
         let placed = self.placed(w, self.pane_area(window));
         let t = placed.tiles;
         let l = w.layout.as_ref().map(|tree| panes::tiles(tree, w.zoomed.as_deref(), (t.w, t.h))).unwrap_or_default();
-        let tiles = l.panes.into_iter().map(|p| (p.block_id, p.rect, "pane"));
+        let shift = |r: panes::Rect| panes::Rect { x: r.x + t.x, y: r.y + t.y, ..r };
+        let tiles = l.panes.into_iter().map(|p| (p.block_id, shift(p.rect), "pane"));
         let docks = placed.docks.into_iter().map(|d| (d.block_id, d.rect, "dock"));
         tiles.chain(docks).chain(placed.floats.into_iter().map(|f| (f.block_id, f.rect, "float"))).collect()
     }

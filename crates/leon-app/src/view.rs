@@ -238,8 +238,9 @@ pub struct Workspace {
     pulse: gpui::Entity<pulse_view::Pulse>,
     pulse_wanted: bool,
     pulse_root: Option<Subscription>,
-    /// The pane under the mouse: its header shows its controls.
+    /// The pane under the mouse: its header shows its controls; and where the panes were then.
     hovered_pane: Option<String>,
+    hover_rects: Vec<(String, panes::Rect, &'static str)>,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
     overview: overview_view::OverviewUi,
@@ -404,6 +405,7 @@ impl Workspace {
             pulse_wanted: false,
             pulse_root: None,
             hovered_pane: None,
+            hover_rects: Vec::new(),
             fade: Default::default(),
             overview: Default::default(),
             updates,

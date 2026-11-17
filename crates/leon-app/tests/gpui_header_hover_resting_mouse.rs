@@ -1,5 +1,5 @@
-//! A pane that comes under a resting mouse shows its header's controls, as the tile's hover group
-//! did on dev: hovered is where the mouse is, not only a move across the tile's edge.
+//! A pane that comes under a resting mouse shows its header's controls before the mouse moves:
+//! GPUI sends a hover only on a move, so when the panes move the one under the mouse is hovered.
 mod grid_support;
 
 use gpui::{point, Modifiers, MouseButton, TestAppContext, VisualTestContext};
@@ -33,9 +33,7 @@ fn a_pane_split_in_under_a_resting_mouse_shows_working_controls(cx: &mut TestApp
     // its close control sits as far from its tile's right edge as the focused pane's does
     let a_close = center(at(cx, &format!("header-close-{a}")).expect("the focused pane's close control"));
     let close = point(nt.origin.x + nt.size.width - (at_.origin.x + at_.size.width - a_close.x), a_close.y);
-    // the user moves onto it, within the pane, and clicks
-    cx.simulate_mouse_move(close, None::<MouseButton>, Modifiers::none());
-    cx.run_until_parked();
+    // a click there, the mouse not moved since the split: a hidden control takes no click
     cx.simulate_click(close, Modifiers::none());
     let closed = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.pane_title(&n)).is_none());
     s.app.stop();

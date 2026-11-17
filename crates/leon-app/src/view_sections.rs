@@ -197,30 +197,41 @@ impl Workspace {
         };
         let mut collapsed: Vec<String> = self.collapsed.iter().cloned().collect();
         collapsed.sort();
+        let hosts: Vec<HostLabel> = self
+            .hosts
+            .machines()
+            .iter()
+            .map(|m| HostLabel {
+                label: m.label.clone(),
+                state: m.state(),
+                sessions: m.remote().map(|r| r.model().sessions.len()).filter(|n| *n > 0),
+                collapsed: self.host_collapsed(&m.label),
+                tailnet: self.tailnet_line(m),
+            })
+            .collect();
+        let (grouped, selected) = (self.grouped(), self.session_id.clone());
+        // the statuses `render_sidebar` draws: none under a collapsed host, the selected session's
+        // none in top style, a closed session's own, an open one's tabs'
+        let drawn = |r: &SessionRow| match list {
+            SidebarList::Activity => false,
+            _ if grouped && hosts.get(r.host).is_some_and(|h| h.collapsed) => false,
+            SidebarList::SessionsOnly => selected.as_ref() != Some(&r.id) && working(&r.status),
+            _ if collapsed.contains(&r.id) => working(&r.status),
+            _ => r.windows.iter().any(|w| working(&w.status)),
+        };
         Some(SidebarInput {
             theme: self.theme,
             list,
+            working: rows.iter().any(drawn)
+                || activity.iter().any(|(r, _)| matches!(r.status, Indicator::Working { .. })),
             rows: rows.to_vec(),
-            selected: self.session_id.clone(),
+            selected,
             collapsed,
-            grouped: self.grouped(),
-            hosts: self
-                .hosts
-                .machines()
-                .iter()
-                .map(|m| HostLabel {
-                    label: m.label.clone(),
-                    state: m.state(),
-                    sessions: m.remote().map(|r| r.model().sessions.len()).filter(|n| *n > 0),
-                    collapsed: self.host_collapsed(&m.label),
-                    tailnet: self.tailnet_line(m),
-                })
-                .collect(),
+            grouped,
+            hosts,
             width: self.settings.sidebar_width,
             tips: self.tips_key(),
             badge: self.activity_badge(),
-            working: rows.iter().any(|r| working(&r.status) || r.windows.iter().any(|w| working(&w.status)))
-                || activity.iter().any(|(r, _)| matches!(r.status, Indicator::Working { .. })),
             activity,
         })
     }
@@ -321,9 +332,19 @@ impl Workspace {
     /// came on screen and drop those that left; run the Pulse while a shown indicator works. After
     /// `prepare`, with the grids; it notifies only sections, never the workspace.
     pub(super) fn sync_sections(&mut self, window: &Window, cx: &mut Context<Self>) {
-        // a pane gone from under the mouse sent no leave
-        let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
-        self.hovered_pane = self.hovered_pane.take().filter(|id| shown.contains(id));
+        // GPUI sends a hover only when the mouse moves: when the panes move under a mouse resting
+        // on one, the hovered pane is the one now under it (the front one), if any
+        let rects = self.shown().map(|(w, ids)| (self.pane_rects(&w, window), ids));
+        let rects: Vec<_> =
+            rects.map(|(r, ids)| r.into_iter().filter(|(id, _, _)| ids.contains(id)).collect()).unwrap_or_default();
+        if rects != self.hover_rects && self.hovered_pane.is_some() {
+            let (view, area, m) = (window.viewport_size(), self.pane_area(window), window.mouse_position());
+            let (x, y) =
+                (f32::from(m.x) - (f32::from(view.width) - area.0), f32::from(m.y) - (f32::from(view.height) - area.1));
+            let under = rects.iter().rev().find(|(_, r, _)| x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+            self.hovered_pane = under.map(|(id, _, _)| id.clone());
+        }
+        self.hover_rects = rects;
         let stamp = self.input_stamp();
         let wanted = self.section_inputs(window, cx);
         self.sections.retain(|n, _| wanted.iter().any(|(w, _)| w == n));
