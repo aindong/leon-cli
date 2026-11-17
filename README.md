@@ -57,7 +57,10 @@ xattr -dr com.apple.quarantine /Applications/Leon.app
 Each release is at <https://github.com/aindong/leon-cli/releases/latest>: `Leon-<version>-macos-<arch>.zip`
 (Leon.app), a tarball of the CLI for macOS and for Linux, and a `.deb`, each for arm64 and x86_64.
 On macOS, unzip the app into `/Applications` and run the `xattr` command above (a file from a
-browser is quarantined too). On Linux, with the file for your machine downloaded:
+browser is quarantined too). Opened before that, macOS refuses it (it says it could not verify
+Leon is free of malware); run the command and open it again. The CLI tarball for macOS carries
+the flag onto its `leon` as well: after unpacking, run `xattr -dr com.apple.quarantine` on its
+folder. On Linux, with the file for your machine downloaded:
 
 ```sh
 dpkg -i leon_*.deb                               # Debian or Ubuntu, as root
@@ -255,7 +258,7 @@ leon do -e 'print(#leon.session.view().windows .. " tabs")'
 
 ## Roadmap
 
-leon is at 0.1.0, not yet tagged. What has landed, milestone by milestone, is in
+leon 0.1.0 is the first release. What has landed, milestone by milestone, is in
 [docs/roadmap.md](docs/roadmap.md) and [CHANGELOG.md](CHANGELOG.md). What comes next:
 
 - **The app on Linux.** Linux has the server, the CLI, `leon attach`, agents and Lua; the GPUI app
