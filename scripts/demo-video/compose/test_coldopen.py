@@ -38,6 +38,14 @@ class ColdOpenTest(unittest.TestCase):
         cold = pieces("main", None, 117.0, load_cue(cue_file([OVERVIEW, esc])))[0]
         self.assertAlmostEqual(cold[2], 51.8 + 1.5 - 0.05)
 
+    def test_an_overview_too_short_to_open_on_keeps_the_title_card(self):
+        """its esc within a second of the mark: no cold open, never one past the esc"""
+        rows = [{"t": 51.7, "type": "mark", "name": "5 overview"},
+                {"t": 51.7, "type": "key", "combo": "cmd+shift+\\", "show": True},
+                {"t": 52.0, "type": "key", "combo": "esc", "show": True},
+                {"t": 52.5, "type": "key", "combo": "cmd+k", "show": True}]
+        self.assertEqual(pieces("main", None, 117.0, load_cue(cue_file(rows)))[0], ("card", "title", TITLE))
+
     def test_without_the_mark_the_title_card_stays(self):
         ps = pieces("main", None, 106.0, load_cue(cue_file([])))
         self.assertEqual(ps[0], ("card", "title", TITLE))

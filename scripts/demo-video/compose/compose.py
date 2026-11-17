@@ -42,7 +42,7 @@ SQUARE_CUT = [
     (80.8, 84.5, [880, 100, 1120, 360], "Pick a machine from your tailnet.", ""),
     (84.5, 87.5, [0, 0, 1200, 1000], "Its sessions, beside your own.", ""),
     # the banner over the attached terminal, the click, leon on the agent's question
-    (98.6, 102.1, [880, 9, 1968, 1560], "It tells you when an agent needs you.", ""),
+    (98.6, 102.1, [512, 9, 2336, 1560], "It tells you when an agent needs you.", ""),
     (103.0, 104.1, [0, 9, 2848, 1602], "Quit the app…", ""),
     (107.3, 110.8, [0, 9, 2848, 1602], "…everything keeps running.", ""),
     (113.5, 116.0, [0, 0, 2000, 1560], "Keep your work in view.", ""),
@@ -54,13 +54,15 @@ def pieces(mode, cut, duration, cue=()):
     main's cold open is a take piece whose caption is the string cold"""
     if mode == "main":
         a, b = cut if cut else (duration, duration)
-        # from just after the overview opens (its cards fade in) to COLD later, or its esc if sooner
-        m = next((r["vt"] + 0.4 for r in cue if r["type"] == "mark" and r["name"] == "5 overview"), None)
-        if m is None:
+        # from just after the overview opens (its cards fade in) to COLD later, or its esc if sooner;
+        # a title card when the take has no overview, or one too short to open on
+        m = next((r["vt"] for r in cue if r["type"] == "mark" and r["name"] == "5 overview"), None)
+        esc = min((r["vt"] for r in cue if r["type"] == "key" and r["combo"] == "esc" and m is not None and r["vt"] > m),
+                  default=math.inf)
+        if m is None or esc - 0.05 - (m + 0.4) < 1.0:
             head = ("card", "title", TITLE)
         else:
-            esc = min((r["vt"] for r in cue if r["type"] == "key" and r["vt"] > m), default=math.inf)
-            head = ("take", m, min(m + COLD, esc - 0.05), None, "cold")
+            head = ("take", m + 0.4, min(m + 0.4 + COLD, esc - 0.05), None, "cold")
         return [head, ("take", 0.0, a, None, None), ("take", b, duration, None, None), ("card", "end", END)]
     out = [("take", s, e, r, (c, sm)) for s, e, r, c, sm in SQUARE_CUT]
     return out + [("card", "end", 30.0 - sum(e - s for s, e, *_ in SQUARE_CUT))]

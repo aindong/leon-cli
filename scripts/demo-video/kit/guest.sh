@@ -97,6 +97,10 @@ EOF
     # the attach scene's plain terminal: Terminal's own Clear Dark, opaque, a font that reads on a
     # phone, no "Last login" line, no windows restored at launch
     pkill -x Terminal 2>/dev/null && sleep 1
+    # Terminal writes its built-in profiles on its first launch: a VM that never ran it has none
+    if ! defaults read com.apple.Terminal "Window Settings" 2>/dev/null | grep -q '"Clear Dark"'; then
+      open -ga Terminal; sleep 3; pkill -x Terminal; sleep 1
+    fi
     defaults export com.apple.Terminal /tmp/term.plist
     python3 - /tmp/term.plist <<'EOF'
 import plistlib, sys
@@ -190,7 +194,8 @@ json.dump(s, open(p, "w"))' "$d/state/app.json"
       "$LEON_RUNTIME_DIR" "$LEON_STATE_DIR" "$LEON_CONFIG" "$PATH" >"$d/shell.command"
     chmod +x "$d/shell.command"
     open "$d/shell.command"
-    sleep 2
+    for _ in $(seq 100); do pgrep -x Terminal >/dev/null && break; sleep 0.1; done
+    sleep 2 # its window open, moved and cleared, before the app comes back in front
     open "$app" # the app in front again, to go full screen
     sleep 1 ;;
   front) open -a Terminal ;;
@@ -229,5 +234,5 @@ json.dump(s, open(p, "w"))' "$d/state/app.json"
     rm -rf "${t:?}"
     exit $rc ;;
 
-  *) sed -n '2,20s/^# \{0,1\}//p' "$0"; exit 2 ;;
+  *) sed -n '2,21s/^# \{0,1\}//p' "$0"; exit 2 ;;
 esac
