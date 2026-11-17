@@ -52,11 +52,11 @@ for t, y in after:
     if y <= BRIGHT:
         break
     last = t
-keep_until = min(first + 2.0, last)
+keep_until = first + 2.0
 # 0.35 s more: the first dark frames are macOS's full-screen animation, the window still see-through
 resume = next((t for t, y in frames if t > last and y <= BRIGHT), None)
 resume = resume + 0.35 if resume is not None else None
-if resume is None or resume <= keep_until:
+if resume is None or last < keep_until:
     sys.exit("cut.py: the desktop is too short to cut")
 if only_print:
     print(f"{keep_until:.2f}:{resume:.2f}")

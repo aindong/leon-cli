@@ -50,7 +50,8 @@ SQUARE_CUT = [
     (98.4, 100.2, [1440, 9, 1408, 1100], "It tells you when an agent needs you.", ""),
     (100.4, 102.4, [512, 9, 1430, 1400], "It tells you when an agent needs you.", ""),
     (103.0, 104.1, [0, 9, 1430, 1430], "Quit the app…", ""),
-    (107.3, 110.8, [0, 9, 1430, 1430], "…everything keeps running.", ""),
+    # from 0.5 s after full screen: the panes are fitted to it again by then
+    (107.8, 111.3, [0, 9, 1430, 1430], "…everything is still running.", ""),
     (113.5, 116.0, [0, 9, 1430, 1430], "Keep your work in view.", ""),
 ]
 
