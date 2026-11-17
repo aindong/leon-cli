@@ -100,6 +100,7 @@ final class Watcher: NSObject, SCStreamOutput {
   var wantSentinel = false
   var saveDir: String?
   let images = CIContext()
+  var kept: [(UInt64, CGImage)] = []  // save=DIR's frames, written once the watch is over
   var lastHash: UInt64 = 0
   func stream(_ s: SCStream, didOutputSampleBuffer sb: CMSampleBuffer, of type: SCStreamOutputType) {
     guard type == .screen,
@@ -162,13 +163,22 @@ final class Watcher: NSObject, SCStreamOutput {
     }
     let dirty = hash != lastHash
     lastHash = hash
-    if dirty, let dir = saveDir, let cg = images.createCGImage(CIImage(cvPixelBuffer: px), from: CGRect(x: 0, y: 0, width: w, height: h)) {
-      let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])
-      try? png?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(ns(shown)).png"))
+    if dirty, saveDir != nil, let cg = images.createCGImage(CIImage(cvPixelBuffer: px), from: CGRect(x: 0, y: 0, width: w, height: h)) {
+      kept.append((ns(shown), cg))
     }
     seen.append(Seen(at: ns(shown), bar: bar, sentinels: sentinels, dirty: dirty))
   }
   func snapshot() -> [Seen] { lock.lock(); defer { lock.unlock() }; return seen }
+  /// Write save=DIR's frames as DISPLAYTIME.png, off the capture queue; a failed write says so.
+  func writeKept() {
+    guard let dir = saveDir else { return }
+    lock.lock(); let frames = kept; lock.unlock()
+    for (at, cg) in frames {
+      let url = URL(fileURLWithPath: dir).appendingPathComponent("\(at).png")
+      guard let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:]) else { continue }
+      do { try png.write(to: url) } catch { FileHandle.standardError.write("winframes: \(url.path): \(error)\n".data(using: .utf8)!) }
+    }
+  }
   var found: Bool { lock.lock(); defer { lock.unlock() }; return probe != nil }
 }
 
@@ -220,6 +230,9 @@ func run() async {
   let watcher = Watcher()
   watcher.wantSentinel = args[2] == "watch"
   watcher.saveDir = args.first(where: { $0.hasPrefix("save=") }).map { String($0.dropFirst(5)) }
+  if let dir = watcher.saveDir {
+    do { try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true) } catch { fail("save=\(dir): \(error)") }
+  }
   let stream = await capture(win, into: watcher)
   // watch ... floor=PID: also the floor's window, for the capture's own frame rate
   let floor = Watcher()
@@ -249,6 +262,7 @@ func run() async {
       try? await Task.sleep(nanoseconds: 50_000_000)
     }
     for f in watcher.snapshot() where f.at > start { print("frame \(f.at) \(f.sentinels) \(f.dirty ? 1 : 0)") }
+    watcher.writeKept()
     for f in floor.snapshot() where f.at > start { print("floor \(f.at) \(f.dirty ? 1 : 0)") }
     try? await floorStream?.stopCapture()
   } else {
