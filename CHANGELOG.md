@@ -32,7 +32,8 @@ fields it doesn't know. The full policy is in
 
 #### Added
 
-- Leon.app's window shows a blur of what is behind it, tinted by the theme: the sidebar, the
+- Leon.app's window shows what is behind it, tinted by the theme (blurred where GPUI's blur
+  works; on macOS 27 it shows through sharp): the sidebar, the
   title bar and the gaps between panes let the most through, the panes less. Text keeps its
   contrast over any desktop, light or dark: where the setting asks for more than that allows,
   the app draws that part more opaque. Reduce Transparency (System Settings › Accessibility ›

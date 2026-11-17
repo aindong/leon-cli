@@ -62,7 +62,7 @@ impl Glass {
         Glass { see, chrome, pane }
     }
 
-    /// Whether the desktop shows through: the window's background is blurred.
+    /// Whether the desktop shows through: GPUI is asked for a blurred background.
     pub fn translucent(&self) -> bool {
         self.see > 0.
     }
