@@ -3,7 +3,7 @@
 
 mod m20b_support;
 
-use gpui::{Modifiers, TestAppContext};
+use gpui::{Modifiers, TestAppContext, VisualTestContext};
 use leon_app::embedded;
 use m20b_support::*;
 use serde_json::json;
@@ -37,9 +37,11 @@ fn the_switcher_lists_a_hidden_float_and_going_there_shows_it(cx: &mut TestAppCo
 
     cx.simulate_keystrokes("cmd-k");
     cx.simulate_input("notes");
+    // the app's model hears of the toggle on its event thread, after the call returned
+    let first = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.switcher_rows().first().cloned());
+    let listed = shows(cx, |cx| first(cx).is_some_and(|r| r.contains("notes") && r.contains("hidden")));
     let rows = ws.read_with(cx, |ws, _| ws.switcher_rows());
-    let first = rows.first().cloned().unwrap_or_default();
-    assert!(first.contains("notes") && first.contains("hidden"), "a row for the hidden float first: {rows:?}");
+    assert!(listed, "a row for the hidden float first: {rows:?}");
     cx.simulate_keystrokes("enter");
     cx.run_until_parked();
     assert!(eventually(|| !hidden(&app, &sid, &id)), "going there shows it");
@@ -61,8 +63,10 @@ fn the_switcher_lists_a_hidden_drawer(cx: &mut TestAppContext) {
     cx.run_until_parked();
     cx.simulate_keystrokes("cmd-k");
     cx.simulate_input("scratch");
+    let first = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.switcher_rows().first().cloned());
+    let listed = shows(cx, |cx| first(cx).is_some_and(|r| r.contains("scratch") && r.contains("hidden")));
     let rows = ws.read_with(cx, |ws, _| ws.switcher_rows());
-    assert!(rows.first().is_some_and(|r| r.contains("scratch") && r.contains("hidden")), "{rows:?}");
+    assert!(listed, "{rows:?}");
     cx.simulate_keystrokes("enter");
     assert!(eventually(|| !hidden(&app, &sid, &id)), "going there shows the drawer");
     assert!(shows(cx, |cx| drawn(cx, &format!("dock-{id}"))));
