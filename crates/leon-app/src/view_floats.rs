@@ -92,6 +92,11 @@ impl Workspace {
         self.floats.seen.insert(w.id.clone(), now);
     }
 
+    /// Which way drawer `id` slides now: in (true), out (false), or not at all (tests).
+    pub fn slide_direction(&self, id: &str) -> Option<bool> {
+        self.floats.slides.get(id).map(|(_, coming)| *coming)
+    }
+
     /// A drawer's shown part while it slides (rising in, falling out).
     fn slide_of(&self, id: &str) -> Option<f32> {
         let (at, coming) = self.floats.slides.get(id)?;

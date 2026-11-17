@@ -27,8 +27,10 @@ fn a_slide_turned_back_carries_on_from_where_it_is(cx: &mut TestAppContext) {
     frame(&ws, cx, SLIDE / 2);
     let mid = top(cx);
     toggle(false);
-    // the hide arrives by an event: the frame it starts draws the drawer where it was
-    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.sliding()) && drawn(cx, &sel)), "it turns back");
+    // the hide arrives by an event, without moving the clock: the frame it starts draws the drawer
+    // where it was, now sliding out
+    let out = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.slide_direction(&id)) == Some(false);
+    assert!(shows(cx, |cx| out(cx) && drawn(cx, &sel)), "it turns back");
     frame(&ws, cx, Duration::from_millis(1));
     let after = top(cx);
     let mut n = 0;
