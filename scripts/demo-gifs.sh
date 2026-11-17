@@ -195,9 +195,12 @@ typ() { keys "keystroke \"$1\"" "${2:-0.3}"; }
 front
 sleep 1
 
-"$d/deskshot" record "$app_pid" "$desk_pid" "$d/app.mov" &
+"$d/deskshot" record "$app_pid" "$desk_pid" "$d/app.mov" >"$d/rec.log" &
 rec=$!
-sleep 1.2
+# the first key once the recorder runs (its line says so), within 10 s
+for _ in $(seq 100); do grep -q recording "$d/rec.log" && break; sleep 0.1; done
+grep -q recording "$d/rec.log" || { cat "$d/rec.log" >&2; echo "demo-gifs: the recorder didn't start" >&2; exit 1; }
+sleep 0.5
 keys 'keystroke "d" using command down' 1            # split right: the panes make room
 typ "ls src tests"; keys 'key code 36' 1
 keys 'keystroke "]" using {command down, shift down}' 1.3   # the next tab fades in, and back
