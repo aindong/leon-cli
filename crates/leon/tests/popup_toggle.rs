@@ -156,11 +156,35 @@ fn attach_draws_the_popup() {
 
 #[test]
 fn the_git_popup_recipe_toggles_on_its_key() {
+    let (e, sid, id, params) = recipe_popup(true);
+    e.screen_until(&id, "the git log in the pager", |s| s.contains("FAKE_GIT_LOG"));
+    e.ok(&["api", "call", "client.key", &params]);
+    assert_eq!(floats(&e, &sid)[0]["hidden"], true);
+}
+
+// macOS only: its own less (668) is the one measured; Linux runners carry other versions.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_git_popup_recipe_shows_a_short_log_from_the_top() {
+    // less without -c writes a log shorter than the screen at the bottom, the top left blank
+    let (e, sid, id, _) = recipe_popup(false);
+    e.screen_until(&id, "the git log in the pager", |s| s.contains("(END)"));
+    // the screen's rows as they are, leading blank ones too (`capture` drops those)
+    let call = serde_json::json!({ "session_id": sid, "block_id": id, "method": "dev.leon.terminal.format",
+                                   "args": { "trim": false } });
+    let s = e.json(&["api", "call", "block.method", &call.to_string()])["text"].as_str().unwrap().to_string();
+    assert!(s.lines().next().is_some_and(|l| l.contains("FAKE_GIT_LOG")), "the log on the first line:\n{s}");
+}
+
+/// The recipe in docs/lua/keys.md loaded and its key pressed, with a stand-in git (and pager, when
+/// `fake_less`, so it runs the same on every CI machine); returns (env, session, popup, the key's
+/// params).
+fn recipe_popup(fake_less: bool) -> (Env, String, String, String) {
     let e = Env::new();
-    // stand-ins for git and the pager, so the recipe runs the same on every CI machine
     let bin = e.dir.path().join("bin");
     std::fs::create_dir(&bin).unwrap();
-    for (name, body) in [("git", "echo FAKE_GIT_LOG"), ("less", "cat; exec sleep 300")] {
+    let fakes = [("git", "echo FAKE_GIT_LOG"), ("less", "cat; exec sleep 300")];
+    for (name, body) in fakes.into_iter().filter(|(n, _)| fake_less || *n != "less") {
         let p = bin.join(name);
         std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
         std::fs::set_permissions(&p, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
@@ -188,7 +212,5 @@ fn the_git_popup_recipe_toggles_on_its_key() {
     let pop = inspect(&e, &sid, "git");
     let id = pop["block_id"].as_str().unwrap().to_string();
     assert_eq!(floats(&e, &sid)[0]["block_id"], id.as_str());
-    e.screen_until(&id, "the git log in the pager", |s| s.contains("FAKE_GIT_LOG"));
-    e.ok(&["api", "call", "client.key", &params]);
-    assert_eq!(floats(&e, &sid)[0]["hidden"], true);
+    (e, sid, id, params)
 }

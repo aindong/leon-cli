@@ -33,10 +33,12 @@ summary bullet per feature, linking its section here.
 
 - A popup or drawer made by `session.toggle`, or a float made by `session.new_floating`
   (`leon float --new`), starts its program at the size Leon.app gives it. Before, every terminal
-  started at 24x80 and the app's resize came a moment later, while the program was still starting:
-  `less` then drew a short log at the bottom of the popup. The app tells its server how it draws
-  each window with `client.geometry`, an internal method; without the app (`leon attach` only) a
-  new terminal still starts at 24x80 and is resized once a client fits it.
+  started at 24x80 and the app's resize reached the program a moment later, while it was still
+  starting. The app tells its server how it draws each window with `client.geometry`, an internal
+  method; without the app (`leon attach` only) a new terminal still starts at 24x80 and is resized
+  once a client fits it.
+- The git popup recipe runs `less -Rc`: without `-c`, `less` writes a log shorter than the popup
+  at the bottom of the screen and leaves the top blank.
 
 ### Server and Remote Hosts in Settings
 

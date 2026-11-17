@@ -30,7 +30,7 @@ fields it doesn't know. The full policy is in
 
 - **Popups**: `leon toggle LABEL --create --float -- CMD` brings a program up over your work on one key
   and hides it on the next; a toggled drawer gives the focus back too; its program starts at the
-  popup's size, so `less` no longer draws at the bottom; API `1.12.0` ([detail](docs/changelog-detail.md#popups)).
+  popup's size, and the git recipe's `less -Rc` shows a short log from the top; API `1.12.0` ([detail](docs/changelog-detail.md#popups)).
 - **A Settings window with sections**: sections, search and a control for every setting in
   Settings (⌘,), with the keymap and `leon skill status` ([detail](docs/changelog-detail.md#a-settings-window-with-sections)).
 - **Server and Remote Hosts in Settings**: the server's state with Stop and Restart, and the hosts
