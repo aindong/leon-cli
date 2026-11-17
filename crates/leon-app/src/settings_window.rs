@@ -421,7 +421,7 @@ impl Render for SettingsWindow {
             .text_size(px(UI_TEXT))
             .child(self.sidebar(&t, cx))
             .child(
-                div().flex_1().flex().flex_col().child(div().h(px(38.)).flex_none()).child(
+                div().flex_1().min_w(px(0.)).flex().flex_col().child(div().h(px(38.)).flex_none()).child(
                     div()
                         .id("settings-body")
                         .flex_1()

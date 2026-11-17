@@ -96,7 +96,10 @@ impl Steps {
 impl SettingsWindow {
     /// A row's title and, under it, a line of explanation.
     pub(super) fn label(t: &Theme, title: &str, note: &str, locked: bool) -> gpui::Div {
+        // it takes what the control leaves and wraps there, so the control stays in the window
         div()
+            .flex_1()
+            .min_w(px(0.))
             .flex()
             .flex_col()
             .gap(px(2.))

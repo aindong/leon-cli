@@ -208,3 +208,20 @@ fn a_broken_init_lua_leaves_the_other_sections(cx: &mut TestAppContext) {
     assert!(ok, "Shortcuts still shows, with Edit in init.lua to fix the file");
     assert!(blank, "no control shows a value init.lua didn't give");
 }
+
+/// Long text wraps inside the window; it never widens the page past it, which would leave
+/// controls out of reach to the right.
+#[gpui::test]
+fn the_page_fits_the_window(cx: &mut TestAppContext) {
+    let (o, mut vcx) = open_settings(cx, "");
+    click(&mut vcx, "section-general");
+    let width = 900.; // open_settings' window
+    let right = |cx: &mut VisualTestContext, sel: &'static str| cx.debug_bounds(sel).map(|b| f32::from(b.right()));
+    let resume = right(&mut vcx, "choice-resume-never");
+    click(&mut vcx, "section-server");
+    let got = [resume, right(&mut vcx, "tailscale-section")];
+    o.s.app.stop();
+    for r in got {
+        assert!(r.is_some_and(|r| r <= width), "{got:?} past {width}");
+    }
+}
