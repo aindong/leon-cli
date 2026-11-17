@@ -29,7 +29,7 @@ leon.action{
     })
     assert(leon.session.new_split{
       anchor_id = srv.block_id, direction = "vertical", side = "after", ratio = 0.45,
-      layout = term(tally, { "sh", "-c", "touch /tmp/review.log; exec python3 logtally.py /tmp/review.log --follow --top 4" }, "review-tally"),
+      layout = term(tally, { "sh", "-c", "touch /tmp/review.log; exec python3 logtally.py /tmp/review.log --follow --top 7" }, "review-tally"),
     })
     return w.window_id
   end,

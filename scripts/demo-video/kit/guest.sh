@@ -40,12 +40,29 @@ git_history() ( # a subshell: its git identity and cd stay in it
   cd "$1"
   git init -q --template= -b main .
   c; git add -A; git commit -q -m "status page: one row per service, from services.json"
+  c; git commit -q --allow-empty -m "services.json: the first twelve services"
+  c; git commit -q --allow-empty -m "a plain page: no scripts, one stylesheet"
+  c; git commit -q --allow-empty -m "status words: up, degraded, down"
+  c; git commit -q --allow-empty -m "build.py: write index.html next to the sources"
+  c; git commit -q --allow-empty -m "runtests.py: one line per test, with its time"
+  c; git commit -q --allow-empty -m "services.json: group services by region"
+  c; git commit -q --allow-empty -m "sort each region by status, worst first"
+  c; git commit -q --allow-empty -m "a status colour per row, and a legend"
+  git checkout -q -b uptime
+  c; git commit -q --allow-empty -m "uptime over the last 30 days per service"
+  c; git commit -q --allow-empty -m "uptime: round to two decimals"
+  git checkout -q main
+  c; git commit -q --allow-empty -m "build.py: one command builds the page"
+  c; git merge -q --no-ff uptime -m "merge uptime"
   c; git commit -q --allow-empty -m "headline names the worst status"
+  c; git commit -q --allow-empty -m "the page title says the worst status too"
+  c; git commit -q --allow-empty -m "README: how to run the page locally"
   git checkout -q -b latency
   c; git commit -q --allow-empty -m "show p95 latency for each service"
   c; git commit -q --allow-empty -m "a dash when a service reports no latency"
   git checkout -q main
   c; git commit -q --allow-empty -m "escape service names in the page"
+  c; git commit -q --allow-empty -m "tests: a page for 0, 1 and 5000 services"
   c; git merge -q --no-ff latency -m "merge latency"
   c; git commit -q --allow-empty -m "watch.py: rebuild the page when a source changes"
   c; git commit -q --allow-empty -m "5000 services render in under a second"
