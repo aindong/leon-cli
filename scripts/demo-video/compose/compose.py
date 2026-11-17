@@ -35,13 +35,14 @@ TITLE, END = 2.5, 6.0
 
 # the 30-second cut: (video start, end, focus region in raw pixels, caption, small line)
 SQUARE_CUT = [
-    (43.4, 48.4, [1000, 260, 1300, 1000], "115 MB/s, and typing keeps up.", ""),
-    (50.0, 53.4, [0, 0, 1700, 1400], "50 tabs. Every one live.", ""),
-    (80.0, 84.5, [880, 100, 1120, 360], "Pick a machine from your tailnet.", ""),
-    (84.5, 88.0, [0, 0, 1200, 1000], "Its sessions, beside your own.", ""),
+    (43.4, 47.9, [1000, 260, 1300, 1000], "115 MB/s, and typing keeps up.", ""),
+    (50.0, 53.2, [0, 0, 1700, 1400], "50 tabs. Every one live.", ""),
+    (57.2, 60.2, [734, 167, 1200, 1290], "Your git history on one key.", ""),  # the popup, then hidden
+    (80.3, 84.5, [880, 100, 1120, 360], "Pick a machine from your tailnet.", ""),
+    (84.5, 87.5, [0, 0, 1200, 1000], "Its sessions, beside your own.", ""),
     (92.5, 93.6, [0, 9, 2848, 1602], "Quit the app…", ""),
-    (96.8, 100.5, [0, 9, 2848, 1602], "…everything keeps running.", ""),
-    (103.0, 105.9, [0, 0, 2000, 1560], "Keep your work in view.", ""),
+    (96.8, 100.3, [0, 9, 2848, 1602], "…everything keeps running.", ""),
+    (103.0, 105.5, [0, 0, 2000, 1560], "Keep your work in view.", ""),
 ]
 
 

@@ -34,3 +34,19 @@ leon.action{
     return w.window_id
   end,
 }
+
+-- ctrl+alt+g: the repo's history in a popup over the focused pane; the same key hides it.
+-- docs/lua/keys.md's recipe ("A popup on a key"), as it is there.
+leon.action{
+  name = "git_popup",
+  title = "Toggle git popup",
+  run = function()
+    local result, err = leon.toggle{
+      label = "git", create = true, float = true,
+      options = { command = { "sh", "-c", "git log --graph --oneline --decorate --color=always | less -R" } },
+    }
+    if not result then error(err, 0) end
+    return result
+  end,
+}
+leon.bind("ctrl+alt+g", "git_popup")

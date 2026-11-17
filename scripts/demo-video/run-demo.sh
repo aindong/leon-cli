@@ -2,8 +2,8 @@
 # run-demo.sh STEP: the launch demo in the Tart VM `leon-demo`, from the host, over ssh and VNC.
 # Nothing here touches the host's own leon, screen or sessions.
 #   boot          start the VM headless (6 cores) and wait for ssh
-#   push          build keypost, copy target/release/Leon.app and kit/ into the VM (build first:
-#                 scripts/bundle.sh)
+#   push          build keypost, copy target/release/Leon.app (or $DEMO_APP), kit/ and this Mac's
+#                 git into the VM (build first: scripts/bundle.sh)
 #   setup         a clean take: reset, stage the sessions and agents, full screen, pointer parked
 #   take [A-B]    record scenes A to B (default 1-11), pull the clip, make take.mp4 and take-cut.mp4
 #   cue [BEATS]   rebuild a take's cue file (take-cue.jsonl) from its beats file (default the last
@@ -11,6 +11,8 @@
 #   render        the finished videos from the take: renders/leon-demo-main.mp4 (16:9) and
 #                 renders/leon-demo-square-30s.mp4 (1:1), each with an .srt
 #   shot NAME     a VNC screenshot of the VM to shots/NAME.png
+#   retake REV    Leon.app built from commit REV on this Mac (the VM has no toolchain), then push,
+#                 setup, take, render: the real take after a change, in one command
 #   check         the projects' tests in the VM
 #   stop          stop the VM
 # Files go to $DEMO_WORK (default target/demo-video). The one-time VM setup (Setup Assistant,
@@ -100,6 +102,9 @@ mark() {
 }
 scene1() { # the empty state: the lion, "Keep your work in view", the shortcuts
   mark "1 empty state" # no caption: the empty state says it
+  # zoomed on its top half from before the first frame (the move ends at -1.6 s, so the video
+  # opens on it): the empty state's third row names two other products. It chains into scene 2's zoom
+  printf '{"t": -2.3, "type": "zoom", "region": [757, 271, 1365, 768], "until": 4.6}\n' >>"$cuefile"
 }
 scene2() { # build up: a session, a shell, an agent beside it, then the others one by one
   at 4; mark "2 build-up"; k combo cmd+n
@@ -144,20 +149,26 @@ scene5() { # speed: a 400 MB coloured log floods the shell while the agent takes
   at 52; k key esc
   g untabs # the 44 background tabs go: devbox has to show in the sidebar later
 }
-scene6() { # ⌘K to the red agent; it fixes the page
+scene6() { # ⌘K to the red agent; while it fixes the page, its repo's history in a popup
   at 52.5; mark "6 switch"; k combo cmd+k
-  caption "⌘K: any session, tab or pane." 59.5
+  caption "⌘K: any session, tab or pane." 55.1
   at 53.2; k type mobile
-  at 54.2; k key return show
-  at 55; g go status-fix
-  at 55.4; zoom 0 9 1714 900 59.2 # the sidebar and the agent (red tests, the fix, green), to the pane border
+  at 54.2; k key return show # its red tests show for a second
+  # init.lua's ctrl+alt+g, the recipe in docs/lua/keys.md: git log --graph in a centred popup
+  at 55.3; mark "6 popup"; k combo ctrl+alt+g
+  caption "A popup on one key: the repo's history." 59.8 "the same key hides it"
+  at 55.6; g go status-fix # the agent fixes the page under the popup: its sidebar row turns done
+  at 58.4; k combo ctrl+alt+g # hidden: the focus is back on the agent, green
+  at 58.7; zoom 0 9 1714 900 60.2 # the sidebar and the agent, to the pane border
 }
-scene7() { # the theme, live (today: leon config set from the drawer; the palette's Change Theme is coming)
-  at 60; mark "7 theme"; k combo cmd+j
-  caption "Your colours, live." 68.8
-  at 61; k type "leon config set theme leon-light"; k key return
-  at 65; k type "leon config set theme leon-dark"; k key return
-  at 68.5; k combo cmd+j
+scene7() { # Settings (⌘,): Appearance, a theme for the whole app, live, and back
+  at 60.5; mark "7 settings"; k combo cmd+,
+  caption "Your colours, live." 68.8 "Settings · Appearance" # the small line's font has no ⌘
+  at 61.4; k key down # the sidebar's next section: Appearance
+  # macOS is light in the VM, so the live column is "When macOS is light" (the window is centred)
+  at 62.6; k click 937 382 # leon-light
+  at 65.4; k click 937 346 # leon-dark again
+  at 67.6; k key esc # closes it; the main window has the keys again
 }
 scene8() { # leon do: a whole tab from one Lua action
   at 69.5; mark "8 leon do"; k combo cmd+j
@@ -212,7 +223,12 @@ case "${1:-}" in
     cp -R "$here/kit" "$work/kit"
     find "$work/kit" -name __pycache__ -prune -exec rm -rf {} +
     swiftc -O -target arm64-apple-macos13 "$here/keypost.swift" -o "$work/kit/bin/keypost"
-    COPYFILE_DISABLE=1 tar -C "$repo/target/release" -cf - Leon.app |
+    # the popup's git log: the VM has no developer tools, and Apple's git needs only system libraries
+    cp "$(xcrun -f git)" "$work/kit/bin/git"
+    app=${DEMO_APP:-$repo/target/release/Leon.app}
+    [ "$(basename "$app")" = Leon.app ] && [ -x "$app/Contents/MacOS/leon" ] ||
+      { echo "run-demo: no Leon.app at $app (scripts/bundle.sh, or DEMO_APP)" >&2; exit 1; }
+    COPYFILE_DISABLE=1 tar -C "$(dirname "$app")" -cf - Leon.app |
       ssh $(ssh_opts) "demo@$(cat "$work/.ip")" 'rm -rf ~/leon/target/release/Leon.app && mkdir -p ~/leon/target/release && tar -xf - -C ~/leon/target/release'
     COPYFILE_DISABLE=1 tar -C "$work" -cf - kit |
       ssh $(ssh_opts) "demo@$(cat "$work/.ip")" 'rm -rf ~/kit && tar -xf - -C ~ && tar -C ~ -cf - kit | ssh devbox "rm -rf ~/kit && tar -xf - -C ~"'
@@ -232,15 +248,19 @@ case "${1:-}" in
     secs=${TAKE_SECS:-106}
     # screencapture hangs when it is started in the background inside the VM, so it runs in the
     # foreground of its own ssh session, and that session is in the background here
-    ssh $(ssh_opts) "demo@$(cat "$work/.ip")" "rm -f ~/take.mov; screencapture -v -V $secs -x ~/take.mov </dev/null" &
+    ssh $(ssh_opts) "demo@$(cat "$work/.ip")" "rm -f ~/take.mov; screencapture -v -V $secs -x ~/take.mov </dev/null 2>~/take.err; echo \"screencapture: exit \$? \$(cat ~/take.err)\" >&2" &
     rec=$!
-    trap 'kill $rec 2>/dev/null; ssh $(ssh_opts) "demo@$(cat "$work/.ip")" pkill -INT screencapture' EXIT
+    # after a pane closes, a still second ends the VM's recorder early: the parked pointer steps
+    # on the right edge (cropped off) the whole take, so the screen is never still
+    guest key wiggle "$secs" &
+    wig=$!
+    trap 'kill $rec $wig 2>/dev/null; ssh $(ssh_opts) "demo@$(cat "$work/.ip")" "pkill -INT screencapture; pkill -f \"[k]eypost wiggle\""' EXIT
     sleep 1.5 # the capture's own start; the edit trims this head
     t0=$(python3 -c 'import time; print(time.time())')
     : >"$work/take-beats.txt"
     printf '{"t": 0, "type": "take", "lead": 1.5, "width": 2880, "height": 1620}\n' >"$cuefile"
     for ((n = from; n <= to; n++)); do "scene$n"; done
-    wait "$rec"
+    wait "$rec" "$wig"
     trap - EXIT
     ssh $(ssh_opts) "demo@$(cat "$work/.ip")" 'cat ~/take.mov' >"$work/take-raw.mov"
     # 60 fps constant rate at 1080p for editors. The crop keeps 16:9 and takes 32 px off the right:
@@ -271,7 +291,22 @@ case "${1:-}" in
     nice -n 10 "$venv/bin/python" "$here/compose/compose.py" square "$work/take-raw.mov" "$work/take-cue.jsonl" \
       "$work/renders/leon-demo-square-30s.mp4" ;;
   shot) mkdir -p "$work/shots"; vnc shot "$work/shots/$2.png"; echo "$work/shots/$2.png" ;;
+  retake) # retake REV: build REV's Leon.app from a clean export of that commit, then film and render
+    rev=$(git -C "$repo" rev-parse --verify "${2:?run-demo: retake needs a commit}^{commit}")
+    src=$work/src
+    rm -rf "${src:?}"
+    mkdir -p "$src"
+    git -C "$repo" archive "$rev" | tar -xm -C "$src" # -m: now as mtime, so cargo rebuilds what an older REV changed
+    # its own target dir (kept between retakes, so a later commit builds incrementally); the
+    # export has no .git, so the commit goes in by hand for `leon --version`
+    (cd "$src" && LEON_GIT_HASH=${rev:0:12} cargo build --release -p leon --target-dir "$work/cargo")
+    "$src/scripts/bundle.sh" --bin "$work/cargo/release/leon" --out "$work/app/Leon.app"
+    DEMO_APP=$work/app/Leon.app "$0" push
+    "$0" setup
+    "$0" take
+    "$0" render
+    echo "retake: $rev filmed and rendered in $work/renders" ;;
   check) ip >"$work/.ip"; g check ;;
   stop) tart stop "$vm" ;;
-  *) sed -n '2,17s/^# \{0,1\}//p' "$0"; exit 2 ;;
+  *) sed -n '2,19s/^# \{0,1\}//p' "$0"; exit 2 ;;
 esac

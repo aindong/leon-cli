@@ -2,6 +2,7 @@
 //   keypost combo cmd+shift+\ | type "some text" | key return|esc|down|up|left|right|tab|space|backspace
 //   keypost park: move the pointer to the middle of the right edge (a bottom edge shows the Dock)
 //   keypost click X Y: click at X,Y points and park again at once, so no frame shows the pointer
+//   keypost wiggle SECS: keep the parked pointer stepping on the right edge for SECS (see below)
 // Real key codes on a US layout: GPUI's query fields ignore a key event's Unicode string.
 import CoreGraphics
 import Foundation
@@ -82,6 +83,16 @@ case (4, "click"):
     usleep(8_000)
   }
   park()
+case (3, "wiggle"):
+  // the parked pointer steps 4 pt up and down the right edge (in the strip the render crops off)
+  // for SECS: a frame every 0.2 s, so the recorder never sees a still screen after a pane closes
+  guard let secs = Double(a[2]) else { print("keypost: wiggle SECS"); exit(2) }
+  let b = CGDisplayBounds(CGMainDisplayID())
+  for i in 0..<Int(secs * 5) {
+    CGWarpMouseCursorPosition(CGPoint(x: b.maxX - 1, y: b.midY + CGFloat(i % 2 * 4)))
+    usleep(200_000)
+  }
+  park()
 default:
-  print("usage: keypost combo KEYS | key NAME | type TEXT | park | click X Y"); exit(2)
+  print("usage: keypost combo KEYS | key NAME | type TEXT | park | click X Y | wiggle SECS"); exit(2)
 }
