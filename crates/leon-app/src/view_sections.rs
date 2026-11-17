@@ -11,6 +11,7 @@ use gpui::{AnyView, StyleRefinement, WeakEntity};
 
 use super::*;
 use crate::attention;
+use crate::glass::Glass;
 use crate::hosts::HostState;
 
 /// The actions whose shortcuts the sections' tooltips show.
@@ -32,6 +33,8 @@ const TIPPED: [&str; 11] = [
 #[derive(Clone, PartialEq, Debug)]
 pub(super) struct SidebarInput {
     pub(super) theme: Theme,
+    /// How see-through its fill is (`chrome_fill`).
+    pub(super) glass: Glass,
     pub(super) list: SidebarList,
     pub(super) rows: Vec<SessionRow>,
     pub(super) selected: Option<String>,
@@ -61,6 +64,7 @@ pub(super) struct HostLabel {
 #[derive(Clone, PartialEq, Debug)]
 pub(super) struct TitleBarInput {
     pub(super) theme: Theme,
+    pub(super) glass: Glass,
     pub(super) row: Option<SessionRow>,
     pub(super) top_tabs: bool,
     /// The sidebar is hidden: the toolbar's buttons are here.
@@ -221,6 +225,7 @@ impl Workspace {
         };
         Some(SidebarInput {
             theme: self.theme,
+            glass: self.glass(),
             list,
             working: rows.iter().any(drawn)
                 || activity.iter().any(|(r, _)| matches!(r.status, Indicator::Working { .. })),
@@ -248,6 +253,7 @@ impl Workspace {
                 .is_some_and(|r| r.windows.iter().any(|w| matches!(w.status, Some(Indicator::Working { .. }))));
         Some(TitleBarInput {
             theme: self.theme,
+            glass: self.glass(),
             row,
             top_tabs: places.top_tabs,
             hidden: places.sidebar.is_none(),

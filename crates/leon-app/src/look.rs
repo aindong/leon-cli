@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use leon_lua::settings::{load_theme, Settings, FADE_MAX};
+use leon_lua::settings::{load_theme, Settings, FADE_MAX, TRANSLUCENCY_MAX};
 use serde_json::Value;
 
 use crate::theme::{Theme, DARK, LIGHT};
@@ -16,6 +16,8 @@ pub struct Look {
     pub font_size: f32,
     /// How far the panes without the focus are faded (0 to 0.8; 0 is off).
     pub fade: f32,
+    /// How much of the desktop shows through the window (0 to 0.8; 0 is opaque).
+    pub translucency: f32,
 }
 
 impl Default for Look {
@@ -44,6 +46,8 @@ impl Look {
             font_size: settings["font"]["size"].as_f64().unwrap_or(d.font_size) as f32,
             // clamped: the reply is another process's, and a fade past the range can't be read
             fade: settings["fade_inactive_panes"].as_f64().unwrap_or(d.fade_inactive_panes).clamp(0., FADE_MAX) as f32,
+            translucency: settings["translucency"].as_f64().unwrap_or(d.translucency).clamp(0., TRANSLUCENCY_MAX)
+                as f32,
         }
     }
 

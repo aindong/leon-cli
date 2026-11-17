@@ -177,7 +177,7 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
 
 Raw AppKit through objc2 is allowed in these files and for these reasons only; the doc test
 (`crates/leon/tests/gpui_adr.rs`) fails when another file calls `msg_send!` or `objc2::`. No
-entry touches GPUI's window, view or layer.
+entry touches GPUI's window, view or layer, but `view_glass.rs`'s, which says why.
 
 - `input.rs`: `[NSApp currentEvent]` during GPUI's own key dispatch, for the key code and
   characters (GPUI rebuilds a key-code-0 event's text from the layout, so automation's keys
@@ -187,6 +187,17 @@ entry touches GPUI's window, view or layer.
   no badge.
 - `view_floats.rs`: `NSWorkspace.accessibilityDisplayShouldReduceMotion`. GPUI has no Reduce
   Motion setting.
+- `view_floats.rs`: `NSWorkspace.accessibilityDisplayShouldReduceTransparency` (amended
+  2026-11-17 for the translucent window). gpui-0.2.2/src has no accessibility API at all. A read
+  on the main thread, again each time the window becomes active; when it is on, the window goes
+  opaque through GPUI's own `Window::set_background_appearance`. It never drives a frame.
+- `view_glass.rs`: the blur on macOS 27 (amended 2026-11-17). GPUI 0.2.2's blur view (class
+  `BlurredView`) uses the `Selection` material, which doesn't blur there. Right after each
+  `set_background_appearance(Blurred)`, a call that makes a new view after an `Opaque`, leon sets
+  that view's material to `UnderWindowBackground`, as upstream GPUI's `90d8514059` does. It runs
+  on the main thread and changes nothing else. With no such class or view it does nothing and
+  logs once. Remove it when a crates.io GPUI has that commit: its `blurred_view_init_with_frame`
+  sets `UnderWindowBackground`.
 
 To add one: show in GPUI's source that it has no way to do it, keep it to reads or system calls
 on the main thread, list the file here with its reason, and never use it to drive frames (R2).

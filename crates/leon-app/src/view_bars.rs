@@ -74,7 +74,7 @@ impl Workspace {
             .h(px(TITLEBAR))
             .pr(px(8.))
             .pl(px(if hidden { TRAFFIC_LIGHTS } else { 10. }))
-            .bg(rgb(t.chrome))
+            .bg(self.chrome_fill())
             .when(hidden, |d| d.child(self.tool("toolbar-sidebar", Icon::Sidebar, "client.sidebar.toggle", cx)));
         if let Some(row) = row {
             bar = bar.child(

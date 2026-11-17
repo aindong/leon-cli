@@ -141,6 +141,7 @@ impl Workspace {
         // one asked for under an older generation may come after a newer one: it is dropped
         if let Some((_, settings)) = settings.filter(|(g, _)| *g == self.keymap.generation) {
             self.apply_settings(&settings);
+            self.glass_later(cx);
             cx.notify();
         }
         let reply = {

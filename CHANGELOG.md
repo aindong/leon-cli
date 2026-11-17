@@ -13,7 +13,7 @@ the server, the CLI and `leon attach`).
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.7.0`.
+one is `1.8.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -27,6 +27,19 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+### A translucent window in Leon.app
+
+#### Added
+
+- Leon.app's window shows a blur of what is behind it, tinted by the theme: the sidebar, the
+  title bar and the gaps between panes let the most through, the panes less. Text keeps its
+  contrast over any desktop, light or dark: where the setting asks for more than that allows,
+  the app draws that part more opaque. Reduce Transparency (System Settings › Accessibility ›
+  Display) and full screen draw the window opaque.
+- `leon.set("translucency", N)` sets how much shows through, from 0 (opaque, the window as
+  before) to 0.8. `server.settings` reports `translucency`, a new result field on a stable
+  method, so `api_version` goes from `1.7.0` to `1.8.0`.
 
 ### Themes
 
@@ -297,27 +310,6 @@ The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
   drops a server; writes and spawned calls have timeouts. All 14 app findings have their own tests
   (`crates/*/tests/hard_*.rs`).
 
-### Fixed in the daily-driver test
-
-- `leon run`, `split`, `float --new` and Lua find programs on your shell's PATH (login and rc
-  files), even when Leon.app started the server from Finder with launchd's bare PATH.
-- With `-H`, `run`, `split` and `new` start in the host's home or an absolute `--cwd` there, not
-  this machine's directory, and fail within 15 s while the host is unreachable.
-- Sessions are saved while the server runs, so a crash no longer restores an older save.
-- A resume command is offered at one restart, not at every one after it.
-- `leon -H … attach` says when it is reconnecting; its splits keep a remote pane's directory.
-- A program not on PATH fails with one line instead of listing every PATH entry.
-- ⌘K puts what needs you (blocked, error, done) first among equally good matches.
-- Activity rows are titled by the block's label, its program's title or its status title, not
-  the program's name, and a long line ends at a word with "…".
-- A pane header too narrow for its directory cuts the middle (`~/src/…/api/routes`); hovering it
-  shows the whole path.
-- Restored blocks keep the title their program had set until it sets a new one.
-- When `leon server stop` stops the server, the app says so and offers Start It Again or Quit,
-  instead of closing.
-- Key events with key code 0 and text of their own (automation, some accessibility tools) type
-  that text instead of `a`.
-
 ### Added
 
 - The app's leon menu has **About leon**, showing `leon --version`'s string.
@@ -329,5 +321,5 @@ The first release: `leon --version` prints `leon 0.1.0 (<commit>)`. API `1.5.0`.
 
 ### The milestones
 
-Each milestone that built 0.1.0, with what it added, changed and fixed, is in
-[docs/changelog-milestones.md](docs/changelog-milestones.md).
+Each milestone that built 0.1.0, with what it added, changed and fixed, and the fixes from the
+daily-driver test are in [docs/changelog-milestones.md](docs/changelog-milestones.md).

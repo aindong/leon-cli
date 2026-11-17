@@ -25,7 +25,7 @@ pub enum ConfigCmd {
     /// Print a setting from init.lua, or every setting without KEY. Needs no server.
     Get {
         /// theme, font.family, font.size, notifications.done|blocked|error, copy_on_select,
-        /// repeat_time, hint_patterns, resume, fade_inactive_panes or check_for_updates.
+        /// repeat_time, hint_patterns, resume, fade_inactive_panes, check_for_updates or translucency.
         key: Option<String>,
     },
     /// Set a setting in init.lua, keeping the rest of the file, and reload a running server.

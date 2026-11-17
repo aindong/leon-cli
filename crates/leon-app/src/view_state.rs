@@ -86,7 +86,10 @@ impl Workspace {
     pub fn screen_text(&self, block_id: &str) -> Option<String> {
         self.app.model().screens.get(block_id).map(|f| f.text())
     }
+}
 
+/// The selection: the target block, and the session kept live.
+impl Workspace {
     /// The target block and its screen (an empty one until the first arrives: keys typed by then
     /// still go to the program).
     pub(super) fn target_screen(&self) -> Option<(String, String, Arc<render::Frame>)> {
@@ -103,4 +106,22 @@ impl Workspace {
         let w = s.windows.get(s.active)?;
         Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
     }
+
+    /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
+    /// killed from the CLI, or its host went away) hands over to the session now in its place.
+    pub(super) fn settle(&mut self, rows: &[SessionRow]) {
+        if let Some(i) = rows.iter().position(|r| Some(&r.id) == self.session_id.as_ref()) {
+            self.selected_at = i;
+            self.use_host(rows[i].host);
+            return;
+        }
+        self.selected_at = self.selected_at.min(rows.len().saturating_sub(1));
+        self.session_id = rows.get(self.selected_at).map(|r| r.id.clone());
+        self.use_host(rows.get(self.selected_at).map_or(0, |r| r.host));
+    }
+}
+
+/// Where the app keeps its settings: `$LEON_STATE_DIR/app.json` (next to the server's sessions).
+pub fn settings_path() -> Option<PathBuf> {
+    leon_core::paths::state_dir().map(|d| d.join("app.json"))
 }

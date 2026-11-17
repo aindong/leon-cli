@@ -137,11 +137,6 @@ enum Drag {
 // Truncating text cells use `line_clamp(1)`, not `whitespace_nowrap`: GPUI 0.2.2 caches a no-wrap
 // text's size from its first layout (before its width is known) and never adds the ellipsis.
 
-/// Where the app keeps its settings: `$LEON_STATE_DIR/app.json` (next to the server's sessions).
-pub fn settings_path() -> Option<PathBuf> {
-    leon_core::paths::state_dir().map(|d| d.join("app.json"))
-}
-
 pub struct Workspace {
     /// The selected session's machine's remote: what every action acts on.
     app: Rc<Remote>,
@@ -233,16 +228,17 @@ pub struct Workspace {
     /// The sidebar, title bar and headers as views (view_sections.rs), and how often each rendered.
     sections: HashMap<String, sections_view::SectionSlot>,
     section_renders: Rc<RefCell<HashMap<String, u64>>>,
-    /// The spinners' clock, whether a shown indicator works, and the root observing it while it
-    /// draws one itself (the overview's cards).
+    /// The spinners' clock, whether a shown one works, and the root's watch while it draws one.
     pulse: gpui::Entity<pulse_view::Pulse>,
     pulse_wanted: bool,
     pulse_root: Option<Subscription>,
-    /// The pane under the mouse: its header shows its controls; and where the panes were then.
+    /// The pane under the mouse (its header shows its controls), and where the panes were.
     hovered_pane: Option<String>,
     hover_rects: Vec<(String, panes::Rect, &'static str)>,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
+    /// The translucent window (view_glass.rs).
+    glass: glass_view::GlassUi,
     overview: overview_view::OverviewUi,
     /// Leon.app's updates (view_update.rs): the notice, and the look for a release.
     updates: Arc<crate::updates::Updater>,
@@ -320,6 +316,8 @@ impl Workspace {
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |ws, window, cx| {
             ws.window_active = window.is_window_active();
+            ws.note_reduce_transparency();
+            ws.update_glass(window, cx);
             cx.notify()
         });
         // the window's frame and display are kept with the settings, and saved when the app quits
@@ -327,6 +325,7 @@ impl Workspace {
         let bounds = cx.observe_window_bounds(window, |ws, window, cx| {
             ws.settings.window = Some(state::frame(window.window_bounds().get_bounds()));
             ws.settings.display = window.display(cx).map(|d| u32::from(d.id()));
+            ws.update_glass(window, cx); // full screen in or out
             cx.notify(); // the headers' titles are cut to the panes' widths
         });
         let quit = cx.on_app_quit(|ws, _| {
@@ -335,7 +334,8 @@ impl Workspace {
         });
         let release = cx.on_release(|ws, _| ws.save_settings());
         let appearance = cx.observe_window_appearance(window, |ws, window, cx| {
-            ws.set_appearance(look_view::is_dark(window.appearance()), cx)
+            ws.set_appearance(look_view::is_dark(window.appearance()), cx);
+            ws.update_glass(window, cx)
         });
         // shortcut: every notify of the workspace brings what render draws from up to date (R5),
         // and gives each grid and section its input; a pushed screen reaches its grid from the poll
@@ -407,6 +407,7 @@ impl Workspace {
             hovered_pane: None,
             hover_rects: Vec::new(),
             fade: Default::default(),
+            glass: glass_view::GlassUi::new(window.window_handle()),
             overview: Default::default(),
             updates,
             updates_auto: false,
@@ -425,6 +426,8 @@ impl Workspace {
         let seen = ws.screens_seen();
         ws.prepare(); // the first frame comes before any notify
         ws.sync_grids(&seen, cx);
+        ws.note_reduce_transparency();
+        ws.update_glass(window, cx);
         ws.sync_sections(window, cx);
         ws
     }
@@ -446,6 +449,8 @@ mod fade_view;
 mod find;
 #[path = "view_floats.rs"]
 mod floats_view;
+#[path = "view_glass.rs"]
+mod glass_view;
 #[path = "view_grid.rs"]
 mod grid_view;
 #[path = "view_handlers.rs"]
@@ -474,6 +479,7 @@ pub use grid_view::GridDrawn;
 pub use look_view::is_dark;
 pub use pulse_view::Pulse;
 pub use start::{init, install, quits, run};
+pub use state::settings_path;
 #[path = "view_menus.rs"]
 mod menus;
 #[path = "view_model.rs"]

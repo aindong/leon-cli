@@ -121,19 +121,6 @@ impl Workspace {
 }
 
 impl Workspace {
-    /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
-    /// killed from the CLI, or its host went away) hands over to the session now in its place.
-    pub(super) fn settle(&mut self, rows: &[SessionRow]) {
-        if let Some(i) = rows.iter().position(|r| Some(&r.id) == self.session_id.as_ref()) {
-            self.selected_at = i;
-            self.use_host(rows[i].host);
-            return;
-        }
-        self.selected_at = self.selected_at.min(rows.len().saturating_sub(1));
-        self.session_id = rows.get(self.selected_at).map(|r| r.id.clone());
-        self.use_host(rows.get(self.selected_at).map_or(0, |r| r.host));
-    }
-
     /// Run a layout method on the selected session; redraw.
     pub(super) fn call(&mut self, method: &str, mut params: serde_json::Value, cx: &mut Context<Self>) {
         let Some(sid) = self.session_id.clone() else { return };
