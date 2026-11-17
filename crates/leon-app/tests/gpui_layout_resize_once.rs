@@ -21,8 +21,6 @@ fn a_split_resizes_the_old_pane_once_at_the_end(cx: &mut TestAppContext) {
     for _ in 0..4 {
         frame(&ws, cx, LAYOUT / 5);
     }
-    // give a resize sent during the motion time to reach the program
-    std::thread::sleep(std::time::Duration::from_millis(300));
     let during = winched(&s, &a) - before;
     to_rest(&ws, cx);
     let one = shows(cx, |_| winched(&s, &a) - before == 1);

@@ -15,6 +15,7 @@ fn a_pane_that_doesnt_move_doesnt_render(cx: &mut TestAppContext) {
     let b = split_running(&s, &ws, cx, &a, &quiet("b-ready"), "b-ready");
     to_rest(&ws, cx);
     let a_tile = tile(cx, &a).unwrap();
+    let a_before = grid_renders(&ws, cx, &a);
     // b split below: a, on the left, keeps its rect
     let sid = sid(&ws, cx);
     let layout = json!({ "block": { "options": { "command": ["sh", "-c", quiet("c-ready")] } } });
@@ -28,8 +29,10 @@ fn a_pane_that_doesnt_move_doesnt_render(cx: &mut TestAppContext) {
     let n = to_rest(&ws, cx);
     let (a_after, b_after) = (grid_renders(&ws, cx, &a) - a_renders, grid_renders(&ws, cx, &b) - b_renders);
     let a_rest = tile(cx, &a).unwrap();
+    let a_total = grid_renders(&ws, cx, &a) - a_before;
     s.app.stop();
     assert_eq!(a_rest, a_tile, "a didn't move");
     assert_eq!(a_after, 0, "a's grid didn't render over the {n} frames of the motion");
+    assert!(a_total <= 1, "from before the split, only the split's own frame: {a_total}");
     assert!(b_after >= 1, "b's grid, which moved, did");
 }

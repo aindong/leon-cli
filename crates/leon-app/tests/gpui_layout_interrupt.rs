@@ -29,6 +29,8 @@ fn a_second_split_mid_motion_carries_on(cx: &mut TestAppContext) {
     let after = tile(cx, &a).unwrap();
     to_rest(&ws, cx);
     let rest = tile(cx, &a).unwrap();
+    let order = ws.read_with(cx, |ws, _| ws.tile_order());
+    let widths: Vec<f32> = order.iter().map(|id| tile(cx, id).unwrap().2).collect();
     let one = shows(cx, |_| winched(&s, &a) - before == 1);
     run_for(cx, std::time::Duration::from_millis(500));
     let n = winched(&s, &a) - before;
@@ -37,4 +39,8 @@ fn a_second_split_mid_motion_carries_on(cx: &mut TestAppContext) {
     assert!(travel > 10., "it was moving: {mid:?} -> {rest:?}");
     assert!((after.2 - mid.2).abs() < travel * 0.1, "the second split carried on from where it was: {mid:?} {after:?}");
     assert!(one && n == 1, "one SIGWINCH for the pane over both splits, not {n}");
+    assert_eq!(order.len(), 3, "three panes at rest");
+    // a split twice: a and n2 share a's half (quarters), n1 keeps the other half
+    let (q1, q2, half) = (widths[0], widths[1], widths[2]);
+    assert!((q1 - q2).abs() < 2. && (half - (q1 + q2)).abs() < 12., "all end at the final layout: {widths:?}");
 }

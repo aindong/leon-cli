@@ -29,6 +29,8 @@ pub struct GridDrawn {
     pub active: bool,
     pub font_size: f32,
     pub theme: Theme,
+    /// It fits its PTY to its bounds (not a closing pane's, whose block is gone).
+    pub fits: bool,
 }
 
 /// A shown pane's grid view, what it was last given (when it had rendered `given` times), the
@@ -231,6 +233,7 @@ impl Workspace {
             active: i.active,
             font_size: i.font_size,
             theme: i.theme,
+            fits: i.fits,
         })
     }
 }

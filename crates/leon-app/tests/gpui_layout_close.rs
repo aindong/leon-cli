@@ -21,7 +21,8 @@ fn a_closed_pane_shrinks_away_showing_its_last_screen(cx: &mut TestAppContext) {
     let (a1, b1) = (tile(cx, &a).unwrap(), tile(cx, &b).expect("still drawn as it starts to go"));
     frame(&ws, cx, LAYOUT / 2);
     let (a2, b2) = (tile(cx, &a).unwrap(), tile(cx, &b).expect("still drawn half way"));
-    let text = ws.read_with(cx, |ws, _| ws.grid_drew(&b).map(|g| g.text)).unwrap_or_default();
+    let drew = ws.read_with(cx, |ws, _| ws.grid_drew(&b));
+    let (text, fits) = drew.map(|g| (g.text, g.fits)).unwrap_or_default();
     to_rest(&ws, cx);
     let (a3, b3) = (tile(cx, &a).unwrap(), tile(cx, &b));
     s.app.stop();
@@ -29,6 +30,7 @@ fn a_closed_pane_shrinks_away_showing_its_last_screen(cx: &mut TestAppContext) {
     assert!(b2.2 < b0.2 && b2.2 > 0., "half way it is narrower: {b2:?}");
     assert!(a2.2 > a0.2 && a2.2 < a3.2, "and its sibling wider: {a2:?}");
     assert!(text.contains("b-ready"), "it shows its last screen while it goes: {text:?}");
+    assert!(!fits, "and asks for no resize: its block is gone");
     assert!(b3.is_none(), "then it is gone");
     assert!(a3.2 > a0.2 * 2., "and its sibling fills the window: {a3:?}");
 }

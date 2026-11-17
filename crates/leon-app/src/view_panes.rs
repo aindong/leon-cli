@@ -35,26 +35,6 @@ impl Workspace {
         Some((w, ids))
     }
 
-    /// Each pane of window `w` with its rect in the pane area and kind (`pane`, `dock`, `float`,
-    /// back to front), as `render_panes` lays them out (a slide moves a drawer, never resizes it).
-    pub(super) fn pane_rects(
-        &self,
-        w: &leon_core::Window,
-        window: &Window,
-    ) -> Vec<(String, panes::Rect, &'static str)> {
-        let placed = self.placed(w, self.pane_area(window));
-        let t = placed.tiles;
-        let l = w.layout.as_ref().map(|tree| panes::tiles(tree, w.zoomed.as_deref(), (t.w, t.h))).unwrap_or_default();
-        let shift = |r: panes::Rect| panes::Rect { x: r.x + t.x, y: r.y + t.y, ..r };
-        // where the tiles are this frame, while they move (view_layout.rs)
-        let tiles: Vec<_> = match self.layout_tiles(w) {
-            Some(frame) => frame.iter().map(|(id, r)| (id.clone(), *r, "pane")).collect(),
-            None => l.panes.into_iter().map(|p| (p.block_id, shift(p.rect), "pane")).collect(),
-        };
-        let docks = placed.docks.into_iter().map(|d| (d.block_id, d.rect, "dock"));
-        tiles.into_iter().chain(docks).chain(placed.floats.into_iter().map(|f| (f.block_id, f.rect, "float"))).collect()
-    }
-
     /// The active window's panes, placed by `panes::tiles` in the pane area (the window less the
     /// sidebar and the titlebar row, so the size is known now, not a frame late) less its
     /// drawers, then the drawers and floats over them (`render_overlays`).
@@ -92,12 +72,11 @@ impl Workspace {
             target: target(w).map(str::to_string),
             several: l.panes.len() + placed.docks.len() + placed.floats.len() > 1,
         };
-        let mut out = div()
-            .debug_selector(|| sel("panes-area".into()))
-            .flex_1()
-            .relative()
-            .overflow_hidden()
-            .child(self.render_gaps(&l, &placed, &terms));
+        let mut out = div().debug_selector(|| sel("panes-area".into())).flex_1().relative().overflow_hidden().child({
+            // a ghost tile fills itself like the others (the translucent look's holes)
+            let see: Panes = terms.iter().chain(self.layout_ghosts()).cloned().collect();
+            self.render_gaps(&l, &placed, &see)
+        });
         for p in &l.panes {
             if terms.contains(&p.block_id) {
                 out = out.child(self.pane_tile("pane", &p.block_id, p.rect, None, &tiling, cx));
@@ -133,7 +112,8 @@ impl Workspace {
         self.render_overlays(out, placed, &terms, &tiling, (size, origin), cx).when(veil > 0., |d| {
             // a tab or session switch fades in: the chrome over it, fading out (cached grids can't
             // be drawn faint, so the veil goes over them, as the overview's does)
-            d.child(div().absolute().size_full().bg(gpui::Hsla::from(rgb(self.theme.chrome)).opacity(veil)))
+            let veil = gpui::Hsla::from(rgb(self.theme.chrome)).opacity(veil);
+            d.child(div().debug_selector(|| sel("panes-veil".into())).absolute().size_full().bg(veil))
         })
     }
 

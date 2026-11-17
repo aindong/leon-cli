@@ -20,7 +20,18 @@ fn ratios_and_sizes_snap(cx: &mut TestAppContext) {
     let b = split_running(&s, &ws, cx, &a, &quiet("b-ready"), "b-ready");
     to_rest(&ws, cx);
     let sid = sid(&ws, cx);
+    let first = window(&s.app, &ws, cx).0.id;
     let still = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| (ws.animating(), ws.frame_asked()));
+    // a lone pane zoomed: nothing to move
+    let lone = tab_running(&s, &ws, cx, &quiet("l-ready"), "l-ready");
+    to_rest(&ws, cx);
+    zoom(&s, &sid, &lone, true);
+    assert!(shows(cx, |cx| window(&s.app, &ws, cx).0.zoomed.is_some()), "zoomed");
+    cx.run_until_parked();
+    let lone_zoom = still(cx);
+    s.app.call("session.focus_window", json!({ "session_id": sid, "window_id": first })).unwrap();
+    assert!(shows(cx, |cx| tile(cx, &a).is_some()), "back on a's tab");
+    to_rest(&ws, cx);
     let a0 = tile(cx, &a).unwrap();
     let p = json!({ "session_id": sid, "direction": "horizontal", "before_block_id": a, "after_block_id": b,
                     "ratio": 0.3 });
@@ -33,6 +44,7 @@ fn ratios_and_sizes_snap(cx: &mut TestAppContext) {
     act(&ws, cx, "client.sidebar.toggle");
     let sidebar = still(cx);
     s.app.stop();
+    assert_eq!(lone_zoom, (false, false), "a lone pane zoomed moves nothing");
     assert_eq!(ratio, (false, false), "a ratio from the API snaps");
     assert_eq!(resized, (false, false), "a window resize snaps");
     assert_eq!(sidebar, (false, false), "a sidebar toggle snaps");

@@ -28,11 +28,16 @@ fn a_tab_switch_fades_in_under_a_veil(cx: &mut TestAppContext) {
     focus(&second); // back, mid-fade
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.target_block()) == Some(a.clone())), "back on a's tab");
     let v2 = veil(cx);
+    let drawn_veil = drawn(cx, "panes-veil");
+    frame(&ws, cx, FRAME);
+    let v2b = veil(cx);
     let n = to_rest(&ws, cx);
     let v3 = veil(cx);
     s.app.stop();
     assert!(v0 > 0.9, "the first frame is under the veil: {v0}");
     assert!(v1 > 0. && v1 < v0, "half way it is fading: {v1}");
-    assert!(v2 <= v1 + 0.01, "a switch back mid-fade carries on from where the veil is: {v1} -> {v2}");
+    assert!((v2 - v1).abs() < 0.01, "a switch back mid-fade carries on from where the veil is: {v1} -> {v2}");
+    assert!(v2b > 0. && v2b < v2, "and keeps fading: {v2} -> {v2b}");
+    assert!(drawn_veil, "the veil is drawn over the panes area");
     assert_eq!(v3, 0., "then it is gone ({n} frames)");
 }

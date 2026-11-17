@@ -76,8 +76,12 @@ impl Workspace {
             l.veil = (seen_before && !reduce).then_some((now, if veil > 0. { veil } else { 1. }));
             (l.motion, l.settled) = (None, target.iter().cloned().collect());
         } else if changed_shape && l.area == area && !self.reduce_motion() {
-            let motion = self.motion_to(&target, &shape, now);
-            self.layout.motion = Some(motion);
+            // a change that moves nothing (a lone pane zoomed) rests at once
+            let motion = Some(self.motion_to(&target, &shape, now)).filter(|m| !m.ghosts.is_empty() || m.from != m.to);
+            if motion.is_none() {
+                self.layout.settled = target.iter().cloned().collect();
+            }
+            self.layout.motion = motion;
         } else if moved {
             (self.layout.motion, self.layout.settled) = (None, target.iter().cloned().collect());
         }
@@ -138,7 +142,10 @@ impl Workspace {
             .active_window()
             .and_then(|w| w.layout.map(|t| t.leaves().into_iter().map(String::from).collect()))
             .unwrap_or_default();
-        for (id, d) in l.frame.iter().filter(|(id, _)| !target.iter().any(|(t, _)| t == id)) {
+        // a pane still shown out of the tiles (floated, docked) is drawn there, not as a ghost: once
+        let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
+        let gone = |id: &String| !target.iter().any(|(t, _)| t == id) && !shown.contains(id);
+        for (id, d) in l.frame.iter().filter(|(id, _)| gone(id)) {
             let end = if zoom && alive.contains(id) {
                 *d
             } else {
@@ -178,6 +185,26 @@ impl Workspace {
     pub(super) fn layout_tiles(&self, w: &leon_core::Window) -> Option<&[(String, Rect)]> {
         let key = (self.session_id.clone().unwrap_or_default(), w.id.clone());
         (self.layout.seen.as_ref() == Some(&key)).then_some(self.layout.frame.as_slice())
+    }
+
+    /// Each pane of window `w` with its rect in the pane area and kind (`pane`, `dock`, `float`,
+    /// back to front), as `render_panes` lays them out (a slide moves a drawer, never resizes it).
+    pub(super) fn pane_rects(
+        &self,
+        w: &leon_core::Window,
+        window: &Window,
+    ) -> Vec<(String, panes::Rect, &'static str)> {
+        let placed = self.placed(w, self.pane_area(window));
+        let t = placed.tiles;
+        let l = w.layout.as_ref().map(|tree| panes::tiles(tree, w.zoomed.as_deref(), (t.w, t.h))).unwrap_or_default();
+        let shift = |r: panes::Rect| panes::Rect { x: r.x + t.x, y: r.y + t.y, ..r };
+        // where the tiles are this frame, while they move (view_layout.rs)
+        let tiles: Vec<_> = match self.layout_tiles(w) {
+            Some(frame) => frame.iter().map(|(id, r)| (id.clone(), *r, "pane")).collect(),
+            None => l.panes.into_iter().map(|p| (p.block_id, shift(p.rect), "pane")).collect(),
+        };
+        let docks = placed.docks.into_iter().map(|d| (d.block_id, d.rect, "dock"));
+        tiles.into_iter().chain(docks).chain(placed.floats.into_iter().map(|f| (f.block_id, f.rect, "float"))).collect()
     }
 
     /// Whether a layout motion is on its way (no dividers drawn: they would be at the end's place).
