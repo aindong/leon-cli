@@ -71,6 +71,9 @@ impl Workspace {
             .overflow_hidden()
             .items_center()
             .gap(px(4.))
+            // a cached view lays its element out as a root (GPUI view.rs, `layout_as_root`), where
+            // nothing stretches it: without a width the fill stops after the last tab
+            .w_full()
             .h(px(TITLEBAR))
             .pr(px(8.))
             .pl(px(if hidden { TRAFFIC_LIGHTS } else { 10. }))

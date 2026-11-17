@@ -270,11 +270,18 @@ summary bullet per feature, linking its section here.
 - The scratch drawer (⌘J, `leon toggle scratch --create`, `session.toggle` with `create`) opens in
   the directory of the active window's focused block instead of `~`, when its program is still
   running (an exited one's directory is only what its output last said). (F14)
+- The command palette (⌘⇧P), and the switcher and the lists that filter like it, rank a row
+  whose title or keywords have each typed word (two letters or more) as a whole word above fuzzy
+  matches inside other words: `log` puts "Tail the server log" first, not 8th.
 
 #### Fixed
 
 - A one-shot `claude -p` (`--print`, or `-p` among other short flags, `-cp`) in a pane no longer
   registers a resume command. (F10)
+- With a translucent window, the title bar's strip to the right of the last tab is tinted like
+  the rest of the bar instead of showing the desktop through it.
+- A pane header's split, zoom and close controls (unfloat and close on a float or drawer) sit at
+  the header's right end again, not right after its title.
 - Keys typed into `leon -H … attach` while the link is stalled no longer arrive in part (the
   research run left `ec` of `echo …⏎` at the remote prompt). After a quiet second, keys wait for
   a probe of the link; if it fails they are all dropped, and so are keys typed while it
