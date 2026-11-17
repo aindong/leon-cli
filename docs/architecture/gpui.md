@@ -86,8 +86,8 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
 
 - **R1. The root view is thin.** `Workspace` holds the window's state and arranges child views;
   its `render` does no per-pane work and no model work. Why: GPUI renders the root view on every
-  frame it draws, so whatever the root does runs at display rate during any animation. Check: review; once
-  the indicators are views, a test counts what a spinner tick renders.
+  frame it draws, so whatever the root does runs at display rate during any animation. Check: review, and
+  a test counts what a spinner tick renders.
 - **R2. Never schedule or force a frame through AppKit** (`setNeedsDisplay:`, `displayLayer:`, the
   NSView or layer behind the window handle). Use `cx.notify()` for changed state and
   `window.request_animation_frame()` for animation. Why: GPUI's `displayLayer:` path rebuilds the
@@ -100,8 +100,10 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   are siblings under a parent that is not itself a re-rendering cached view: a pane's header (with
   its spinner) and its grid are two cached views side by side, never the grid inside a cached
   view that also holds the spinner, whose every tick would re-render the grid. Keep hover and pressed styles, tooltips and focus changes off
-  hot paths: each refreshes the window and drops every cache for that frame. Check: review, and
-  a render-count test per cached view.
+  hot paths: each refreshes the window and drops every cache for that frame. A cached view's root
+  element is laid out as a root, so it needs its own size (`w_full`, a height) or it
+  shrinks to its content (#44). Check: review, and a render-count
+  test per cached view.
 - **R4. Notify the view whose drawing changed, and only it.** What a view draws lives in that
   view or in an entity it observes (`cx.observe(&model, |_, _, cx| cx.notify())`) or subscribes
   to (`EventEmitter`), keeping the returned `Subscription` in the view (dropping it ends the
@@ -125,13 +127,12 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   Bookkeeping about the frame itself (that one was drawn, what it showed, such as the pane the
   user arrived at) may be scheduled from `render` with `cx.defer_in`, given values read in
   `render` (the model can move before it runs), never model work or I/O: it runs once `Window::draw` returns, outside the draw
-  phase, on macOS and on the test platform (`Window::defer`, `window.rs:1541`; `flush_effects`,
-  `app.rs:1201`), where `window.on_next_frame` never runs (`platform/test/window.rs:235`).
+  phase, on macOS and on the test platform (`Window::defer`), where `window.on_next_frame` never runs.
   Check: review.
 - **R6. Animate through GPUI.** A transition with a fixed length (a slide, a fade) uses
   `with_animation` or `request_animation_frame` in the view that moves; a slow periodic change
   (the spinner, the Activity list's waited times) is a `cx.spawn` loop on
-  `background_executor().timer()` that notifies its own view, as Zed's cursor blink does; indicators that move together share
+  `background_executor().timer()` that notifies its own view; indicators that move together share
   one clock entity they all observe, so N spinners cost one frame a tick, not N. Reduce Motion
   still turns movement off. Why: the cost of an animation is the subtree of the view it
   notifies; a clock in the window's poll redraws the whole window. Check: review, and a test that several working indicators draw no
