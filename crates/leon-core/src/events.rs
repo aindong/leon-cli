@@ -87,8 +87,12 @@ impl State {
         self.emit(&sid, "block_event", inner);
     }
 
-    /// Something a block's terminal reported.
+    /// Something a block's terminal reported. What it reports is stored here, with its event, under
+    /// the state lock a snapshot takes too: an attach sees the value or gets the event, never both.
     pub fn notice(&mut self, block_id: &str, notice: Notice) {
+        if let Ok((_, b)) = self.block(block_id) {
+            b.terminal.remember(&notice);
+        }
         let (name, payload) = match notice {
             Notice::Exited(code) => return self.block_exited(block_id, code),
             Notice::Title(title) => ("title_changed", json!({ "title": title })),

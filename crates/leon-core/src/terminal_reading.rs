@@ -28,7 +28,27 @@ pub(super) struct Reported {
     pub(super) foreground: Option<String>,
 }
 
+/// Store what `notice` reports (its title, pwd or foreground), as a snapshot will show it. A server
+/// does it under its state lock as it sends the event (`State::notice`); the terminal's own threads
+/// do it again once their notify returned, for a terminal no server holds. Never before: a snapshot
+/// in between would show a value whose event is still to come.
+pub(super) fn remember(reported: &Mutex<Reported>, notice: &Notice) {
+    let mut r = lock(reported);
+    match notice {
+        // an empty title (a reset) gives the tab back its program's name
+        Notice::Title(t) => r.title = Some(t.clone()).filter(|t| !t.is_empty()),
+        Notice::Pwd(p) => r.pwd = Some(p.clone()),
+        Notice::Foreground(f) => r.foreground.clone_from(f),
+        _ => {}
+    }
+}
+
 impl Terminal {
+    /// Store what `notice` reports (`remember`); `State::notice` calls it under the state lock.
+    pub(crate) fn remember(&self, notice: &Notice) {
+        remember(&self.reported, notice);
+    }
+
     /// The last title the program set (OSC 0/2), cleaned as the `title_changed` event carries it.
     pub fn title(&self) -> Option<String> {
         lock(&self.reported).title.clone()
@@ -94,15 +114,14 @@ impl Reading {
             let seen = std::mem::take(&mut *lock(&self.seen));
             if let Some(new) = seen.title.map(|t| clean(&t)).filter(|t| title.as_ref() != Some(t)) {
                 title = Some(new.clone());
-                // an empty title (a reset) gives the tab back its program's name
-                lock(&self.reported).title = Some(new.clone()).filter(|t| !t.is_empty());
-                notify(Notice::Title(new));
+                notify(Notice::Title(new.clone()));
+                remember(&self.reported, &Notice::Title(new));
             }
             let new_pwd = fed.pwd.and_then(|p| pwd_url(&p));
             if let Some(new) = new_pwd.filter(|p| pwd.as_ref() != Some(p)) {
                 pwd = Some(new.clone());
-                lock(&self.reported).pwd = Some(new.clone());
-                notify(Notice::Pwd(new));
+                notify(Notice::Pwd(new.clone()));
+                remember(&self.reported, &Notice::Pwd(new));
             }
             if seen.bell {
                 notify(Notice::Bell);
