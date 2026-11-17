@@ -9,7 +9,7 @@ use m9_support::*;
 
 #[gpui::test]
 fn a_spinner_nothing_shows_does_not_redraw(cx: &mut TestAppContext) {
-    let s = setup();
+    let s = plain_setup(); // a login shell's prompt may set the new session's title, drawn meanwhile
     let (ws, cx) = open(cx, &s.app);
     let first = focused(&s.app, &ws, cx);
     cx.simulate_keystrokes("cmd-n"); // a second session, now selected
