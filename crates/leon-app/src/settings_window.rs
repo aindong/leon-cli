@@ -5,6 +5,7 @@
 //! place settings live. A setting init.lua sets by code that can't be rewritten shows read-only,
 //! with `leon config set`'s own message.
 
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -26,6 +27,8 @@ use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
 
 #[path = "settings_window_lists.rs"]
 mod lists;
+#[path = "settings_window_patterns.rs"]
+mod patterns;
 #[path = "settings_window_rows.rs"]
 mod rows;
 #[path = "settings_window_sections.rs"]
@@ -80,20 +83,23 @@ pub struct SettingsWindow {
     config: PathBuf,
     server: Rc<Remote>,
     loaded: Option<Loaded>,
-    /// The last write's refusal, or why init.lua doesn't load.
+    /// The last write's refusal.
     error: Option<String>,
+    /// Why init.lua didn't load, the last time it was read.
+    load_error: Option<String>,
     /// The installed families of `FONTS`.
     fonts: Vec<String>,
     dark: bool,
     /// Changes not written yet, in the order they were made; `saving` while they are written.
-    queue: VecDeque<(String, Value)>,
+    /// Shared with the writer, so a change made just before the window closes is still written.
+    queue: Rc<RefCell<VecDeque<(String, Value)>>>,
     saving: bool,
     /// The section shown when the search field is empty.
     section: Section,
     query: String,
     /// The hint pattern field: what is typed, the pattern it replaces (None: a new one), and why
     /// the last Add was refused.
-    pattern: lists::PatternField,
+    pattern: patterns::PatternField,
     /// The keymap's bindings, once the server has sent them.
     shortcuts: Vec<ShortcutRow>,
     /// `leon skill status`, once read (Err: why it couldn't be).
@@ -109,6 +115,7 @@ pub struct SettingsWindow {
     focus: FocusHandle,
     _appearance: Subscription,
     _activation: Subscription,
+    _bounds: Subscription,
 }
 
 /// Read the config at `config` and the themes beside it (off the UI thread: Lua runs).
@@ -161,6 +168,8 @@ impl SettingsWindow {
                 sw.read_shortcuts(cx);
             }
         });
+        // full screen has nothing behind it to show
+        let bounds = cx.observe_window_bounds(window, |sw, window, cx| sw.update_glass(window, cx));
         let focus = cx.focus_handle();
         window.focus(&focus);
         let mut sw = SettingsWindow {
@@ -168,13 +177,14 @@ impl SettingsWindow {
             server,
             loaded: None,
             error: None,
+            load_error: None,
             fonts,
             dark: crate::view::is_dark(window.appearance()),
-            queue: VecDeque::new(),
+            queue: Rc::default(),
             saving: false,
             section: Section::General,
             query: String::new(),
-            pattern: lists::PatternField::new(cx),
+            pattern: patterns::PatternField::new(cx),
             shortcuts: Vec::new(),
             agents: None,
             glass: Glass::OPAQUE,
@@ -186,6 +196,7 @@ impl SettingsWindow {
             focus,
             _appearance: appearance,
             _activation: activation,
+            _bounds: bounds,
         };
         sw.note_reduce_transparency();
         sw.reload(cx);
@@ -210,8 +221,8 @@ impl SettingsWindow {
 
     fn loaded(&mut self, loaded: Result<Loaded, String>, cx: &mut Context<Self>) {
         match loaded {
-            Ok(l) => self.loaded = Some(l),
-            Err(e) => self.error = Some(e),
+            Ok(l) => (self.loaded, self.load_error) = (Some(l), None),
+            Err(e) => self.load_error = Some(e),
         }
         self.glass_later(cx);
         cx.notify();
@@ -226,7 +237,7 @@ impl SettingsWindow {
 
     /// The last change's refusal, or why init.lua doesn't load.
     pub fn error(&self) -> Option<String> {
-        self.error.clone()
+        self.error.clone().or_else(|| self.load_error.clone())
     }
 
     /// Changes are still being written.
@@ -253,7 +264,7 @@ impl SettingsWindow {
                 o.insert(last.to_string(), value.clone());
             }
         }
-        self.queue.push_back((key.to_string(), value));
+        self.queue.borrow_mut().push_back((key.to_string(), value));
         cx.notify();
         if !self.saving {
             self.saving = true;
@@ -264,9 +275,10 @@ impl SettingsWindow {
 
     /// Write the queued changes, reloading the server after each, then read init.lua again.
     fn write_queue(&mut self, cx: &mut Context<Self>) {
-        let (config, server) = (self.config.clone(), self.server.clone());
+        let (config, server, queue) = (self.config.clone(), self.server.clone(), self.queue.clone());
         cx.spawn(async move |this, cx| {
-            while let Some((key, value)) = this.update(cx, |sw, _| sw.queue.pop_front()).ok().flatten() {
+            loop {
+                let Some((key, value)) = queue.borrow_mut().pop_front() else { break };
                 let path = config.clone();
                 let written = cx.background_executor().spawn(async move { write_setting(&path, &key, &value) }).await;
                 let mut error = written.err();
@@ -284,6 +296,10 @@ impl SettingsWindow {
             }
             let loaded = cx.background_executor().spawn(async move { load(&config) }).await;
             this.update(cx, |sw, cx| {
+                if !sw.queue.borrow().is_empty() {
+                    // a change made while the file was read: write it, and read again after
+                    return sw.write_queue(cx);
+                }
                 sw.saving = false;
                 sw.loaded(loaded, cx);
             })
@@ -394,9 +410,9 @@ impl Render for SettingsWindow {
         self.renders += 1;
         self.pattern.typing = self.pattern.focused(window);
         let t = self.theme();
-        let (text, color) = match (&self.error, self.saving) {
+        let (text, color) = match (self.error(), self.saving) {
             (_, true) => ("Saving…".to_string(), t.muted),
-            (Some(e), _) => (e.clone(), t.error),
+            (Some(e), _) => (e, t.error),
             (None, _) => {
                 let home = std::env::var_os("HOME").map(PathBuf::from);
                 (format!("Every change is written to {}", home_relative(&self.config, home.as_deref())), t.muted)

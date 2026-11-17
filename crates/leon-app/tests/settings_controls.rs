@@ -236,3 +236,51 @@ leon.set("translucency", 0.1 + 0.1)
     o.s.app.stop();
     assert_eq!(got, src, "nothing written");
 }
+
+/// From a hand-written value between steps, a stepper goes to the next step that way, not two.
+#[gpui::test]
+fn a_step_from_between_steps_goes_to_the_next_one(cx: &mut TestAppContext) {
+    let src = "leon.set(\"font.size\", 13.5)\nleon.set(\"repeat_time\", 333)\nleon.set(\"translucency\", 0.33)\n";
+    let (o, mut cx) = open_settings(cx, src);
+    click(&mut cx, "section-appearance");
+    click(&mut cx, "step-up-font.size");
+    click(&mut cx, "step-down-translucency");
+    click(&mut cx, "section-terminal");
+    click(&mut cx, "step-up-repeat_time");
+    let want = [("font.size", json!(14.0)), ("translucency", json!(0.3)), ("repeat_time", json!(350))];
+    let ok = saved(&mut cx, &o) && shows(&mut cx, |cx| want.iter().all(|(k, v)| value(cx, &o, k).as_ref() == Some(v)));
+    let got: Vec<_> = want.iter().map(|(k, _)| value(&mut cx, &o, k)).collect();
+    o.s.app.stop();
+    assert!(ok, "{got:?}");
+}
+
+/// Click a pattern, change it, Enter: that pattern changes in init.lua.
+#[gpui::test]
+fn hint_patterns_edit(cx: &mut TestAppContext) {
+    let (o, mut cx) = open_settings(cx, SRC);
+    click(&mut cx, "section-terminal");
+    click(&mut cx, "pattern-0");
+    cx.simulate_input("d");
+    cx.simulate_keystrokes("enter");
+    let after = json!(["abcd"]);
+    let ok = saved(&mut cx, &o) && shows(&mut cx, |cx| value(cx, &o, "hint_patterns") == Some(after.clone()));
+    let got = text(&o.config);
+    o.s.app.stop();
+    assert!(ok, "the window never showed {after}");
+    assert_eq!(got, config_set_text(SRC, "hint_patterns", &after));
+}
+
+/// ↑ and ↓ in the hint pattern field stay there: the section doesn't change under it.
+#[gpui::test]
+fn arrows_in_the_pattern_field_keep_the_section(cx: &mut TestAppContext) {
+    let (o, mut cx) = open_settings(cx, "");
+    click(&mut cx, "section-terminal");
+    click(&mut cx, "pattern-field");
+    cx.simulate_keystrokes("down up down");
+    let s = o.sw.read_with(&cx, |sw, _| sw.section()).unwrap();
+    cx.simulate_keystrokes("cmd-w");
+    let left = cx.windows().len();
+    o.s.app.stop();
+    assert_eq!(s, leon_app::settings_window::Section::Terminal);
+    assert_eq!(left, 0, "⌘W still closes from the field");
+}

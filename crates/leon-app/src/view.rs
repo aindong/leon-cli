@@ -462,10 +462,12 @@ mod state;
 #[path = "view_theme.rs"]
 mod theme_view;
 pub(crate) use bars::Tip;
+
 // the Settings window draws translucent as this window does
-pub use drawn_view::{drawing, drawn, sel};
 pub(crate) use floats_view::system_reduce_transparency;
 pub(crate) use glass_view::set_blur_material;
+
+pub use drawn_view::{drawing, drawn, sel};
 pub use grid_view::GridDrawn;
 pub use look_view::is_dark;
 pub use start::{init, install, quits, run};

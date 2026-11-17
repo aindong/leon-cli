@@ -56,6 +56,14 @@ pub(super) struct Entry {
     pub keys: &'static [&'static str],
 }
 
+/// A row on the page: a settings row, a shortcut or an agent (by index).
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Item {
+    Entry(&'static str),
+    Shortcut(usize),
+    Agent(usize),
+}
+
 const fn entry(section: Section, id: &'static str, label: &'static str, keys: &'static [&'static str]) -> Entry {
     Entry { section, id, label, keys }
 }
@@ -102,33 +110,43 @@ impl SettingsWindow {
     /// The ids of the rows the page shows, in order: a setting row's id, `shortcut:<action>`,
     /// `agent:<name>`.
     pub fn shown(&self) -> Vec<String> {
-        self.pages().into_iter().flat_map(|(_, ids)| ids).collect()
+        let id = |item: &Item| match *item {
+            Item::Entry(id) => id.to_string(),
+            Item::Shortcut(i) => self.shortcuts[i].id(),
+            Item::Agent(i) => match &self.agents {
+                Some(Ok(list)) => format!("agent:{}", list[i].agent),
+                _ => String::new(),
+            },
+        };
+        self.pages().into_iter().flat_map(|(_, items)| items).map(|i| id(&i)).collect()
     }
 
     /// What the page shows: the section, or with a query each section with a match, and its rows.
-    fn pages(&self) -> Vec<(Section, Vec<String>)> {
+    fn pages(&self) -> Vec<(Section, Vec<Item>)> {
         let q = self.query.trim().to_lowercase();
-        let pick = |s: Section| -> Vec<String> {
+        let pick = |s: Section| -> Vec<Item> {
             let any = q.is_empty();
-            let mut ids: Vec<String> = ENTRIES
+            let mut items: Vec<Item> = ENTRIES
                 .iter()
                 .filter(|e| e.section == s && (any || matches(&q, &[e.label, s.name(), &e.keys.join(" ")])))
-                .map(|e| e.id.to_string())
+                .map(|e| Item::Entry(e.id))
                 .collect();
             if s == Shortcuts {
-                ids.extend(self.shortcuts.iter().filter(|r| any || r.matches(&q)).map(ShortcutRow::id));
+                let hits = self.shortcuts.iter().enumerate().filter(|(_, r)| any || r.matches(&q));
+                items.extend(hits.map(|(i, _)| Item::Shortcut(i)));
             }
             if s == Agents {
                 if let Some(Ok(list)) = &self.agents {
-                    ids.extend(list.iter().filter(|a| any || a.matches(&q)).map(|a| format!("agent:{}", a.agent)));
+                    let hits = list.iter().enumerate().filter(|(_, a)| any || a.matches(&q));
+                    items.extend(hits.map(|(i, _)| Item::Agent(i)));
                 }
             }
-            ids
+            items
         };
         if q.is_empty() {
             return vec![(self.section, pick(self.section))];
         }
-        Section::ALL.into_iter().map(|s| (s, pick(s))).filter(|(_, ids)| !ids.is_empty()).collect()
+        Section::ALL.into_iter().map(|s| (s, pick(s))).filter(|(_, items)| !items.is_empty()).collect()
     }
 
     pub(super) fn sidebar(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
@@ -216,7 +234,7 @@ impl SettingsWindow {
                     .child(format!("No setting or shortcut matches “{}”", self.query.trim())),
             );
         }
-        for (s, ids) in pages {
+        for (s, items) in pages {
             let mut part = div().flex().flex_col().gap(px(22.)).child(
                 div()
                     .text_size(px(UI_TEXT + 6.))
@@ -228,17 +246,15 @@ impl SettingsWindow {
                 part = part.child(self.shortcuts_intro(t, cx));
             }
             let (mut shortcuts, mut agents) = (vec![], vec![]);
-            for id in &ids {
-                if let Some(action) = id.strip_prefix("shortcut:") {
-                    shortcuts.push(action.to_string());
-                } else if let Some(name) = id.strip_prefix("agent:") {
-                    agents.push(name.to_string());
-                } else {
-                    part = part.child(self.entry(id, t, cx));
+            for item in items {
+                match item {
+                    Item::Entry(id) => part = part.child(self.entry(id, t, cx)),
+                    Item::Shortcut(i) => shortcuts.push(i),
+                    Item::Agent(i) => agents.push(i),
                 }
             }
             if !shortcuts.is_empty() {
-                part = part.child(self.shortcut_rows(&ids, t));
+                part = part.child(self.shortcut_rows(&shortcuts, t));
             }
             if !agents.is_empty() {
                 part = part.child(self.agent_rows(&agents, t));

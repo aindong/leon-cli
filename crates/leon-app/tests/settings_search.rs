@@ -46,6 +46,10 @@ fn search_finds_rows_by_label_and_by_lua_name(cx: &mut TestAppContext) {
     let got = search(cx, &o, "split.right");
     assert_eq!(got, vec!["shortcut:pane.split.right".to_string()]);
 
+    // one row per binding: ⌘3 alone, though ⌘1…⌘9 all run client.tab.goto
+    let got = search(cx, &o, "go to tab 3");
+    assert_eq!(got, vec!["shortcut:client.tab.goto".to_string()]);
+
     let got = search(cx, &o, "zzzz");
     assert!(got.is_empty(), "{got:?}");
     assert!(drawn(cx, "no-results"), "no match says so");
@@ -70,4 +74,22 @@ fn a_backspace_edits_the_query(cx: &mut TestAppContext) {
     o.s.app.stop();
     assert_eq!(q, "hint");
     assert!(got.contains(&"hint_patterns".to_string()), "{got:?}");
+}
+
+/// A binding init.lua adds is found too, beside the default for the same action.
+#[gpui::test]
+fn search_finds_a_config_binding(cx: &mut TestAppContext) {
+    let (o, mut cx) = open_settings(cx, "leon.bind(\"cmd+shift+y\", \"pane.zoom\")\n");
+    assert!(shows(&mut cx, |cx| o.sw.read_with(cx, |sw, _| !sw.shortcuts().is_empty()).unwrap()));
+    let got = search(&mut cx, &o, "zoom pane");
+    let keys: Vec<String> =
+        o.sw.read_with(&cx, |sw, _| sw.shortcuts())
+            .unwrap()
+            .into_iter()
+            .filter(|r| r.title == "Zoom Pane")
+            .map(|r| r.keys)
+            .collect();
+    o.s.app.stop();
+    assert_eq!(got, vec!["shortcut:pane.zoom".to_string(); 2], "the default and init.lua's");
+    assert!(keys.contains(&"⌘⇧Y".to_string()), "{keys:?}");
 }

@@ -166,3 +166,24 @@ fn idle_it_draws_nothing(cx: &mut TestAppContext) {
     o.s.app.stop();
     assert_eq!(after, before, "no renders while nothing changes");
 }
+
+/// With no config folder yet, Edit in init.lua makes it and an empty init.lua, as `leon config
+/// set` would, so the editor has a file to open.
+#[gpui::test]
+fn edit_in_init_lua_makes_its_folder(cx: &mut TestAppContext) {
+    let s = m9_support::setup_with_config("");
+    let config = s.dir.path().join("fresh").join("leon").join("init.lua");
+    let remote = std::rc::Rc::new(leon_app::remote::Remote::connect(s.app.socket()).expect("attached"));
+    let at = config.clone();
+    let sw = cx.update(|cx| leon_app::settings_window::SettingsWindow::open(at, remote, cx)).expect("opened");
+    let mut vcx = VisualTestContext::from_window(sw.into(), cx);
+    vcx.simulate_resize(gpui::size(gpui::px(900.), gpui::px(2400.)));
+    assert!(shows(&mut vcx, |cx| sw.read_with(cx, |sw, _| sw.row("theme").is_some()).unwrap()));
+    click(&mut vcx, "section-shortcuts");
+    click(&mut vcx, "edit-init-lua");
+    let err = sw.read_with(&vcx, |sw, _| sw.error()).unwrap();
+    let made = config.exists();
+    s.app.stop();
+    assert!(made, "init.lua not made: {err:?}");
+    assert_eq!(vcx.opened_url(), Some(format!("file://{}", config.display())));
+}

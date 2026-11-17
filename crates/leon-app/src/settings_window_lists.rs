@@ -1,32 +1,9 @@
-//! The Settings window's lists: the hint patterns (an editable list, each pattern checked before
-//! it is written), the keymap's shortcuts (read-only) and the agents' skill (`leon skill status`).
-
-use leon_core::hints::{compile, MAX_PATTERNS};
+//! The Settings window's read-only lists: the keymap's shortcuts and the agents' skill
+//! (`leon skill status`).
 
 use super::sections::matches;
 use super::*;
 use crate::keymap::{keys_text, Keymap};
-
-/// The hint pattern field.
-pub(super) struct PatternField {
-    focus: FocusHandle,
-    draft: String,
-    /// The pattern the draft replaces; None adds one.
-    editing: Option<usize>,
-    error: Option<String>,
-    /// The field had the focus when the window last rendered.
-    pub(super) typing: bool,
-}
-
-impl PatternField {
-    pub(super) fn new(cx: &mut Context<SettingsWindow>) -> Self {
-        PatternField { focus: cx.focus_handle(), draft: String::new(), editing: None, error: None, typing: false }
-    }
-
-    pub(super) fn focused(&self, window: &Window) -> bool {
-        self.focus.is_focused(window)
-    }
-}
 
 /// One binding, as Shortcuts lists it.
 #[derive(Debug, Clone, PartialEq)]
@@ -145,11 +122,6 @@ impl SettingsWindow {
         self.agents.clone()
     }
 
-    /// Why the last hint pattern wasn't added.
-    pub fn pattern_error(&self) -> Option<String> {
-        self.pattern.error.clone()
-    }
-
     /// Ask the server for its keymap (init.lua's bindings over the defaults).
     pub(super) fn read_shortcuts(&mut self, cx: &mut Context<Self>) {
         let server = self.server.clone();
@@ -197,166 +169,6 @@ impl SettingsWindow {
         .detach();
     }
 
-    /// The hint pattern list: each pattern (click to edit it, × to remove it) and a field to add one.
-    pub(super) fn patterns(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let row = self.row("hint_patterns");
-        let locked = Self::is_locked(&row);
-        let list: Vec<String> = row
-            .as_ref()
-            .and_then(|r| r.value.as_array().cloned())
-            .unwrap_or_default()
-            .iter()
-            .filter_map(|p| p.as_str().map(String::from))
-            .collect();
-        let note = "Regular expressions hints (⌘⇧H) label too, besides URLs, paths and hashes; at most 32";
-        let mut out = div().flex().flex_col().gap(px(6.)).child(Self::label(t, "Hint patterns", note, locked));
-        for (i, p) in list.iter().enumerate() {
-            let (sel, editing) = (format!("pattern-{i}"), self.pattern.editing == Some(i));
-            let text = p.clone();
-            out = out.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .id(SharedString::from(sel.clone()))
-                            .debug_selector(|| sel)
-                            .flex_1()
-                            .px(px(8.))
-                            .py(px(4.))
-                            .rounded(px(6.))
-                            .font_family("Menlo")
-                            .bg(rgb(if editing { t.selected } else { t.bg }))
-                            .when(!locked, |d| {
-                                d.cursor_pointer().on_click(cx.listener(move |sw, _, window, cx| {
-                                    sw.pattern.draft = text.clone();
-                                    sw.pattern.editing = Some(i);
-                                    sw.pattern.error = None;
-                                    window.focus(&sw.pattern.focus);
-                                    cx.notify();
-                                }))
-                            })
-                            .child(p.clone()),
-                    )
-                    .child(rows::button(t, format!("pattern-remove-{i}"), "×", !locked, cx, {
-                        let list = list.clone();
-                        move |sw, cx| {
-                            let mut rest = list.clone();
-                            rest.remove(i);
-                            sw.pattern.editing = None;
-                            sw.choose("hint_patterns", json!(rest), cx);
-                        }
-                    })),
-            );
-        }
-        if !locked {
-            let f = &self.pattern;
-            let shown = if f.draft.is_empty() && !f.typing {
-                div().text_color(rgb(t.muted)).child("Add a pattern, such as [A-Z]+-\\d+")
-            } else {
-                div().child(format!("{}{}", f.draft, if f.typing { "▏" } else { "" }))
-            };
-            out = out.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .id("pattern-field")
-                            .debug_selector(|| "pattern-field".into())
-                            .track_focus(&f.focus)
-                            .on_key_down(cx.listener(Self::pattern_key))
-                            .flex_1()
-                            .px(px(8.))
-                            .py(px(4.))
-                            .rounded(px(6.))
-                            .border_1()
-                            .border_color(rgb(if f.typing { t.accent } else { t.border }))
-                            .bg(rgb(t.bg))
-                            .font_family("Menlo")
-                            .cursor_text()
-                            .child(shown),
-                    )
-                    .child(
-                        div()
-                            .id("pattern-add")
-                            .debug_selector(|| "pattern-add".into())
-                            .px(px(10.))
-                            .py(px(4.))
-                            .rounded(px(6.))
-                            .border_1()
-                            .border_color(rgb(t.border))
-                            .cursor_pointer()
-                            .hover(|d| d.bg(rgb(t.hover)))
-                            .on_click(cx.listener(|sw, _, _, cx| sw.add_pattern(cx)))
-                            .child(if f.editing.is_some() { "Save" } else { "Add" }),
-                    ),
-            );
-            if let Some(why) = &f.error {
-                out = out.child(
-                    div()
-                        .debug_selector(|| "pattern-error".into())
-                        .text_size(px(SECONDARY_TEXT))
-                        .text_color(rgb(t.error))
-                        .child(why.clone()),
-                );
-            }
-        }
-        out.children(Self::locked(t, "hint_patterns", &row))
-    }
-
-    /// A key in the hint pattern field. ⌘ keys go on to the window (⌘W).
-    fn pattern_key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let k = &e.keystroke;
-        let m = &k.modifiers;
-        if m.platform {
-            return;
-        }
-        let f = &mut self.pattern;
-        match k.key.as_str() {
-            "enter" => self.add_pattern(cx),
-            "escape" => {
-                (f.draft, f.editing, f.error) = (String::new(), None, None);
-                window.focus(&self.focus);
-            }
-            "backspace" => {
-                f.draft.pop();
-            }
-            "space" => f.draft.push(' '),
-            _ => match k.key_char.as_deref().filter(|c| !c.is_empty() && !m.control && !m.alt) {
-                Some(typed) => f.draft.extend(typed.chars().filter(|c| !c.is_control())),
-                None => return,
-            },
-        }
-        cx.stop_propagation();
-        cx.notify();
-    }
-
-    /// Add the field's pattern (or save the one it edits), once it compiles and the list has room;
-    /// otherwise say why under the field and write nothing.
-    fn add_pattern(&mut self, cx: &mut Context<Self>) {
-        let Some(row) = self.row("hint_patterns").filter(|r| r.read_only.is_none()) else { return };
-        let mut list: Vec<Value> = row.value.as_array().cloned().unwrap_or_default();
-        let f = &mut self.pattern;
-        let draft = f.draft.clone();
-        if let Err(why) = compile(&draft) {
-            f.error = Some(why);
-            return cx.notify();
-        }
-        match f.editing.filter(|i| *i < list.len()) {
-            Some(i) => list[i] = json!(draft),
-            None if list.len() >= MAX_PATTERNS => {
-                f.error = Some(format!("at most {MAX_PATTERNS} hint patterns; remove one first"));
-                return cx.notify();
-            }
-            None => list.push(json!(draft)),
-        }
-        (f.draft, f.editing, f.error) = (String::new(), None, None);
-        self.choose("hint_patterns", Value::Array(list), cx);
-    }
-
     /// Shortcuts' first line, with the button that opens init.lua.
     pub(super) fn shortcuts_intro(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
         div()
@@ -383,9 +195,14 @@ impl SettingsWindow {
                     .cursor_pointer()
                     .hover(|d| d.bg(rgb(t.hover)))
                     .on_click(cx.listener(|sw, _, _, cx| {
-                        // an editor can't open a file that isn't there: start an empty one
-                        if let Err(e) = std::fs::OpenOptions::new().append(true).create(true).open(&sw.config) {
+                        // an editor can't open a file that isn't there: start an empty one, as
+                        // `leon config set` would, folder and all
+                        let made = sw.config.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|_| {
+                            std::fs::OpenOptions::new().append(true).create(true).open(&sw.config).map(drop)
+                        });
+                        if let Err(e) = made {
                             sw.error = Some(format!("can't make {}: {e}", sw.config.display()));
+                            cx.notify();
                         }
                         cx.open_url(&file_url(&sw.config));
                     }))
@@ -393,12 +210,12 @@ impl SettingsWindow {
             )
     }
 
-    /// The shortcuts among `ids`, one line each: keys, title and action.
+    /// The shortcuts at `rows` (indexes into `shortcuts`), one line each: keys, title and action.
     // shortcut: plain rows, not a uniform_list; the keymap is a few dozen bindings. Upgrade if a
     // config binds hundreds.
-    pub(super) fn shortcut_rows(&self, ids: &[String], t: &Theme) -> gpui::Div {
+    pub(super) fn shortcut_rows(&self, rows: &[usize], t: &Theme) -> gpui::Div {
         let mut out = div().flex().flex_col();
-        for r in self.shortcuts.iter().filter(|r| ids.contains(&r.id())) {
+        for r in rows.iter().filter_map(|i| self.shortcuts.get(*i)) {
             out = out.child(
                 div()
                     .flex()
@@ -437,12 +254,12 @@ impl SettingsWindow {
         .children(state.map(|(s, c)| div().text_size(px(SECONDARY_TEXT)).text_color(rgb(c)).child(s)))
     }
 
-    /// The agents named in `names`: each with its state and, unless it is set up, the command that does.
-    pub(super) fn agent_rows(&self, names: &[String], t: &Theme) -> gpui::Div {
+    /// The agents at `rows`: each with its state and, unless it is set up, the command that does.
+    pub(super) fn agent_rows(&self, rows: &[usize], t: &Theme) -> gpui::Div {
         let mut out = div().flex().flex_col().gap(px(12.));
         let Some(Ok(list)) = &self.agents else { return out };
         let home = std::env::var_os("HOME").map(PathBuf::from);
-        for a in list.iter().filter(|a| names.contains(&a.agent)) {
+        for a in rows.iter().filter_map(|i| list.get(*i)) {
             let ok = a.setup.is_none();
             out = out.child(
                 div()

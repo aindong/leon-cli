@@ -65,10 +65,13 @@ const FONT_SIZE: Steps =
     Steps { step: 1., min: FONT_SIZES.0, max: FONT_SIZES.1, whole: false, show: points, range: "8 to 32 pt" };
 
 impl Steps {
-    /// `v` one step up (`by` 1) or down (-1), snapped to the step and kept in the range; None at
-    /// the range's end. Rounded, so 0.5 − 0.05 is 0.45 in init.lua, not 0.44999….
+    /// The next step boundary up (`by` 1) or down (-1) from `v`, kept in the range; None at the
+    /// range's end. Rounded, so 0.5 − 0.05 is 0.45 in init.lua, not 0.44999….
     pub(super) fn next(&self, v: f64, by: f64) -> Option<f64> {
-        let to = (((v / self.step).round() + by) * self.step).clamp(self.min, self.max);
+        // the next step boundary past `v` that way: from 13.5 pt, + is 14, not 15
+        let k = v / self.step;
+        let n = if by > 0. { (k + 1e-9).floor() + 1. } else { (k - 1e-9).ceil() - 1. };
+        let to = (n * self.step).clamp(self.min, self.max);
         let to = (to * 100.).round() / 100.;
         (to != v && (by > 0. && v < self.max || by < 0. && v > self.min)).then_some(to)
     }
