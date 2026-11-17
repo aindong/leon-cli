@@ -2,9 +2,9 @@
 # demo-gifs.sh [OUT_DIR]: record docs/images/demo-app.gif and demo-cli.gif from a neutral demo, as
 # demo-shots.sh takes the screenshots: a temp HOME whose prompt is `$ `, a scripted agent instead of a
 # real one, and private LEON_RUNTIME_DIR/STATE_DIR/CONFIG. The app is a video of leon's window over
-# a plain desktop of our own (scripts/winrec.swift: 30 frames a second, made from only those two
-# programs' windows, so the motion shows and nothing else on the screen can); the CLI is recorded in
-# vhs's own headless terminal. Keys go to leon through System Events under the GUI lock
+# a plain desktop of our own (`deskshot record`: 30 frames a second, so the motion shows, and a take
+# is thrown away if any other program's window comes over it); the CLI is recorded in vhs's own
+# headless terminal. Keys go to leon through System Events under the GUI lock
 # (/tmp/leon-gui.lock), each only when leon is in front. Needs ffmpeg and vhs (brew install ffmpeg
 # vhs), Accessibility and Screen Recording for the terminal running it, and an unlocked screen;
 # leave the mouse and keyboard alone for the minute it takes. Check the result with
@@ -52,20 +52,8 @@ cat >"$d/init.lua" <<'EOF'
 leon.set("notifications.done", false)
 leon.set("notifications.blocked", false)
 leon.set("notifications.error", false)
-leon.action{
-  name = "git_popup",
-  title = "Toggle git popup",
-  run = function()
-    local result, err = leon.toggle{
-      label = "git", create = true, float = true,
-      options = { command = { "sh", "-c", "git log --graph --oneline --decorate --color=always | less -R" } },
-    }
-    if not result then error(err, 0) end
-    return result
-  end,
-}
-leon.bind("ctrl+alt+g", "git_popup")
 EOF
+awk '/<!-- popup-git -->/{on=1;next} /<!-- \/popup-git -->/{on=0} on && !/^```/' docs/lua/keys.md >>"$d/init.lua"
 ln -s "$leon" "$home/bin/leon"
 # the popup's history: a made-up author and fixed dates, so the same hashes every run
 (
@@ -202,8 +190,7 @@ cat >"$d/state/app.json" <<EOF
 {"tab_style":"sidebar","pane_headers":true,"sidebar_width":210,"window":{"x":60,"y":60,"w":1200,"h":760},"display":$display,"collapsed_hosts":[]}
 EOF
 
-swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift"
-swiftc -O -o "$d/winrec" "$repo/scripts/winrec.swift" 2>/dev/null
+swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift" 2>/dev/null
 until mkdir "$lock" 2>/dev/null; do echo "demo-gifs: waiting for $lock" >&2; sleep 3; done
 held=1
 "$d/deskshot" backdrop &
@@ -227,25 +214,25 @@ typ() { keys "keystroke \"$1\"" "${2:-0.3}"; }
 front
 sleep 1
 
-"$d/winrec" "$app_pid" "$desk_pid" "$d/app.mov" &
+"$d/deskshot" record "$app_pid" "$desk_pid" "$d/app.mov" &
 rec=$!
-sleep 1.5
+sleep 1.2
 keys 'keystroke "d" using command down' 1            # split right: the panes make room
-typ "ls"; keys 'key code 36' 1.2
+typ "ls"; keys 'key code 36' 1
 keys 'keystroke "]" using {command down, shift down}' 1.3   # the next tab fades in, and back
 keys 'keystroke "[" using {command down, shift down}' 1
 keys 'keystroke "p" using {command down, shift down}' 0.6   # the palette: split below
 typ "split below" 0.6; keys 'key code 36' 1.2
 keys 'keystroke "w" using command down' 1            # and close it again
 keys 'keystroke "k" using command down' 0.6          # the switcher, to another session
-typ "infra" 0.6; keys 'key code 36' 1.6
+typ "infra" 0.5; keys 'key code 36' 1.5
 keys 'keystroke "k" using command down' 0.6
-typ "auth" 0.6; keys 'key code 36' 1.2
+typ "auth" 0.5; keys 'key code 36' 1
 keys 'keystroke "g" using {control down, option down}' 2.5   # the git popup (docs/lua/keys.md)
 keys 'keystroke "g" using {control down, option down}' 1
 touch "$d/blocked"                                   # the agent asks for permission
-sleep 2.2
-keys 'keystroke "a" using {command down, shift down}' 2.5   # Activity: what needs you
+sleep 2
+keys 'keystroke "a" using {command down, shift down}' 2.2   # Activity: what needs you
 keys 'keystroke "a" using {command down, shift down}' 1
 kill -TERM "$rec"
 wait "$rec"
