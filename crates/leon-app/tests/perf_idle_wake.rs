@@ -1,6 +1,6 @@
 //! Finding 3 of the performance baseline: the workspace's poll runs when woken or when something
 //! timed is due, never on a fixed 8 ms clock. GPUI's test clock only moves when asked, so `run_for`
-//! moves it with the real one (the spinner's frames and the find re-run come from the real clock).
+//! moves it with the real one, drawing only the animation frames the app asks for.
 mod m20b_support;
 
 use std::time::{Duration, Instant};
@@ -22,8 +22,7 @@ fn run_for(ws: &Entity<Workspace>, cx: &mut VisualTestContext, d: Duration) -> (
     while Instant::now() < end {
         let t = Instant::now();
         std::thread::sleep(Duration::from_millis(5));
-        cx.executor().advance_clock(t.elapsed());
-        cx.run_until_parked();
+        tick(ws, cx, t.elapsed()); // and the animation frames the app asks for, which the test window never runs
     }
     let after = ws.read_with(cx, |ws, _| ws.polls());
     (after.0 - before.0, after.1 - before.1)
@@ -90,7 +89,8 @@ fn a_drawer_slides_to_rest_with_no_manual_redraw(cx: &mut TestAppContext) {
     let id = view_window(&s.app, &sid)["docked"][0]["block_id"].as_str().unwrap().to_string();
     let sel = format!("dock-{id}");
     assert!(shows(cx, |cx| drawn(cx, &sel)));
-    // its shell's prompt drawn and the first slide over: from here only the poll's clock moves it
+    // its shell's prompt drawn and the first slide over: from here only the frames the app asks for
+    // move it
     settle(&term(&s.app, &id));
     run_for(&ws, cx, Duration::from_millis(300));
     toggle(false);

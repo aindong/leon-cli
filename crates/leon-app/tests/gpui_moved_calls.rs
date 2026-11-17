@@ -51,9 +51,9 @@ fn a_drawer_hidden_from_the_cli_slides(cx: &mut TestAppContext) {
     let id = view_window(&s.app, &sid)["docked"][0]["block_id"].as_str().unwrap().to_string();
     let dock = format!("dock-{id}");
     assert!(shows(cx, |cx| drawn(cx, &dock)), "the drawer shows");
-    // a slide ends on the poll's own timer, which runs on the test clock: move it with real time
+    // a slide ends on the frames the app asks for, on GPUI's clock
     let rested = |cx: &mut gpui::VisualTestContext| {
-        cx.executor().advance_clock(std::time::Duration::from_millis(10));
+        tick(&ws, cx, std::time::Duration::from_millis(10));
         !ws.read_with(cx, |ws, _| ws.sliding())
     };
     assert!(shows(cx, rested), "its first slide ends");

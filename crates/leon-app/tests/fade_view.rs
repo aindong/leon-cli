@@ -11,14 +11,13 @@ use serde_json::json;
 
 /// The default strength.
 const S: f32 = leon_lua::settings::FADE as f32;
-/// The app's poll timer: a wait moves it on and never asks for a redraw itself.
+/// One step of GPUI's clock: a wait moves it on, drawing only the frames the app asks for.
 const POLL: std::time::Duration = std::time::Duration::from_millis(8);
 
 /// Wait until no fade is moving and `want` holds. Time alone moves a fade, so each look draws again.
 fn rests(ws: &Entity<Workspace>, cx: &mut VisualTestContext, want: impl Fn(&Workspace) -> bool) -> bool {
     shows(cx, |cx| {
-        cx.executor().advance_clock(POLL);
-        cx.run_until_parked();
+        tick(ws, cx, POLL);
         ws.read_with(cx, |ws, _| !ws.fading() && want(ws))
     })
 }

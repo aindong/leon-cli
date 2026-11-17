@@ -335,9 +335,7 @@ impl Render for Workspace {
             app: self.app.clone(),
         };
         cx.defer_in(window, move |ws, _, cx| ws.drew_frame(showed, cx));
-        if self.theme_shifting() {
-            window.request_animation_frame(); // the next step of the change (R6)
-        }
+        self.ask_frame(window); // the next step of whatever moves (R6)
         let stats = self.stats.clone();
         if stats.borrow().enabled {
             stats.borrow_mut().render_start = Some(Instant::now());

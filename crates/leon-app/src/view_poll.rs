@@ -81,7 +81,7 @@ impl Workspace {
         self.stats.borrow_mut().report(); // and on the tick, for the last frames before a quiet spell
         self.refresh_keymap(false, cx);
         let now = self.signature();
-        if now != self.seen || self.sliding() || self.fading() || replied || scrolled {
+        if now != self.seen || replied || scrolled {
             self.seen = now;
             self.polls.1 += 1;
             self.undrawn = self.undrawn.saturating_add(1);
@@ -93,16 +93,14 @@ impl Workspace {
     }
 
     /// The soonest timed thing pending, never sooner than `POLL`; None when only a wake can bring
-    /// news (the spinner has its own clock, view_pulse.rs). Slides, fades, the waited times and a
-    /// find's re-run only matter on screen: once a second redraw asked for is not drawn (hidden,
-    /// covered), they wait for the next frame, which wakes the poll again (`drew_frame`).
+    /// news (the spinner has its own clock, view_pulse.rs; slides and fades step on the frames
+    /// render asks GPUI for, `ask_frame`). The waited times and a find's re-run only matter on
+    /// screen: once a second redraw asked for is not drawn (hidden, covered), they wait for the
+    /// next frame, which wakes the poll again (`drew_frame`).
     pub(super) fn next_poll(&self) -> Option<Duration> {
         let now = Instant::now();
         let mut due = Vec::new();
         if self.undrawn < 2 {
-            if self.sliding() || self.fading() {
-                due.push(POLL);
-            }
             if self.activity && !self.attention.rows().is_empty() {
                 due.push(WAITED_TICK);
             }
@@ -115,9 +113,8 @@ impl Workspace {
     }
 
     /// After a frame was drawn (render defers it): the poll looks again at once if the state that
-    /// frame drew has something timed due sooner than it planned for (a slide, a fade, the
-    /// Activity list), and the Pulse goes on (it pauses while no frame is drawn), as after a
-    /// hidden spell.
+    /// frame drew has something timed due sooner than it planned for (the Activity list, a find's
+    /// re-run), and the Pulse goes on (it pauses while no frame is drawn), as after a hidden spell.
     pub(super) fn drew_frame(&mut self, showed: Shown, cx: &mut Context<Self>) {
         self.undrawn = 0;
         self.note_focus(showed);

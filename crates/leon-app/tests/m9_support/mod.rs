@@ -79,6 +79,40 @@ pub fn focused(app: &Embedded, ws: &Entity<Workspace>, cx: &mut VisualTestContex
     term(app, &id)
 }
 
+/// Draw the animation frame the app asked for, `step` later on GPUI's clock. GPUI's test window
+/// never runs `on_next_frame`, so this does what `request_animation_frame` would (notify the
+/// view that asked); it fails if the last render asked for no frame, so a motion only moves here
+/// when the app itself asks (ADR R6, R10).
+pub fn frame(ws: &Entity<Workspace>, cx: &mut VisualTestContext, step: Duration) {
+    assert!(ws.read_with(cx, |ws, _| ws.frame_asked()), "the app asked for no frame");
+    cx.executor().advance_clock(step);
+    ws.update(cx, |_, cx| cx.notify());
+    cx.run_until_parked();
+}
+
+/// Draw the frames the app asks for, each a display frame (16 ms) on, until it asks for none: a
+/// motion runs to its end. Returns how many; fails past 100 (a motion that never ends).
+pub fn frames(ws: &Entity<Workspace>, cx: &mut VisualTestContext) -> usize {
+    let mut n = 0;
+    while ws.read_with(cx, |ws, _| ws.frame_asked()) {
+        assert!(n < 100, "the app kept asking for frames");
+        frame(ws, cx, Duration::from_millis(16));
+        n += 1;
+    }
+    n
+}
+
+/// Move GPUI's clock on by `step`, drawing the animation frame the app asked for if it asked for
+/// one (`frame`); with nothing moving it only runs what the clock set off (timers).
+pub fn tick(ws: &Entity<Workspace>, cx: &mut VisualTestContext, step: Duration) {
+    if ws.read_with(cx, |ws, _| ws.frame_asked()) {
+        frame(ws, cx, step);
+    } else {
+        cx.executor().advance_clock(step);
+        cx.run_until_parked();
+    }
+}
+
 /// Poll `pred` for up to 10 s, letting the window run between tries; returns whether it came
 /// true. The app hears of changes made outside it (a program's status) by events, a moment later.
 pub fn shows(cx: &mut VisualTestContext, mut pred: impl FnMut(&mut VisualTestContext) -> bool) -> bool {

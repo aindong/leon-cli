@@ -299,6 +299,7 @@ impl Workspace {
         let activation = cx.observe_window_activation(window, |ws, window, cx| {
             ws.window_active = window.is_window_active();
             ws.note_reduce_transparency();
+            ws.note_reduce_motion();
             ws.update_glass(window, cx);
             cx.notify()
         });
@@ -388,7 +389,7 @@ impl Workspace {
             pulse_root: None,
             hovered_pane: None,
             hover_rects: Vec::new(),
-            fade: Default::default(),
+            fade: fade_view::FadeUi::new(cx.background_executor().clone()),
             glass: glass_view::GlassUi::new(window.window_handle()),
             overview: Default::default(),
             updates,
@@ -409,6 +410,7 @@ impl Workspace {
         ws.prepare(); // the first frame comes before any notify
         ws.sync_grids(&seen, cx);
         ws.note_reduce_transparency();
+        ws.note_reduce_motion();
         ws.update_glass(window, cx);
         ws.sync_sections(window, cx);
         ws
