@@ -1,4 +1,4 @@
-//! Resumable event streams (docs/architecture.md, "Remote hosts"). A subscriber attached with
+//! Resumable event streams (docs/architecture/hosts.md, "Remote hosts"). A subscriber attached with
 //! `resumable` has a token. When its connection ends, it is parked for `HOLD`, still queueing
 //! events (and still dropped past `MAX_BACKLOG`). `session.resume {resume, seq}` on another
 //! connection moves its queue there under the state lock, so no event slips between, and puts the

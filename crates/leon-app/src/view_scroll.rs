@@ -1,6 +1,6 @@
-//! Scrolling a pane back through its history (docs/architecture.md, "Scrollback in the app"):
-//! per-pane view state, history rows fetched from the server in ranges, the wheel and trackpad,
-//! paging keys, and the "↓ N new lines" pill.
+//! Scrolling a pane back through its history (docs/architecture/protocol-and-clients.md,
+//! "Scrollback in the app"): per-pane view state, history rows fetched from the server in ranges,
+//! the wheel and trackpad, paging keys, and the "↓ N new lines" pill.
 
 use std::collections::{HashMap, HashSet};
 

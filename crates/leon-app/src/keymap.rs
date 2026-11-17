@@ -59,9 +59,9 @@ pub const DEFAULTS: &[(&str, &str)] = &[
 pub const APP_DEFAULTS: &[(&str, &str)] =
     &[("shift+pageup", "client.scroll.page_up"), ("shift+pagedown", "client.scroll.page_down")];
 
-/// A keystroke as a binding chord, written unshifted (docs/lua.md), or None for a key binding syntax
-/// has no name for. shortcut: assumes a US layout for shifted symbols; physical keys (`[KeyA]`)
-/// never match since GPUI keystrokes carry no key code.
+/// A keystroke as a binding chord, written unshifted (docs/lua/keys.md), or None for a key binding
+/// syntax has no name for. shortcut: assumes a US layout for shifted symbols; physical keys
+/// (`[KeyA]`) never match since GPUI keystrokes carry no key code.
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub fn chord(ks: &Keystroke) -> Option<Chord> {
     let m = &ks.modifiers;
@@ -253,8 +253,8 @@ impl Keymap {
         out
     }
 
-    /// The keys that run `action`, as the README writes them (`⌘⇧D`): the config's newest binding,
-    /// else the first default.
+    /// The keys that run `action`, as docs/shortcuts.md writes them (`⌘⇧D`): the config's newest
+    /// binding, else the first default.
     pub fn shortcut(&self, action: &str) -> Option<String> {
         let mut all = self.bindings.iter().filter(|b| b.action.as_deref() == Some(action) && b.args.is_none());
         let first = all.clone().next();
@@ -268,7 +268,7 @@ impl Keymap {
     }
 }
 
-/// A binding's keys as the README writes them: `⌘⇧D`, `⌃B C`.
+/// A binding's keys as docs/shortcuts.md writes them: `⌘⇧D`, `⌃B C`.
 pub fn keys_text(seq: &[Chord]) -> String {
     seq.iter().map(glyphs).collect::<Vec<_>>().join(" ")
 }

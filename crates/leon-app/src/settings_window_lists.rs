@@ -8,7 +8,7 @@ use crate::keymap::{keys_text, Keymap};
 /// One binding, as Shortcuts lists it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShortcutRow {
-    /// As the README writes them (`⌘⇧D`, `⌃B C`).
+    /// As docs/shortcuts.md writes them (`⌘⇧D`, `⌃B C`).
     pub keys: String,
     pub title: String,
     /// None: a Lua function.

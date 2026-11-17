@@ -76,7 +76,7 @@ pub struct Frame {
 pub struct View {
     /// The absolute number of the screen's top row: how many lines were ever pushed into the
     /// scrollback. History line `scrolled - 1` is just above the screen; appended output never
-    /// renumbers a line (docs/architecture.md, "Scrollback in the app").
+    /// renumbers a line (docs/architecture/protocol-and-clients.md, "Scrollback in the app").
     pub scrolled: usize,
     /// Lines kept in the scrollback: the oldest is `scrolled - history`.
     pub history: usize,
