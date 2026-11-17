@@ -29,7 +29,11 @@ fn lua_blocks(doc: &str) -> Vec<(String, String)> {
 /// docs/lua.md and its pages in docs/lua/.
 fn doc() -> String {
     let dir = help_walk::repo().join("docs/lua");
-    let mut pages: Vec<_> = std::fs::read_dir(&dir).expect("docs/lua/ exists").map(|e| e.unwrap().path()).collect();
+    let mut pages: Vec<_> = std::fs::read_dir(&dir)
+        .expect("docs/lua/ exists")
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "md"))
+        .collect();
     pages.sort();
     assert!(pages.len() >= 4, "docs/lua/ has the Lua pages: {pages:?}");
     pages.into_iter().fold(std::fs::read_to_string(dir.with_extension("md")).expect("docs/lua.md exists"), |all, p| {

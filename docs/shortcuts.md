@@ -1,6 +1,6 @@
 # App shortcuts
 
-Leon.app's keys, from the [README](../README.md#app-shortcuts). [lua.md](lua.md) says how to change them.
+Leon.app's keys, from the [README](../README.md#app-shortcuts). [lua/keys.md](lua/keys.md) says how to change them.
 
 | Keys | Action |
 |---|---|

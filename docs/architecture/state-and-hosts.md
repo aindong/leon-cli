@@ -169,7 +169,7 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   init.lua itself and writes through `leon_lua::rewrite::write_setting`, then reloads the server,
   so init.lua stays the one place settings live.
 - **Docs are tested.** `docs/cli.md` is checked against every `--help`; the `sh` blocks in the docs
-  run against the real binary (a bad command line fails); `docs/lua.md`'s examples go through
+  run against the real binary (a bad command line fails); `docs/lua/`'s examples go through
   `leon config check` and `leon do -e`.
 - **Naming.** Method, action, event and flag names stay as `docs/api.md` lists them, so scripts and
   agents keep working (`docs/integrators.md#compatibility`). Env vars are `LEON_*`.

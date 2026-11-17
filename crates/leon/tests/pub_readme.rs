@@ -46,7 +46,11 @@ fn readme_covers_what_a_visitor_needs() {
 
 #[test]
 fn readme_names_no_other_terminal_product() {
-    let readme = std::fs::read_to_string(repo("README.md")).unwrap().to_lowercase();
+    // the README and the pages split out of it (file-size limit)
+    let readme = ["README.md", "docs/install.md", "docs/shortcuts.md", "docs/remote-hosts.md"]
+        .map(|p| std::fs::read_to_string(repo(p)).unwrap())
+        .concat()
+        .to_lowercase();
     for name in ["tmux", "zellij", "wezterm", "iterm", "ghostty", "kitty", "alacritty", "warp"] {
         assert!(!readme.contains(name), "the README names {name}");
     }
