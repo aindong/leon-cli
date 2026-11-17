@@ -242,7 +242,8 @@ fn zoom_never_hides_where_input_goes(cx: &mut TestAppContext) {
     settle(&shown);
     cx.simulate_input("echo seen");
     cx.simulate_keystrokes("enter");
-    assert!(has_line(&wait_text(&shown, |x| has_line(x, "seen")), "seen"), "typed into the zoomed block");
+    let text = wait_text(&shown, |x| has_line(x, "seen"));
+    assert!(has_line(&text, "seen"), "typed into the zoomed block ({:?}):\n{text}", shown.size());
     s.app.stop();
 }
 
