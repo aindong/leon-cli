@@ -36,6 +36,10 @@ chmod 700 "$d"
 mkdir -m 700 -p "$d/run" "$d/state" "$d/cli/run" "$d/cli/state"
 home=$d/home
 mkdir -p "$home/bin" "$home/src/auth" "$home/src/infra" "$home/src/app"
+swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift" 2>/dev/null
+# the window: 70% of the screen, centred, the font to match (as in demo-shots.sh)
+read -r wx wy ww wh < <("$d/deskshot" window 70)
+font=$(((13 * ww + 720) / 1440))
 # a neutral shell: no user or host in the prompt or the title
 cat >"$home/.zshrc" <<'EOF'
 PROMPT='$ '
@@ -48,7 +52,8 @@ EOF
 cp "$home/.bashrc" "$home/.bash_profile"
 : >"$d/none.lua"
 # no notification banners on the screen; ctrl+alt+g is docs/lua/keys.md's popup recipe, as it is there
-cat >"$d/init.lua" <<'EOF'
+cat >"$d/init.lua" <<EOF
+leon.set("font.size", $font)
 leon.set("notifications.done", false)
 leon.set("notifications.blocked", false)
 leon.set("notifications.error", false)
@@ -129,9 +134,19 @@ cat >"$d/claude.txt" <<'EOF'
   The test sleeps 50 ms and then checks the session expired.
   On a busy machine the check runs before the timer fires.
 
+  Ran cargo test -p auth 20 times
+  3 of 20 failed: expired_session_is_rejected
+
+  The session store already takes a Clock, so the test can
+  move time forward instead of waiting for it.
+
   Update auth/session_test.rs
    - std::thread::sleep(Duration::from_millis(50));
    + clock.advance(Duration::from_secs(61));
+
+  Update auth/session.rs
+   - if Instant::now() > self.expires_at {
+   + if self.clock.now() > self.expires_at {
 
   Running the tests beside me:
     leon split --label tests -- cargo test -p auth
@@ -144,9 +159,12 @@ cat >"$d/tests.txt" <<'EOF'
 running 18 tests
 test session::tests::refresh_keeps_the_id ... ok
 test session::tests::expired_session_is_rejected ... ok
+test session::tests::idle_session_expires ... ok
 test session::tests::login_sets_a_cookie ... ok
+test session::tests::logout_clears_the_cookie ... ok
 test token::tests::round_trip ... ok
 test token::tests::rejects_a_bad_signature ... ok
+test token::tests::rotates_weekly ... ok
 
 test result: ok. 18 passed; 0 failed; finished in 0.31s
 EOF
@@ -160,6 +178,8 @@ POST /orders 201 21ms
 GET /orders/1042 200 4ms
 POST /session 401 2ms
 POST /session 201 11ms
+GET /me 200 2ms
+DELETE /session 204 3ms
 EOF
 cat >"$d/migrate.txt" <<'EOF'
 > Migrate the users table to the new schema
@@ -212,10 +232,9 @@ print(CGMainDisplayID())
 SWIFT
 )
 cat >"$d/state/app.json" <<EOF
-{"tab_style":"sidebar","pane_headers":true,"sidebar_width":230,"window":{"x":160,"y":120,"w":1440,"h":900},"display":$display,"collapsed_hosts":[]}
+{"tab_style":"sidebar","pane_headers":true,"sidebar_width":230,"window":{"x":$wx,"y":$wy,"w":$ww,"h":$wh},"display":$display,"collapsed_hosts":[]}
 EOF
 
-swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift" 2>/dev/null
 until mkdir "$lock" 2>/dev/null; do echo "demo-gifs: waiting for $lock" >&2; sleep 3; done
 held=1
 "$d/deskshot" backdrop &
@@ -271,8 +290,8 @@ gif() { # IN_ARGS... OUT: a ${width:-1100} px wide GIF, one palette, repeated fr
     "fps=${fps:-10},scale=${width:-1100}:-1:flags=lanczos,mpdecimate,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
     -loop 0 "$out"
 }
-# 20 a second: the app's moves last 100 to 160 ms; the window at its size in points
-fps=20 width=1440 gif -i "$d/app.mov" "$out/demo-app.gif"
+# 20 a second: the app's moves last 100 to 160 ms; a pixel a point, twice the README's column
+fps=20 width=$ww gif -i "$d/app.mov" "$out/demo-app.gif"
 echo "demo-gifs: demo-app.gif"
 
 # the CLI, in vhs's headless terminal: bash with a `$ ` prompt and its own private server
