@@ -28,6 +28,15 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### A Settings window with sections
+
+#### Added
+
+- Settings (⌘,) has a sidebar of sections (General, Appearance, Terminal, Notifications,
+  Shortcuts, Agents) and a search field, and a control for every setting init.lua takes: steppers
+  with their range for the numbers, an editable list for hint patterns. Shortcuts lists the
+  keymap; Agents shows `leon skill status`. See [docs/lua/settings.md](docs/lua/settings.md#settings).
+
 ### A translucent window in Leon.app
 
 #### Added

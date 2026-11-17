@@ -27,7 +27,7 @@ Leon.app's keys, from the [README](../README.md#app-shortcuts). [lua/keys.md](lu
 | ⌘B | Show or hide the sidebar |
 | ⌘⇧S | Tabs in the sidebar or in the titlebar (saved for the next launch) |
 | ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
-| ⌘, | Settings: theme for dark and light mode, font, notifications, copy on select (into init.lua) |
+| ⌘, | Settings: every setting in sections, with search, ↑ and ↓ between sections, esc or ⌘W closes (into init.lua) |
 | ⌘⇧T | Change theme, shown live as you move; ↩ keeps it, esc goes back |
 | ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
 | ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |

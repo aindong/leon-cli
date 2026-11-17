@@ -1,4 +1,5 @@
-//! The Settings window (⌘,): init.lua's settings with a control each. It reads init.lua itself, as
+//! The Settings window (⌘,): a sidebar of sections and a search field over init.lua's settings,
+//! each with a control, the keymap and the agents' skill. It reads init.lua itself, as
 //! `leon config get` does, and every change goes through `leon config set`'s code
 //! (`leon_lua::rewrite::write_setting`), then the local server reloads, so init.lua stays the one
 //! place settings live. A setting init.lua sets by code that can't be rewritten shows read-only,
@@ -9,22 +10,31 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::{
-    div, point, prelude::*, px, rgb, size, App, Bounds, Context, FocusHandle, FontWeight, KeyDownEvent, SharedString,
-    Subscription, TitlebarOptions, Window, WindowBounds, WindowHandle, WindowOptions,
+    div, point, prelude::*, px, rgb, size, AnyWindowHandle, App, Bounds, Context, FocusHandle, FontWeight, Hsla,
+    KeyDownEvent, SharedString, Subscription, TitlebarOptions, Window, WindowBackgroundAppearance as Bg, WindowBounds,
+    WindowHandle, WindowOptions,
 };
 use leon_lua::rewrite::{read_only, write_setting};
 use leon_lua::settings::{load_theme, theme_names, themes_dir, FONT_SIZES};
 use serde_json::{json, Value};
 
+use crate::glass::Glass;
 use crate::icons::{Icon, ROW_ICON};
 use crate::look::Look;
 use crate::remote::Remote;
 use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
 
+#[path = "settings_window_lists.rs"]
+mod lists;
 #[path = "settings_window_rows.rs"]
 mod rows;
+#[path = "settings_window_sections.rs"]
+mod sections;
 #[path = "settings_window_theme.rs"]
 mod theme_picker;
+
+pub use lists::{parse_agents, AgentRow, ShortcutRow};
+pub use sections::Section;
 
 /// Monospaced families the font control steps through, when installed (init.lua takes any).
 // shortcut: a fixed list, not every installed monospace font; upgrade with a text field.
@@ -78,6 +88,24 @@ pub struct SettingsWindow {
     /// Changes not written yet, in the order they were made; `saving` while they are written.
     queue: VecDeque<(String, Value)>,
     saving: bool,
+    /// The section shown when the search field is empty.
+    section: Section,
+    query: String,
+    /// The hint pattern field: what is typed, the pattern it replaces (None: a new one), and why
+    /// the last Add was refused.
+    pattern: lists::PatternField,
+    /// The keymap's bindings, once the server has sent them.
+    shortcuts: Vec<ShortcutRow>,
+    /// `leon skill status`, once read (Err: why it couldn't be).
+    agents: Option<Result<Vec<AgentRow>, String>>,
+    glass: Glass,
+    /// What GPUI was asked for, oldest first (GPUI's test window keeps no background).
+    backgrounds: Vec<Bg>,
+    /// Reduce Transparency as a test set it; None asks the system.
+    reduce_transparency: Option<bool>,
+    reduced: bool,
+    handle: AnyWindowHandle,
+    renders: usize,
     focus: FocusHandle,
     _appearance: Subscription,
     _activation: Subscription,
@@ -100,7 +128,7 @@ fn load(config: &Path) -> Result<Loaded, String> {
 impl SettingsWindow {
     /// Open the window on `config`, the init.lua the local `server` loaded.
     pub fn open(config: PathBuf, server: Rc<Remote>, cx: &mut App) -> Option<WindowHandle<SettingsWindow>> {
-        let bounds = Bounds::centered(None, size(px(720.), px(780.)), cx);
+        let bounds = Bounds::centered(None, size(px(860.), px(780.)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             // drawn in the theme's chrome, as the main window's is, not in the macOS appearance
@@ -109,7 +137,7 @@ impl SettingsWindow {
                 appears_transparent: true,
                 traffic_light_position: Some(point(px(14.), px(13.))),
             }),
-            window_min_size: Some(size(px(560.), px(420.))),
+            window_min_size: Some(size(px(640.), px(420.))),
             ..WindowOptions::default()
         };
         let opened = cx.open_window(options, |window, cx| cx.new(|cx| SettingsWindow::new(config, server, window, cx)));
@@ -121,12 +149,16 @@ impl SettingsWindow {
         let fonts = FONTS.iter().filter(|f| installed.iter().any(|i| i == *f)).map(|f| f.to_string()).collect();
         let appearance = cx.observe_window_appearance(window, |sw, window, cx| {
             sw.dark = crate::view::is_dark(window.appearance());
+            sw.update_glass(window, cx);
             cx.notify();
         });
-        // init.lua may have been edited by hand while the window was in the background
+        // init.lua may have been edited by hand while the window was in the background, and
+        // Reduce Transparency changed in System Settings
         let activation = cx.observe_window_activation(window, |sw, window, cx| {
             if window.is_window_active() && !sw.saving {
+                sw.note_reduce_transparency();
                 sw.reload(cx);
+                sw.read_shortcuts(cx);
             }
         });
         let focus = cx.focus_handle();
@@ -140,11 +172,29 @@ impl SettingsWindow {
             dark: crate::view::is_dark(window.appearance()),
             queue: VecDeque::new(),
             saving: false,
+            section: Section::General,
+            query: String::new(),
+            pattern: lists::PatternField::new(cx),
+            shortcuts: Vec::new(),
+            agents: None,
+            glass: Glass::OPAQUE,
+            backgrounds: Vec::new(),
+            reduce_transparency: None,
+            reduced: false,
+            handle: window.window_handle(),
+            renders: 0,
             focus,
             _appearance: appearance,
             _activation: activation,
         };
+        sw.note_reduce_transparency();
         sw.reload(cx);
+        sw.read_shortcuts(cx);
+        // the app runs as `leon app`: its own binary says what `leon skill status` says
+        match std::env::current_exe().ok().filter(|e| e.file_name().is_some_and(|n| n == "leon")) {
+            Some(leon) => sw.read_agents(leon, cx),
+            None => sw.agents = Some(Err("This isn't the leon binary: run leon skill status in a terminal".into())),
+        }
         sw
     }
 
@@ -153,15 +203,18 @@ impl SettingsWindow {
         let config = self.config.clone();
         cx.spawn(async move |this, cx| {
             let loaded = cx.background_executor().spawn(async move { load(&config) }).await;
-            this.update(cx, |sw, cx| {
-                match loaded {
-                    Ok(l) => sw.loaded = Some(l),
-                    Err(e) => sw.error = Some(e),
-                }
-                cx.notify();
-            })
+            this.update(cx, |sw, cx| sw.loaded(loaded, cx))
         })
         .detach();
+    }
+
+    fn loaded(&mut self, loaded: Result<Loaded, String>, cx: &mut Context<Self>) {
+        match loaded {
+            Ok(l) => self.loaded = Some(l),
+            Err(e) => self.error = Some(e),
+        }
+        self.glass_later(cx);
+        cx.notify();
     }
 
     /// `key` as init.lua leaves it, and whether it can be changed here (None before the first read).
@@ -179,6 +232,11 @@ impl SettingsWindow {
     /// Changes are still being written.
     pub fn saving(&self) -> bool {
         self.saving
+    }
+
+    /// How many times the window has rendered.
+    pub fn renders(&self) -> usize {
+        self.renders
     }
 
     /// Set `key` to `value` in init.lua (what each control does), then reload the server and read
@@ -227,32 +285,115 @@ impl SettingsWindow {
             let loaded = cx.background_executor().spawn(async move { load(&config) }).await;
             this.update(cx, |sw, cx| {
                 sw.saving = false;
-                match loaded {
-                    Ok(l) => sw.loaded = Some(l),
-                    Err(e) => sw.error = Some(e),
-                }
-                cx.notify();
+                sw.loaded(loaded, cx);
             })
         })
         .detach();
     }
 
     /// The theme this window draws in: the one init.lua names for the appearance now.
-    fn theme(&self) -> Theme {
+    pub fn theme(&self) -> Theme {
         self.loaded.as_ref().map_or_else(Look::default, |l| l.look.clone()).theme(self.dark)
+    }
+
+    /// The window backgrounds GPUI was asked for, oldest first.
+    pub fn backgrounds_set(&self) -> &[Bg] {
+        &self.backgrounds
+    }
+
+    /// The alpha the window's chrome is filled with (1 when opaque).
+    pub fn fill_alpha(&self) -> f32 {
+        self.glass.chrome_alpha()
+    }
+
+    /// Use Reduce Transparency as `on` says whatever the system does (tests); None asks the system.
+    pub fn set_reduce_transparency(&mut self, on: Option<bool>, window: &mut Window, cx: &mut Context<Self>) {
+        self.reduce_transparency = on;
+        self.note_reduce_transparency();
+        self.update_glass(window, cx);
+    }
+
+    fn note_reduce_transparency(&mut self) {
+        self.reduced = self.reduce_transparency.unwrap_or_else(crate::view::system_reduce_transparency);
+    }
+
+    /// Look again at what the window shows through, as the main window does
+    /// (`Workspace::update_glass`): init.lua's translucency, unless Reduce Transparency is on or
+    /// the window is in full screen. GPUI is asked only for a change.
+    fn update_glass(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(l) = &self.loaded else { return };
+        let see = if self.reduced || window.is_fullscreen() { 0. } else { l.look.translucency };
+        let glass = Glass::new(&self.theme(), see, 0.);
+        let bg = if glass.translucent() { Bg::Blurred } else { Bg::Opaque };
+        if self.backgrounds.last() != Some(&bg) {
+            window.set_background_appearance(bg);
+            if self.backgrounds.len() == 16 {
+                self.backgrounds.remove(0);
+            }
+            self.backgrounds.push(bg);
+            if bg == Bg::Blurred {
+                crate::view::set_blur_material();
+            }
+        }
+        if glass != self.glass {
+            self.glass = glass;
+            cx.notify();
+        }
+    }
+
+    /// [`SettingsWindow::update_glass`] once this update is over: a read ends in a task, which
+    /// has no window.
+    fn glass_later(&mut self, cx: &mut Context<Self>) {
+        let (handle, this) = (self.handle, cx.entity().downgrade());
+        cx.defer(move |cx| {
+            let _ = handle.update(cx, |_, window, cx| this.update(cx, |sw, cx| sw.update_glass(window, cx)));
+        });
+    }
+
+    /// The window's fill: the chrome, at the glass's alpha.
+    fn fill(&self, t: &Theme) -> Hsla {
+        Hsla::from(rgb(t.chrome)).opacity(self.glass.chrome_alpha())
+    }
+
+    /// A key anywhere but the hint pattern field: the search field's, ↑/↓ for the sidebar, Escape
+    /// and ⌘W to close.
+    fn key_down(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let k = &e.keystroke;
+        let m = &k.modifiers;
+        if m.platform {
+            if k.key == "w" {
+                window.remove_window();
+            }
+            return;
+        }
+        match k.key.as_str() {
+            "escape" if self.query.is_empty() => window.remove_window(),
+            "escape" => self.query.clear(),
+            "up" | "down" => {
+                let all = Section::ALL;
+                let at = all.iter().position(|s| *s == self.section).unwrap_or(0);
+                let to = if k.key == "up" { at.saturating_sub(1) } else { (at + 1).min(all.len() - 1) };
+                self.section = all[to];
+                self.query.clear();
+            }
+            "backspace" => {
+                self.query.pop();
+            }
+            "space" => self.query.push(' '),
+            _ => match k.key_char.as_deref().filter(|c| !c.is_empty() && !m.control && !m.alt) {
+                Some(typed) => self.query.extend(typed.chars().filter(|c| !c.is_control())),
+                None => return,
+            },
+        }
+        cx.notify();
     }
 }
 
 impl Render for SettingsWindow {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.renders += 1;
+        self.pattern.typing = self.pattern.focused(window);
         let t = self.theme();
-        let mut body = div().flex().flex_col().gap(px(32.)).px(px(28.)).pb(px(28.));
-        if self.loaded.is_some() {
-            body = body
-                .child(self.theme_section(&t, cx))
-                .child(self.font_section(&t, cx))
-                .child(self.toggles_section(&t, cx));
-        }
         let (text, color) = match (&self.error, self.saving) {
             (_, true) => ("Saving…".to_string(), t.muted),
             (Some(e), _) => (e.clone(), t.error),
@@ -264,42 +405,29 @@ impl Render for SettingsWindow {
         let full: SharedString = self.config.display().to_string().into();
         let footer = div()
             .id("settings-footer")
+            .text_size(px(SECONDARY_TEXT))
             .text_color(rgb(color))
             .child(text)
             .tooltip(move |_, cx| cx.new(|_| crate::view::Tip(full.clone(), t)).into());
         div()
             .id("settings")
             .track_focus(&self.focus)
-            .on_key_down(cx.listener(|_, e: &KeyDownEvent, window, _| {
-                let k = &e.keystroke;
-                if k.key == "escape" || (k.modifiers.platform && k.key == "w") {
-                    window.remove_window();
-                }
-            }))
+            .on_key_down(cx.listener(Self::key_down))
             .size_full()
             .flex()
-            .flex_col()
-            .bg(rgb(t.chrome))
+            .bg(self.fill(&t))
             .text_color(rgb(t.text))
             .font_family(".SystemUIFont")
             .text_size(px(UI_TEXT))
+            .child(self.sidebar(&t, cx))
             .child(
-                div()
-                    .h(px(38.))
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_color(rgb(t.title))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Settings"),
-            )
-            .child(
-                div()
-                    .id("settings-body")
-                    .flex_1()
-                    .overflow_y_scroll()
-                    .child(body.child(footer.text_size(px(SECONDARY_TEXT)))),
+                div().flex_1().flex().flex_col().child(div().h(px(38.)).flex_none()).child(
+                    div()
+                        .id("settings-body")
+                        .flex_1()
+                        .overflow_y_scroll()
+                        .child(self.page(&t, cx).px(px(28.)).pb(px(28.)).child(footer)),
+                ),
             )
     }
 }

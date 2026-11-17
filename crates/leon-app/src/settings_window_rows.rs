@@ -1,16 +1,101 @@
-//! The Settings window's font and toggle rows, and the controls they are made of.
+//! The Settings window's controls: a switch, a stepper for a number with its range, a choice of a
+//! few values, and the font row made of them.
 
 use super::*;
 
-/// The notification kinds, as the window names them.
-const NOTIFICATIONS: [(&str, &str); 3] = [
-    ("notifications.done", "A long run finished while leon was in the background"),
-    ("notifications.blocked", "A program is waiting for you"),
-    ("notifications.error", "A program reported an error"),
-];
+pub(super) const NOTIFY_DONE: &str = "A long run finished while leon was in the background";
+pub(super) const NOTIFY_BLOCKED: &str = "A program is waiting for you";
+pub(super) const NOTIFY_ERROR: &str = "A program reported an error";
+
+/// What `resume` is, under its label.
+pub(super) const RESUME_NOTE: &str = "What a block restored after a restart does with its program's resume command";
+/// `resume`'s values, as the window names them.
+pub(super) const RESUME: [(&str, &str); 3] = [("ask", "Ask"), ("always", "Always"), ("never", "Never")];
+
+/// A number's control: its step, its range, whether init.lua takes it whole, and how it reads.
+#[derive(Clone, Copy)]
+pub(super) struct Steps {
+    step: f64,
+    min: f64,
+    max: f64,
+    whole: bool,
+    show: fn(f64) -> String,
+    range: &'static str,
+}
+
+fn ms(v: f64) -> String {
+    if v == 0. {
+        "Off".into()
+    } else {
+        format!("{v} ms")
+    }
+}
+
+fn percent(v: f64) -> String {
+    if v == 0. {
+        "Off".into()
+    } else {
+        format!("{}%", (v * 100.).round())
+    }
+}
+
+fn points(v: f64) -> String {
+    format!("{v} pt")
+}
+
+pub(super) const REPEAT: Steps =
+    Steps { step: 50., min: 0., max: 10_000., whole: true, show: ms, range: "0 (off) to 10000 ms" };
+pub(super) const FADE: Steps = Steps {
+    step: 0.05,
+    min: 0.,
+    max: leon_lua::settings::FADE_MAX,
+    whole: false,
+    show: percent,
+    range: "0 (off) to 80%",
+};
+pub(super) const TRANSLUCENCY: Steps = Steps {
+    step: 0.05,
+    min: 0.,
+    max: leon_lua::settings::TRANSLUCENCY_MAX,
+    whole: false,
+    show: percent,
+    range: "0 (opaque) to 80%",
+};
+const FONT_SIZE: Steps =
+    Steps { step: 1., min: FONT_SIZES.0, max: FONT_SIZES.1, whole: false, show: points, range: "8 to 32 pt" };
+
+impl Steps {
+    /// `v` one step up (`by` 1) or down (-1), snapped to the step and kept in the range; None at
+    /// the range's end. Rounded, so 0.5 − 0.05 is 0.45 in init.lua, not 0.44999….
+    pub(super) fn next(&self, v: f64, by: f64) -> Option<f64> {
+        let to = (((v / self.step).round() + by) * self.step).clamp(self.min, self.max);
+        let to = (to * 100.).round() / 100.;
+        (to != v && (by > 0. && v < self.max || by < 0. && v > self.min)).then_some(to)
+    }
+
+    fn json(&self, v: f64) -> Value {
+        if self.whole {
+            json!(v as u64)
+        } else {
+            json!(v)
+        }
+    }
+}
 
 impl SettingsWindow {
-    pub(super) fn section(t: &Theme, title: &str) -> gpui::Div {
+    /// A row's title and, under it, a line of explanation.
+    pub(super) fn label(t: &Theme, title: &str, note: &str, locked: bool) -> gpui::Div {
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .child(div().text_color(rgb(if locked { t.muted } else { t.text })).child(title.to_string()))
+            .when(!note.is_empty(), |d| {
+                d.child(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(note.to_string()))
+            })
+    }
+
+    pub(super) fn subtitle(t: &Theme, title: &str) -> gpui::Div {
         div().flex().flex_col().gap(px(12.)).child(
             div()
                 .text_size(px(UI_TEXT + 2.))
@@ -21,98 +106,59 @@ impl SettingsWindow {
     }
 
     /// A setting's read-only line under its control.
-    pub(super) fn locked(t: &Theme, row: &Option<Row>) -> Option<gpui::Div> {
+    pub(super) fn locked(t: &Theme, key: &str, row: &Option<Row>) -> Option<gpui::Div> {
         let why = row.as_ref()?.read_only.clone()?;
-        Some(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(why))
+        let sel = format!("locked-{key}");
+        Some(div().debug_selector(|| sel).text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(why))
+    }
+
+    pub(super) fn is_locked(row: &Option<Row>) -> bool {
+        row.as_ref().is_none_or(|r| r.read_only.is_some())
     }
 
     pub(super) fn font_section(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
         let family_row = self.row("font.family");
-        let size_row = self.row("font.size");
         let family = family_row.as_ref().and_then(|r| r.value.as_str()).unwrap_or("Menlo").to_string();
-        let pt = size_row.as_ref().and_then(|r| r.value.as_f64()).unwrap_or(13.);
         let mut fonts = self.fonts.clone();
         if !fonts.contains(&family) {
             fonts.insert(0, family.clone());
         }
         let at = fonts.iter().position(|f| *f == family).unwrap_or(0);
         let step = |by: isize| fonts[(at as isize + by).rem_euclid(fonts.len() as isize) as usize].clone();
-        let family_locked = family_row.as_ref().is_some_and(|r| r.read_only.is_some()) || fonts.len() < 2;
-        let size_locked = size_row.as_ref().is_some_and(|r| r.read_only.is_some());
         let (back, next) = (step(-1), step(1));
-        let smaller = (pt - 1.).max(FONT_SIZES.0);
-        let bigger = (pt + 1.).min(FONT_SIZES.1);
-        let label = |text: &str| div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(text.to_string());
-        Self::section(t, "Font")
+        let locked = Self::is_locked(&family_row);
+        let mut control = div().flex().items_center().gap(px(8.));
+        let several = fonts.len() > 1;
+        if several {
+            control = control.child(button(t, "font-back".into(), "‹", !locked, cx, move |sw, cx| {
+                sw.choose("font.family", json!(back), cx)
+            }));
+        }
+        control = control.child(div().w(px(140.)).flex().justify_center().font_family(family.clone()).child(family));
+        if several {
+            control = control.child(button(t, "font-next".into(), "›", !locked, cx, move |sw, cx| {
+                sw.choose("font.family", json!(next), cx)
+            }));
+        }
+        Self::subtitle(t, "Font")
             .child(
                 div()
                     .flex()
-                    .gap(px(32.))
-                    .child(
-                        div().flex().flex_col().gap(px(6.)).child(label("Family")).child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(8.))
-                                .child(button(t, "font-back", "‹", !family_locked, cx, move |sw, cx| {
-                                    sw.choose("font.family", json!(back), cx)
-                                }))
-                                .child(
-                                    div().w(px(140.)).flex().justify_center().font_family(family.clone()).child(family),
-                                )
-                                .child(button(t, "font-next", "›", !family_locked, cx, move |sw, cx| {
-                                    sw.choose("font.family", json!(next), cx)
-                                })),
-                        ),
-                    )
-                    .child(
-                        div().flex().flex_col().gap(px(6.)).child(label("Size")).child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(8.))
-                                .child(button(
-                                    t,
-                                    "size-down",
-                                    "−",
-                                    !size_locked && pt > FONT_SIZES.0,
-                                    cx,
-                                    move |sw, cx| sw.choose("font.size", json!(smaller), cx),
-                                ))
-                                .child(div().w(px(52.)).flex().justify_center().child(format!("{pt} pt")))
-                                .child(button(
-                                    t,
-                                    "size-up",
-                                    "+",
-                                    !size_locked && pt < FONT_SIZES.1,
-                                    cx,
-                                    move |sw, cx| sw.choose("font.size", json!(bigger), cx),
-                                )),
-                        ),
-                    ),
+                    .items_center()
+                    .justify_between()
+                    .gap(px(16.))
+                    .child(Self::label(t, "Family", "", locked))
+                    .child(control),
             )
-            .children(Self::locked(t, &family_row))
-            .children(Self::locked(t, &size_row))
-    }
-
-    pub(super) fn toggles_section(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let mut notes = Self::section(t, "Notify me when");
-        for (key, label) in NOTIFICATIONS {
-            notes = notes.child(self.toggle(t, key, label, cx));
-        }
-        div().flex().flex_col().gap(px(28.)).child(notes).child(Self::section(t, "Selection").child(self.toggle(
-            t,
-            "copy_on_select",
-            "Copy text as I select it",
-            cx,
-        )))
+            .children(Self::locked(t, "font.family", &family_row))
+            .child(self.stepper(t, "font.size", "Size", FONT_SIZE, cx))
     }
 
     /// A switch for a true/false setting, with its label.
     pub(super) fn toggle(&self, t: &Theme, key: &'static str, label: &str, cx: &mut Context<Self>) -> gpui::Div {
         let row = self.row(key);
         let on = row.as_ref().is_some_and(|r| r.value == true);
-        let locked = row.as_ref().is_none_or(|r| r.read_only.is_some());
+        let locked = Self::is_locked(&row);
         div()
             .flex()
             .flex_col()
@@ -120,31 +166,131 @@ impl SettingsWindow {
             .child(
                 div()
                     .id(SharedString::from(format!("toggle-{key}")))
+                    .debug_selector(|| format!("toggle-{key}"))
                     .flex()
                     .items_center()
                     .justify_between()
                     .gap(px(16.))
-                    .child(div().text_color(rgb(if locked { t.muted } else { t.text })).child(label.to_string()))
+                    .child(Self::label(t, label, "", locked))
                     .child(switch(t, on, locked))
                     .when(!locked, |d| {
                         d.cursor_pointer().on_click(cx.listener(move |sw, _, _, cx| sw.choose(key, json!(!on), cx)))
                     }),
             )
-            .children(Self::locked(t, &row))
+            .children(Self::locked(t, key, &row))
+    }
+
+    /// − value + for a number, with its range under the label; a button at the range's end is inert.
+    pub(super) fn stepper(
+        &self,
+        t: &Theme,
+        key: &'static str,
+        label: &str,
+        steps: Steps,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        let row = self.row(key);
+        let v = row.as_ref().and_then(|r| r.value.as_f64()).unwrap_or(0.);
+        let locked = Self::is_locked(&row);
+        let go = |by: f64, cx: &mut Context<Self>, mark: &'static str, dir: &str| {
+            let to = steps.next(v, by).filter(|_| !locked);
+            button(t, format!("step-{dir}-{key}"), mark, to.is_some(), cx, move |sw, cx| {
+                if let Some(to) = to {
+                    sw.choose(key, steps.json(to), cx)
+                }
+            })
+        };
+        let control = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(go(-1., cx, "−", "down"))
+            .child(div().w(px(72.)).flex().justify_center().child((steps.show)(v)))
+            .child(go(1., cx, "+", "up"));
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(16.))
+                    .child(Self::label(t, label, steps.range, locked))
+                    .child(control),
+            )
+            .children(Self::locked(t, key, &row))
+    }
+
+    /// One of a few values, as a row of buttons.
+    pub(super) fn choice(
+        &self,
+        t: &Theme,
+        key: &'static str,
+        label: &str,
+        note: &str,
+        values: &[(&'static str, &'static str)],
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        let row = self.row(key);
+        let now = row.as_ref().and_then(|r| r.value.as_str()).unwrap_or_default().to_string();
+        let locked = Self::is_locked(&row);
+        let mut group = div().flex().rounded(px(6.)).border_1().border_color(rgb(t.border)).overflow_hidden();
+        for &(value, name) in values {
+            let on = now == value;
+            let sel = format!("choice-{key}-{value}");
+            group = group.child(
+                div()
+                    .id(SharedString::from(sel.clone()))
+                    .debug_selector(|| sel)
+                    .px(px(12.))
+                    .py(px(4.))
+                    .text_color(rgb(if on {
+                        t.title
+                    } else if locked {
+                        t.muted
+                    } else {
+                        t.text
+                    }))
+                    .when(on, |d| d.bg(rgb(t.selected)))
+                    .when(!on && !locked, |d| {
+                        d.cursor_pointer()
+                            .hover(|d| d.bg(rgb(t.hover)))
+                            .on_click(cx.listener(move |sw, _, _, cx| sw.choose(key, json!(value), cx)))
+                    })
+                    .child(name),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(16.))
+                    .child(Self::label(t, label, note, locked))
+                    .child(group),
+            )
+            .children(Self::locked(t, key, &row))
     }
 }
 
 /// A small square button with a label; inert when not `enabled`.
-fn button(
+pub(super) fn button(
     t: &Theme,
-    id: &'static str,
+    id: String,
     label: &'static str,
     enabled: bool,
     cx: &mut Context<SettingsWindow>,
     run: impl Fn(&mut SettingsWindow, &mut Context<SettingsWindow>) + 'static,
 ) -> impl IntoElement {
     div()
-        .id(id)
+        .id(SharedString::from(id.clone()))
+        .debug_selector(|| id)
         .size(px(26.))
         .flex()
         .items_center()

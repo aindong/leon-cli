@@ -259,8 +259,18 @@ impl Keymap {
         let mut all = self.bindings.iter().filter(|b| b.action.as_deref() == Some(action) && b.args.is_none());
         let first = all.clone().next();
         let b = all.rfind(|b| b.from_config).or(first)?;
-        Some(b.seq.iter().map(glyphs).collect::<Vec<_>>().join(" "))
+        Some(keys_text(&b.seq))
     }
+
+    /// Every binding, defaults first, then the config's in its order.
+    pub fn bindings(&self) -> &[Bound] {
+        &self.bindings
+    }
+}
+
+/// A binding's keys as the README writes them: `⌘⇧D`, `⌃B C`.
+pub fn keys_text(seq: &[Chord]) -> String {
+    seq.iter().map(glyphs).collect::<Vec<_>>().join(" ")
 }
 
 /// The window after a repeatable binding ran (tmux `bind -r`): until it closes, a key that
