@@ -29,6 +29,7 @@ fn the_focused_pane_of_several_has_a_left_edge(cx: &mut TestAppContext) {
     let a = ws.read_with(cx, |ws, _| ws.target_block()).unwrap();
     assert!(!drawn(cx, &format!("focus-edge-{a}")), "one pane: no focus mark");
     cx.simulate_keystrokes("cmd-d");
+    frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     let b = ws.read_with(cx, |ws, _| ws.target_block()).unwrap();
     let edge = at(cx, &format!("focus-edge-{b}")).expect("the focused pane is marked");
     let pane = at(cx, &format!("pane-{b}")).unwrap();

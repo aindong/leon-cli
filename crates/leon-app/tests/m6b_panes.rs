@@ -165,6 +165,7 @@ fn input_goes_to_the_focused_pane(cx: &mut TestAppContext) {
     let (ws, cx) = open(cx, &s.app);
     let old = leaves(&window(&s.app, &ws, cx).0)[0].clone();
     cx.simulate_keystrokes("cmd-d");
+    m9_support::frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     let new = window(&s.app, &ws, cx).0.focus.unwrap();
     let (t_new, t_old) = (term(&s.app, &new), term(&s.app, &old));
     settle(&t_new);
@@ -253,6 +254,7 @@ fn each_pane_has_its_own_pty_size(cx: &mut TestAppContext) {
     let full = term(&s.app, &a).size();
     cx.simulate_keystrokes("cmd-d");
     cx.run_until_parked();
+    m9_support::frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     let b = window(&s.app, &ws, cx).0.focus.unwrap();
     let (sa, sb) = (term(&s.app, &a).size(), term(&s.app, &b).size());
     assert_eq!((sa.0, sb.0), (full.0, full.0), "rows stay: {full:?} {sa:?} {sb:?}");
@@ -266,6 +268,7 @@ fn each_pane_has_its_own_pty_size(cx: &mut TestAppContext) {
     assert!(has_line(&text, &want), "wanted {want}: {text}");
     cx.simulate_keystrokes("cmd-shift-enter");
     cx.run_until_parked();
+    m9_support::frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     assert_eq!(term(&s.app, &b).size(), full, "the zoomed pane gets the whole area");
     s.app.stop();
 }
@@ -277,6 +280,7 @@ fn dragging_an_inner_divider_uses_its_own_split(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("cmd-d");
     cx.simulate_keystrokes("cmd-shift-d"); // A | (B / C), focus on C
     cx.run_until_parked();
+    m9_support::frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     let w = window(&s.app, &ws, cx).0;
     let focus = w.focus.clone();
     let (outer, inner) = match w.layout.as_ref().unwrap() {
@@ -319,6 +323,7 @@ fn click_focuses_and_dragging_a_divider_resizes(cx: &mut TestAppContext) {
     let a = leaves(&window(&s.app, &ws, cx).0)[0].clone();
     cx.simulate_keystrokes("cmd-d");
     cx.run_until_parked();
+    m9_support::frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     let b = window(&s.app, &ws, cx).0.focus.unwrap();
 
     let pane_a = cx.debug_bounds(Box::leak(format!("pane-{a}").into_boxed_str())).expect("pane a has bounds");

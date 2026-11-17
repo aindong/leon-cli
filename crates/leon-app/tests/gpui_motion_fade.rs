@@ -28,6 +28,8 @@ fn a_focus_move_fades_two_panes_and_leaves_the_third_alone(cx: &mut TestAppConte
         frame(&ws, cx, FRAME);
     }
     assert_eq!(fades(&ws, cx, &[&a, &b, &c]), vec![S, S, 0.], "a and b faded, c in focus");
+    // the splits' screens settle (a watch set that changed re-sends screens) before counting
+    run_for(cx, Duration::from_millis(300));
     let a_renders = grid_renders(&ws, cx, &a);
     act(&ws, cx, "pane.focus.left"); // to b
     let mut steps = vec![fades(&ws, cx, &[&b, &c])];

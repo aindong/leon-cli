@@ -45,3 +45,35 @@ fn zoom_grows_the_pane_and_unzoom_shrinks_it_back(cx: &mut TestAppContext) {
     assert!(a4.2 < a2.2 && a4.2 > a0.2, "half way it is between: {a4:?}");
     assert_eq!((a5, b5), (a0, b0), "and both end where they were");
 }
+
+/// Review (a GPUI panic, `line_layout.rs` reuse_layouts): a pane closed while zoomed is both what
+/// leaves and the zoom's pane; it is drawn once a frame, never twice.
+#[gpui::test]
+fn a_pane_closed_while_zoomed_is_drawn_once(cx: &mut TestAppContext) {
+    let s = setup();
+    let (ws, cx) = open(cx, &s.app);
+    ws.update(cx, |ws, _| ws.set_reduce_motion(false));
+    let a = tab_running(&s, &ws, cx, &quiet("a-ready"), "a-ready");
+    let b = split_running(&s, &ws, cx, &a, &quiet("b-ready"), "b-ready");
+    to_rest(&ws, cx);
+    let sid = sid(&ws, cx);
+    zoom(&s, &sid, &b, true);
+    assert!(moving(&ws, cx), "the zoom moves");
+    to_rest(&ws, cx);
+    close(&s, &sid, &b);
+    assert!(moving(&ws, cx), "the close moves");
+    let mut orders = vec![ws.read_with(cx, |ws, _| ws.tile_order())];
+    while ws.read_with(cx, |ws, _| ws.frame_asked()) {
+        frame(&ws, cx, FRAME);
+        orders.push(ws.read_with(cx, |ws, _| ws.tile_order()));
+    }
+    let end = tile(cx, &a);
+    s.app.stop();
+    for o in &orders {
+        let mut sorted = o.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(o.len(), sorted.len(), "each pane drawn once a frame: {o:?}");
+    }
+    assert!(end.is_some(), "the pane left fills the window");
+}

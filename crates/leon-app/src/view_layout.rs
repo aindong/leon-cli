@@ -96,9 +96,17 @@ impl Workspace {
             Some(m) => {
                 let p = lm::progress(now.saturating_duration_since(m.at), LAYOUT, m.ease).unwrap_or(1.);
                 let at = |id: &String| lm::between(m.from[id], m.to[id], p);
+                // the tiles, then what goes or stays covered, then the pane a zoom moves: each once
+                // (a view drawn twice in a frame breaks GPUI's reuse of its layouts)
                 let tiles = l.target.iter().map(|(id, _)| id).filter(|id| m.top.as_ref() != Some(*id));
                 let order = tiles.chain(&m.ghosts).chain(m.top.iter().filter(|t| m.to.contains_key(*t)));
-                order.map(|id| (id.clone(), at(id))).collect()
+                let mut drawn = Vec::<(String, Rect)>::new();
+                for id in order {
+                    if !drawn.iter().any(|(d, _)| d == id) {
+                        drawn.push((id.clone(), at(id)));
+                    }
+                }
+                drawn
             }
         };
         if self.veil_now(now) == 0. {
@@ -125,8 +133,13 @@ impl Workspace {
             to.insert(id.clone(), *r);
         }
         let mut ghosts = Vec::new();
+        // a pane a zoom covers is still there: it stays still under it; one closed shrinks away
+        let alive: Vec<String> = self
+            .active_window()
+            .and_then(|w| w.layout.map(|t| t.leaves().into_iter().map(String::from).collect()))
+            .unwrap_or_default();
         for (id, d) in l.frame.iter().filter(|(id, _)| !target.iter().any(|(t, _)| t == id)) {
-            let end = if zoom {
+            let end = if zoom && alive.contains(id) {
                 *d
             } else {
                 lm::holding(*d, target.iter().map(|(i, r)| (i.as_str(), *r))).map_or(*d, |(_, h)| lm::collapse(*d, h))
@@ -204,10 +217,20 @@ impl Workspace {
     /// The text size pane `id`'s grid keeps while panes move: its resting one (its PTY's), or a new
     /// pane's final one. None at rest: the grid fills its tile.
     pub(super) fn layout_held(&self, id: &str) -> Option<Rect> {
-        // a pane that doesn't move keeps its grid as it is (and cached)
+        self.layout_rest(id).map(|r| panes::text_rect(r, self.settings.pane_headers))
+    }
+
+    /// The tile a moving pane is laid out in, clipped by where it is: its resting one (or a new
+    /// pane's final one). None for a pane that doesn't move, which keeps its views as they are.
+    fn layout_rest(&self, id: &str) -> Option<Rect> {
         let m = self.layout.motion.as_ref().filter(|m| m.from.get(id) != m.to.get(id))?;
-        let rest = self.layout.settled.get(id).or_else(|| m.to.get(id))?;
-        Some(panes::text_rect(*rest, self.settings.pane_headers))
+        self.layout.settled.get(id).or_else(|| m.to.get(id)).copied()
+    }
+
+    /// The width pane `id`'s header is laid out at (its title cut to): its resting tile's while it
+    /// moves, so its text is never laid out in a strip a few pixels wide; else its tile's, `w`.
+    pub(super) fn header_width(&self, id: &str, w: f32) -> f32 {
+        self.layout_rest(id).map_or(w, |r| r.w)
     }
 
     /// The veil over the panes area this frame (a switch fading in), 0 at rest (tests too).

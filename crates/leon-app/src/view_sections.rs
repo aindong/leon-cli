@@ -118,7 +118,7 @@ impl Workspace {
                 let (w, terms) = self.shown()?;
                 let (_, rect, kind) = self.pane_rects(&w, window).into_iter().find(|(p, _, _)| p == id)?;
                 (terms.iter().any(|t| t == id) && self.header_shown(id, kind))
-                    .then(|| Input::Header(self.header_input(id, rect.w, cx)))
+                    .then(|| Input::Header(self.header_input(id, self.header_width(id, rect.w), cx)))
             }
         }
     }
@@ -232,7 +232,11 @@ impl Workspace {
 
     /// Pane `id`'s header in a pane `width` wide.
     pub(super) fn header_section(&self, id: &str, width: f32, cx: &mut Context<Self>) -> gpui::AnyElement {
-        let style = StyleRefinement::default().w_full().h(px(panes::HEADER)).flex_none();
+        let width = self.header_width(id, width);
+        // while the pane moves the header keeps its resting width, clipped by the moving tile
+        let held = self.header_width(id, f32::NAN).is_finite();
+        let style = StyleRefinement::default().h(px(panes::HEADER)).flex_none();
+        let style = if held { style.w(px(width)) } else { style.w_full() };
         let input = |ws: &Self, cx: &App| Some(Input::Header(ws.header_input(id, width, cx)));
         self.section(&format!("header-{id}"), style, input, cx)
     }
