@@ -27,4 +27,5 @@ printf '%s\n' "$notes" | sed -E -e '/./,$!d' \
   -e "s|(!\[[^]]*\])\(([^):#[:space:]][^):[:space:]]*)\)|\1($tag/raw/v$version/\2)|g" \
   -e "s|\]\(([^):#[:space:]][^):[:space:]]*)\)|]($tag/blob/v$version/\1)|g" \
   -e "s|\]\(#|]($tag/blob/v$version/CHANGELOG.md#|g" \
-  -e "s|^(\[[^]]+\]:[[:space:]]+)([^:#[:space:]][^:[:space:]]*)|\1$tag/blob/v$version/\2|"
+  -e "s|^(\[[^]]+\]:[[:space:]]+)([^:#[:space:]][^:[:space:]]*)([[:space:]].*)?$|\1$tag/blob/v$version/\2\3|" \
+  -e "s|^(\[[^]]+\]:[[:space:]]+)#|\1$tag/blob/v$version/CHANGELOG.md#|"
