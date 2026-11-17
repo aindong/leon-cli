@@ -21,8 +21,11 @@ pub(super) struct FloatUi {
     seen: HashMap<String, HashMap<String, bool>>,
     /// Drawers sliding: when it started, and whether in (else out).
     slides: HashMap<String, (Instant, bool)>,
-    /// Reduce Motion as set by a test; None asks the system.
+    /// Reduce Motion as set by a test; None takes the system's.
     reduce_motion: Option<bool>,
+    /// The system's Reduce Motion, read at launch and when the window becomes active (back from
+    /// System Settings), not on every frame of a motion: each read asks the accessibility prefs.
+    system_reduce: bool,
     /// What the last frame placed, and where the pane area's corner was in the window.
     placed: RefCell<(Placed, (f32, f32))>,
 }
@@ -40,7 +43,12 @@ impl Workspace {
     }
 
     pub(super) fn reduce_motion(&self) -> bool {
-        self.floats.reduce_motion.unwrap_or_else(system_reduce_motion)
+        self.floats.reduce_motion.unwrap_or(self.floats.system_reduce)
+    }
+
+    /// Read the system's Reduce Motion again (launch, and the window becoming active).
+    pub(super) fn note_reduce_motion(&mut self) {
+        self.floats.system_reduce = system_reduce_motion();
     }
 
     /// The active window's overlays, as the app last heard them.

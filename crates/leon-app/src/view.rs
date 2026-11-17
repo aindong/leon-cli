@@ -299,6 +299,7 @@ impl Workspace {
         let activation = cx.observe_window_activation(window, |ws, window, cx| {
             ws.window_active = window.is_window_active();
             ws.note_reduce_transparency();
+            ws.note_reduce_motion();
             ws.update_glass(window, cx);
             cx.notify()
         });
@@ -409,6 +410,7 @@ impl Workspace {
         ws.prepare(); // the first frame comes before any notify
         ws.sync_grids(&seen, cx);
         ws.note_reduce_transparency();
+        ws.note_reduce_motion();
         ws.update_glass(window, cx);
         ws.sync_sections(window, cx);
         ws
