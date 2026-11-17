@@ -61,8 +61,11 @@ ln -s "$leon" "$home/bin/leon"
   n=0
   c() { n=$((n + 1)); export GIT_AUTHOR_DATE="@$((1793000000 + n * 86400)) +0000" GIT_COMMITTER_DATE="@$((1793000000 + n * 86400)) +0000"; }
   cd "$home/src/auth"
+  mkdir src tests
+  printf '[package]\nname = "auth"\nversion = "0.4.0"\n' >Cargo.toml
+  : >README.md; : >src/lib.rs; : >src/session.rs; : >src/token.rs; : >tests/session_test.rs
   git init -q --template= -b main .
-  c; git commit -q --allow-empty -m "sessions: a cookie per login"
+  c; git add -A; git commit -q -m "sessions: a cookie per login"
   c; git commit -q --allow-empty -m "tokens: sign with the key from the vault"
   git checkout -q -b expiry
   c; git commit -q --allow-empty -m "sessions expire after an hour idle"
@@ -225,7 +228,6 @@ front() { osascript -e "tell application \"System Events\" to set frontmost of (
 # keys AS [WAIT]: the check and the key are one AppleScript, so keys go only to the app this
 # script started, and anything else in front stops the run
 keys() {
-  front
   osascript -e "tell application \"System Events\"
     if (unix id of (first process whose frontmost is true)) is not $app_pid then error \"not leon\"
     $1
@@ -240,18 +242,16 @@ sleep 1
 rec=$!
 sleep 1.2
 keys 'keystroke "d" using command down' 1            # split right: the panes make room
-typ "leon block ls"; keys 'key code 36' 1.2
+typ "ls src tests"; keys 'key code 36' 1
 keys 'keystroke "]" using {command down, shift down}' 1.3   # the next tab fades in, and back
 keys 'keystroke "[" using {command down, shift down}' 1
 keys 'keystroke "p" using {command down, shift down}' 0.6   # the palette: split below
 typ "split below" 0.6; keys 'key code 36' 1.2
 keys 'keystroke "w" using command down' 1            # and close it again
+keys 'keystroke "g" using {control down, option down}' 2.2   # the git popup (docs/lua/keys.md)
+keys 'keystroke "g" using {control down, option down}' 1
 keys 'keystroke "k" using command down' 0.6          # the switcher, to another session
 typ "infra" 0.5; keys 'key code 36' 1.5
-keys 'keystroke "k" using command down' 0.6
-typ "auth" 0.5; keys 'key code 36' 1
-keys 'keystroke "g" using {control down, option down}' 2.5   # the git popup (docs/lua/keys.md)
-keys 'keystroke "g" using {control down, option down}' 1
 touch "$d/blocked"                                   # the agent asks for permission
 sleep 2
 keys 'keystroke "a" using {command down, shift down}' 2.2   # Activity: what needs you
