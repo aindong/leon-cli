@@ -76,6 +76,15 @@ impl Workspace {
             l.veil = (seen_before && !reduce).then_some((now, if veil > 0. { veil } else { 1. }));
             (l.motion, l.settled) = (None, target.iter().cloned().collect());
         } else if changed_shape && l.area == area && !self.reduce_motion() {
+            // a motion turned: the panes it was making keep the size their PTYs got (its end's), so
+            // they aren't resized again before the new one ends
+            if let Some(old) = &self.layout.motion {
+                let made: Vec<(String, Rect)> = (old.to.iter())
+                    .filter(|(id, _)| !self.layout.settled.contains_key(*id) && !old.ghosts.contains(id))
+                    .map(|(id, r)| (id.clone(), *r))
+                    .collect();
+                self.layout.settled.extend(made);
+            }
             // a change that moves nothing (a lone pane zoomed) rests at once
             let motion = Some(self.motion_to(&target, &shape, now)).filter(|m| !m.ghosts.is_empty() || m.from != m.to);
             if motion.is_none() {
@@ -258,6 +267,11 @@ impl Workspace {
     /// moves, so its text is never laid out in a strip a few pixels wide; else its tile's, `w`.
     pub(super) fn header_width(&self, id: &str, w: f32) -> f32 {
         self.layout_rest(id).map_or(w, |r| r.w)
+    }
+
+    /// The text size pane `id`'s grid keeps while panes move, (w, h); None at rest (tests).
+    pub fn held_size(&self, id: &str) -> Option<(f32, f32)> {
+        self.layout_held(id).map(|r| (r.w, r.h))
     }
 
     /// The veil over the panes area this frame (a switch fading in), 0 at rest (tests too).
