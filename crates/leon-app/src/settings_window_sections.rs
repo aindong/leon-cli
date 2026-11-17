@@ -99,6 +99,11 @@ pub(super) const ENTRIES: [Entry; 16] = [
     entry(Server, "tailscale", "Tailscale", &["tailscale", "tailnet", "serve"]),
 ];
 
+/// Whether the row `id` shows a setting from init.lua (blank until init.lua has been read).
+fn from_init_lua(id: &str) -> bool {
+    ENTRIES.iter().any(|e| e.id == id && e.keys.iter().any(|k| leon_lua::settings::KEYS.contains(k)))
+}
+
 /// Whether every word of `query` (lower case) is in one of `texts`.
 pub(super) fn matches(query: &str, texts: &[&str]) -> bool {
     let hay = texts.join(" ").to_lowercase();
@@ -243,9 +248,6 @@ impl SettingsWindow {
 
     pub(super) fn page(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
         let mut body = div().flex().flex_col().gap(px(28.));
-        if self.loaded.is_none() {
-            return body;
-        }
         let pages = self.pages();
         if pages.is_empty() {
             return body.child(
@@ -270,7 +272,11 @@ impl SettingsWindow {
             let (mut shortcuts, mut agents, mut hosts) = (vec![], vec![], vec![]);
             for item in items {
                 match item {
-                    Item::Entry(id) => part = part.child(self.entry(id, t, cx)),
+                    // until init.lua reads, only the rows that don't come from it
+                    Item::Entry(id) if self.loaded.is_some() || !from_init_lua(id) => {
+                        part = part.child(self.entry(id, t, cx))
+                    }
+                    Item::Entry(_) => {}
                     Item::Shortcut(i) => shortcuts.push(i),
                     Item::Agent(i) => agents.push(i),
                     Item::Host(i) => hosts.push(i),

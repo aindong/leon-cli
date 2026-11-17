@@ -187,3 +187,24 @@ fn edit_in_init_lua_makes_its_folder(cx: &mut TestAppContext) {
     assert!(made, "init.lua not made: {err:?}");
     assert_eq!(vcx.opened_url(), Some(format!("file://{}", config.display())));
 }
+
+/// An init.lua that doesn't load leaves its own rows blank and says why, but the sections that
+/// don't come from it (Shortcuts, Agents) still work.
+#[gpui::test]
+fn a_broken_init_lua_leaves_the_other_sections(cx: &mut TestAppContext) {
+    let s = m9_support::setup();
+    let config = s.dir.path().join("init.lua");
+    std::fs::write(&config, "leon.set(\"font.size\", ").unwrap(); // a syntax error
+    let remote = std::rc::Rc::new(leon_app::remote::Remote::connect(s.app.socket()).unwrap());
+    let sw = cx.update(|cx| leon_app::settings_window::SettingsWindow::open(config, remote, cx)).unwrap();
+    let mut vcx = VisualTestContext::from_window(sw.into(), cx);
+    vcx.simulate_resize(gpui::size(gpui::px(900.), gpui::px(2400.)));
+    assert!(shows(&mut vcx, |cx| sw.read_with(cx, |sw, _| sw.error()).unwrap().is_some()), "it says why");
+    click(&mut vcx, "section-shortcuts");
+    let ok = shows(&mut vcx, |cx| drawn(cx, "edit-init-lua"));
+    click(&mut vcx, "section-general");
+    let blank = !drawn(&mut vcx, "choice-resume-ask");
+    s.app.stop();
+    assert!(ok, "Shortcuts still shows, with Edit in init.lua to fix the file");
+    assert!(blank, "no control shows a value init.lua didn't give");
+}

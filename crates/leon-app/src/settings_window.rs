@@ -179,8 +179,13 @@ impl SettingsWindow {
         // init.lua may have been edited by hand while the window was in the background, and
         // Reduce Transparency changed in System Settings
         let activation = cx.observe_window_activation(window, |sw, window, cx| {
-            if window.is_window_active() && !sw.saving {
-                sw.note_reduce_transparency();
+            if !window.is_window_active() {
+                return;
+            }
+            // changed in System Settings meanwhile; a write under way doesn't wait for it
+            sw.note_reduce_transparency();
+            sw.update_glass(window, cx);
+            if !sw.saving {
                 sw.reload(cx);
                 sw.read_shortcuts(cx);
                 sw.read_server(cx);
@@ -305,9 +310,12 @@ impl SettingsWindow {
     /// Write the queued changes, reloading the server after each, then read init.lua again.
     fn write_queue(&mut self, cx: &mut Context<Self>) {
         let (config, server, queue) = (self.config.clone(), self.server.clone(), self.queue.clone());
-        cx.spawn(async move |this, cx| {
+        cx.spawn(async move |this, cx| loop {
+            // the queue is drained even if the window closes: a change shown was asked for
             loop {
-                let Some((key, value)) = queue.borrow_mut().pop_front() else { break };
+                // taken out first: a borrow kept across the awaits below would meet a click's push
+                let next = queue.borrow_mut().pop_front();
+                let Some((key, value)) = next else { break };
                 let path = config.clone();
                 let written = cx.background_executor().spawn(async move { write_setting(&path, &key, &value) }).await;
                 let mut error = written.err();
@@ -323,15 +331,16 @@ impl SettingsWindow {
                     this.update(cx, |sw, _| sw.error = error).ok();
                 }
             }
-            let loaded = cx.background_executor().spawn(async move { load(&config) }).await;
-            this.update(cx, |sw, cx| {
-                if !sw.queue.borrow().is_empty() {
-                    // a change made while the file was read: write it, and read again after
-                    return sw.write_queue(cx);
-                }
+            let path = config.clone();
+            let loaded = cx.background_executor().spawn(async move { load(&path) }).await;
+            if !queue.borrow().is_empty() {
+                continue; // a change made while the file was read: write it, and read again after
+            }
+            let _ = this.update(cx, |sw, cx| {
                 sw.saving = false;
                 sw.loaded(loaded, cx);
-            })
+            });
+            break;
         })
         .detach();
     }
