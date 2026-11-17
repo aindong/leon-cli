@@ -17,6 +17,8 @@ pub(super) struct GridInput {
     family: SharedString,
     font_size: f32,
     theme: Theme,
+    /// It fits its PTY to its bounds; not a closing pane's (its block is gone) while it shrinks.
+    fits: bool,
 }
 
 /// What a grid's last render drew (tests).
@@ -27,6 +29,8 @@ pub struct GridDrawn {
     pub active: bool,
     pub font_size: f32,
     pub theme: Theme,
+    /// It fits its PTY to its bounds (not a closing pane's, whose block is gone).
+    pub fits: bool,
 }
 
 /// A shown pane's grid view, what it was last given (when it had rendered `given` times), the
@@ -76,6 +80,7 @@ fn canvas_of(
         i.active,
         (i.family.clone(), i.font_size, i.theme),
         (stats.clone(), painted.clone()),
+        i.fits,
     )
 }
 
@@ -93,6 +98,7 @@ impl Workspace {
             family: self.font_family.clone(),
             font_size: self.font_size,
             theme,
+            fits: true,
         }
     }
 
@@ -110,10 +116,21 @@ impl Workspace {
     /// every notify of the workspace; it notifies only grids, never the workspace.
     pub(super) fn sync_grids(&mut self, seen: &Screens, cx: &mut Context<Self>) {
         let shown = self.grid_panes();
-        self.grids.retain(|id, _| shown.contains(id));
-        self.grid_renders.borrow_mut().retain(|id, _| shown.contains(id));
+        // a closing pane's grid, and those a zoom covers, stay as they were until their motion ends
+        let ghosts = self.layout_ghosts().to_vec();
+        self.grids.retain(|id, _| shown.contains(id) || ghosts.contains(id));
+        self.grid_renders.borrow_mut().retain(|id, _| shown.contains(id) || ghosts.contains(id));
         for id in &shown {
             self.sync_grid(id, seen.get(id).copied(), cx);
+        }
+        for id in &ghosts {
+            let Some(slot) = self.grids.get_mut(id).filter(|s| s.input.fits) else { continue };
+            slot.input.fits = false;
+            let input = slot.input.clone();
+            slot.view.update(cx, |g, cx| {
+                g.input = input;
+                cx.notify();
+            });
         }
     }
 
@@ -168,7 +185,7 @@ impl Workspace {
         let moved: Vec<String> = self
             .grids
             .iter()
-            .filter(|(id, s)| here(s) && s.screen != now.get(*id).copied())
+            .filter(|(id, s)| here(s) && s.screen != now.get(*id).copied() && s.input.fits)
             .map(|(id, _)| id.clone())
             .collect();
         let mut scrolled = false;
@@ -183,7 +200,7 @@ impl Workspace {
     /// Pane `id`'s grid, shown cached; the plain canvas when it has none yet (a frame before any
     /// notify, or a pane the model shows before the poll ran): never a view made while drawing.
     pub(super) fn grid_element(&self, id: &str) -> gpui::AnyElement {
-        match self.grids.get(id) {
+        let grid = match self.grids.get(id) {
             Some(s) => gpui::AnyView::from(s.view.clone())
                 .cached(gpui::StyleRefinement::default().size_full())
                 .into_any_element(),
@@ -192,6 +209,11 @@ impl Workspace {
                 canvas_of(&self.grid_input(id), self.app.clone(), ids, (&self.stats, &self.term.painted))
                     .into_any_element()
             }
+        };
+        // while panes move it keeps the size its PTY has, clipped by its moving tile (one resize, at the end)
+        match self.layout_held(id) {
+            Some(h) => div().flex_none().w(px(h.w)).h(px(h.h)).child(grid).into_any_element(),
+            None => grid,
         }
     }
 
@@ -211,6 +233,7 @@ impl Workspace {
             active: i.active,
             font_size: i.font_size,
             theme: i.theme,
+            fits: i.fits,
         })
     }
 }

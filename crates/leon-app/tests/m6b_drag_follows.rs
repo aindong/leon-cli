@@ -25,6 +25,12 @@ fn a_divider_follows_small_pointer_moves(cx: &mut TestAppContext) {
     cx.run_until_parked();
     cx.simulate_keystrokes("cmd-d");
     cx.run_until_parked();
+    // the split's motion, to its end, on the frames the app asks for (motion PR 2)
+    while ws.read_with(cx, |ws, _| ws.frame_asked()) {
+        cx.executor().advance_clock(std::time::Duration::from_millis(16));
+        ws.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+    }
 
     let win = |cx: &mut gpui::VisualTestContext| {
         let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();

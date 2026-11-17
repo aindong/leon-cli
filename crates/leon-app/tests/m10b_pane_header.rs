@@ -17,12 +17,14 @@ fn the_header_controls_split_zoom_and_close(cx: &mut TestAppContext) {
     assert!(header.contains(&center(split)));
     cx.simulate_click(center(split), Modifiers::none());
     assert!(shows(cx, |cx| leaves(&window(&s.app, &ws, cx).0).len() == 2), "the control split the pane");
+    frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     let new = ws.read_with(cx, |ws, _| ws.target_block()).unwrap();
     let p = center(at(cx, &format!("header-{new}")).unwrap());
     cx.simulate_mouse_move(p, None, Modifiers::none());
     let p = center(at(cx, &format!("header-zoom-{new}")).unwrap());
     cx.simulate_click(p, Modifiers::none());
     assert_eq!(window(&s.app, &ws, cx).0.zoomed.as_deref(), Some(new.as_str()), "zoom zooms it");
+    frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     let p = center(at(cx, &format!("header-{new}")).unwrap());
     cx.simulate_mouse_move(p, None, Modifiers::none());
     let p = center(at(cx, &format!("header-close-{new}")).unwrap());

@@ -56,13 +56,16 @@ pub(super) fn terminal_canvas(
     active: bool,
     (family, font_size, theme): (SharedString, f32, Theme),
     (stats, painted): (Rc<RefCell<Stats>>, scroll::PaintedMap),
+    fits: bool,
 ) -> impl IntoElement {
     let family2 = family.clone();
     canvas(
         move |bounds, window, _| {
             let (cell_w, line_h) = cell_size(window, &family2, font_size);
             let (rows, cols) = cells_in(bounds.size.width, bounds.size.height, cell_w, line_h);
-            app.fit(&sid, &block_id, rows, cols);
+            if fits {
+                app.fit(&sid, &block_id, rows, cols);
+            }
             (frame, cell_w, line_h, (rows as usize, cols as usize), block_id)
         },
         move |bounds, (frame, cell_w, line_h, size, id), window, cx| {

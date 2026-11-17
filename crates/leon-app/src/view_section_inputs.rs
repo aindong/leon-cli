@@ -187,7 +187,7 @@ impl Workspace {
         self.pane_rects(&w, window)
             .into_iter()
             .filter(|(id, _, kind)| terms.contains(id) && self.header_shown(id, kind))
-            .map(|(id, rect, _)| self.header_input(&id, rect.w, cx))
+            .map(|(id, rect, _)| self.header_input(&id, self.header_width(&id, rect.w), cx))
             .collect()
     }
 

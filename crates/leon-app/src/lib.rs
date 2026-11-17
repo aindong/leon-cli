@@ -13,6 +13,7 @@ pub mod icons;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod input;
 pub mod keymap;
+pub mod layout_motion;
 pub mod look;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod notify;

@@ -18,6 +18,7 @@ fn font_size_keys_resize_every_pane(cx: &mut TestAppContext) {
         ids.iter().all(|id| ws.read_with(cx, |ws, _| ws.cell_position(id, 0, 0)).is_some())
     };
     assert!(shows(cx, painted), "both panes are drawn");
+    frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     let sizes = || ids.iter().map(|id| term(&s.app, id).size()).collect::<Vec<_>>();
     let start = sizes();
     let start_pt = ws.read_with(cx, |ws, _| ws.font_size());
