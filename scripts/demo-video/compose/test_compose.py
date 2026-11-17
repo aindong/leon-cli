@@ -6,11 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PIL import Image
+
 from compose import SQUARE_CUT, frame_plan, pieces, soft, srt
 from draw import combo_caps, ease
-from frame import BASE, MAIN, Renderer, fit, lerp_cam, load_cue
+from frame import BASE, MAIN, SQUARE, SRC_H, SRC_W, Renderer, fit, lerp_cam, load_cue
 
-RUN_DEMO = (Path(__file__).resolve().parent.parent / "run-demo.sh").read_text()
+RUN_DEMO = "".join((Path(__file__).resolve().parent.parent / f).read_text() for f in ("run-demo.sh", "scenes.sh"))
 
 
 def cue(*zooms):
@@ -122,6 +124,52 @@ class SrtTest(unittest.TestCase):
         self.assertIn("Quit the app", text)  # 92.5-94.5 in video time: kept up to the cut at 94
         self.assertIn("00:01:35,000 --> 00:01:36,500", text)  # title 2.5 + 92.5, to 2.5 + 94
         self.assertIn("00:01:36,500 --> 00:01:39,150", text)  # 96.85-99.5, shifted back by the 2.85 s cut
+
+
+class LayoutTest(unittest.TestCase):
+    def test_the_take_fills_most_of_the_frame(self):
+        self.assertGreaterEqual(MAIN.vw / MAIN.W, 0.93)
+        self.assertAlmostEqual(MAIN.vw / MAIN.vh, 16 / 9, places=2)
+        self.assertGreater(MAIN.vy, 0)  # the gradient still shows around it
+        self.assertGreaterEqual(SQUARE.vw / SQUARE.W, 0.93)
+
+    def test_the_caption_is_a_pill_over_the_takes_top_edge(self):
+        """the pill crosses the edge: drawn on the border above it and on the take below it, and
+        the small line sits in the pill after the caption, not on a line of its own"""
+        rows = [{"t": 0, "type": "take", "lead": 0}, {"t": 0, "type": "caption", "text": "Agents open their own panes.",
+                                                      "until": 5, "small": "leon split"}]
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl") as f:
+            f.write("\n".join(json.dumps(r) for r in rows))
+            f.flush()
+            for L in (MAIN, SQUARE):
+                R = Renderer(L, load_cue(f.name))
+                plain = R.frame(Image.new("RGB", (SRC_W, SRC_H), (255, 255, 255)), 2.0, 2.0, captions=[])
+                img = R.frame(Image.new("RGB", (SRC_W, SRC_H), (255, 255, 255)), 2.0, 2.0)
+                left = next(x for x in range(L.W) if img.getpixel((x, L.caption_y)) != plain.getpixel((x, L.caption_y)))
+                for y in (L.vy - 4, L.vy + 8):  # above the edge and below it, just inside the pill
+                    self.assertNotEqual(img.getpixel((L.W // 2, y)), plain.getpixel((L.W // 2, y)), (L, y))
+                self.assertLess(left, L.W / 2 - 200)  # one wide pill: caption and small line on one row
+                below = L.caption_y + int(R.cap_font.size * 1.7 / 2) + 6
+                self.assertEqual(img.getpixel((L.W // 2, below)), plain.getpixel((L.W // 2, below)))
+
+
+class CaptionTimeTest(unittest.TestCase):
+    def test_each_caption_stays_long_enough_to_read(self):
+        """no voice-over: a caption is up at least 2 s, and 1 s for every 4 words"""
+        start, seen = None, 0
+        for line in RUN_DEMO.splitlines():
+            for m in re.finditer(r'\bat (-?[\d.]+);|caption "([^"]+)" ([\d.]+)', line):
+                if m[1]:
+                    start = float(m[1])
+                    continue
+                seen += 1
+                need = max(2.0, len(m[2].split()) / 4)
+                self.assertGreaterEqual(float(m[3]) - start, need, m[2])
+        self.assertGreater(seen, 15)
+
+    def test_every_key_shows_a_keycap(self):
+        self.assertNotIn('"show": false', RUN_DEMO)
+        self.assertNotIn("echo false", RUN_DEMO)
 
 
 class KeysTest(unittest.TestCase):

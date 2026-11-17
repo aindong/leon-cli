@@ -32,8 +32,8 @@ def row(s):
 def render(services):
     worst = "down" if any(s["status"] == "down" for s in services) else (
         "degraded" if any(s["status"] == "degraded" for s in services) else "up")
-    head = ('<meta charset="utf-8">'
-            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    head = ('<meta charset="utf-8"><meta name="viewport"'
+            ' content="width=device-width, initial-scale=1">'
             '<title>Status</title>')
     return (
         f"<!doctype html><html><head>{head}<style>{CSS}</style></head><body><main>"

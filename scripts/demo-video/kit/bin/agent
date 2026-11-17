@@ -114,5 +114,6 @@ while :; do
   printf '\n  %s>%s \033[?25h' "$B" "$R"
   IFS= read -r ask || exec sleep 100000
   printf '\033[?25l'
-  [ -n "$ask" ] && printf '  %s●%s Noted: %s. I\x27ll start on it after this review.\n' "$C" "$R" "$ask"
+  # short: the request is on the line above, and the attach view's pane is narrower than the app's
+  [ -n "$ask" ] && printf '  %s●%s Noted. I\x27ll do that after this review.\n' "$C" "$R"
 done
