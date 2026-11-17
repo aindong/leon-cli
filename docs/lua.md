@@ -275,9 +275,9 @@ background; a status indicator and a pane that needs you never fade.
 leon.set("fade_inactive_panes", 0)
 ```
 
-`translucency` is how much of the desktop shows through the app's window, blurred and tinted
-by the theme, but never so much that text falls below 4.5:1. Reduce Transparency and
-full screen are opaque, as is `leon.set("translucency", 0)`.
+`translucency` is how much desktop shows through Leon.app, blurred, tinted by the theme.
+Text keeps 4.5:1 over any desktop (muted 3:1), or the theme's own if lower.
+Reduce Transparency and full screen are opaque, as is `leon.set("translucency", 0)`.
 
 `repeat_time` is how long a repeatable binding's keys work without the prefix (above).
 
