@@ -5,24 +5,97 @@ use leon_core::hints::{compile, MAX_PATTERNS};
 
 use super::*;
 
-/// The hint pattern field.
-pub(super) struct PatternField {
-    focus: FocusHandle,
-    draft: String,
-    /// The pattern the draft replaces (by its text: init.lua may be edited meanwhile); None adds one.
+/// A one-line text field: the hint pattern field, and Tailscale's port and tag fields.
+pub(super) struct TextField {
+    pub(super) focus: FocusHandle,
+    pub(super) draft: String,
+    /// The hint pattern the draft replaces (by its text: init.lua may be edited meanwhile); None
+    /// adds one.
     editing: Option<String>,
-    error: Option<String>,
+    /// Why the last Enter was refused.
+    pub(super) error: Option<String>,
     /// The field had the focus when the window last rendered.
     pub(super) typing: bool,
 }
 
-impl PatternField {
+impl TextField {
     pub(super) fn new(cx: &mut Context<SettingsWindow>) -> Self {
-        PatternField { focus: cx.focus_handle(), draft: String::new(), editing: None, error: None, typing: false }
+        TextField { focus: cx.focus_handle(), draft: String::new(), editing: None, error: None, typing: false }
     }
 
     pub(super) fn focused(&self, window: &Window) -> bool {
         self.focus.is_focused(window)
+    }
+
+    /// Empty the field and give the focus back to the window.
+    pub(super) fn escape(&mut self, window: &mut Window, to: &FocusHandle) {
+        (self.draft, self.editing, self.error) = (String::new(), None, None);
+        window.focus(to);
+    }
+
+    /// The field (`{id}-field`, showing `placeholder` while empty), its `button` (`{id}-add`) and,
+    /// under them, why the last Enter was refused (`{id}-error`).
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn draw(
+        &self,
+        t: &Theme,
+        id: &str,
+        placeholder: String,
+        button: &'static str,
+        key: impl Fn(&mut SettingsWindow, &KeyDownEvent, &mut Window, &mut Context<SettingsWindow>) + 'static,
+        enter: impl Fn(&mut SettingsWindow, &mut Context<SettingsWindow>) + 'static,
+        cx: &mut Context<SettingsWindow>,
+    ) -> gpui::Div {
+        let shown = if self.draft.is_empty() && !self.typing {
+            div().text_color(rgb(t.muted)).child(placeholder)
+        } else {
+            div().child(format!("{}{}", self.draft, if self.typing { "▏" } else { "" }))
+        };
+        let (field, add, error) = (format!("{id}-field"), format!("{id}-add"), format!("{id}-error"));
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .id(SharedString::from(field.clone()))
+                            .debug_selector(|| field)
+                            .track_focus(&self.focus)
+                            .on_key_down(cx.listener(key))
+                            .flex_1()
+                            .px(px(8.))
+                            .py(px(4.))
+                            .rounded(px(6.))
+                            .border_1()
+                            .border_color(rgb(if self.typing { t.accent } else { t.border }))
+                            .bg(rgb(t.bg))
+                            .font_family("Menlo")
+                            .cursor_text()
+                            .child(shown),
+                    )
+                    .child(
+                        div()
+                            .id(SharedString::from(add.clone()))
+                            .debug_selector(|| add)
+                            .px(px(10.))
+                            .py(px(4.))
+                            .rounded(px(6.))
+                            .border_1()
+                            .border_color(rgb(t.border))
+                            .cursor_pointer()
+                            .hover(|d| d.bg(rgb(t.hover)))
+                            .on_click(cx.listener(move |sw, _, _, cx| enter(sw, cx)))
+                            .child(button),
+                    ),
+            )
+            .children(self.error.clone().map(|why| {
+                div().debug_selector(|| error).text_size(px(SECONDARY_TEXT)).text_color(rgb(t.error)).child(why)
+            }))
     }
 }
 
@@ -132,57 +205,9 @@ impl SettingsWindow {
         }
         if !locked {
             let f = &self.pattern;
-            let shown = if f.draft.is_empty() && !f.typing {
-                div().text_color(rgb(t.muted)).child("Add a pattern, such as [A-Z]+-\\d+")
-            } else {
-                div().child(format!("{}{}", f.draft, if f.typing { "▏" } else { "" }))
-            };
-            out = out.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .id("pattern-field")
-                            .debug_selector(|| "pattern-field".into())
-                            .track_focus(&f.focus)
-                            .on_key_down(cx.listener(Self::pattern_key))
-                            .flex_1()
-                            .px(px(8.))
-                            .py(px(4.))
-                            .rounded(px(6.))
-                            .border_1()
-                            .border_color(rgb(if f.typing { t.accent } else { t.border }))
-                            .bg(rgb(t.bg))
-                            .font_family("Menlo")
-                            .cursor_text()
-                            .child(shown),
-                    )
-                    .child(
-                        div()
-                            .id("pattern-add")
-                            .debug_selector(|| "pattern-add".into())
-                            .px(px(10.))
-                            .py(px(4.))
-                            .rounded(px(6.))
-                            .border_1()
-                            .border_color(rgb(t.border))
-                            .cursor_pointer()
-                            .hover(|d| d.bg(rgb(t.hover)))
-                            .on_click(cx.listener(|sw, _, _, cx| sw.add_pattern(cx)))
-                            .child(if f.editing.is_some() { "Save" } else { "Add" }),
-                    ),
-            );
-            if let Some(why) = &f.error {
-                out = out.child(
-                    div()
-                        .debug_selector(|| "pattern-error".into())
-                        .text_size(px(SECONDARY_TEXT))
-                        .text_color(rgb(t.error))
-                        .child(why.clone()),
-                );
-            }
+            let save = if f.editing.is_some() { "Save" } else { "Add" };
+            let hint = "Add a pattern, such as [A-Z]+-\\d+".to_string();
+            out = out.child(f.draw(t, "pattern", hint, save, Self::pattern_key, |sw, cx| sw.add_pattern(cx), cx));
         }
         out.children(Self::locked(t, "hint_patterns", &row))
     }
@@ -191,11 +216,7 @@ impl SettingsWindow {
     fn pattern_key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         match typed(&mut self.pattern.draft, e, cx) {
             Typed::Enter => self.add_pattern(cx),
-            Typed::Escape => {
-                let f = &mut self.pattern;
-                (f.draft, f.editing, f.error) = (String::new(), None, None);
-                window.focus(&self.focus);
-            }
+            Typed::Escape => self.pattern.escape(window, &self.focus),
             Typed::Edited | Typed::Other => {}
         }
     }

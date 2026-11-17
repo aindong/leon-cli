@@ -108,7 +108,10 @@ pub struct SettingsWindow {
     query: String,
     /// The hint pattern field: what is typed, the pattern it replaces (None: a new one), and why
     /// the last Add was refused.
-    pattern: patterns::PatternField,
+    pattern: patterns::TextField,
+    /// Tailscale's port and tag fields.
+    port: patterns::TextField,
+    tag: patterns::TextField,
     /// The keymap's bindings, once the server has sent them.
     shortcuts: Vec<ShortcutRow>,
     /// `leon skill status`, once read (Err: why it couldn't be).
@@ -212,7 +215,9 @@ impl SettingsWindow {
             saving: false,
             section: Section::General,
             query: String::new(),
-            pattern: patterns::PatternField::new(cx),
+            pattern: patterns::TextField::new(cx),
+            port: patterns::TextField::new(cx),
+            tag: patterns::TextField::new(cx),
             shortcuts: Vec::new(),
             agents: None,
             server_info: None,
@@ -354,8 +359,8 @@ impl SettingsWindow {
         self.loaded.as_ref().map_or_else(Look::default, |l| l.look.clone()).theme(self.dark)
     }
 
-    /// A key anywhere but the hint pattern field: the search field's, ↑/↓ for the sidebar, Escape
-    /// and ⌘W to close.
+    /// A key anywhere but a text field (a hint pattern, Tailscale's port or tag): the search
+    /// field's, ↑/↓ for the sidebar, Escape and ⌘W to close.
     fn key_down(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let k = &e.keystroke;
         let m = &k.modifiers;
@@ -391,7 +396,9 @@ impl SettingsWindow {
 impl Render for SettingsWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.renders += 1;
-        self.pattern.typing = self.pattern.focused(window);
+        for f in [&mut self.pattern, &mut self.port, &mut self.tag] {
+            f.typing = f.focused(window);
+        }
         let t = self.theme();
         let (text, color) = match (self.error(), self.saving) {
             (_, true) => ("Saving…".to_string(), t.muted),
