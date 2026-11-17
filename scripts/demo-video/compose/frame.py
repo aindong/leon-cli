@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 from PIL import Image, ImageDraw
 
-from draw import (AMBER, CHALK, PARCHMENT, SYMBOLS, background, badge, ease, font, pointer,
+from draw import (AMBER, CHALK, IRON, PARCHMENT, SYMBOLS, UMBER, background, badge, ease, font, pointer,
                   rounded_mask, shadow, symbol)
 
 FPS = 60
@@ -29,12 +29,14 @@ class Layout:
     vw: int
     vh: int
     radius: int
-    caption_y: int  # the caption's centre line
-    keys_y: int  # the keycaps' centre line
+    caption_y: int  # the caption pill's centre line, over the take's top edge
+    keys_y: int  # the keycaps' centre line, over its bottom edge
 
 
-MAIN = Layout(1920, 1080, 184, 112, 1552, 873, 22, 46, 1034)
-SQUARE = Layout(1080, 1080, 48, 160, 984, 780, 22, 70, 1012)
+# the take fills most of the frame (a thin gradient border is left): on a phone its text is what
+# has to read, so the caption and the keycaps sit on it as pills rather than in bands of their own
+MAIN = Layout(1920, 1080, 64, 36, 1792, 1008, 22, 62, 1018)
+SQUARE = Layout(1080, 1080, 24, 24, 1032, 1032, 22, 48, 1026)
 
 
 def fit(region, aspect, base=BASE, max_zoom=1.8, margin=1.12):
@@ -82,8 +84,9 @@ class Renderer:
         b.alpha_composite(self.shadow, (L.vx - self.spad, L.vy - self.spad))
         self.base = b.convert("RGB")
         self.cursor = pointer(int(46 * L.W / 1920) if L.W == 1920 else 40)
-        self.cap_font = font(44 if L.W == 1920 else 40, 640)
-        self.small_font = font(26, 520)
+        # no voice-over: the captions tell the story, so they read on a phone (a still 390 px wide)
+        self.cap_font = font(56 if L.W == 1920 else 40, 640)
+        self.small_font = font(38 if L.W == 1920 else 30, 520)
         self.badges = {}
         self.home = (BASE[0] + BASE[2] / 2, BASE[1] + BASE[3] / 2, min(BASE[2], BASE[3] * self.aspect))
         self.zooms = sorted((r for r in cue if r["type"] == "zoom"), key=lambda r: r["vt"])
@@ -207,10 +210,9 @@ class Renderer:
             b2.putalpha(b.getchannel("A").point(lambda v: int(v * alpha)))
         img.alpha_composite(b2, (L.W // 2 - b.width // 2, L.keys_y - b.height // 2 + rise))
 
-    def caption_line(self, layer, text, y, alpha):
-        """one caption line, centred; ⌘ ⇧ ⌥ ⌃ are drawn as symbols in the run of text"""
+    def caption_runs(self, text):
+        """the caption's runs of text, ⌘ ⇧ ⌥ ⌃ as symbol names, and each one's width"""
         f = self.cap_font
-        size = f.size
         marks = {"⌘": "cmd", "⇧": "shift", "⌥": "alt", "⌃": "ctrl"}
         runs, cur = [], ""
         for ch in text:
@@ -223,9 +225,13 @@ class Renderer:
                 cur += ch
         if cur:
             runs.append(cur)
-        sym = int(size * 0.9)
-        widths = [sym + 2 if r in SYMBOLS else f.getlength(r) for r in runs]
-        x = self.L.W / 2 - sum(widths) / 2
+        sym = int(f.size * 0.9)
+        return runs, [sym + 2 if r in SYMBOLS else f.getlength(r) for r in runs]
+
+    def caption_line(self, layer, runs, widths, x, y, alpha):
+        """one caption line from x; the symbols drawn as strokes in the run of text"""
+        f = self.cap_font
+        sym = int(f.size * 0.9)
         d = ImageDraw.Draw(layer)
         for r, w in zip(runs, widths):
             if r in SYMBOLS:
@@ -250,8 +256,16 @@ class Renderer:
             alpha = min(1.0, (t - a) / 0.2, (b - t) / 0.2)
             layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
             d = ImageDraw.Draw(layer)
-            y = L.caption_y
-            self.caption_line(layer, text, y, alpha)
+            runs, widths = self.caption_runs(text)
+            gap = 26  # between the caption and its small line, which follows it in the pill
+            sw = self.small_font.getlength(small) + gap if small else 0
+            w = sum(widths) + sw
+            pad, h, y = 30, int(self.cap_font.size * 1.7), L.caption_y
+            x = L.W / 2 - w / 2
+            d.rounded_rectangle((x - pad, y - h / 2, x + w + pad, y + h / 2), h // 2, fill=IRON + (int(232 * alpha),),
+                                outline=UMBER + (int(255 * alpha),), width=2)
+            self.caption_line(layer, runs, widths, x, y, alpha)
             if small:
-                d.text((L.W / 2, y + 42), small, font=self.small_font, fill=CHALK + (int(230 * alpha),), anchor="mm")
+                d.text((x + sum(widths) + gap, y + 2), small, font=self.small_font, fill=CHALK + (int(230 * alpha),),
+                       anchor="lm")
             img.alpha_composite(layer)
