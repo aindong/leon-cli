@@ -1,8 +1,9 @@
-# Changelog: the detail since 0.1.0
+# Changelog: the detail of each feature
 
-The detail of each feature in [CHANGELOG.md](../CHANGELOG.md)'s `[Unreleased]`, newest first, moved
-here to keep that file short; each section is as it was written. The changelog keeps one
-summary bullet per feature, linking its section here.
+The detail of each feature in [CHANGELOG.md](../CHANGELOG.md) that came after its milestones,
+newest first, moved here to keep that file short; each section is as it was written. The
+changelog keeps one summary bullet or link per feature, pointing at its section here. Every
+feature here on 2026-11-18 shipped in 0.1.0.
 
 ## Since 0.1.0: the detail
 
