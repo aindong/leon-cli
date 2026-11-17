@@ -77,6 +77,8 @@ names one theme for both appearances, the new one is set for both; when it names
 side macOS is on now changes (the list's field says which). A theme change fades in over a moment,
 or switches at once with Reduce Motion.
 
+![Change Theme… with another theme selected, drawing the whole window as a preview](../images/app-theme.png)
+
 ### `leon theme`
 
 List, import and show themes. Needs no server.
