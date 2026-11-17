@@ -182,6 +182,18 @@ pub enum Cmd {
         /// Create a bottom scratch-shell drawer if the label is absent.
         #[arg(long)]
         create: bool,
+        /// With --create: a centred float (a popup) instead of the bottom drawer.
+        #[arg(long, requires = "create")]
+        float: bool,
+        /// The float's position and size as window fractions, default 0.1,0.1,0.8,0.8.
+        #[arg(long, value_name = "X,Y,W,H", requires = "float")]
+        rect: Option<String>,
+        /// With --create: keep it open after its program exits.
+        #[arg(long, requires = "create")]
+        keep_open: bool,
+        /// With --create: the program and its arguments, after `--` [default: a login shell].
+        #[arg(last = true, value_name = "CMD", requires = "create")]
+        command: Vec<String>,
     },
     /// Pin a block to a side (left, right or bottom).
     Dock {

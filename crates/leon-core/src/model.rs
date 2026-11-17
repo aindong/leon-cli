@@ -92,6 +92,9 @@ pub struct State {
     pub sessions: Vec<Session>,
     /// Exit statuses of finished programs, newest last, so `wait` works after a block closed.
     exits: VecDeque<(String, i32)>,
+    /// Where the focus goes back when a toggled overlay hides or closes while focused, by
+    /// overlay block (`set_focus_back`).
+    pub(crate) back_to: HashMap<String, String>,
     /// Events not yet taken (events.rs).
     pub(crate) outbox: Vec<Event>,
     /// Sessions whose view changed since the events were last taken.
@@ -275,11 +278,16 @@ impl State {
 
     /// Close a block, collapsing its split; a window left without blocks closes too.
     pub fn close_block(&mut self, session_id: &str, block_id: &str) -> Result<(), ApiError> {
+        let back = self.back_to.remove(block_id);
         let s = self.session_mut(session_id)?;
         let i = s.block_index(block_id)?;
         let w = s.window_index(&s.blocks[i].window_id)?;
+        let had_focus = s.windows[w].focus.as_deref() == Some(block_id);
         s.blocks.remove(i);
         s.detach_placed(w, block_id);
+        if had_focus {
+            s.focus_back(w, back);
+        }
         let emptied = s.empty_window(w).then(|| s.windows[w].id.clone());
         self.emit(session_id, "block_closed", json!({ "block_id": block_id }));
         match emptied {

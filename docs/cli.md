@@ -432,6 +432,9 @@ Show/hide a float or drawer by its exact, case-insensitive label within `-s/--se
 Labels must be unique there. Hidden terminals keep running.
 `--create` opens a scratch login shell docked to the bottom on first use, in the directory of
 the active window's focused block (the session's current directory); subsequent calls toggle it. A bottom panel already occupying that side makes creation fail.
+With `--create`: `--float` makes a popup (a float at `--rect`, default `0.1,0.1,0.8,0.8`)
+instead; `-- CMD` runs CMD instead of a shell. It closes when its program exits, giving the
+focus back, unless `--keep-open`. See [lua/keys.md](lua/keys.md#a-popup-on-a-key).
 
 ### `leon dock left|right|bottom`
 

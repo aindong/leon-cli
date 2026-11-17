@@ -54,9 +54,19 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
             }
             r
         }
-        Cmd::Toggle { label, create } => {
+        Cmd::Toggle { label, create, float, rect, keep_open, command } => {
             let sid = pick_session(c, cli, None)?;
-            c.call("session.toggle", json!({ "session_id": sid, "label": label, "create": create }))?
+            let mut params = json!({ "session_id": sid, "label": label, "create": create });
+            // only the fields in use, so a server older than them still takes a plain toggle
+            if *float {
+                params["float"] = json!(true);
+                params["bounds"] = json!(rect.as_deref().map(parse_rect).transpose()?);
+            }
+            if *keep_open || !command.is_empty() {
+                let exit = keep_open.then(|| json!({ "on_completion": false }));
+                params["options"] = json!({ "command": (!command.is_empty()).then_some(command), "exit": exit });
+            }
+            c.call("session.toggle", params)?
         }
         Cmd::Dock { side, size } => {
             let (sid, bid) = pick_block(c, cli, None)?;

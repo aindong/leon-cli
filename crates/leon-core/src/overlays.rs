@@ -131,11 +131,30 @@ impl Session {
             .or_else(|| o.docked.iter().find(|d| !d.hidden).map(|d| d.block_id.clone()))
             .or_else(|| self.windows[w].layout.as_ref().and_then(|t| t.leaves().first().map(|s| s.to_string())));
     }
+    /// Focus `back` if it is still shown in window `w` (a tile, or an overlay not hidden).
+    pub(crate) fn focus_back(&mut self, w: usize, back: Option<String>) {
+        let win = &self.windows[w];
+        let o = self.overlay(&win.id);
+        let shown = |id: &str| win.layout.as_ref().is_some_and(|t| t.contains(id)) || (o.contains(id) && !o.hidden(id));
+        if let Some(id) = back.filter(|id| shown(id)) {
+            self.windows[w].focus = Some(id);
+        }
+    }
     pub(crate) fn empty_window(&self, w: usize) -> bool {
         self.windows[w].layout.is_none() && self.overlay(&self.windows[w].id).ids().next().is_none()
     }
 }
 impl State {
+    /// When overlay `id` hides (by toggle) or closes while it has the focus, the focus goes back to
+    /// `to` if that is still shown. Not saved: after a restart the usual pick applies.
+    pub fn set_focus_back(&mut self, id: &str, to: Option<String>) {
+        let sessions = &self.sessions;
+        self.back_to.retain(|k, _| sessions.iter().any(|s| s.blocks.iter().any(|b| &b.id == k)));
+        match to.filter(|to| to != id) {
+            Some(to) => self.back_to.insert(id.into(), to),
+            None => self.back_to.remove(id),
+        };
+    }
     pub fn float_block(&mut self, sid: &str, id: &str, bounds: Bounds) -> Result<u64, ApiError> {
         bounds.check()?;
         let s = self.session_mut(sid)?;
@@ -221,8 +240,10 @@ impl State {
         let id = self
             .overlay_by_label(sid, label)?
             .ok_or_else(|| ApiError::not_found("no float or drawer with that label"))?;
+        let back = self.back_to.get(&id).cloned();
         let s = self.session_mut(sid)?;
         let w = s.window_of(&id)?;
+        let before = s.windows[w].focus.clone();
         let o = s.overlays.get_mut(&s.windows[w].id).expect("overlay found");
         let hidden = !o.hidden(&id);
         if hidden {
@@ -240,12 +261,16 @@ impl State {
                 s.windows[w].zoomed = None;
             }
             s.repair_focus(w);
+            if before.as_deref() == Some(&id) {
+                s.focus_back(w, back);
+            }
         } else {
             o.show(&id);
             s.windows[w].focus = Some(id.clone());
             s.windows[w].zoomed = None;
         }
         if !hidden {
+            self.set_focus_back(&id, before);
             self.focus_block(sid, &id)?;
         }
         self.touch(sid);

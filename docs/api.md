@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.11.0**. Every method is marked:
+API version **1.12.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -479,7 +479,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.11.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.12.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -3711,7 +3711,7 @@ same facts for the server you run.
 
 ### `session.toggle`
 
-*stable*. Show or hide a labeled float or drawer without stopping its program; optionally create a scratch shell.
+*stable*. Show or hide a labeled float or drawer without stopping its program; optionally create it (a scratch shell, or a popup running a command).
 
 **Input:** 
 
@@ -3720,12 +3720,38 @@ same facts for the server you run.
 | `session_id` | string | yes |  |
 | `label` | string | yes | Exact case-insensitive block label, unique within this session. |
 | `create` | boolean |  | When true and no block has this label, create a login-shell drawer at the bottom of the active window, in the directory of its focused block (else the login shell's default). |
+| `float` | boolean |  | With `create`: a float (at `bounds`) instead of the bottom drawer. |
+| `bounds` | `Bounds` \| null |  | With `float`: fractions of the whole window; default centered 80% by 80%. |
+| `options` | `TerminalOptions` \| null |  | With `create`: what runs (default a login shell) and where (default the focused block's directory). It closes when its program exits, as every block does, unless `exit` says not to. |
 
 **Output:** 
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `revision` | integer (uint64) | yes |  |
+
+**`Bounds`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `x` | number | yes |  |
+| `y` | number | yes |  |
+| `width` | number | yes |  |
+| `height` | number | yes |  |
+
+**`TerminalOptions`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `exit` | `ExitOptions` \| null |  |  |
+
+**`ExitOptions`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `on_completion` | boolean | yes | Close the block when its program exits (default true); false keeps it open. |
 
 <details><summary>JSON Schemas</summary>
 
@@ -3747,13 +3773,116 @@ same facts for the server you run.
         "description": "When true and no block has this label, create a login-shell drawer at the bottom of the active\nwindow, in the directory of its focused block (else the login shell's default).",
         "type": "boolean",
         "default": false
+      },
+      "float": {
+        "description": "With `create`: a float (at `bounds`) instead of the bottom drawer.",
+        "type": "boolean",
+        "default": false
+      },
+      "bounds": {
+        "description": "With `float`: fractions of the whole window; default centered 80% by 80%.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Bounds"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "options": {
+        "description": "With `create`: what runs (default a login shell) and where (default the focused block's\ndirectory). It closes when its program exits, as every block does, unless `exit` says not to.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/TerminalOptions"
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     },
     "additionalProperties": false,
     "required": [
       "session_id",
       "label"
-    ]
+    ],
+    "$defs": {
+      "Bounds": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ]
+      },
+      "TerminalOptions": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "argv to run directly; omitted runs the login shell.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "description": "Working directory; defaults to `$HOME`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ExitOptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExitOptions": {
+        "type": "object",
+        "properties": {
+          "on_completion": {
+            "description": "Close the block when its program exits (default true); false keeps it open.",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "on_completion"
+        ]
+      }
+    }
   },
   "output_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
