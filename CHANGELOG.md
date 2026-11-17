@@ -52,7 +52,8 @@ rest.
 - **A native macOS app.** Sessions and tabs in a sidebar or the titlebar, split panes with headers,
   floating panes, drawers and popups on a key ([detail](docs/changelog-detail.md#popups)), scrollback, selection, find,
   copy mode, hints, links and mouse support, a command palette, ⌘K to switch to any tab on any
-  machine, and ⌘⇧\ for every tab as a live card ([detail](docs/changelog-detail.md#the-overview-in-leonapp)).
+  machine, ⌘⇧\ for every tab as a live card ([detail](docs/changelog-detail.md#the-overview-in-leonapp)),
+  and About leon in the leon menu.
 - **Make it yours.** Eight themes with a live preview ([detail](docs/changelog-detail.md#themes)), your font
   ([detail](docs/changelog-detail.md#m22b--themes-and-settings-in-the-app)), a translucent window (`translucency`,
   [detail](docs/changelog-detail.md#a-translucent-window-in-leonapp)), an icon for each pane's program
