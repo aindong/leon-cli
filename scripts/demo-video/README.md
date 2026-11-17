@@ -8,14 +8,14 @@ moments every time, driven over ssh. Nothing touches the host's own leon, screen
 
 | Path | What it is |
 |---|---|
-| `run-demo.sh` | On the host: `boot`, `push`, `setup`, `take`, `cue`, `render`, `shot`, `check`, `stop`. The scenes and their timing are its `scene1`…`scene11` functions. |
+| `run-demo.sh` | On the host: `boot`, `push`, `setup`, `take`, `cue`, `render`, `retake`, `shot`, `check`, `stop`. The scenes and their timing are its `scene1`…`scene11` functions. |
 | `kit/guest.sh` | In the VM, as `demo`: reset, stage, start the app, the take's beats. |
 | `kit/bin/agent`, `kit/scenes/` | The scripted agent: reads a scene file, prints at a reading pace, reports its state with OSC 7501, asks its question and waits, and drives leon the way an agent with leon's skill does (`leon split`, `leon wait`, `leon capture`). No AI service runs. |
 | `kit/projects/` | Three small Python projects (stdlib only) whose tests really run; `.next/N/` is each agent's change, applied during the take. |
 | `kit/bin/tailscale` | A stand-in found through `LEON_TAILSCALE`: answers only `status --json`, with a made-up tailnet. |
 | `kit/bin/mklog.py`, `kit/bin/ticker` | The 400 MB coloured log for the speed scene, and the background jobs of the 50-tab overview. |
-| `kit/init.lua`, `kit/zshrc` | The take's leon config (font, theme, no banners, the `review` action) and a neutral prompt. |
-| `keypost.swift` | Posts real key codes and clicks to the focused app in the VM; `push` builds it. |
+| `kit/init.lua`, `kit/zshrc` | The take's leon config (font, theme, no banners, the `review` action, `docs/lua/keys.md`'s ctrl+alt+g git popup) and a neutral prompt. |
+| `keypost.swift` | Posts real key codes and clicks to the focused app in the VM, and keeps the parked pointer stepping during a take; `push` builds it. |
 | `vnc.py` | Screenshots of the headless VM over its VNC server. |
 | `cut.py` | Finds the second where the app reopens windowed after ⌘Q, so the edit can drop it. |
 | `compose/` | The compositor: `compose.py` (timeline, render, CLI), `frame.py` (layouts, camera, one frame), `draw.py` (gradient, keycaps, pointer, wordmark, cards), `test_compose.py`, `requirements.txt`. |
@@ -60,7 +60,7 @@ These need a person once, over VNC (`tart run leon-demo --vnc-experimental` prin
    and a copy of `~demo/python` in that user's home. `run-demo.sh push` copies leon there.
 
 `guest.sh prefs` (run by `setup`) does the rest each time, safely: it hides the desktop widgets,
-maps the made-up tailnet's `devbox.example-tailnet.ts.net` to the same account, and makes the
+turns off macOS's tips (their "See what's new" banner stays on screen until clicked), maps the made-up tailnet's `devbox.example-tailnet.ts.net` to the same account, and makes the
 400 MB log once.
 
 ## Making a take
@@ -75,6 +75,13 @@ scripts/demo-video/run-demo.sh take    # scenes 1-11, about 106 s; take 3-5 film
 scripts/demo-video/run-demo.sh stop
 ```
 
+After a change lands, one command films it again: `run-demo.sh retake REV` (with the VM booted)
+builds Leon.app from a clean export of commit `REV` on this Mac (the VM has no Rust toolchain;
+the build has its own target dir in `$DEMO_WORK/cargo`, so the next retake builds only what
+changed), then runs `push`, `setup`, `take` and `render`. `push` takes any other build from
+`DEMO_APP=path/to/Leon.app`. It also copies this Mac's `git` (Apple's, which needs only system
+libraries) into the VM's kit, for the popup's `git log`: the VM has no developer tools.
+
 `setup` starts from nothing every time: it quits the app, stops both leon servers and forgets
 their sessions (the take's own `LEON_RUNTIME_DIR` and `LEON_STATE_DIR` in the VM, never anything
 else), and copies the projects fresh. `take` writes `take-raw.mov` (2880×1620, variable frame
@@ -83,7 +90,9 @@ a VNC screenshot to `shots/`.
 
 Things learnt the hard way: `screencapture` started in the background inside the VM hangs, so
 it runs in the foreground of its own ssh session; `screencapture -V` stops only on a frame after
-its time, so a take ends on panes that still print; ⌘K matches anywhere in a name, so the take
+its time, so a take ends on panes that still print; after a pane closes, one still second ends
+`screencapture -v` early (with any leon build), so during a take the parked pointer steps 4 pt up
+and down the right edge, inside the strip the render crops off (`keypost wiggle`); ⌘K matches anywhere in a name, so the take
 types whole words; the pointer is parked on the right edge, inside what the render crops.
 
 ## Rendering
@@ -170,6 +179,8 @@ input and lowers its capture rate.
   and `demo@example.com`, and the devbox is the VM's second account over real ssh. Captions say
   "pick a machine from your tailnet", never that no keys are needed.
 - Speed numbers are captions from the host's measurements (above), not filmed in the VM.
+- status-page's git history (the popup's `git log --graph`) is made up at `reset`: one real
+  commit of the project, then empty commits and a merged branch with fixed dates.
 
 ## Licences of what it uses
 

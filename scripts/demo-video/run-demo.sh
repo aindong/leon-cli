@@ -163,7 +163,7 @@ scene6() { # ⌘K to the red agent; while it fixes the page, its repo's history 
 }
 scene7() { # Settings (⌘,): Appearance, a theme for the whole app, live, and back
   at 60.5; mark "7 settings"; k combo cmd+,
-  caption "Your colours, live." 68.8 "Settings: ⌘,"
+  caption "Your colours, live." 68.8 "Settings · Appearance" # the small line's font has no ⌘
   at 61.4; k key down # the sidebar's next section: Appearance
   # macOS is light in the VM, so the live column is "When macOS is light" (the window is centred)
   at 62.6; k click 937 382 # leon-light
