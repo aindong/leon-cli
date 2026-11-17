@@ -1,6 +1,6 @@
 //! M10b criterion 6, the header part: each pane has a header above its terminal that names its
-//! program. Its own binary: its panes run a plain /bin/sh (`plain_shell`), set in the environment
-//! before anything starts, which other tests running beside it in one binary must not see.
+//! program. Its panes run a plain /bin/sh (`plain_setup`): a login shell's prompt or profile may set
+//! the title to user@host.
 
 mod m10b_support;
 
@@ -9,8 +9,7 @@ use m10b_support::*;
 
 #[gpui::test]
 fn each_pane_has_a_header_above_its_terminal(cx: &mut TestAppContext) {
-    plain_shell();
-    let s = setup();
+    let s = plain_setup();
     let (ws, cx) = open(cx, &s.app);
     cx.simulate_keystrokes("cmd-d");
     let (w, _) = window(&s.app, &ws, cx);

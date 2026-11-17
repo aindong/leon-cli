@@ -205,9 +205,43 @@ leon.bind("ctrl+g", "scratch_shell")
 ```
 <!-- /m20-scratch -->
 
-The label must be unique within the session. Creation fails if the bottom side
-already has a drawer. Existing programs and their visibility restore with saved
+The label must be unique within the session. Creating a drawer fails if the bottom
+side already has one. Existing programs and their visibility restore with saved
 sessions, using the usual fresh-shell/resume policy after server restart.
+
+### A popup on a key
+
+`float=true` makes the toggle create a float instead of a drawer: a popup over your work. It
+runs `options.command` (default a login shell) in the focused pane's directory, at `bounds`
+(default `{x=0.1,y=0.1,width=0.8,height=0.8}`). The same key hides it and shows it again, and
+the hidden program keeps running. When the program exits the popup closes, and the next press
+makes a new one; `options={exit={on_completion=false}}` keeps it open instead. Opening it takes
+the focus; hiding or closing it gives the focus back to the pane that had it.
+
+There is one popup per label per session: pressed in a pane in another directory, the key shows
+the popup you already have, still where it was made, so a half-read log isn't lost. Quit the
+program to start the next one where you are. This one shows the git history in a pager on
+Ctrl+Alt+G (`q` quits it; put your own git UI in `command`):
+
+<!-- popup-git -->
+```lua
+leon.action{
+  name = "git_popup",
+  title = "Toggle git popup",
+  run = function()
+    local result, err = leon.toggle{
+      label = "git", create = true, float = true,
+      options = { command = { "sh", "-c", "git log --graph --oneline --decorate --color=always | less -R" } },
+    }
+    if not result then error(err, 0) end
+    return result
+  end,
+}
+leon.bind("ctrl+alt+g", "git_popup")
+```
+<!-- /popup-git -->
+
+The same from a shell: `leon toggle git --create --float -- sh -c 'git log --graph --oneline | less -R'`.
 
 Attach also accepts the client action names `pane.float` and `pane.new_floating` in
 `leon.bind`; their GUI counterparts are part of M20b.

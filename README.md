@@ -195,6 +195,13 @@ strength. `leon.set("fade_inactive_panes", N)` sets it from 0 (off) to 0.8 (defa
 The window is translucent, tinted by the theme, with text readable over any desktop;
 `leon.set("translucency", 0)` makes it opaque.
 
+![The leon window over a plain blue-to-violet desktop, which shows through its sidebar and title bar](docs/images/app-translucent.png)
+
+Each tab, sidebar row and pane header has an icon for the program in it: an agent, an editor,
+tests, a server, a monitor, ssh or a shell.
+
+![Tabs in the title bar, each with its program's icon: a shell, an agent, an editor, tests, a server, a monitor and ssh](docs/images/app-icons.png)
+
 ⌘K switches to any session, tab or block on any host, the most recent first, and ⌘⇧A lists what
 needs you: blocked first (with what it is waiting for), then errors, finished runs you haven't
 looked at, and work in progress. The toolbar button for it shows how many blocks are blocked, and so

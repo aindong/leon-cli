@@ -22,3 +22,5 @@ screens under a "reconnecting" note.
 ![A pane on the devbox, focused, with the host's name in its header](images/m16b-remote-pane.png)
 
 ![A host that can't be reached, with ssh's reason under its label](images/m16b-unreachable.png)
+
+![Add Host… listing the machines on a tailnet, each with its system and whether it is online](images/app-tailnet.png)

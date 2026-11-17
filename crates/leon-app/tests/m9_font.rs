@@ -8,11 +8,16 @@ use m9_support::*;
 
 #[gpui::test]
 fn font_size_keys_resize_every_pane(cx: &mut TestAppContext) {
-    let s = setup();
+    let s = plain_setup(); // it types into a pane at the end
     let (ws, cx) = open(cx, &s.app);
     cx.simulate_keystrokes("cmd-d");
     cx.run_until_parked();
     let ids = leaves(&window(&s.app, &ws, cx).0);
+    // a pane is fitted (its PTY resized) when its grid is first drawn, after its screen arrives
+    let painted = |cx: &mut gpui::VisualTestContext| {
+        ids.iter().all(|id| ws.read_with(cx, |ws, _| ws.cell_position(id, 0, 0)).is_some())
+    };
+    assert!(shows(cx, painted), "both panes are drawn");
     let sizes = || ids.iter().map(|id| term(&s.app, id).size()).collect::<Vec<_>>();
     let start = sizes();
     let start_pt = ws.read_with(cx, |ws, _| ws.font_size());

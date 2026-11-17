@@ -6,6 +6,29 @@ summary bullet per feature, linking its section here.
 
 ## Since 0.1.0: the detail
 
+### Popups
+
+#### Added
+
+- `leon toggle LABEL --create --float [--rect X,Y,W,H] [--keep-open] [-- CMD]` creates a float
+  (default `0.1,0.1,0.8,0.8`) running CMD, or a login shell, in the focused pane's directory;
+  later toggles hide and show it, and a hidden program keeps running. It closes when its program
+  exits, as every block does, and the next toggle makes a new one; `--keep-open` keeps it with
+  its exit status. Without `--float`, `-- CMD` now runs CMD in the bottom drawer.
+- In Lua: `leon.toggle{label=..., create=true, float=true, bounds={...}, options={command={...}}}`,
+  with a recipe for a git popup on a key in [lua/keys.md](lua/keys.md#a-popup-on-a-key).
+- `session.toggle` gains `float`, `bounds` and `options` (the `TerminalOptions` that
+  `session.new_split` takes): new optional parameters on a stable method, so `api_version` goes
+  from `1.11.0` to `1.12.0`.
+
+#### Changed
+
+- Hiding or closing a float or drawer that a toggle opened, while it has the focus, gives the
+  focus back to the pane the toggle was pressed in, in its own tab (before, the top float, a drawer
+  or the first tile of the overlay's tab). One that isn't focused leaves the focus where it is, and
+  one shown another way (the switcher, `leon float`) forgets where to go back. A popup is one per label
+  per session: toggled from a pane in another directory, it shows the one already running.
+
 ### Server and Remote Hosts in Settings
 
 #### Added
@@ -247,11 +270,18 @@ summary bullet per feature, linking its section here.
 - The scratch drawer (⌘J, `leon toggle scratch --create`, `session.toggle` with `create`) opens in
   the directory of the active window's focused block instead of `~`, when its program is still
   running (an exited one's directory is only what its output last said). (F14)
+- The command palette (⌘⇧P), and the switcher and the lists that filter like it, rank a row
+  whose title or keywords have each typed word (two letters or more) as a whole word above fuzzy
+  matches inside other words: `log` puts "Tail the server log" first, not 8th.
 
 #### Fixed
 
 - A one-shot `claude -p` (`--print`, or `-p` among other short flags, `-cp`) in a pane no longer
   registers a resume command. (F10)
+- With a translucent window, the title bar's strip to the right of the last tab is tinted like
+  the rest of the bar instead of showing the desktop through it.
+- A pane header's split, zoom and close controls (unfloat and close on a float or drawer) sit at
+  the header's right end again, not right after its title.
 - Keys typed into `leon -H … attach` while the link is stalled no longer arrive in part (the
   research run left `ec` of `echo …⏎` at the remote prompt). After a quiet second, keys wait for
   a probe of the link; if it fails they are all dropped, and so are keys typed while it

@@ -26,5 +26,5 @@ async fn status_reports_its_start_and_its_blocks() {
     assert_eq!((s["sessions"].clone(), s["blocks"].clone()), (json!(2), json!(3)), "{s}");
     assert_eq!(s["started_at"].as_u64(), Some(started), "the start doesn't move");
     let v = c.call("server.version", json!({})).await.unwrap();
-    assert_eq!(v["api_version"], "1.11.0");
+    assert_eq!(v["api_version"], leon_server::API_VERSION);
 }

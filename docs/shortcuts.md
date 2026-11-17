@@ -35,6 +35,8 @@ Leon.app's keys, from the [README](../README.md#app-shortcuts). [lua/keys.md](lu
 | ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (shown panes) |
 | ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
 
+![The overview (⌘⇧\\): every tab on every session as a live tile, with its status](images/app-overview.png)
+
 These are defaults. A `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
 removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow. Every
 button names its action and shortcut on hover. The wheel scrolls a pane back through its

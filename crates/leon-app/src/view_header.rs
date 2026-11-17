@@ -69,6 +69,9 @@ impl Workspace {
             .flex_none()
             .items_center()
             .gap(px(6.))
+            // laid out as a cached view's root, like the title bar: the caption's flex_1 needs a
+            // width to push the controls to the right end
+            .w_full()
             .h(px(panes::HEADER))
             .pl(px(10.))
             .pr(px(4.))

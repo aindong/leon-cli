@@ -44,16 +44,19 @@ fn snapshots_and_events_line_up_under_concurrent_changes() {
         std::thread::sleep(Duration::from_millis(20));
     };
     let mut c = connect();
+    // `sleep` comes to the front once, and the server's 200 ms look sends that as an event at no
+    // fixed place: let it go by before counting. Every event, from before the session exists, so
+    // the look can't come before the listening.
+    let mut first = connect();
+    call(&mut first, "session.attach_all", json!({ "event_scope": "all" }));
     let layout = json!({ "block": { "options": { "command": ["sleep", "60"] } } });
     let sid = call(&mut c, "session.create", json!({ "layout": layout })).0["session_id"].as_str().unwrap().to_string();
-    // `sleep` comes to the front once, and the server's 200 ms look sends that as an event at no
-    // fixed place: let it go by before counting
-    let mut first = connect();
-    call(&mut first, "session.attach", json!({ "session_id": sid }));
     loop {
         let mut line = String::new();
         first.read_line(&mut line).unwrap();
-        if line.contains("foreground_changed") {
+        let v: Value = serde_json::from_str(&line).unwrap();
+        let block = &v["event"]["payload"]["event"]["payload"];
+        if block["name"] == "foreground_changed" && block["payload"]["foreground"] == "sleep" {
             break;
         }
     }

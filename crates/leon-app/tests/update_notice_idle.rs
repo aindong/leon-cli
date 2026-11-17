@@ -9,8 +9,7 @@ use leon_app::view::Workspace;
 use m10b_support::*;
 
 fn setup() -> Setup {
-    plain_shell();
-    m10b_support::setup()
+    plain_setup()
 }
 
 /// Until the pane's shell has started and the app knows the program in front: the server

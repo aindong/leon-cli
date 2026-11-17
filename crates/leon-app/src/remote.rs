@@ -382,11 +382,15 @@ impl Remote {
     /// size it has now (each ask is a round trip, and the screen follows a moment later).
     pub fn fit(&self, session_id: &str, block_id: &str, rows: u16, cols: u16) {
         let shown = self.model().screens.get(block_id).map_or((0, 0), |f| (f.lines, f.cols));
-        if shown == (rows as usize, cols as usize) {
+        let mut asked = lock(&self.asked);
+        // a screen of this size is stale if another size was asked for since: ask again
+        let last = asked.get(block_id).map(|(size, _)| *size);
+        if shown == (rows as usize, cols as usize) && last.is_none_or(|size| size == (rows, cols)) {
             return;
         }
         let ask = ((rows, cols), shown);
-        if lock(&self.asked).insert(block_id.to_string(), ask) != Some(ask) {
+        if asked.insert(block_id.to_string(), ask) != Some(ask) {
+            drop(asked);
             self.resize(session_id, block_id, rows, cols);
         }
     }

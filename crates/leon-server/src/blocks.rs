@@ -45,7 +45,7 @@ pub struct BlockSpec {
 pub struct TerminalOptions {
     /// argv to run directly; omitted runs the login shell.
     pub command: Option<Vec<String>>,
-    /// Working directory; defaults to `$HOME`.
+    /// Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).
     pub cwd: Option<String>,
     pub exit: Option<ExitOptions>,
 }
@@ -107,15 +107,17 @@ pub(crate) fn spawn(
     cwd: Option<PathBuf>,
     shown: &[u8],
 ) -> Result<Terminal, ApiError> {
-    let mut env: Vec<(String, String)> = [
-        ("LEON_SESSION", session_id),
-        ("LEON_BLOCK", block_id),
-        ("LEON_SERVER", ctx.info.socket.as_str()),
-        ("TERM", "xterm-256color"),
-    ]
-    .iter()
-    .map(|(k, v)| (k.to_string(), v.to_string()))
-    .collect();
+    let mut env = ctx.pane_env.clone(); // leon's variables after it, so they win
+    env.extend(
+        [
+            ("LEON_SESSION", session_id),
+            ("LEON_BLOCK", block_id),
+            ("LEON_SERVER", ctx.info.socket.as_str()),
+            ("TERM", "xterm-256color"),
+        ]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string())),
+    );
     // `leon` resolves in every terminal, even when the user's PATH lacks where it was installed
     if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(PathBuf::from)) {
         let path = std::env::var_os("PATH")

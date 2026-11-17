@@ -20,6 +20,8 @@ does, with each one's state, and adds, renames and removes them. Server shows Th
 (how long it has run, its sessions, blocks and log) and stops or restarts it; each asks first,
 since every program in every session ends.
 
+![The Settings window on Appearance: theme, translucency, the fade of other panes and the font](../images/app-settings.png)
+
 | Setting | Takes | Default |
 |---|---|---|
 | `theme` | a theme name, or `{ dark = NAME, light = NAME }` to follow the OS appearance | `"leon-dark"` |
