@@ -35,8 +35,15 @@ pub(super) struct OverlayUi {
     looked: bool,
 }
 
-/// Note whether overlay `key` shows (`is`) against whether it did (`was`): a change starts a fade,
-/// from the look it has now if one is on its way.
+/// Start overlay `key` showing (`is`) or going from the look it has now, if one is on its way.
+fn start(fades: &mut HashMap<&'static str, (Instant, bool)>, key: &'static str, is: bool, t: Instant) {
+    let now = fades.get(key).and_then(|(at, showing)| om::look(*showing, t.saturating_duration_since(*at)));
+    let from = now.map_or(if is { 0. } else { 1. }, |l| l.opacity);
+    let start = t.checked_sub(om::elapsed_at(is, from)).unwrap_or(t);
+    fades.insert(key, (start, is));
+}
+
+/// Note whether overlay `key` shows (`is`) against whether it did (`was`): a change starts a fade.
 fn turn(
     fades: &mut HashMap<&'static str, (Instant, bool)>,
     key: &'static str,
@@ -51,10 +58,7 @@ fn turn(
         fades.remove(key);
         return;
     }
-    let now = fades.get(key).and_then(|(at, showing)| om::look(*showing, t.saturating_duration_since(*at)));
-    let from = now.map_or(if is { 0. } else { 1. }, |l| l.opacity);
-    let start = t.checked_sub(om::elapsed_at(is, from)).unwrap_or(t);
-    fades.insert(key, (start, is));
+    start(fades, key, is, t);
 }
 
 impl Workspace {
@@ -82,9 +86,14 @@ impl Workspace {
         for (key, was, is) in was {
             turn(&mut o.fades, key, (was, is), t, moving);
         }
+        // find opened in another pane: the bar there fades in (the one it leaves goes at once)
+        let block = |f: &Option<FindShown>| f.as_ref().map(|f| f.0.clone());
+        if moving && o.find.is_some() && find.is_some() && block(&o.find) != block(&find) {
+            o.fades.insert("find", (t, true));
+        }
         // the sidebar switching lists fades the one it switches to in (not the sidebar coming or going)
         if moving && o.list.is_some() && list.is_some() && o.list != list {
-            o.fades.insert("list", (t, true));
+            start(&mut o.fades, "list", true, t);
         }
         // a fade over is done; a going overlay's last look goes with it
         o.fades.retain(|_, (at, showing)| om::look(*showing, t.saturating_duration_since(*at)).is_some());
@@ -166,13 +175,16 @@ pub(super) fn presented<E: IntoElement + Styled>(look: Look, w: f32, el: E) -> g
         return el.into_any_element();
     }
     let cut = w * (1. - look.scale) / 2.;
+    let clip = div().w(px(w - 2. * cut)).overflow_hidden().child(el.ml(px(-cut)));
+    // a slot `w` wide, so it stays put however its container anchors it
     div()
+        .w(px(w))
+        .flex()
+        .justify_center()
         .relative()
         .top(px(look.rise))
-        .w(px(w - 2. * cut))
-        .overflow_hidden()
         .opacity(look.opacity)
-        .child(el.ml(px(-cut)))
+        .child(clip)
         .into_any_element()
 }
 

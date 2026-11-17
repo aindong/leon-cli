@@ -1,0 +1,2 @@
+thread 'the_find_bar_fades_in_when_it_moves_to_another_pane' (97419712) panicked at crates/leon-app/tests/review_find_moves_fades.rs:28:5:
+the bar on the other pane fades in: Some(Look { opacity: 1.0, scale: 1.0, rise: 0.0 })

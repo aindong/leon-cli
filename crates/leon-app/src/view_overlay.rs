@@ -47,7 +47,10 @@ impl Workspace {
     /// The palette (open, or fading out) and a pending sequence's hint, each as it looks now.
     pub(super) fn render_overlay(&self, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
         let palette = self.palette_drawn().map(|(p, look, live)| self.render_palette(p, look, live, cx));
-        let hint = self.hint_drawn().map(|(h, look)| presence::faded(look, 8., render_hint(h.clone(), &self.theme)));
+        let hint = self.hint_drawn().map(|(h, look)| {
+            let hint = presence::faded(look, 8., render_hint(h.clone(), &self.theme));
+            div().absolute().bottom(px(16.)).right(px(16.)).child(hint)
+        });
         if palette.is_none() && hint.is_none() {
             return None;
         }
@@ -94,6 +97,7 @@ impl Workspace {
                         ws.palette = None;
                         ws.run_action(&name, args.as_ref(), "palette", window, cx);
                         cx.stop_propagation();
+                        cx.notify(); // prepare sees it closed (not every action notifies)
                     }),
                 )
             });
@@ -118,7 +122,7 @@ impl Workspace {
             .border_color(rgb(t.border))
             .rounded(px(10.))
             .shadow_lg()
-            .occlude()
+            .when(live, |d| d.occlude()) // a going palette lets clicks through
             .child(
                 div()
                     .flex()
@@ -137,7 +141,7 @@ impl Workspace {
     }
 }
 
-/// A pending sequence (`ctrl+b`) and what may follow it, bottom right.
+/// A pending sequence (`ctrl+b`) and what may follow it (`render_overlay` puts it bottom right).
 fn render_hint((prefix, next): (String, Vec<(String, String)>), t: &Theme) -> gpui::Div {
     let mut rows = div().flex().flex_col().gap(px(2.));
     for (key, what) in next {
@@ -151,9 +155,7 @@ fn render_hint((prefix, next): (String, Vec<(String, String)>), t: &Theme) -> gp
         );
     }
     div()
-        .absolute()
-        .bottom(px(16.))
-        .right(px(16.))
+        .debug_selector(|| sel("key-hint".into()))
         .p(px(10.))
         .flex()
         .flex_col()

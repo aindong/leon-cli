@@ -78,7 +78,7 @@ impl Workspace {
             .border_color(rgb(t.border))
             .rounded(px(8.))
             .shadow_lg()
-            .occlude()
+            .when(live, |d| d.occlude())
             .text_color(rgb(t.text))
             .child(div().child(notice.text))
             // a card with nothing to click (a step of an install) is the text alone
