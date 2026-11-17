@@ -91,8 +91,8 @@ if record {
     let config = SCStreamConfiguration()
     let scale = Double(filter.pointPixelScale)
     config.sourceRect = rect
-    config.width = Int(rect.width * scale)
-    config.height = Int(rect.height * scale)
+    config.width = Int(rect.width * scale) & ~1 // H.264 wants even sizes
+    config.height = Int(rect.height * scale) & ~1
     config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
     config.showsCursor = false
     config.queueDepth = 6
@@ -103,17 +103,25 @@ if record {
     try stream.addStreamOutput(out, type: .screen, sampleHandlerQueue: queue)
     try await stream.startCapture()
     print("deskshot: recording \(rect)")
+    fflush(stdout) // demo-gifs.sh waits for this line in a file
     var sources: [DispatchSourceSignal] = []
     for sig in [SIGTERM, SIGINT] {
         signal(sig, SIG_IGN)
         let s = DispatchSource.makeSignalSource(signal: sig, queue: queue)
+        // on the frames' queue, so no frame is written once the flag is up
         s.setEventHandler {
+            out.stopping = true
             Task {
                 try? await stream.stopCapture()
+                if !out.started {
+                    try? FileManager.default.removeItem(at: url)
+                    print(out.bad ? "deskshot: another window came over the recording; nothing kept" : "deskshot: nothing recorded")
+                    exit(1)
+                }
                 out.writer.endSession(atSourceTime: CMClockGetTime(CMClockGetHostTimeClock())) // the last frame lasts until now
                 out.input.markAsFinished()
                 await out.writer.finishWriting()
-                if out.bad || !out.started || out.writer.status != .completed {
+                if out.bad || out.writer.status != .completed {
                     try? FileManager.default.removeItem(at: url)
                     print(out.bad ? "deskshot: another window came over the recording; nothing kept" : "deskshot: nothing recorded")
                     exit(1)
@@ -149,6 +157,7 @@ final class Recorder: NSObject, SCStreamOutput {
     let check: () -> CGRect?
     var started = false
     var bad = false
+    var stopping = false
     init(_ url: URL, _ rect: CGRect, _ w: Int, _ h: Int, _ check: @escaping () -> CGRect?) throws {
         self.rect = rect
         self.check = check
@@ -167,6 +176,9 @@ final class Recorder: NSObject, SCStreamOutput {
               let info = CMSampleBufferGetSampleAttachmentsArray(buffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
               let raw = info.first?[.status] as? Int, SCFrameStatus(rawValue: raw) == .complete
         else { return }
+        if stopping { return }
+        // shortcut: the window list is read when the frame arrives, a few ms after it was drawn, so
+        // a window gone within those ms isn't seen; m13_privacy's OCR and a look at the frames back it up
         if check() != rect { bad = true }
         if bad { return }
         if !started { writer.startSession(atSourceTime: buffer.presentationTimeStamp); started = true }
