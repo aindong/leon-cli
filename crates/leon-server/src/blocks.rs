@@ -45,7 +45,7 @@ pub struct BlockSpec {
 pub struct TerminalOptions {
     /// argv to run directly; omitted runs the login shell.
     pub command: Option<Vec<String>>,
-    /// Working directory; defaults to `$HOME`.
+    /// Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).
     pub cwd: Option<String>,
     pub exit: Option<ExitOptions>,
 }

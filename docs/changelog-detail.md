@@ -6,6 +6,29 @@ summary bullet per feature, linking its section here.
 
 ## Since 0.1.0: the detail
 
+### Popups
+
+#### Added
+
+- `leon toggle LABEL --create --float [--rect X,Y,W,H] [--keep-open] [-- CMD]` creates a float
+  (default `0.1,0.1,0.8,0.8`) running CMD, or a login shell, in the focused pane's directory;
+  later toggles hide and show it, and a hidden program keeps running. It closes when its program
+  exits, as every block does, and the next toggle makes a new one; `--keep-open` keeps it with
+  its exit status. Without `--float`, `-- CMD` now runs CMD in the bottom drawer.
+- In Lua: `leon.toggle{label=..., create=true, float=true, bounds={...}, options={command={...}}}`,
+  with a recipe for a git popup on a key in [lua/keys.md](lua/keys.md#a-popup-on-a-key).
+- `session.toggle` gains `float`, `bounds` and `options` (the `TerminalOptions` that
+  `session.new_split` takes): new optional parameters on a stable method, so `api_version` goes
+  from `1.11.0` to `1.12.0`.
+
+#### Changed
+
+- Hiding or closing a float or drawer that a toggle opened, while it has the focus, gives the
+  focus back to the pane the toggle was pressed in, in its own tab (before, the top float, a drawer
+  or the first tile of the overlay's tab). One that isn't focused leaves the focus where it is, and
+  one shown another way (the switcher, `leon float`) forgets where to go back. A popup is one per label
+  per session: toggled from a pane in another directory, it shows the one already running.
+
 ### Server and Remote Hosts in Settings
 
 #### Added

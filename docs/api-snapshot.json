@@ -1,5 +1,5 @@
 {
-  "api_version": "1.11.0",
+  "api_version": "1.12.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -2378,6 +2378,92 @@
           "create": {
             "type": "boolean",
             "default": false
+          },
+          "float": {
+            "type": "boolean",
+            "default": false
+          },
+          "bounds": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "y": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "width": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "height": {
+                    "type": "number",
+                    "format": "double"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "cwd": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "exit": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "on_completion": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "on_completion"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,

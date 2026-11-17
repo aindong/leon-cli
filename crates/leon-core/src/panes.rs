@@ -167,6 +167,7 @@ impl State {
 
     /// Focus a block and make its window the active one.
     pub fn focus_block(&mut self, session_id: &str, block_id: &str) -> Result<u64, ApiError> {
+        self.forget_back_if_hidden(session_id, block_id);
         let s = self.session_mut(session_id)?;
         let w = s.window_of(block_id)?;
         let overlay = s.overlay(&s.windows[w].id).contains(block_id);
