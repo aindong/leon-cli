@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 
-from compose import COLD, TITLE, frame_plan, pieces, soft, srt
+from compose import COLD, ESC_MARGIN, TITLE, frame_plan, pieces, soft, srt
 from frame import FPS, load_cue
 
 
@@ -36,7 +36,7 @@ class ColdOpenTest(unittest.TestCase):
         """a slow take opens the overview late: the cold open stops at its esc, not after"""
         esc = {"t": 51.8, "type": "key", "combo": "esc", "show": True}
         cold = pieces("main", None, 117.0, load_cue(cue_file([OVERVIEW, esc])))[0]
-        self.assertAlmostEqual(cold[2], 51.8 + 1.5 - 0.05)
+        self.assertAlmostEqual(cold[2], 51.8 + 1.5 - ESC_MARGIN)
 
     def test_an_overview_too_short_to_open_on_keeps_the_title_card(self):
         """its esc within a second of the mark: no cold open, never one past the esc"""

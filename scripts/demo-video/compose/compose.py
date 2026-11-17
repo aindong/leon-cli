@@ -34,15 +34,18 @@ END_LINES = ["a terminal multiplexer for coding agents", "github.com/aindong/leo
              os.environ.get("LEON_DEMO_INSTALL", "Open source (MIT) · macOS app · CLI for macOS and Linux")]
 TITLE, END = 2.5, 6.0
 COLD = 3.0  # the cold open: the 50-tab overview, live, so a feed sees motion in the first second
+ESC_MARGIN = 0.8  # seconds the cold open ends before the overview's esc
 
 # the 30-second cut: (video start, end, focus region in raw pixels, caption, small line)
 SQUARE_CUT = [
     (43.4, 47.9, [1000, 260, 1300, 1000], "115 MB/s, and typing keeps up.", ""),
     (50.0, 53.2, [0, 0, 1700, 1400], "50 tabs. Every one live.", ""),
-    (80.8, 84.5, [880, 100, 1120, 360], "Pick a machine from your tailnet.", ""),
+    (81.1, 84.5, [880, 100, 1120, 360], "Pick a machine from your tailnet.", ""),
     (84.5, 87.5, [0, 0, 1200, 1000], "Its sessions, beside your own.", ""),
-    # the banner over the attached terminal, the click, leon on the agent's question
-    (98.6, 102.1, [512, 9, 2336, 1560], "It tells you when an agent needs you.", ""),
+    # the banner over the attached terminal and its click; then leon on the agent's question (one
+    # frame can't hold both: the banner is at the right edge, the pane's text starts at the sidebar)
+    (98.4, 100.2, [1440, 9, 1408, 1100], "It tells you when an agent needs you.", ""),
+    (100.4, 102.4, [512, 9, 1900, 1400], "It tells you when an agent needs you.", ""),
     (103.0, 104.1, [0, 9, 2848, 1602], "Quit the app…", ""),
     (107.3, 110.8, [0, 9, 2848, 1602], "…everything keeps running.", ""),
     (113.5, 116.0, [0, 0, 2000, 1560], "Keep your work in view.", ""),
@@ -54,15 +57,16 @@ def pieces(mode, cut, duration, cue=()):
     main's cold open is a take piece whose caption is the string cold"""
     if mode == "main":
         a, b = cut if cut else (duration, duration)
-        # from just after the overview opens (its cards fade in) to COLD later, or its esc if sooner;
-        # a title card when the take has no overview, or one too short to open on
+        # from just after the overview opens (its cards fade in) to COLD later, or ESC_MARGIN before
+        # its esc if sooner (a take's real lead can be ~0.7 s off the cue's, and scene 6's ⌘K follows
+        # the esc at once); a title card when the take has no overview, or one too short to open on
         m = next((r["vt"] for r in cue if r["type"] == "mark" and r["name"] == "5 overview"), None)
         esc = min((r["vt"] for r in cue if r["type"] == "key" and r["combo"] == "esc" and m is not None and r["vt"] > m),
                   default=math.inf)
-        if m is None or esc - 0.05 - (m + 0.4) < 1.0:
+        if m is None or esc - ESC_MARGIN - (m + 0.4) < 1.0:
             head = ("card", "title", TITLE)
         else:
-            head = ("take", m + 0.4, min(m + 0.4 + COLD, esc - 0.05), None, "cold")
+            head = ("take", m + 0.4, min(m + 0.4 + COLD, esc - ESC_MARGIN), None, "cold")
         return [head, ("take", 0.0, a, None, None), ("take", b, duration, None, None), ("card", "end", END)]
     out = [("take", s, e, r, (c, sm)) for s, e, r, c, sm in SQUARE_CUT]
     return out + [("card", "end", 30.0 - sum(e - s for s, e, *_ in SQUARE_CUT))]

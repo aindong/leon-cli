@@ -100,7 +100,12 @@ it runs in the foreground of its own ssh session; `screencapture -V` stops only 
 its time, so a take ends on panes that still print; after a pane closes, one still second ends
 `screencapture -v` early (with any leon build), so during a take the parked pointer steps 4 pt up
 and down the right edge, inside the strip the render crops off (`keypost wiggle`); ⌘K matches anywhere in a name, so the take
-types whole words; the pointer is parked on the right edge, inside what the render crops.
+types whole words; the pointer is parked on the right edge, inside what the render crops. The
+cue's `lead` of 1.5 s is the script's wait, not when the recording really started: one dry run
+on 2026-11-17 ran about 0.7 s behind it (every zoom, caption and keycap lands that much late),
+another matched. Look at the frames of each take before rendering it for real; the cold open
+keeps 0.8 s clear of the overview's esc for this reason. One take in four also stopped at 64 s
+with `screencapture: exit 0`: check `take-raw.mov`'s length.
 
 ## Rendering
 
