@@ -98,175 +98,7 @@ chmod +x "$home/bin/show"
 b64() { printf %s "$1" | base64; }
 txt() { cat >"$d/$1.txt"; }
 
-txt claude <<'EOF'
-> Fix the flaky login test in auth/session_test.rs
-
-  I'll read the test first, then run it a few times to see
-  how it fails.
-
-  Read auth/session_test.rs (212 lines)
-  The test sleeps 50 ms and then checks the session expired.
-  On a busy machine the check runs before the timer fires.
-
-  Ran cargo test -p auth 20 times
-  3 of 20 failed: expired_session_is_rejected
-
-  The session store already takes a Clock, so the test can
-  move time forward instead of waiting for it.
-
-  Update auth/session_test.rs
-   - std::thread::sleep(Duration::from_millis(50));
-   + clock.advance(Duration::from_secs(61));
-
-  Update auth/session.rs
-   - if Instant::now() > self.expires_at {
-   + if self.clock.now() > self.expires_at {
-
-  Running the tests beside me:
-    leon split --label tests -- cargo test -p auth
-
-  18 passed, 0 failed. Running it 50 more times to be sure:
-    for i in $(seq 50); do cargo test -p auth -q || break; done
-  50 of 50 passed.
-
-  The same sleep is in two more tests:
-    tests/session_test.rs:88   idle_session_expires
-    tests/session_test.rs:141  refresh_after_expiry_fails
-  Moving both to the test clock.
-
-  Update tests/session_test.rs
-   - thread::sleep(Duration::from_secs(2));
-   + clock.advance(Duration::from_secs(3601));
-EOF
-txt tests <<'EOF'
-   Compiling auth v0.4.0 (/src/auth)
-    Finished `test` profile in 4.21s
-     Running unittests src/lib.rs
-
-running 18 tests
-test session::tests::refresh_keeps_the_id ... ok
-test session::tests::expired_session_is_rejected ... ok
-test session::tests::idle_session_expires ... ok
-test session::tests::login_sets_a_cookie ... ok
-test session::tests::logout_clears_the_cookie ... ok
-test token::tests::round_trip ... ok
-test token::tests::rejects_a_bad_signature ... ok
-test token::tests::rotates_weekly ... ok
-
-test result: ok. 18 passed; 0 failed; finished in 0.31s
-EOF
-txt server <<'EOF'
-listening on http://127.0.0.1:8080
-GET /login 200 3ms
-POST /session 201 12ms
-GET /me 200 2ms
-GET /orders 200 9ms
-POST /orders 201 21ms
-GET /orders/1042 200 4ms
-POST /session 401 2ms
-POST /session 201 11ms
-GET /me 200 2ms
-DELETE /session 204 3ms
-EOF
-txt readme <<'EOF'
-> Review the README for the 0.4 release
-
-  Checked every command in README.md against --help: all current.
-  Fixed two broken links in the install section.
-EOF
-txt migrate <<'EOF'
-> Migrate the users table to the new schema
-
-  Wrote migrations/0042_users_email_unique.sql
-  Dry run on staging: 18,204 rows, 0 conflicts.
-
-  Run it on production now?
-EOF
-txt api <<'EOF'
-> Add rate limiting to the public API
-
-  Plan: a token bucket per API key in src/limits.rs, 100 requests
-  a minute, with Retry-After on a 429.
-
-  Edit src/routes.rs to add the middleware?
-EOF
-txt deploy <<'EOF'
-$ ./deploy.sh api v2.3.1
-rolling out api v2.3.1 to 4 pods
-pod api-7f9c-1 ready
-pod api-7f9c-2 CrashLoopBackOff
-rollout failed: 2 of 4 pods crashed
-EOF
-txt notes <<'EOF'
-## 0.4.0
-
-- Sessions survive a server restart
-- The login test no longer sleeps
-- Rate limits on the public API
-EOF
-txt build <<'EOF'
-$ make release
-[ 40%] Building CXX object src/CMakeFiles/core.dir/engine.cpp.o
-EOF
-
-txt routes <<'EOF'
-use axum::{routing::get, Router};
-
-pub fn routes() -> Router {
-    Router::new()
-        .route("/health", get(health))
-        .route("/v1/orders", get(orders::list).post(orders::create))
-        .layer(limits::per_key(100))
-}
-EOF
-txt pytest <<'EOF'
-============================= test session starts ==============================
-collected 42 items
-
-tests/test_orders.py ..........                                          [ 23%]
-tests/test_limits.py ........                                            [ 42%]
-tests/test_users.py ........................                             [100%]
-
-============================== 42 passed in 1.84s ==============================
-EOF
-txt caddy <<'EOF'
-INFO  using config from file  {"file": "Caddyfile"}
-INFO  serving initial configuration
-INFO  http.log.access  {"method": "GET", "uri": "/health", "status": 200}
-EOF
-txt htop <<'EOF'
-  CPU [|||||||||               24.1%]   Tasks: 212, 3 running
-  Mem [||||||||||||       6.12G/16.0G]   Load average: 1.42 1.20 0.98
-  Swp [                      0K/2.00G]   Uptime: 3 days, 04:12:55
-
-    PID  CPU% MEM%  Command
-   4121  31.0  2.4  api-server
-   4180  12.5  1.1  postgres
-   4202   3.2  0.4  worker --queue orders
-   4210   2.9  0.3  worker --queue emails
-   3988   1.4  0.8  redis-server
-   4301   0.9  0.2  caddy run
-   4122   0.6  0.1  cargo test -p auth
-   4377   0.3  0.1  leon server
-EOF
-txt access <<'EOF'
-GET  /health          200   1ms
-GET  /login           200   3ms
-POST /session         201  12ms
-GET  /me              200   2ms
-GET  /orders          200   9ms
-POST /orders          201  21ms
-GET  /orders/1042     200   4ms
-GET  /orders/1043     404   2ms
-POST /session         401   2ms
-POST /session         201  11ms
-GET  /me              200   2ms
-GET  /health          200   1ms
-DELETE /session       204   3ms
-GET  /login           200   3ms
-POST /session         201  10ms
-GET  /orders?page=2   200  14ms
-EOF
+. "$repo/scripts/demo-texts.sh"
 
 # LEON_RELEASE_URL: the app's look for a release goes to a loopback port that refuses, not to GitHub
 base=(env -u LEON_SESSION -u LEON_BLOCK -u ZDOTDIR HOME="$home" SHELL=/bin/zsh PATH="$home/bin:$PATH" LEON_RELEASE_URL=http://127.0.0.1:9 LEON_TAILSCALE="$d/no-tailscale")
@@ -446,9 +278,10 @@ close_app
 # a devbox with an agent waiting for permission and a failed deploy
 dev server start >/dev/null
 dev new api >/dev/null
-dev -s api run --keep-open -c "$home/src/api" -- show "Add rate limiting" "$d/api.txt" \
-  "state=blocked:kind=permission:title=$(b64 'Edit src/routes.rs?')" >/dev/null
+apiblock=$(dev -s api run --keep-open -c "$home/src/api" -- show "Add rate limiting" "$d/api.txt" \
+  "state=blocked:kind=permission:title=$(b64 'Edit src/routes.rs?')")
 dev -s api window close 1 >/dev/null
+dev -s api split -b "$apiblock" --focus=false -c "$home/src/api" -- show "pytest -q" "$d/pytest.txt" >/dev/null
 dev new deploy >/dev/null
 dev -s deploy run --keep-open -c "$home/src/deploy" -- show "deploy api v2.3.1" "$d/deploy.txt" \
   "state=error:title=$(b64 'rollout failed: 2 of 4 pods crashed')" >/dev/null
