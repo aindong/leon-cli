@@ -71,6 +71,12 @@ class TimelineTest(unittest.TestCase):
     def test_square_is_thirty_seconds(self):
         self.assertEqual(len(frame_plan(pieces("square", None, 106.0))), 30 * 60)
 
+    def test_square_pieces_run_forward_and_leave_the_end_card_five_seconds(self):
+        for (s0, e0, *_), (s1, *_) in zip(SQUARE_CUT, SQUARE_CUT[1:]):
+            self.assertLess(s0, e0)
+            self.assertLessEqual(e0, s1)
+        self.assertGreaterEqual(pieces("square", None, 106.0)[-1][2], 5.0)
+
     def test_main_cut_removes_the_gap(self):
         whole = len(frame_plan(pieces("main", None, 106.0)))
         cut = len(frame_plan(pieces("main", (93.0, 96.0), 106.0)))

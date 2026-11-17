@@ -1,7 +1,8 @@
 #!/bin/bash
 # guest.sh STEP: the launch demo inside the VM, run as `demo` over ssh by run-demo.sh.
 #   reset       quit the app, stop both leon servers, forget their sessions, fresh copies of the projects
-#   prefs       once per VM: no desktop widgets, the tailnet's ssh name, the big log
+#               (status-page with a made-up git history, for the popup)
+#   prefs       once per VM: no desktop widgets, no macOS tips, the tailnet's ssh name, the big log
 #   stage       the app on an empty leon; the devbox's agent already running on its own server
 #   build N     the take's build-up beats: 1 a dev server tab, 2 logtally's agent, 3 status-page's
 #   tabs        about 44 more tabs of quiet background jobs, for the 50-tab overview (untabs: gone)
@@ -25,6 +26,26 @@ export SHELL=/bin/zsh
 app=$HOME/leon/target/release/Leon.app
 b64() { printf %s "$1" | base64; }
 app_pid() { pgrep -fx "$app/Contents/MacOS/leon" || true; }
+# git_history DIR: a made-up git history for the popup's `git log --graph` (git is the host's, copied
+# into kit/bin by `run-demo.sh push`: the VM has no developer tools); fixed dates, the same hashes
+git_history() ( # a subshell: its git identity and cd stay in it
+  export GIT_AUTHOR_NAME=demo GIT_AUTHOR_EMAIL=demo@example.com GIT_COMMITTER_NAME=demo GIT_COMMITTER_EMAIL=demo@example.com
+  local n=0
+  c() { n=$((n + 1)); export GIT_AUTHOR_DATE="@$((1793000000 + n * 86400)) +0000" GIT_COMMITTER_DATE="@$((1793000000 + n * 86400)) +0000"; }
+  cd "$1"
+  git init -q --template= -b main .
+  c; git add -A; git commit -q -m "status page: one row per service, from services.json"
+  c; git commit -q --allow-empty -m "headline names the worst status"
+  git checkout -q -b latency
+  c; git commit -q --allow-empty -m "show p95 latency for each service"
+  c; git commit -q --allow-empty -m "a dash when a service reports no latency"
+  git checkout -q main
+  c; git commit -q --allow-empty -m "escape service names in the page"
+  c; git merge -q --no-ff latency -m "merge latency"
+  c; git commit -q --allow-empty -m "watch.py: rebuild the page when a source changes"
+  c; git commit -q --allow-empty -m "5000 services render in under a second"
+  git checkout -q -b mobile-layout # the agent's branch
+)
 
 case "${1:-}" in
   reset)
@@ -43,6 +64,7 @@ case "${1:-}" in
     cp "$kit/init.lua" "$d/init.lua"
     mkdir -p "$HOME/work"
     cp -R "$kit/projects/." "$HOME/work/"
+    git_history "$HOME/work/status-page"
     cp "$kit/zshrc" "$HOME/.zshrc"
     printf 'export PATH=%s\n' "$PATH" >"$HOME/.zshenv"
     ssh devbox 'rm -rf ~/work; find ~/kit -maxdepth 1 -name "go*" -delete; mkdir -p ~/work && cp -R ~/kit/projects/. ~/work/ && cp ~/kit/zshrc ~/.zshrc'
@@ -54,6 +76,9 @@ case "${1:-}" in
       defaults write com.apple.WindowManager StageManagerHideWidgets -bool true
       killall WindowManager 2>/dev/null || true
     fi
+    # macOS's "See what's new" tip is a notification banner over the take
+    launchctl disable "gui/$(id -u)/com.apple.tipsd" 2>/dev/null || true
+    killall tipsd 2>/dev/null || true
     # the tailnet's devbox is this VM's admin account, by real ssh with the devbox key
     grep -q 'devbox.example-tailnet.ts.net' ~/.ssh/config || cat >>~/.ssh/config <<'EOF'
 
