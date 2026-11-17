@@ -5,14 +5,16 @@
 #   push          build keypost, copy target/release/Leon.app (or $DEMO_APP), kit/ and this Mac's
 #                 git into the VM (build first: scripts/bundle.sh)
 #   setup         a clean take: reset, stage the sessions and agents, full screen, pointer parked
-#   take [A-B]    record scenes A to B (default 1-12), pull the clip, make take.mp4 and take-cut.mp4
+#   take [A-B]    record scenes A to B (default 1-12), pull the clip, make take.mp4 and take-cut.mp4;
+#                 exits 3 when the recording stopped early (the VM's recorder sometimes does)
 #   cue [BEATS]   rebuild a take's cue file (take-cue.jsonl) from its beats file (default the last
 #                 take's), sending nothing
 #   render        the finished videos from the take: renders/leon-demo-main.mp4 (16:9) and
 #                 renders/leon-demo-square-30s.mp4 (1:1), each with an .srt
 #   shot NAME     a VNC screenshot of the VM to shots/NAME.png
 #   retake REV    Leon.app built from commit REV on this Mac (the VM has no toolchain), then push,
-#                 setup, take, render: the real take after a change, in one command
+#                 setup, take, render: the real take after a change, in one command (a take that
+#                 stopped early is filmed again from setup, up to 3 tries)
 #   check         the projects' tests in the VM
 #   stop          stop the VM
 # Files go to $DEMO_WORK (default target/demo-video). The one-time VM setup (Setup Assistant,
@@ -277,6 +279,13 @@ case "${1:-}" in
     wait "$rec" "$wig"
     trap - EXIT
     ssh $(ssh_opts) "demo@$(cat "$work/.ip")" 'cat ~/take.mov' >"$work/take-raw.mov"
+    # `screencapture -v -V` sometimes ends early and still exits 0 (one take in four stopped at
+    # 64 of 117 s): a recording more than 2 s short is not a take
+    got=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$work/take-raw.mov" 2>/dev/null || echo 0)
+    if python3 -c "import sys; sys.exit(0 if float(sys.argv[1] or 0) < $secs - 2 else 1)" "$got"; then # short
+      echo "take: the recording stopped at ${got:-0} s of $secs: film it again (setup, then take)" >&2
+      exit 3
+    fi
     # the recorder's start varies: the cue's lead becomes the one measured on this take
     lead=$(python3 "$here/lead.py" "$work/take-raw.mov" "$cuefile") || lead="1.5, not measured"
     echo "take: the video runs $lead s ahead of the script"
@@ -321,11 +330,17 @@ case "${1:-}" in
     (cd "$src" && LEON_GIT_HASH=${rev:0:12} cargo build --release -p leon --target-dir "$work/cargo")
     "$src/scripts/bundle.sh" --bin "$work/cargo/release/leon" --out "$work/app/Leon.app"
     DEMO_APP=$work/app/Leon.app "$0" push
-    "$0" setup
-    "$0" take
+    for n in 1 2 3; do # a take stops early now and then (exit 3): the state it used is spent, so setup again
+      "$0" setup
+      rc=0
+      "$0" take || rc=$?
+      [ $rc -eq 0 ] && break
+      [ $rc -eq 3 ] && [ $n -lt 3 ] || exit $rc
+      echo "retake: take $n stopped early; filming it again"
+    done
     "$0" render
     echo "retake: $rev filmed and rendered in $work/renders" ;;
   check) ip >"$work/.ip"; g check ;;
   stop) tart stop "$vm" ;;
-  *) sed -n '2,19s/^# \{0,1\}//p' "$0"; exit 2 ;;
+  *) sed -n '2,22s/^# \{0,1\}//p' "$0"; exit 2 ;;
 esac
