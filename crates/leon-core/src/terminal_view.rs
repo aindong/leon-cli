@@ -1,5 +1,6 @@
 //! What a client reads of a terminal beyond its screen: absolute line numbers, history ranges,
-//! find, selections, links, and mouse reports (docs/architecture.md, "Scrollback in the app").
+//! find, selections, links, and mouse reports (docs/architecture/protocol-and-clients.md,
+//! "Scrollback in the app").
 
 use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::index::{Column, Line};

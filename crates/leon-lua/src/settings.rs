@@ -1,4 +1,4 @@
-//! The settings `leon.set` takes (docs/lua.md "Settings"), typed and with their defaults; the one
+//! The settings `leon.set` takes (docs/lua/settings.md), typed and with their defaults; the one
 //! check both `leon.set` and `leon config set` use; and the themes a setting can name: leon's
 //! built-in ones and the files in `themes/` beside init.lua.
 
@@ -36,7 +36,7 @@ pub const FADE: f64 = 0.35;
 pub const FADE_MAX: f64 = 0.8;
 
 /// How much of the desktop shows through Leon.app's window, unless the config says (the app
-/// keeps text readable over any desktop whatever it is; docs/lua.md).
+/// keeps text readable over any desktop whatever it is; docs/lua/settings.md).
 pub const TRANSLUCENCY: f64 = 0.3;
 /// The most a config can ask for: past it the chrome is hardly there.
 pub const TRANSLUCENCY_MAX: f64 = 0.8;

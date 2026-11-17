@@ -46,7 +46,9 @@ summary bullet per feature, linking its section here.
   [architecture/tailnet.md](architecture/tailnet.md)).
 - `tailnet://HOST[:PORT]` endpoints reach such a server with no ssh, for `-H`, `leon hosts add`,
   `leon attach` and the app; the client connects only to a machine its own tailscaled vouches for.
-- The Settings window has a Tailscale section: the switch, the port and tags, and how serving goes.
+- The Settings window has a Tailscale section: the switch, a field for the port and a list of
+  tags (each checked as `leon.set` checks it, read-only when init.lua sets it by code), and how
+  serving goes.
 - `server.status` reports `tailnet` (state, addresses, login, reason, last refusal) and
   `server.settings` the three settings: new result fields on stable methods, so `api_version`
   goes from `1.9.0` to `1.10.0`.

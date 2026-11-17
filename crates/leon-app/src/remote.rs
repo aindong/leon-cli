@@ -1,4 +1,5 @@
-//! The app's link to a leon server over its socket (docs/architecture.md, "The app attaches").
+//! The app's link to a leon server over its socket (docs/architecture/protocol-and-clients.md,
+//! "The app attaches").
 //! Three connections: one for the UI's calls (keys, layout changes), one that refetches the model,
 //! and one that receives events and screens. A thread reads the last: a screen line patches that
 //! block's frame, and an event means the model is refetched once the lines that came with it are

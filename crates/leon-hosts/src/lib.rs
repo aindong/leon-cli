@@ -1,4 +1,4 @@
-//! Other machines' leon servers (docs/architecture.md, "Remote hosts"): an `Endpoint` such as
+//! Other machines' leon servers (docs/architecture/hosts.md, "Remote hosts"): an `Endpoint` such as
 //! `ssh://me@devbox:2222`, the hosts list that names them, and the `Link` that reaches one through
 //! the system ssh. Used by the CLI's `-H` and, later, by the app.
 

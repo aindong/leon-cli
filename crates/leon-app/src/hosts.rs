@@ -1,6 +1,6 @@
-//! The machines the window shows (docs/architecture.md, "The app's hosts"): This Mac, then each
-//! host from the hosts list, reached through a `leon_hosts::Link` whose ssh never prompts. A thread
-//! per connection attempt does the slow part; the UI thread picks the result up in `poll`.
+//! The machines the window shows (docs/architecture/hosts.md, "The app's hosts"): This Mac, then
+//! each host from the hosts list, reached through a `leon_hosts::Link` whose ssh never prompts. A
+//! thread per connection attempt does the slow part; the UI thread picks the result up in `poll`.
 
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

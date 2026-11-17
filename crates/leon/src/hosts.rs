@@ -1,4 +1,4 @@
-//! `-H HOST` and `leon hosts` (docs/architecture.md, "Remote hosts").
+//! `-H HOST` and `leon hosts` (docs/architecture/hosts.md, "Remote hosts").
 
 use leon_core::ApiError;
 use leon_hosts::{hosts, tailscale, Endpoint, Host, Link};
