@@ -136,7 +136,7 @@ impl Section {
 
 impl Render for Section {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        drawing(cx);
+        drawing_cached(cx);
         *self.renders.borrow_mut().entry(self.name.clone()).or_default() += 1;
         let (input, stamp, name) = (self.input.clone(), self.stamp, self.name.clone());
         let drawn = self.ws.update(cx, |ws, cx| {

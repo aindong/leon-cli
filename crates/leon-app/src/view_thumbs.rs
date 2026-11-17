@@ -42,7 +42,7 @@ pub(super) struct ThumbPane {
 
 impl Render for Thumb {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        drawing(cx);
+        drawing_cached(cx);
         *self.renders.borrow_mut().entry(self.window_id.clone()).or_default() += 1;
         let mut d = div().size_full().relative().bg(rgb(self.theme.chrome));
         for p in &self.panes {

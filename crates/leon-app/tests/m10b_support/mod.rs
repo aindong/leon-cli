@@ -34,12 +34,15 @@ pub fn open_with<'a>(
 /// keeps a selector's bounds after its element is gone, so the view's own record says what's drawn.
 pub fn at(cx: &mut VisualTestContext, sel: &str) -> Option<Bounds<Pixels>> {
     cx.run_until_parked();
-    // then a frame that draws every view, and nothing after it: GPUI notes an element's bounds only
-    // when it prepaints, and a cached view reused from the last frame prepaints none of its
-    // elements (GPUI phase 3). The update draws as it ends, with no task run in between.
-    cx.update(|window, _| window.refresh());
     if !view::drawn().contains(sel) {
         return None;
+    }
+    // drawn by a cached view: GPUI notes an element's bounds only when it prepaints, and keeps
+    // them, so a frame that reused the view left the bounds of the last one that drew it; draw a
+    // frame of every view, and nothing after it (the update draws as it ends, no task in between).
+    // Only for those: a frame costs the time a slide is timed by.
+    if view::drawn_cached(sel) {
+        cx.update(|window, _| window.refresh());
     }
     cx.debug_bounds(Box::leak(sel.to_string().into_boxed_str()))
 }

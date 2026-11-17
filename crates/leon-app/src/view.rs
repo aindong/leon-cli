@@ -469,7 +469,7 @@ mod start;
 #[path = "view_state.rs"]
 mod state;
 pub(crate) use bars::Tip;
-pub use drawn_view::{drawing, drawn, sel};
+pub use drawn_view::{drawing, drawing_cached, drawn, drawn_cached, sel};
 pub use grid_view::GridDrawn;
 pub use look_view::is_dark;
 pub use pulse_view::Pulse;
