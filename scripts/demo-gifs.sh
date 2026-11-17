@@ -37,9 +37,8 @@ mkdir -m 700 -p "$d/run" "$d/state" "$d/cli/run" "$d/cli/state"
 home=$d/home
 mkdir -p "$home/bin" "$home/src/auth" "$home/src/infra" "$home/src/app"
 swiftc -O -o "$d/deskshot" "$repo/scripts/deskshot.swift" 2>/dev/null
-# the window: 70% of the screen, centred, the font to match (as in demo-shots.sh)
-read -r wx wy ww wh < <("$d/deskshot" window 70)
-font=$(((13 * ww + 720) / 1440))
+# the window: 80% of the screen, centred (as in demo-shots.sh)
+read -r wx wy ww wh < <("$d/deskshot" window 80)
 # a neutral shell: no user or host in the prompt or the title
 cat >"$home/.zshrc" <<'EOF'
 PROMPT='$ '
@@ -52,8 +51,7 @@ EOF
 cp "$home/.bashrc" "$home/.bash_profile"
 : >"$d/none.lua"
 # no notification banners on the screen; ctrl+alt+g is docs/lua/keys.md's popup recipe, as it is there
-cat >"$d/init.lua" <<EOF
-leon.set("font.size", $font)
+cat >"$d/init.lua" <<'EOF'
 leon.set("notifications.done", false)
 leon.set("notifications.blocked", false)
 leon.set("notifications.error", false)
@@ -150,6 +148,19 @@ cat >"$d/claude.txt" <<'EOF'
 
   Running the tests beside me:
     leon split --label tests -- cargo test -p auth
+
+  18 passed, 0 failed. Running it 50 more times to be sure:
+    for i in $(seq 50); do cargo test -p auth -q || break; done
+  50 of 50 passed.
+
+  The same sleep is in two more tests:
+    tests/session_test.rs:88   idle_session_expires
+    tests/session_test.rs:141  refresh_after_expiry_fails
+  Moving both to the test clock.
+
+  Update tests/session_test.rs
+   - thread::sleep(Duration::from_secs(2));
+   + clock.advance(Duration::from_secs(3601));
 EOF
 cat >"$d/tests.txt" <<'EOF'
    Compiling auth v0.4.0 (/src/auth)
@@ -167,6 +178,39 @@ test token::tests::rejects_a_bad_signature ... ok
 test token::tests::rotates_weekly ... ok
 
 test result: ok. 18 passed; 0 failed; finished in 0.31s
+EOF
+cat >"$d/htop.txt" <<'EOF'
+  CPU [|||||||||               24.1%]   Tasks: 212, 3 running
+  Mem [||||||||||||       6.12G/16.0G]   Load average: 1.42 1.20 0.98
+  Swp [                      0K/2.00G]   Uptime: 3 days, 04:12:55
+
+    PID  CPU% MEM%  Command
+   4121  31.0  2.4  api-server
+   4180  12.5  1.1  postgres
+   4202   3.2  0.4  worker --queue orders
+   4210   2.9  0.3  worker --queue emails
+   3988   1.4  0.8  redis-server
+   4301   0.9  0.2  caddy run
+   4122   0.6  0.1  cargo test -p auth
+   4377   0.3  0.1  leon server
+EOF
+cat >"$d/access.txt" <<'EOF'
+GET  /health          200   1ms
+GET  /login           200   3ms
+POST /session         201  12ms
+GET  /me              200   2ms
+GET  /orders          200   9ms
+POST /orders          201  21ms
+GET  /orders/1042     200   4ms
+GET  /orders/1043     404   2ms
+POST /session         401   2ms
+POST /session         201  11ms
+GET  /me              200   2ms
+GET  /health          200   1ms
+DELETE /session       204   3ms
+GET  /login           200   3ms
+POST /session         201  10ms
+GET  /orders?page=2   200  14ms
 EOF
 cat >"$d/server.txt" <<'EOF'
 listening on http://127.0.0.1:8080
@@ -218,7 +262,10 @@ here server start >/dev/null
 here new auth >/dev/null
 claude=$(here -s auth run --keep-open -c "$home/src/auth" -- agent "$d/claude.txt")
 here -s auth window close 1 >/dev/null
-here -s auth split -b "$claude" --focus=false -c "$home/src/auth" -- show tests.sh "$d/tests.txt" "state=done" >/dev/null
+# the agent | its tests over a monitor | the access log
+tests=$(here -s auth split -b "$claude" --ratio 60 --focus=false -c "$home/src/auth" -- show tests.sh "$d/tests.txt" "state=done")
+here -s auth split -b "$tests" --split below --focus=false -c "$home/src/auth" -- show htop "$d/htop.txt" >/dev/null
+here -s auth split -b "$tests" --ratio 40 --focus=false -c "$home/src/auth" -- show "tail -f access.log" "$d/access.txt" >/dev/null
 here -s auth run --keep-open -c "$home/src/auth" -- show "dev server" "$d/server.txt" >/dev/null
 here new infra >/dev/null
 here -s infra run --keep-open -c "$home/src/infra" -- show "Migrate the users table" "$d/migrate.txt" \
@@ -290,8 +337,8 @@ gif() { # IN_ARGS... OUT: a ${width:-1100} px wide GIF, one palette, repeated fr
     "fps=${fps:-10},scale=${width:-1100}:-1:flags=lanczos,mpdecimate,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
     -loop 0 "$out"
 }
-# 20 a second: the app's moves last 100 to 160 ms; a pixel a point, twice the README's column
-fps=20 width=$ww gif -i "$d/app.mov" "$out/demo-app.gif"
+# 20 a second: the app's moves last 100 to 160 ms; 1760 px, twice the README's column, as the stills
+fps=20 width=1760 gif -i "$d/app.mov" "$out/demo-app.gif"
 echo "demo-gifs: demo-app.gif"
 
 # the CLI, in vhs's headless terminal: bash with a `$ ` prompt and its own private server
@@ -312,7 +359,7 @@ Env LEON_RUNTIME_DIR "$d/cli/run"
 Env LEON_STATE_DIR "$d/cli/state"
 Env LEON_CONFIG "$d/none.lua"
 Hide
-Type "exec env -i HOME='$home' SHELL=/bin/bash PATH='$home/bin:/usr/bin:/bin:/usr/sbin:/sbin' TERM=xterm-256color LANG=en_US.UTF-8 LEON_RUNTIME_DIR='$d/cli/run' LEON_STATE_DIR='$d/cli/state' LEON_CONFIG='$d/none.lua' PS1='\$ ' bash --noprofile --norc"
+Type "exec env -i HOME='$home' SHELL=/bin/bash BASH_SILENCE_DEPRECATION_WARNING=1 PATH='$home/bin:/usr/bin:/bin:/usr/sbin:/sbin' TERM=xterm-256color LANG=en_US.UTF-8 LEON_RUNTIME_DIR='$d/cli/run' LEON_STATE_DIR='$d/cli/state' LEON_CONFIG='$d/none.lua' PS1='\$ ' bash --noprofile --norc"
 Enter
 Sleep 300ms
 Type "cd ~/src/app; clear"
@@ -340,7 +387,7 @@ Enter
 Sleep 2.2s
 Type "leon attach demo"
 Enter
-Sleep 2.5s
+Sleep 2s
 Ctrl+B
 Type "%"
 Sleep 2s
@@ -349,7 +396,7 @@ Enter
 Sleep 1.8s
 Ctrl+B
 Type "d"
-Sleep 1.8s
+Sleep 1.2s
 EOF
 (cd "$d" && vhs demo.tape >/dev/null)
 gif -i "$d/cli.mp4" "$out/demo-cli.gif"
