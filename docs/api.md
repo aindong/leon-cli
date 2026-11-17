@@ -999,7 +999,7 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
-| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory). |
 | `exit` | `ExitOptions` \| null |  |  |
 
 **`ExitOptions`:**
@@ -1111,7 +1111,7 @@ same facts for the server you run.
             }
           },
           "cwd": {
-            "description": "Working directory; defaults to `$HOME`.",
+            "description": "Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).",
             "type": [
               "string",
               "null"
@@ -1663,7 +1663,7 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
-| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory). |
 | `exit` | `ExitOptions` \| null |  |  |
 
 **`ExitOptions`:**
@@ -1760,7 +1760,7 @@ same facts for the server you run.
             }
           },
           "cwd": {
-            "description": "Working directory; defaults to `$HOME`.",
+            "description": "Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).",
             "type": [
               "string",
               "null"
@@ -2334,7 +2334,7 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
-| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory). |
 | `exit` | `ExitOptions` \| null |  |  |
 
 **`ExitOptions`:**
@@ -2481,7 +2481,7 @@ same facts for the server you run.
             }
           },
           "cwd": {
-            "description": "Working directory; defaults to `$HOME`.",
+            "description": "Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).",
             "type": [
               "string",
               "null"
@@ -3366,7 +3366,7 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
-| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory). |
 | `exit` | `ExitOptions` \| null |  |  |
 
 **`ExitOptions`:**
@@ -3501,7 +3501,7 @@ same facts for the server you run.
             }
           },
           "cwd": {
-            "description": "Working directory; defaults to `$HOME`.",
+            "description": "Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).",
             "type": [
               "string",
               "null"
@@ -3744,7 +3744,7 @@ same facts for the server you run.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | [string] \| null |  | argv to run directly; omitted runs the login shell. |
-| `cwd` | string \| null |  | Working directory; defaults to `$HOME`. |
+| `cwd` | string \| null |  | Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory). |
 | `exit` | `ExitOptions` \| null |  |  |
 
 **`ExitOptions`:**
@@ -3850,7 +3850,7 @@ same facts for the server you run.
             }
           },
           "cwd": {
-            "description": "Working directory; defaults to `$HOME`.",
+            "description": "Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).",
             "type": [
               "string",
               "null"
