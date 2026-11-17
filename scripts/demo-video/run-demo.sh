@@ -277,6 +277,9 @@ case "${1:-}" in
     wait "$rec" "$wig"
     trap - EXIT
     ssh $(ssh_opts) "demo@$(cat "$work/.ip")" 'cat ~/take.mov' >"$work/take-raw.mov"
+    # the recorder's start varies: the cue's lead becomes the one measured on this take
+    lead=$(python3 "$here/lead.py" "$work/take-raw.mov" "$cuefile") || lead="1.5, not measured"
+    echo "take: the video runs $lead s ahead of the script"
     # 60 fps constant rate at 1080p for editors. The crop keeps 16:9 and takes 32 px off the right:
     # macOS's recording dot (top right) and the parked pointer's sliver (right edge) are there
     ffmpeg -loglevel error -y -i "$work/take-raw.mov" -vf crop=2848:1602:0:9,fps=60,scale=1920:1080:flags=lanczos \
@@ -288,7 +291,9 @@ case "${1:-}" in
     [ -f "$anchor" ] || anchor=$work/$anchor # a bare name means the work dir's
     [ -f "$anchor" ] || { echo "run-demo: no beats file $anchor" >&2; exit 1; }
     CUE_ONLY=1
-    printf '{"t": 0, "type": "take", "lead": 1.5, "width": 2880, "height": 1620}\n' >"$cuefile"
+    # the lead `take` measured stays: it is the video's, not the script's
+    lead=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readline())["lead"])' "$cuefile" 2>/dev/null) || lead=1.5
+    printf '{"t": 0, "type": "take", "lead": %s, "width": 2880, "height": 1620}\n' "$lead" >"$cuefile"
     for ((n = 1; n <= 12; n++)); do "scene$n"; done
     echo "cue: $cuefile ($(wc -l <"$cuefile" | tr -d ' ') lines, rebuilt from $anchor)" ;;
   render)

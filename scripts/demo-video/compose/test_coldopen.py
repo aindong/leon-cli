@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 
-from compose import COLD, ESC_MARGIN, TITLE, frame_plan, pieces, soft, srt
+from compose import COLD, ESC_MARGIN, SQUARE_CUT, TITLE, frame_plan, pieces, soft, srt
 from frame import FPS, load_cue
 
 
@@ -58,6 +58,17 @@ class ColdOpenTest(unittest.TestCase):
             text = open(f"{d}/o.srt").read()
         self.assertIn("00:00:08,500 --> 00:00:10,500", text)  # 3 s cold open + 5.5 s video time
         self.assertEqual(text.count("Start"), 1)
+
+    def test_the_square_follows_the_measured_lead(self):
+        """SQUARE_CUT's times are a 1.5 s lead's: a take that leads by 0.5 s shows each a second sooner"""
+        rows = [{"t": 0, "type": "take", "lead": 0.5}]
+        f = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        f.write(json.dumps(rows[0]))
+        f.close()
+        self.addCleanup(os.unlink, f.name)
+        first = pieces("square", None, 117.0, load_cue(f.name))[0]
+        self.assertAlmostEqual(first[1], SQUARE_CUT[0][0] - 1.0)
+        self.assertAlmostEqual(first[2], SQUARE_CUT[0][1] - 1.0)
 
     def test_frame_count(self):
         ps = pieces("main", None, 117.0, load_cue(cue_file([OVERVIEW])))

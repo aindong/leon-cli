@@ -34,9 +34,10 @@ END_LINES = ["a terminal multiplexer for coding agents", "github.com/aindong/leo
              os.environ.get("LEON_DEMO_INSTALL", "Open source (MIT) · macOS app · CLI for macOS and Linux")]
 TITLE, END = 2.5, 6.0
 COLD = 3.0  # the cold open: the 50-tab overview, live, so a feed sees motion in the first second
-ESC_MARGIN = 0.8  # seconds the cold open ends before the overview's esc
+ESC_MARGIN = 0.3  # seconds the cold open ends before the overview's esc
 
-# the 30-second cut: (video start, end, focus region in raw pixels, caption, small line)
+# the 30-second cut: (video start, end, focus region in raw pixels, caption, small line); the times
+# are a take's whose video leads the script by 1.5 s, moved to the take's own measured lead
 SQUARE_CUT = [
     (43.4, 47.9, [1000, 260, 1300, 1000], "115 MB/s, and typing keeps up.", ""),
     (50.0, 53.2, [0, 0, 1700, 1400], "50 tabs. Every one live.", ""),
@@ -58,8 +59,8 @@ def pieces(mode, cut, duration, cue=()):
     if mode == "main":
         a, b = cut if cut else (duration, duration)
         # from just after the overview opens (its cards fade in) to COLD later, or ESC_MARGIN before
-        # its esc if sooner (a take's real lead can be ~0.7 s off the cue's, and scene 6's ⌘K follows
-        # the esc at once); a title card when the take has no overview, or one too short to open on
+        # its esc if sooner (scene 6's ⌘K follows it at once); a title card when the take has no
+        # overview, or one too short to open on
         m = next((r["vt"] for r in cue if r["type"] == "mark" and r["name"] == "5 overview"), None)
         esc = min((r["vt"] for r in cue if r["type"] == "key" and r["combo"] == "esc" and m is not None and r["vt"] > m),
                   default=math.inf)
@@ -68,7 +69,8 @@ def pieces(mode, cut, duration, cue=()):
         else:
             head = ("take", m + 0.4, min(m + 0.4 + COLD, esc - ESC_MARGIN), None, "cold")
         return [head, ("take", 0.0, a, None, None), ("take", b, duration, None, None), ("card", "end", END)]
-    out = [("take", s, e, r, (c, sm)) for s, e, r, c, sm in SQUARE_CUT]
+    d = next((r["lead"] for r in cue if r["type"] == "take"), 1.5) - 1.5
+    out = [("take", s + d, e + d, r, (c, sm)) for s, e, r, c, sm in SQUARE_CUT]
     return out + [("card", "end", 30.0 - sum(e - s for s, e, *_ in SQUARE_CUT))]
 
 

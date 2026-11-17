@@ -18,6 +18,7 @@ moments every time, driven over ssh. Nothing touches the host's own leon, screen
 | `keypost.swift` | Posts real key codes and clicks to the focused app in the VM, and keeps the parked pointer stepping during a take; `push` builds it. |
 | `vnc.py` | Screenshots of the headless VM over its VNC server. |
 | `cut.py` | Finds the second where the app reopens windowed after ⌘Q, so the edit can drop it. |
+| `lead.py` | Measures how far the raw take runs ahead of the script's clock, into the cue file. |
 | `compose/` | The compositor: `compose.py` (timeline, render, CLI), `frame.py` (layouts, camera, one frame), `draw.py` (gradient, keycaps, pointer, wordmark, cards), `test_compose.py`, `requirements.txt`. |
 | `frames.sh` | Contact sheets of a video at given seconds, for checking a take or a render frame by frame. |
 
@@ -100,12 +101,11 @@ it runs in the foreground of its own ssh session; `screencapture -V` stops only 
 its time, so a take ends on panes that still print; after a pane closes, one still second ends
 `screencapture -v` early (with any leon build), so during a take the parked pointer steps 4 pt up
 and down the right edge, inside the strip the render crops off (`keypost wiggle`); ⌘K matches anywhere in a name, so the take
-types whole words; the pointer is parked on the right edge, inside what the render crops. The
-cue's `lead` of 1.5 s is the script's wait, not when the recording really started: one dry run
-on 2026-11-17 ran about 0.7 s behind it (every zoom, caption and keycap lands that much late),
-another matched. Look at the frames of each take before rendering it for real; the cold open
-keeps 0.8 s clear of the overview's esc for this reason. One take in four also stopped at 64 s
-with `screencapture: exit 0`: check `take-raw.mov`'s length.
+types whole words; the pointer is parked on the right edge, inside what the render crops; the
+recorder's own start varies (from 0 to 1.5 s after it is asked, on 2026-11-17), so `take` measures
+the lead on the video (`lead.py`: the first frame that changes is scene 2's ⌘N) instead of
+trusting the 1.5 s it waits; one take in four stopped at 64 s with `screencapture: exit 0`, so
+check `take-raw.mov`'s length.
 
 ## Rendering
 
@@ -154,7 +154,7 @@ What it draws, and the limits it keeps:
 
 | `type` | Fields | Meaning |
 |---|---|---|
-| `take` | `lead`, `width`, `height` | first line: the raw video's size and lead |
+| `take` | `lead`, `width`, `height` | first line: the raw video's size and lead (measured by `lead.py`) |
 | `mark` | `name` | a scene or beat starts (also in `take-beats.txt`) |
 | `key` | `combo` (`cmd+shift+\`), `show` | a key sent; `show` puts it on screen as keycaps |
 | `type` | `text` | text typed (never shown as keycaps) |

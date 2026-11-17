@@ -9,6 +9,7 @@ screen is about 44, windowed over the wallpaper about 64, the desktop about 104.
 the first bright one after the "11 quit" beat in BEATS (take-beats.txt), so the light-theme moment
 earlier is never taken for it.
 """
+import json
 import pathlib
 import re
 import subprocess
@@ -21,7 +22,10 @@ if only_print:
     args.insert(1, None)
 src, out = args[0], args[1]
 beats = pathlib.Path(args[2] if len(args) > 2 else pathlib.Path(src).with_name("take-beats.txt"))
-LEAD = 1.5  # the video starts this long before the script's clock (run-demo.sh's `sleep 1.5`)
+# the video starts this long before the script's clock: lead.py's measure in the cue, else the
+# 1.5 s run-demo.sh waits
+cue = pathlib.Path(src).with_name("take-cue.jsonl")
+LEAD = json.loads(cue.read_text().splitlines()[0]).get("lead", 1.5) if cue.exists() else 1.5
 quit_at = next((float(line.split()[0]) + LEAD for line in beats.read_text().splitlines() if "11 quit" in line), None)
 if quit_at is None:
     sys.exit(f"cut.py: no '11 quit' beat in {beats}")
