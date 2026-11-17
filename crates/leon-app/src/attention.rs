@@ -140,6 +140,9 @@ impl Tracker {
         let seen = std::mem::take(&mut self.seen);
         self.seen = seen.into_iter().filter_map(|((h, b), s)| Some(((shifted(h, removed)?, b), s))).collect();
         self.known = self.known.iter().filter_map(|h| shifted(*h, removed)).collect();
+        // Activity's rows too, until the next look rebuilds them: a click goes to the right host
+        let rows = std::mem::take(&mut self.rows);
+        self.rows = rows.into_iter().filter_map(|r| Some(Row { host: shifted(r.host, removed)?, ..r })).collect();
     }
 
     /// Look at every machine's model at `now`: rebuild the rows and return the blocks that entered

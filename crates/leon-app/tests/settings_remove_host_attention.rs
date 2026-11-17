@@ -18,6 +18,9 @@ fn removing_a_host_does_not_make_the_next_hosts_blocks_news() {
     t.update(&[(0, "This Mac", &here), (1, "alpha", &a), (2, "beta", &b)], now);
     // Settings › Remote Hosts removes alpha (Workspace::remove_host): beta moves up to index 1
     t.forget_host(1);
+    let rows: Vec<(usize, String)> = t.rows().iter().map(|r| (r.host, r.session_id.clone())).collect();
+    assert!(rows.iter().all(|(h, _)| *h == 1), "alpha's row is gone and beta's moved up: {rows:?}");
+    assert_eq!(rows.len(), 1, "{rows:?}");
     let changes = t.update(&[(0, "This Mac", &here), (1, "beta", &b)], now);
     assert!(changes.is_empty(), "beta's block was already blocked: {changes:?}");
 }
