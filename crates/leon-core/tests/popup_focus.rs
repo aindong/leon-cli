@@ -103,3 +103,20 @@ fn a_popup_that_lost_the_focus_leaves_it_where_it_is() {
     assert!(st.block("block:pop").is_err(), "closed on exit");
     assert_eq!(focus(&st, &s).as_deref(), Some("block:c"), "closing an unfocused popup");
 }
+
+#[test]
+fn a_toggled_float_returned_to_the_tiles_closes_like_a_tile() {
+    let mut st = State::default();
+    let (s, w) = st.create_session(None, None).unwrap();
+    add(&mut st, &s, &w, "block:a", None, None);
+    add(&mut st, &s, &w, "block:b", None, Some("block:a"));
+    add(&mut st, &s, &w, "block:pop", Some("pop"), Some("block:b"));
+    st.float_block(&s, "block:pop", Bounds::default()).unwrap();
+    st.toggle_overlay(&s, "pop").unwrap();
+    st.focus_block(&s, "block:a").unwrap();
+    st.toggle_overlay(&s, "pop").unwrap(); // shown from a
+    st.unfloat_block(&s, "block:pop").unwrap();
+    // the tiles are a | b | pop: closing pop focuses its sibling b, as for any tile
+    st.close_block(&s, "block:pop").unwrap();
+    assert_eq!(focus(&st, &s).as_deref(), Some("block:b"));
+}

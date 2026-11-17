@@ -282,7 +282,9 @@ impl State {
         let s = self.session_mut(session_id)?;
         let i = s.block_index(block_id)?;
         let w = s.window_index(&s.blocks[i].window_id)?;
-        let had_focus = s.windows[w].focus.as_deref() == Some(block_id);
+        // an overlay only: one a toggle opened and then unfloated is a tile, with a tile's pick
+        let had_focus =
+            s.windows[w].focus.as_deref() == Some(block_id) && s.overlay(&s.windows[w].id).contains(block_id);
         s.blocks.remove(i);
         s.detach_placed(w, block_id);
         if had_focus {
