@@ -12,6 +12,7 @@
 #   app         start the app again (after a ⌘Q in the take)
 #   terminal    a plain Terminal window on the desktop, with the take's LEON_* (before full screen)
 #   front       bring that Terminal forward (macOS slides from the full-screen app to the desktop)
+#   unterminal  close it (behind the full-screen app: after ⌘Q the desktop is bare, for cut.py)
 #   banner      turn the blocked banner on (seconds before `go banner`: the app reads it within ~1 s)
 #   quit        quit the app (kills its pid; the take uses ⌘Q)
 #   fullscreen  click the window's green button (pointer parked again at once)
@@ -62,9 +63,8 @@ case "${1:-}" in
     leon --autostart=false server stop --discard >/dev/null 2>&1 || true
     # started without restoring first: a server killed with the VM left saved sessions behind
     ssh devbox '~/.local/bin/leon server start --restore=false; ~/.local/bin/leon server stop --discard' >/dev/null 2>&1 || true
-    pkill -f 'kit/bin/agent|traffic.sh|serve.py|watch.py|logtally.py|leon attach' 2>/dev/null || true
-    pkill -x Terminal 2>/dev/null || true # the attach scene's terminal, and nothing to restore
-    rm -rf "$HOME/Library/Saved Application State/com.apple.Terminal.savedState"
+    pkill -f 'kit/bin/agent|traffic.sh|serve.py|watch.py|logtally.py' 2>/dev/null || true
+    "$0" unterminal
     rm -rf "${d:?}" "$HOME/work" "$kit"/go* /tmp/review.log
     mkdir -m 700 -p "$d" "$d/run" "$d/state"
     cp "$kit/init.lua" "$d/init.lua"
@@ -194,6 +194,10 @@ json.dump(s, open(p, "w"))' "$d/state/app.json"
     open "$app" # the app in front again, to go full screen
     sleep 1 ;;
   front) open -a Terminal ;;
+  unterminal)
+    pkill -f 'leon attach' 2>/dev/null || true
+    pkill -x Terminal 2>/dev/null || true
+    rm -rf "$HOME/Library/Saved Application State/com.apple.Terminal.savedState" ;; # nothing to restore
   # init.lua has every banner off (scene 4's agent blocks off screen too): only the attach
   # scene's is on. A blocked state the app sees before it has the new setting posts nothing
   banner) leon config set notifications.blocked true >/dev/null ;;

@@ -202,6 +202,7 @@ scene10() { # leon attach in a plain terminal; an agent elsewhere asks: its bann
   at 96.8; zoom 1400 9 1448 815 98.6 # the banner, top right
   at 98.4; k click 1250 78 # the banner: leon comes forward on that agent's pane
   at 99.8; k type y; k key return show
+  g unterminal # behind the app: after ⌘Q the desktop is bare again
 }
 scene11() { # quit the app; the programs keep going; open it again
   at 101.5; mark "11 quit"; k combo cmd+q

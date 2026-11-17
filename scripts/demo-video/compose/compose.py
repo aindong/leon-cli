@@ -39,12 +39,13 @@ COLD = 3.0  # the cold open: the 50-tab overview, live, so a feed sees motion in
 SQUARE_CUT = [
     (43.4, 47.9, [1000, 260, 1300, 1000], "115 MB/s, and typing keeps up.", ""),
     (50.0, 53.2, [0, 0, 1700, 1400], "50 tabs. Every one live.", ""),
-    (57.2, 60.2, [734, 167, 1200, 1290], "Your git history on one key.", ""),  # the popup, then hidden
-    (80.3, 84.5, [880, 100, 1120, 360], "Pick a machine from your tailnet.", ""),
+    (80.8, 84.5, [880, 100, 1120, 360], "Pick a machine from your tailnet.", ""),
     (84.5, 87.5, [0, 0, 1200, 1000], "Its sessions, beside your own.", ""),
-    (92.5, 93.6, [0, 9, 2848, 1602], "Quit the app…", ""),
-    (96.8, 100.3, [0, 9, 2848, 1602], "…everything keeps running.", ""),
-    (103.0, 105.5, [0, 0, 2000, 1560], "Keep your work in view.", ""),
+    # the banner over the attached terminal, the click, leon on the agent's question
+    (98.6, 102.1, [880, 9, 1968, 1560], "It tells you when an agent needs you.", ""),
+    (103.0, 104.1, [0, 9, 2848, 1602], "Quit the app…", ""),
+    (107.3, 110.8, [0, 9, 2848, 1602], "…everything keeps running.", ""),
+    (113.5, 116.0, [0, 0, 2000, 1560], "Keep your work in view.", ""),
 ]
 
 
@@ -53,9 +54,13 @@ def pieces(mode, cut, duration, cue=()):
     main's cold open is a take piece whose caption is the string cold"""
     if mode == "main":
         a, b = cut if cut else (duration, duration)
-        # from just after the overview opens (its cards fade in), before its esc
+        # from just after the overview opens (its cards fade in) to COLD later, or its esc if sooner
         m = next((r["vt"] + 0.4 for r in cue if r["type"] == "mark" and r["name"] == "5 overview"), None)
-        head = ("card", "title", TITLE) if m is None else ("take", m, m + COLD, None, "cold")
+        if m is None:
+            head = ("card", "title", TITLE)
+        else:
+            esc = min((r["vt"] for r in cue if r["type"] == "key" and r["vt"] > m), default=math.inf)
+            head = ("take", m, min(m + COLD, esc - 0.05), None, "cold")
         return [head, ("take", 0.0, a, None, None), ("take", b, duration, None, None), ("card", "end", END)]
     out = [("take", s, e, r, (c, sm)) for s, e, r, c, sm in SQUARE_CUT]
     return out + [("card", "end", 30.0 - sum(e - s for s, e, *_ in SQUARE_CUT))]

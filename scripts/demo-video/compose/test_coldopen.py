@@ -32,6 +32,12 @@ class ColdOpenTest(unittest.TestCase):
         self.assertFalse(soft("main", 2, ps))  # the quit stays a cut
         self.assertTrue(soft("main", 3, ps))  # the end card still dissolves in
 
+    def test_ends_before_the_overview_closes(self):
+        """a slow take opens the overview late: the cold open stops at its esc, not after"""
+        esc = {"t": 51.8, "type": "key", "combo": "esc", "show": True}
+        cold = pieces("main", None, 117.0, load_cue(cue_file([OVERVIEW, esc])))[0]
+        self.assertAlmostEqual(cold[2], 51.8 + 1.5 - 0.05)
+
     def test_without_the_mark_the_title_card_stays(self):
         ps = pieces("main", None, 106.0, load_cue(cue_file([])))
         self.assertEqual(ps[0], ("card", "title", TITLE))
