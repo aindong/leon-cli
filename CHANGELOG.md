@@ -28,6 +28,27 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+### Themes
+
+#### Added
+
+- Six new built-in themes made for leon from its brand palette, beside leon-dark and leon-light:
+  leon-maroon (a warm dark), leon-tide (a cool dark), leon-coal (a high-contrast dark), leon-linen
+  (a paper light), leon-sand (a soft light) and leon-mist (a cool light). Every built-in theme is
+  tested to keep body and UI text at 4.5:1 or better, its ANSI colours readable, selection and
+  find marks visible, and the four status colours apart. `leon theme list` and the Settings
+  window list them.
+- Change Theme… in the command palette (⌘⇧T) lists every theme, built in and imported, and draws
+  the window in the selected one as you move through the list; ↩ keeps it in init.lua and esc
+  goes back.
+- A theme change fades in over a moment instead of switching at once; with Reduce Motion it still
+  switches at once.
+
+#### Changed
+
+- A theme imported under one of the new built-in names (`leon-tide`, say) is now shadowed by the
+  built-in one; import it again under another `--name` to keep using it.
+
 ### Terminals under load
 
 #### Fixed

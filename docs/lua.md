@@ -246,8 +246,7 @@ message, and the setting keeps its default.
 | `fade_inactive_panes` | a number, 0 (off) to 0.8 | `0.35` |
 | `check_for_updates` | `true` or `false` ([updates.md](updates.md)) | `true` |
 
-`theme` names `leon-dark`, `leon-light` or a theme `leon theme import` stored; an unknown name is
-an error.
+`theme` names a theme `leon theme list` shows (built in or imported); an unknown name is an error.
 
 ```lua
 leon.set("theme", { dark = "leon-dark", light = "leon-light" })

@@ -262,6 +262,7 @@ impl Workspace {
     pub(super) fn prepare(&mut self) {
         self.prepares += 1;
         self.note_slides();
+        self.follow_theme();
         self.settle_overview();
         self.drop_unshown_thumbs();
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
@@ -304,6 +305,9 @@ impl Render for Workspace {
             app: self.app.clone(),
         };
         cx.defer_in(window, move |ws, _, _| ws.drew_frame(showed));
+        if self.theme_shifting() {
+            window.request_animation_frame(); // the next step of the change (R6)
+        }
         let stats = self.stats.clone();
         if stats.borrow().enabled {
             stats.borrow_mut().render_start = Some(Instant::now());
