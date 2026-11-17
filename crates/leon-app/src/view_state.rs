@@ -120,3 +120,8 @@ impl Workspace {
         self.use_host(rows.get(self.selected_at).map_or(0, |r| r.host));
     }
 }
+
+/// Where the app keeps its settings: `$LEON_STATE_DIR/app.json` (next to the server's sessions).
+pub fn settings_path() -> Option<PathBuf> {
+    leon_core::paths::state_dir().map(|d| d.join("app.json"))
+}

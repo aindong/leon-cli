@@ -72,7 +72,15 @@ fn many_tabs_of_many_panes_dont_stall_the_overview(cx: &mut gpui::TestAppContext
     let remote = std::rc::Rc::new(leon_app::remote::Remote::connect(&socket).expect("the fake answers"));
     cx.update(leon_app::view::init);
     let (ws, cx) = cx.add_window_view(move |window, cx| leon_app::view::Workspace::new(remote, window, cx));
-    cx.run_until_parked();
+    // the server's settings come back on a socket thread, and applying them asks AppKit for the
+    // window's blur the first time (a second or two in a test process): startup work, not the
+    // overview's, so the clock starts once they are in
+    let settled = Instant::now();
+    while !ws.read_with(cx, |ws, _| ws.settings_applied()) && settled.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(10));
+        cx.run_until_parked();
+    }
+    assert!(ws.read_with(cx, |ws, _| ws.settings_applied()), "the settings were applied");
     let t = Instant::now();
     cx.update(|window, cx| ws.update(cx, |ws, cx| ws.run_action("client.overview.toggle", None, "test", window, cx)));
     cx.run_until_parked();

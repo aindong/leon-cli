@@ -93,19 +93,15 @@ impl Workspace {
     }
 
     /// The soonest timed thing pending, never sooner than `POLL`; None when only a wake can bring
-    /// news. Slides, fades, the spinner, the waited times and a find's re-run only matter on
-    /// screen: once a second redraw asked for is not drawn (hidden, covered), they wait for the
-    /// next frame, which wakes the poll again (`drew_frame`).
+    /// news (the spinner has its own clock, view_pulse.rs). Slides, fades, the waited times and a
+    /// find's re-run only matter on screen: once a second redraw asked for is not drawn (hidden,
+    /// covered), they wait for the next frame, which wakes the poll again (`drew_frame`).
     pub(super) fn next_poll(&self) -> Option<Duration> {
         let now = Instant::now();
         let mut due = Vec::new();
         if self.undrawn < 2 {
             if self.sliding() || self.fading() {
                 due.push(POLL);
-            }
-            if self.spinning(&self.rows()).is_some() {
-                let spin = SPIN.as_millis();
-                due.push(Duration::from_millis((spin - self.epoch.elapsed().as_millis() % spin) as u64));
             }
             if self.activity && !self.attention.rows().is_empty() {
                 due.push(WAITED_TICK);
@@ -119,11 +115,14 @@ impl Workspace {
     }
 
     /// After a frame was drawn (render defers it): the poll looks again at once if the state that
-    /// frame drew has something timed due sooner than it planned for (a slide, a fade, the spinner,
-    /// the Activity list), as after a hidden spell, when the poll stopped its clocks.
-    pub(super) fn drew_frame(&mut self, showed: Shown) {
+    /// frame drew has something timed due sooner than it planned for (a slide, a fade, the
+    /// Activity list), and the Pulse goes on (it pauses while no frame is drawn), as after a
+    /// hidden spell.
+    pub(super) fn drew_frame(&mut self, showed: Shown, cx: &mut Context<Self>) {
         self.undrawn = 0;
         self.note_focus(showed);
+        let wanted = self.pulse_wanted;
+        self.pulse.update(cx, |p, cx| p.drew(wanted, cx));
         let Some(d) = self.next_poll() else { return };
         if self.planned.is_none_or(|p| Instant::now() + d + POLL < p) {
             (self.wake)();
@@ -189,14 +188,15 @@ impl Workspace {
     }
 
     /// Fetch the keymap and the settings and apply them now, waiting for the server (tests, and
-    /// nothing on a hot path).
-    pub fn sync_keymap(&mut self) {
+    /// nothing on a hot path); what they change redraws.
+    pub fn sync_keymap(&mut self, cx: &mut Context<Self>) {
         if let Ok(km) = self.hosts.local().call("client.keymap", json!({})) {
             self.use_keymap(&km);
         }
         if let Ok(settings) = self.hosts.local().call("server.settings", json!({})) {
             self.apply_settings(&settings);
         }
+        cx.notify();
     }
 }
 

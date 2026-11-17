@@ -87,20 +87,25 @@ fn the_spinner_redraws_at_most_eight_times_a_second(cx: &mut TestAppContext) {
     let (ws, cx) = open(cx, &s.app);
     let t = focused(&s.app, &ws, cx);
     run_until(&t, "echo ready", "ready");
-    let distinct = |cx: &mut gpui::VisualTestContext| {
-        let mut seen = std::collections::HashSet::new();
+    // the spinner's clock is the Pulse (GPUI phase 3): its ticks over 400 ms of real time, the
+    // test clock moved with it
+    let ticks = |cx: &mut gpui::VisualTestContext| {
+        let before = ws.read_with(cx, |ws, cx| ws.pulse_state(cx).1);
         let end = Instant::now() + Duration::from_millis(400);
         while Instant::now() < end {
-            seen.insert(ws.read_with(cx, |ws, _| ws.signature()));
+            let t = Instant::now();
             std::thread::sleep(Duration::from_millis(5));
+            cx.executor().advance_clock(t.elapsed());
+            cx.run_until_parked();
         }
-        seen.len()
+        ws.read_with(cx, |ws, cx| ws.pulse_state(cx).1) - before
     };
     settle(&t);
-    assert_eq!(distinct(cx), 1, "nothing working: nothing to animate");
+    assert_eq!(ticks(cx), 0, "nothing working: nothing to animate");
     run_until(&t, WORKING, "w-sent");
     settle(&t);
-    let n = distinct(cx);
-    assert!((2..=5).contains(&n), "the spinner turns, at most every 125 ms: {n} frames in 400 ms");
+    assert!(shows(cx, |cx| ws.read_with(cx, |ws, cx| ws.pulse_state(cx).0)), "the clock runs");
+    let n = ticks(cx);
+    assert!((2..=5).contains(&n), "the spinner turns, at most every 125 ms: {n} ticks in 400 ms");
     s.app.stop();
 }

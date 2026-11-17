@@ -57,7 +57,7 @@ pub(super) struct PaneGrid {
 
 impl Render for PaneGrid {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        drawing(cx);
+        drawing_cached(cx);
         *self.renders.borrow_mut().entry(self.block.clone()).or_default() += 1;
         canvas_of(&self.input, self.app.clone(), (self.sid.clone(), self.block.clone()), (&self.stats, &self.painted))
     }

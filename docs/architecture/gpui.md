@@ -111,6 +111,11 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   cached view unless that view was notified, and a hash over everything costs every view on
   every change. Check: review, and for each input a view draws from, a test that changing it
   renders the view again.
+  Stop-gap until phase 5 (the model as entities): the sidebar, title bar and pane headers are
+  cached views that render through the workspace (`ws.update`, the helpers as they are) and
+  hold a typed input of exactly what their helper reads; the workspace notifies one when its
+  input changed, and in debug builds its render checks the stored input against a fresh one.
+  It goes when the views observe the model's entities instead.
 - **R5. `render`, `prepaint` and `paint` only draw.** No server calls, fetches, model changes,
   focus events or I/O in them; that work happens where the state changes (an event, an action,
   the reader's wake). The one exception is an element fitting its own content, as a pane's grid
@@ -217,14 +222,15 @@ on the main thread, list the file here with its reason, and never use it to driv
 
 ## Consequences
 
-- Where the app is today (each moved by the refactor's phases): one `Render` for the window but
-  for each pane's grid, a cached `PaneGrid` view the workspace gives its input and notifies on
-  change (`view_grid.rs`; headers, sidebar and title bar are phase 3; R1, R3); the model work
+- Where the app is today (each moved by the refactor's phases): a root `Render` with cached
+  views the workspace gives their input and notifies on change: each pane's grid
+  (`view_grid.rs`), and the sidebar, title bar and pane headers, which render through the
+  workspace (`view_sections.rs`, the stop-gap under R4; R1, R3); the model work
   `render` did (`sync_pane`, `run_find`, `settle`) runs in `prepare`, an observer of every
   notify of the workspace, and for a pushed screen in the poll (phase 5 takes it over; R5); a
   poll that hashes what the root draws (no screens) and notifies the whole window
-  (`view_poll.rs`; R4); slides, fades and the spinner clocked by
-  that poll (R6); keys for the palette, find and modes handled by hand inside one `key_down`
+  (`view_poll.rs`; R4); slides and fades clocked by that poll, the spinner by its own `Pulse`
+  (`view_pulse.rs`; R6); keys for the palette, find and modes handled by hand inside one `key_down`
   under one focus handle (R9); no `InputHandler`, so no input method (R9); every call to This
   Mac's server waits on the main thread, since its `Remote` has no queue (`Remote::enqueue`):
   actions, each key's write, `fit` in prepaint and `watch` in `prepare` (R8).

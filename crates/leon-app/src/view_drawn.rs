@@ -14,6 +14,9 @@ thread_local! {
     static DRAWN: RefCell<HashMap<EntityId, HashSet<String>>> = RefCell::default();
     /// The view rendering now, whose record `sel` adds to.
     static DRAWING: Cell<Option<EntityId>> = const { Cell::new(None) };
+    /// The views shown cached: a frame that reuses one prepaints none of its elements, so GPUI's
+    /// bounds for them are the last frame that drew it.
+    static CACHED: RefCell<HashSet<EntityId>> = RefCell::default();
 }
 
 /// Start over the record of what `cx`'s view draws: the first thing its render does. The record
@@ -22,8 +25,25 @@ pub fn drawing<V: 'static>(cx: &mut Context<V>) {
     let id = cx.entity_id();
     DRAWING.with(|d| d.set(Some(id)));
     if DRAWN.with(|d| d.borrow_mut().insert(id, HashSet::new()).is_none()) {
-        cx.on_release(move |_, _| DRAWN.with(|d| drop(d.borrow_mut().remove(&id)))).detach();
+        cx.on_release(move |_, _| {
+            DRAWN.with(|d| drop(d.borrow_mut().remove(&id)));
+            CACHED.with(|c| c.borrow_mut().remove(&id));
+        })
+        .detach();
     }
+}
+
+/// `drawing`, for a view shown cached (`AnyView::cached`).
+pub fn drawing_cached<V: 'static>(cx: &mut Context<V>) {
+    drawing(cx);
+    CACHED.with(|c| c.borrow_mut().insert(cx.entity_id()));
+}
+
+/// Whether `name` was drawn by a view shown cached (tests: its bounds may be a frame's that
+/// reused it, so a test draws every view first).
+pub fn drawn_cached(name: &str) -> bool {
+    let cached = CACHED.with(|c| c.borrow().clone());
+    DRAWN.with(|d| d.borrow().iter().any(|(id, names)| cached.contains(id) && names.contains(name)))
 }
 
 /// `name`, noted as drawn by the view rendering now: what each `debug_selector` closure returns.
