@@ -3,10 +3,11 @@
 //
 //   winframes PID keys N [GAP_MS]   post N synthetic "x" keys to PID; per key, the time from posting
 //                                   it to the first frame whose echo bar has that key's colour
-//   winframes PID watch SECONDS [UNTIL] [floor=PID]  every changed frame of the window, and how many sentinel
-//                                   bars it shows (runs of truecolor 255,0,128); stops 0.5 s after
+//   winframes PID watch SECONDS [UNTIL] [floor=PID] [save=DIR]  every changed frame of the window, and how many
+//                                   sentinel bars it shows (runs of truecolor 255,0,128); stops 0.5 s after
 //                                   the first frame showing UNTIL bars; floor=PID also lists the frames of a
-//                                   `floor animate` window (what the capture delivered meanwhile)
+//                                   `floor animate` window (what the capture delivered meanwhile); save=DIR
+//                                   writes each new frame there as DISPLAYTIME.png (a motion's frames)
 //   winframes PID hide|unhide        hide the app as ⌘H does, or show it again
 //   winframes floor [W H] [animate] a window of this tool's own that draws the echo bar the moment
 //                                   a key arrives (run it, then `keys` its pid: the floor); with
@@ -19,6 +20,7 @@
 // time printed is the boot clock in nanoseconds (CLOCK_UPTIME_RAW), like LEON_FRAME_LOG's.
 // Build: swiftc -O -o target/perf/winframes scripts/perf/winframes.swift
 import AppKit
+import CoreImage
 import CoreMedia
 import ScreenCaptureKit
 
@@ -96,6 +98,8 @@ final class Watcher: NSObject, SCStreamOutput {
   var seen: [Seen] = []
   var probe: (Int, Int)?  // the echo bar's centre, in buffer pixels, once found
   var wantSentinel = false
+  var saveDir: String?
+  let images = CIContext()
   var lastHash: UInt64 = 0
   func stream(_ s: SCStream, didOutputSampleBuffer sb: CMSampleBuffer, of type: SCStreamOutputType) {
     guard type == .screen,
@@ -158,6 +162,10 @@ final class Watcher: NSObject, SCStreamOutput {
     }
     let dirty = hash != lastHash
     lastHash = hash
+    if dirty, let dir = saveDir, let cg = images.createCGImage(CIImage(cvPixelBuffer: px), from: CGRect(x: 0, y: 0, width: w, height: h)) {
+      let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])
+      try? png?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(ns(shown)).png"))
+    }
     seen.append(Seen(at: ns(shown), bar: bar, sentinels: sentinels, dirty: dirty))
   }
   func snapshot() -> [Seen] { lock.lock(); defer { lock.unlock() }; return seen }
@@ -211,6 +219,7 @@ func run() async {
   print("period \(1_000_000_000 / fps)")
   let watcher = Watcher()
   watcher.wantSentinel = args[2] == "watch"
+  watcher.saveDir = args.first(where: { $0.hasPrefix("save=") }).map { String($0.dropFirst(5)) }
   let stream = await capture(win, into: watcher)
   // watch ... floor=PID: also the floor's window, for the capture's own frame rate
   let floor = Watcher()
