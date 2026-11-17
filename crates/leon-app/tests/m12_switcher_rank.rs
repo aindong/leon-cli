@@ -108,3 +108,14 @@ fn rows_come_from_every_host_with_each_tabs_status() {
         rows.iter().map(Row::text).collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn a_whole_word_counts_in_a_tabs_session_as_in_a_blocks_title() {
+    let mut shell = tab("This Mac", "web", "zsh", "w1");
+    shell.status = Some(Indicator::Blocked(None));
+    let idle = Row { status: None, ..block(&shell, "b2", "web tests") };
+    // "web" is a whole word of both; the row that needs the user comes first
+    let rows = rank(&[shell], &[idle], "web", &[]);
+    let blocks: Vec<bool> = rows.iter().map(|r| r.block_id.is_some()).collect();
+    assert_eq!(blocks, [false, true], "{:?}", names(&rows));
+}

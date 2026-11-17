@@ -247,8 +247,9 @@ summary bullet per feature, linking its section here.
 - The scratch drawer (⌘J, `leon toggle scratch --create`, `session.toggle` with `create`) opens in
   the directory of the active window's focused block instead of `~`, when its program is still
   running (an exited one's directory is only what its output last said). (F14)
-- The command palette (⌘⇧P) ranks an action whose title has each typed word as a whole word
-  above fuzzy matches inside other words: `log` puts "Tail the server log" first, not 8th.
+- The command palette (⌘⇧P), and the switcher and the lists that filter like it, rank a row
+  whose title or keywords have each typed word (two letters or more) as a whole word above fuzzy
+  matches inside other words: `log` puts "Tail the server log" first, not 8th.
 
 #### Fixed
 
