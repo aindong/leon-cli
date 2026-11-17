@@ -5840,7 +5840,7 @@ the method's full name as `method` and its input as `args`. The output is `block
 | `cursor` | `Cursor` \| null |  |  |
 | `app_cursor` | boolean | yes |  |
 | `bracketed_paste` | boolean | yes |  |
-| `scrolled` | integer (uint) |  | The absolute number of the screen's top row: how many lines were ever pushed into the scrollback. History line `scrolled - 1` is just above the screen; appended output never renumbers a line (docs/architecture.md, "Scrollback in the app"). |
+| `scrolled` | integer (uint) |  | The absolute number of the screen's top row: how many lines were ever pushed into the scrollback. History line `scrolled - 1` is just above the screen; appended output never renumbers a line (docs/architecture/protocol-and-clients.md, "Scrollback in the app"). |
 | `history` | integer (uint) |  | Lines kept in the scrollback: the oldest is `scrolled - history`. |
 | `alt_screen` | boolean |  |  |
 | `alternate_scroll` | boolean |  | `?1007`: on the alternate screen the wheel becomes arrow keys. |
@@ -5939,7 +5939,7 @@ the method's full name as `method` and its input as `args`. The output is `block
         "type": "boolean"
       },
       "scrolled": {
-        "description": "The absolute number of the screen's top row: how many lines were ever pushed into the\nscrollback. History line `scrolled - 1` is just above the screen; appended output never\nrenumbers a line (docs/architecture.md, \"Scrollback in the app\").",
+        "description": "The absolute number of the screen's top row: how many lines were ever pushed into the\nscrollback. History line `scrolled - 1` is just above the screen; appended output never\nrenumbers a line (docs/architecture/protocol-and-clients.md, \"Scrollback in the app\").",
         "type": "integer",
         "format": "uint",
         "minimum": 0,
