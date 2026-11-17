@@ -121,6 +121,14 @@ impl Ctx {
         StateGuard { state: events::lock(&self.state), subscribers: &self.subscribers }
     }
 
+    /// Look at each terminal's program in front; a change is a `foreground_changed` event. Off
+    /// the state lock, since the event takes it.
+    pub fn check_foregrounds(&self) {
+        let terminals: Vec<_> =
+            self.state().sessions.iter().flat_map(|s| s.blocks.iter().map(|b| b.terminal.clone())).collect();
+        terminals.iter().for_each(|t| t.check_foreground());
+    }
+
     pub fn is_autostarted(&self) -> bool {
         self.autostarted.load(Ordering::SeqCst)
     }

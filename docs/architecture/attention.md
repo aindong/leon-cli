@@ -116,6 +116,18 @@ of [the architecture](../architecture.md).
   which the server sends again in the new colours, fades out and back in. `render` asks GPUI for
   animation frames only while it moves (ADR R6); Reduce Motion, and the first settings after a
   launch, switch at once. The theme list's preview is drawn the same way.
+- **An icon per program** (`program_kind.rs`). Each pane header, and each tab, sidebar row and
+  overview card for the pane its tab shows (`Session::named_tile`), draws a glyph for the kind of
+  program running there, before its title; the status mark keeps its place and colour. The
+  server reports the program as `foreground` in `session.list_blocks`: the name of the PTY's
+  foreground process group's leader (`tcgetpgrp`, then `proc_pidinfo` or `/proc`), or a live
+  member's when a pipeline's first process is gone. Only its name, never its arguments, and
+  null for another user's process. Its 200 ms tick sends `foreground_changed` on a change, so
+  the app redraws through the refetch it already does for any event. One table maps names to
+  kinds. A name it doesn't know (an interpreter: a `#!` script reads as one) is looked up by the
+  pane title's first word, which shells set to the running command; else it is an agent when the
+  block has an OSC 7501 report (a record an agent leaves outlives it), else generic. A server without the field
+  falls back to argv0.
 - **`leon notify`.** `dev.leon.terminal.report_status {state, title, msg}` (experimental) builds an
   OSC 7501 report (title and msg base64) and runs it through the same parser and store as PTY
   output, so every limit applies; text the parser would drop is refused (400) instead. `leon notify`

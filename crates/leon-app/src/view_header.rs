@@ -19,6 +19,7 @@ impl Workspace {
     ) -> impl IntoElement {
         let t = &self.pane_theme(id); // faded with its pane, but for the status colours
         let shown = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
+        let kind = self.app.model().block(id).map_or(Kind::Shell, |(_, b)| crate::program_kind::kind_of_block(b));
         let caption = self.header_caption(id);
         let frame = self.pulse();
         // shortcut: the host badge's width from its length, not measured; fine for short labels
@@ -75,7 +76,7 @@ impl Workspace {
             .pl(px(10.))
             .pr(px(4.))
             .text_size(px(SECONDARY_TEXT))
-            .child(div().flex_none().text_color(rgb(t.muted)).child(Icon::Terminal.at(ROW_ICON, t.muted)))
+            .child(program_mark(kind, format!("header-program-{id}"), t.muted))
             .child(
                 div()
                     .id(SharedString::from(format!("header-title-{id}")))

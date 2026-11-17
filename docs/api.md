@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.9.0**. Every method is marked:
+API version **1.10.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -455,7 +455,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.9.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.10.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -2012,6 +2012,7 @@ same facts for the server you run.
 | `exit_code` | integer (int32) \| null |  | Set once the program exited (only seen on blocks kept open). |
 | `title` | string \| null |  | The last title the program set (OSC 0/2). |
 | `cwd` | string \| null |  | Where the program is: its cwd, else its last OSC 7 path, else where it started. |
+| `foreground` | string \| null |  | The program in front (a shell's job, else the shell): the name of the PTY's foreground process, never its arguments; null once it exited or when another user owns it (`sudo`). Each change is a `foreground_changed` event; this is the value the last one carried (the server looks every 200 ms). |
 | `resume` | [string] \| null |  | What runs to resume the program after a restart, if it registered one (`set_resume`). |
 
 <details><summary>JSON Schemas</summary>
@@ -2099,6 +2100,13 @@ same facts for the server you run.
               "null"
             ]
           },
+          "foreground": {
+            "description": "The program in front (a shell's job, else the shell): the name of the PTY's foreground\nprocess, never its arguments; null once it exited or when another user owns it (`sudo`).\nEach change is a `foreground_changed` event; this is the value the last one carried (the\nserver looks every 200 ms).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "resume": {
             "description": "What runs to resume the program after a restart, if it registered one (`set_resume`).",
             "type": [
@@ -2149,6 +2157,7 @@ same facts for the server you run.
 | `exit_code` | integer (int32) \| null |  | Set once the program exited (only seen on blocks kept open). |
 | `title` | string \| null |  | The last title the program set (OSC 0/2). |
 | `cwd` | string \| null |  | Where the program is: its cwd, else its last OSC 7 path, else where it started. |
+| `foreground` | string \| null |  | The program in front (a shell's job, else the shell): the name of the PTY's foreground process, never its arguments; null once it exited or when another user owns it (`sudo`). Each change is a `foreground_changed` event; this is the value the last one carried (the server looks every 200 ms). |
 | `resume` | [string] \| null |  | What runs to resume the program after a restart, if it registered one (`set_resume`). |
 
 <details><summary>JSON Schemas</summary>
@@ -2221,6 +2230,13 @@ same facts for the server you run.
       },
       "cwd": {
         "description": "Where the program is: its cwd, else its last OSC 7 path, else where it started.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "foreground": {
+        "description": "The program in front (a shell's job, else the shell): the name of the PTY's foreground\nprocess, never its arguments; null once it exited or when another user owns it (`sudo`).\nEach change is a `foreground_changed` event; this is the value the last one carried (the\nserver looks every 200 ms).",
         "type": [
           "string",
           "null"

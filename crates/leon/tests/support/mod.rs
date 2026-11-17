@@ -162,14 +162,21 @@ impl Stream {
         self.lines.recv_timeout(timeout).ok()
     }
 
-    /// The next event, unwrapped: (type or block-event name, payload, the whole line).
+    /// The next event, unwrapped: (type or block-event name, payload, the whole line). A
+    /// `foreground_changed` is skipped (its seq still checked): the server's 200 ms look sends it
+    /// at no fixed place among the others (`foreground_event.rs` reads it).
     pub fn next(&mut self) -> Ev {
-        let line = self.line(Duration::from_secs(10)).expect("timed out waiting for an event");
-        let v: Value = serde_json::from_str(&line).unwrap_or_else(|e| panic!("event not JSON ({e}): {line}"));
-        let seq = v["seq"].as_u64().unwrap_or_else(|| panic!("event without seq: {line}"));
-        assert_eq!(seq, self.seq + 1, "seq must rise by exactly one: {line}");
-        self.seq = seq;
-        Ev::new(&v["event"])
+        loop {
+            let line = self.line(Duration::from_secs(10)).expect("timed out waiting for an event");
+            let v: Value = serde_json::from_str(&line).unwrap_or_else(|e| panic!("event not JSON ({e}): {line}"));
+            let seq = v["seq"].as_u64().unwrap_or_else(|| panic!("event without seq: {line}"));
+            assert_eq!(seq, self.seq + 1, "seq must rise by exactly one: {line}");
+            self.seq = seq;
+            let e = Ev::new(&v["event"]);
+            if e.name != "foreground_changed" {
+                return e;
+            }
+        }
     }
 
     /// Skip events until one named `name` arrives (each still checked for gaps).

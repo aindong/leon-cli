@@ -13,7 +13,7 @@ the server, the CLI and `leon attach`).
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.9.0`.
+one is `1.10.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -32,14 +32,21 @@ fields it doesn't know. The full policy is in
 
 #### Added
 
-- `leon.set("serve_tailscale", true)` (off by default) makes the server also listen on this
-  machine's Tailscale addresses, letting in only your own other machines, as tailscaled's
-  `whois` says, before it reads a byte; `serve_tailscale_port` (7297) and `serve_tailscale_tags`
-  go with it. `tailnet://HOST` endpoints reach such a server with no ssh. See
-  [docs/cli/hosts.md](docs/cli/hosts.md#serve-over-tailscale).
-- `server.status` reports `tailnet` (state, addresses, login, reason, last refusal) and
-  `server.settings` the three settings: new result fields on stable methods, so `api_version`
-  goes from `1.8.0` to `1.9.0`.
+- `serve_tailscale` (off by default): the server also listens on its Tailscale addresses for
+  only your own machines; `tailnet://HOST` reaches it
+  ([docs/cli/hosts.md](docs/cli/hosts.md#serve-over-tailscale)). `server.status` gains `tailnet`:
+  `api_version` 1.10.0.
+
+### An icon per program in Leon.app
+
+#### Added
+
+- Each pane's header, tab, sidebar row and overview card shows an icon for the kind of program in
+  it: shell, agent, editor, server, test run, monitor, remote or other
+  ([docs/architecture/attention.md](docs/architecture/attention.md)).
+- `session.list_blocks` gives each block `foreground`, the name of the program in front
+  (never its arguments; null for another user's), and a change is a `foreground_changed` event: a
+  new result field on a stable method, so `api_version` goes from `1.8.0` to `1.9.0`.
 
 ### A translucent window in Leon.app
 

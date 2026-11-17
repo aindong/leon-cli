@@ -1,5 +1,5 @@
 {
-  "api_version": "1.9.0",
+  "api_version": "1.10.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -1123,6 +1123,12 @@
                     "null"
                   ]
                 },
+                "foreground": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "resume": {
                   "type": [
                     "array",
@@ -1207,6 +1213,12 @@
             ]
           },
           "cwd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "foreground": {
             "type": [
               "string",
               "null"
