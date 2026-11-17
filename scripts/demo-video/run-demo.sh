@@ -6,7 +6,8 @@
 #                 git into the VM (build first: scripts/bundle.sh)
 #   setup         a clean take: reset, stage the sessions and agents, full screen, pointer parked
 #   take [A-B]    record scenes A to B (default 1-12), pull the clip, make take.mp4 and take-cut.mp4;
-#                 exits 3 when the recording stopped early (the VM's recorder sometimes does)
+#                 exits 3 when the recording stopped early (the VM's recorder sometimes does) or the
+#                 script fell more than 2.5 s behind its beats (a busy host)
 #   cue [BEATS]   rebuild a take's cue file (take-cue.jsonl) from its beats file (default the last
 #                 take's), sending nothing
 #   render        the finished videos from the take: renders/leon-demo-main.mp4 (16:9) and
@@ -60,11 +61,11 @@ g() {
   fi
   guest "$@"
 }
-# k combo KEYS | k key NAME [show] | k type TEXT | k click X Y (points): keys and clicks in the VM
+# k combo KEYS | k key NAME | k type TEXT | k click X Y (points): keys and clicks in the VM. Every
+# press shows a keycap: with no voice-over, the keycaps and captions tell the story
 k() {
   case "$1" in
-    combo) cue "\"type\": \"key\", \"combo\": $(jstr "$2"), \"show\": true" ;;
-    key) cue "\"type\": \"key\", \"combo\": $(jstr "$2"), \"show\": $([ "${3:-}" = show ] || [ "$2" = esc ] && echo true || echo false)" ;;
+    combo | key) cue "\"type\": \"key\", \"combo\": $(jstr "$2"), \"show\": true" ;;
     type) cue "\"type\": \"type\", \"text\": $(jstr "$2")" ;;
     click) cue "\"type\": \"click\", \"x\": $(($2 * 2)), \"y\": $(($3 * 2))" ;; # raw pixels: the screen is 2x
   esac
@@ -72,7 +73,6 @@ k() {
     case "$1" in type) spend "$(python3 -c "print(0.15 + 0.067 * len('''$2'''))")" ;; *) spend 0.15 ;; esac
     return
   fi
-  [ "$1" = key ] && set -- key "$2" # "show" is for the cue only
   guest key "$@"
 }
 vnc() { python3 "$here/vnc.py" "$(vnc_url)" "$@"; }
@@ -81,11 +81,13 @@ at() { # at SECONDS: wait until SECONDS after the take started
     vt=$(python3 -c "print(max($vt, $1))")
     return
   fi
-  local now; now=$(python3 -c 'import time; print(time.time())')
-  python3 -c "import time; time.sleep(max(0, $t0 + $1 - $now))"
+  # a step that runs long (a busy host slows every ssh and key) makes the beats after it late: a
+  # good take is at most 1.4 s behind, one on a loaded host was 15 s behind; `take` checks the file
+  python3 -c "import time; d = $t0 + $1 - time.time(); time.sleep(max(0, d)); d < -2.5 and print('at $1: %.1f s late' % -d)" \
+    >>"$work/take-late.txt"
 }
 # zoom X Y W H UNTIL: the compositor zooms onto this region of the raw frame (pixels) until UNTIL.
-# The camera shows the region widened by 12% about its centre and to the frame's shape, at most 1.84x (16:9) so text
+# The camera shows the region widened by 12% about its centre and to the frame's shape, at most 1.59x (16:9) so text
 # stays sharp: pick regions whose widened edges fall on pane borders, not mid-word
 zoom() { cue "\"type\": \"zoom\", \"region\": [$1, $2, $3, $4], \"until\": $5"; }
 # caption TEXT UNTIL [SMALL]: a burned-in caption (and an .srt line) from now until UNTIL
@@ -157,6 +159,7 @@ case "${1:-}" in
     sleep 1.5 # the capture's own start; the edit trims this head
     t0=$(python3 -c 'import time; print(time.time())')
     : >"$work/take-beats.txt"
+    : >"$work/take-late.txt"
     printf '{"t": 0, "type": "take", "lead": 1.5, "width": 2880, "height": 1620}\n' >"$cuefile"
     for ((n = from; n <= to; n++)); do "scene$n"; done
     wait "$rec" "$wig"
@@ -167,6 +170,10 @@ case "${1:-}" in
     got=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$work/take-raw.mov" 2>/dev/null || echo 0)
     if python3 -c "import sys; sys.exit(0 if float(sys.argv[1] or 0) < $secs - 2 else 1)" "$got"; then # short
       echo "take: the recording stopped at ${got:-0} s of $secs: film it again (setup, then take)" >&2
+      exit 3
+    fi
+    if [ -s "$work/take-late.txt" ]; then # zooms, captions and clicks would miss their beats
+      echo "take: the script ran late ($(head -1 "$work/take-late.txt")): film it again (setup, then take)" >&2
       exit 3
     fi
     # the recorder's start varies: the cue's lead becomes the one measured on this take
@@ -225,5 +232,5 @@ case "${1:-}" in
     echo "retake: $rev filmed and rendered in $work/renders" ;;
   check) ip >"$work/.ip"; g check ;;
   stop) tart stop "$vm" ;;
-  *) sed -n '2,22s/^# \{0,1\}//p' "$0"; exit 2 ;;
+  *) sed -n '2,23s/^# \{0,1\}//p' "$0"; exit 2 ;;
 esac

@@ -106,7 +106,9 @@ recorder's own start varies (from 0 to 1.5 s after it is asked, on 2026-11-17), 
 the lead on the video (`lead.py`: the first frame that changes is scene 2's ⌘N) instead of
 trusting the 1.5 s it waits; one take in four stopped at 64 s with `screencapture: exit 0`, so
 `take` exits 3 when the recording is more than 2 s short, and `retake` then films it again from
-`setup` (up to 3 tries).
+`setup` (up to 3 tries); on a host busy with builds every ssh and key slowed to seconds and a take
+ran 15 s behind its beats (a good one is at most 1.4 s behind), so `take` also exits 3 when the
+script falls more than 2.5 s behind (`take-late.txt` says where).
 
 ## Rendering
 
@@ -119,10 +121,13 @@ reopen's windowed second with `cut.py --print`, and renders, at `nice -n 10` wit
 
 - `renders/leon-demo-main.mp4`: 16:9, 1920×1080, 60 fps: a 3 s cold open (the 50-tab overview,
   live, from the take's `5 overview` beat, without its caption or keycap), a cut to the empty
-  state and the take from there, end card;
+  state and the take from there, end card; the take fills 1792×1008 of the frame (a thin
+  gradient border), with the caption and keycaps as pills over its top and bottom edges, so it
+  shows as much of the screen as it can;
 - `renders/leon-demo-square-30s.mp4`: 1:1, 1080×1080, 60 fps: the 30-second cut
   (`SQUARE_CUT` in `compose.py`), its pieces dissolving into each other;
-- an `.srt` beside each, and a silent stereo track in each, for a voice-over.
+- an `.srt` beside each, and a silent stereo track in each (there is no voice-over: the captions
+  and the keycaps, one for every key pressed, tell the story; each caption stays up at least 2 s).
 
 H.264 High, CRF 18 capped at 12 Mb/s, 2 s GOPs, `+faststart`: X and LinkedIn take it as it is.
 On a 12-core Mac with other work running, the main cut takes 2 to 3 minutes, the square 1.

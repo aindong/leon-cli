@@ -35,7 +35,7 @@ scene4() { # Activity: blocked, error, done; jump to the blocked one and answer
 scene5() { # speed: a 400 MB coloured log floods the shell while the agent takes typing; 50 tabs
   at 37; mark "5 speed"; k combo cmd+k
   at 37.7; k type pagination # not "pag": status-page matches that too
-  at 39.2; k key return show
+  at 39.2; k key return
   at 39.8; k combo cmd+alt+left
   at 40.3; k type "cat ~/logs/app.log"; k key return
   at 41.6; mark "5 flood starts"; k combo cmd+alt+right
@@ -52,7 +52,7 @@ scene6() { # ⌘K to the red agent; while it fixes the page, its repo's history 
   at 52.5; mark "6 switch"; k combo cmd+k
   caption "⌘K: any session, tab or pane." 55.1
   at 53.2; k type mobile
-  at 54.2; k key return show # its red tests show for a second
+  at 54.2; k key return # its red tests show for a second
   # init.lua's ctrl+alt+g, the recipe in docs/lua/keys.md: git log --graph in a centred popup
   at 55.3; mark "6 popup"; k combo ctrl+alt+g
   caption "A popup on one key: the repo's history." 59.8 "the same key hides it"
@@ -79,39 +79,39 @@ scene9() { # Tailscale: Add Host lists the tailnet; pick devbox; its session
   at 77; mark "9 tailscale"; k combo cmd+shift+p
   caption "Pick a machine from your tailnet." 84.8
   at 77.8; k type "add host"
-  at 79; k key return show
+  at 79; k key return
   # the sidebar, the palette and the shell pane: its edges fall on pane borders and column gaps
   at 79.4; zoom 0 9 1768 990 87.0
   at 81.5; k type dev
-  at 82.5; k key return show
+  at 82.5; k key return
   at 85; caption "Its sessions, beside your own." 90.6
   at 85.5; k combo cmd+k
   at 86.2; k type nightly
-  at 87.2; k key return show
+  at 87.2; k key return
   at 87.6; zoom 0 9 1714 720 90.6 # devbox in the sidebar, its agent with the devbox badge, to the pane border
 }
 scene10() { # leon attach in a plain terminal; an agent elsewhere asks: its banner takes you there
   at 91; mark "10 attach"; g banner # on now: the app has it well before the agent asks
   g front # the Terminal setup left on the desktop: macOS slides there
-  caption "The same sessions, from any terminal." 96.3 "leon attach"
-  at 92; k type "leon attach shelf-api"; k key return show # the session's tab: its agent and shell, live
-  at 94.3; k type "then update the README"; k key return show # to its agent: the app has it too
+  caption "The same sessions, from any terminal." 96.3 "leon attach, in macOS Terminal"
+  at 92; k type "leon attach shelf-api"; k key return # the session's tab: its agent and shell, live
+  at 94.3; k type "then update the README"; k key return # to its agent: the app has it too
   at 96.5; mark "10 banner"; g go banner # logtally's agent asks again; leon's banner (the app is behind)
-  caption "It tells you when an agent needs you." 100.8
+  caption "It tells you when an agent needs you." 100.8 "click it to go straight there"
   at 96.8; zoom 1400 9 1448 815 98.6 # the banner, top right
   at 98.4; k click 1250 78 # the banner: leon comes forward on that agent's pane
-  at 99.8; k type y; k key return show
+  at 99.8; k type y; k key return
   g unterminal # behind the app: after ⌘Q the desktop is bare again
 }
 scene11() { # quit the app; the programs keep going; open it again
   at 101.5; mark "11 quit"; k combo cmd+q
-  caption "Quit the app…" 103.5
+  caption "Quit the app…" 103.7 # cut.py keeps 2 s of desktop: the caption runs to the cut
   at 103.5; mark "11 reopen"; g app
   g fullscreen # it opens windowed: the compositor and take-cut.mp4 drop that second
   at 107.4; caption "…everything is still running." 111.8
   at 107.5; k combo cmd+k
   at 108.2; k type review
-  at 109; k key return show
+  at 109; k key return
 }
 scene12() { # the payoff: every tab, This Mac and devbox, live
   at 112; mark "12 overview"; k combo 'cmd+shift+\' # live cards: screencapture -V needs frames to stop
