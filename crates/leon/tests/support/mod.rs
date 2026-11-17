@@ -83,7 +83,15 @@ impl Env {
     /// A session whose first block runs `sleep 300`; returns (session id, block id).
     pub fn session(&self) -> (String, String) {
         let b = self.ok(&["run", "--", "sleep", "300"]);
-        let v = self.json(&["block", "inspect", &b, "--json"]);
+        // the server reports `sleep` in front on its 200 ms look, as an event: until a snapshot
+        // shows it, a stream attached now could start with it
+        let end = Instant::now() + Duration::from_secs(10);
+        let mut v = self.json(&["block", "inspect", &b, "--json"]);
+        while v["foreground"] != "sleep" && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(20));
+            v = self.json(&["block", "inspect", &b, "--json"]);
+        }
+        assert_eq!(v["foreground"], "sleep", "the server reported the program in front: {v}");
         let s = self.json(&["ls", "--json"])[0]["session_id"].as_str().unwrap().to_string();
         assert_eq!(v["block_id"], b.as_str());
         (s, b)
