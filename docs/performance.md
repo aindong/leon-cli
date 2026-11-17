@@ -255,8 +255,8 @@ The parse path's speed-up for a flood of text and colour, with its numbers: docs
 
 ## Memory
 
-Giving a closed pane's memory back, and the two small leaks in GPUI the app's soak found:
-docs/performance-memory.md.
+Giving a closed pane's memory back (tried and dropped: macOS frees nothing more), and the two
+small leaks in GPUI the app's soak found: docs/performance-memory.md.
 
 ## Not measured yet
 

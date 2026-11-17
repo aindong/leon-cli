@@ -31,7 +31,6 @@ mod foreground;
 pub use foreground::owned_process_name;
 #[path = "terminal_process.rs"]
 mod process;
-pub use process::given_back;
 use process::{reap, wait_exit, Registered, Started};
 #[path = "terminal_reading.rs"]
 mod reading;

@@ -56,8 +56,7 @@ fields it doesn't know. The full policy is in
   choose Install (`check_for_updates` turns it off; API `1.7.0`)
   ([detail](docs/changelog-detail.md#updates-in-leonapp)).
 - **Memory**: a font change resizes only the panes on screen, so it no longer grows the server by
-  hundreds of MiB, and on macOS a closed pane's memory goes back to the system
-  ([detail](docs/changelog-detail.md#memory)).
+  hundreds of MiB ([detail](docs/changelog-detail.md#memory)).
 - **Fading the panes without the focus**: every pane but the focused one fades, set with
   `fade_inactive_panes`; API `1.6.0` ([detail](docs/changelog-detail.md#fading-the-panes-without-the-focus)).
 - **Updates**: `leon self-update` installs the newest signed release

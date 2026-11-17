@@ -1,5 +1,5 @@
 //! A terminal's program as a process: its resume command, whether it reads a line, hanging it up
-//! and killing it, and waiting for and reaping it; and handing its memory back once it is freed.
+//! and killing it, and waiting for and reaping it.
 
 use super::*;
 
@@ -168,51 +168,4 @@ pub(super) fn reap(pid: i32) -> i32 {
     } else {
         1
     }
-}
-
-/// Times freed memory was handed back to the system (`give_back`).
-static GIVEN_BACK: AtomicUsize = AtomicUsize::new(0);
-/// A give-back is on its way: closes meanwhile ride along with it.
-#[cfg(target_os = "macos")]
-static GIVING_BACK: AtomicBool = AtomicBool::new(false);
-
-/// How many times freed memory has been handed back to the system.
-pub fn given_back() -> usize {
-    GIVEN_BACK.load(Ordering::SeqCst)
-}
-
-// shortcut: macOS only, where the soak measured it; glibc's malloc_trim(0) would be Linux's
-#[cfg(target_os = "macos")]
-impl Drop for Listener {
-    /// alacritty's `Term` drops this after both of its grids, so a pane's history has just been
-    /// freed: have the allocator hand the pages it keeps back to the system, off this thread (this
-    /// can run under the server's state lock).
-    /// shortcut: relies on `Term` declaring `event_proxy` after its grids (alacritty 0.26); if an
-    /// upgrade moves it, this runs first and gives back less, nothing worse.
-    fn drop(&mut self) {
-        if !GIVING_BACK.swap(true, Ordering::SeqCst) {
-            let later = std::thread::Builder::new().name("give-back".into()).spawn(|| {
-                std::thread::sleep(Duration::from_millis(100)); // a session's other panes close too
-                GIVING_BACK.store(false, Ordering::SeqCst);
-                give_back();
-            });
-            if later.is_err() {
-                // no thread to spare: give back here, so the closes that rode along aren't missed
-                GIVING_BACK.store(false, Ordering::SeqCst);
-                give_back();
-            }
-        }
-    }
-}
-
-/// Hand the free pages the allocator keeps (every zone, as many as it can) back to the system.
-#[cfg(target_os = "macos")]
-fn give_back() {
-    extern "C" {
-        fn malloc_zone_pressure_relief(zone: *mut libc::c_void, goal: libc::size_t) -> libc::size_t;
-    }
-    // SAFETY: a null zone means every zone; the call takes the allocator's own locks and touches
-    // no Rust memory.
-    unsafe { malloc_zone_pressure_relief(std::ptr::null_mut(), 0) };
-    GIVEN_BACK.fetch_add(1, Ordering::SeqCst);
 }
