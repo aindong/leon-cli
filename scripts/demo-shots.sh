@@ -134,7 +134,6 @@ txt tests <<'EOF'
      Running unittests src/lib.rs
 
 running 18 tests
-test session::tests::clock_advances ... ok
 test session::tests::refresh_keeps_the_id ... ok
 test session::tests::expired_session_is_rejected ... ok
 test session::tests::idle_session_expires ... ok
@@ -142,16 +141,9 @@ test session::tests::login_sets_a_cookie ... ok
 test session::tests::logout_clears_the_cookie ... ok
 test token::tests::round_trip ... ok
 test token::tests::rejects_a_bad_signature ... ok
-test token::tests::rejects_an_old_key ... ok
 test token::tests::rotates_weekly ... ok
 
 test result: ok. 18 passed; 0 failed; finished in 0.31s
-
-     Running tests/session_test.rs
-
-running 6 tests
-......
-test result: ok. 6 passed; 0 failed; finished in 0.12s
 EOF
 txt server <<'EOF'
 listening on http://127.0.0.1:8080
@@ -291,7 +283,7 @@ claude=$(here -s auth run --keep-open -c "$home/src/auth" -- show "Fix the flaky
 here -s auth window close 1 >/dev/null
 tests=$(here -s auth split -b "$claude" --focus=false -c "$home/src/auth" -- show tests.sh "$d/tests.txt")
 shell=$(here -s auth split -b "$tests" --split below --focus=false -c "$home/src/auth")
-here -s auth send -b "$shell" 'git log --oneline -6' >/dev/null
+here -s auth send -b "$shell" 'git --no-pager log --oneline -6' >/dev/null
 here -s auth send-key -b "$shell" enter >/dev/null
 tab auth auth "dev server" server >/dev/null
 here -s auth focus "$claude" >/dev/null 2>&1 || true
@@ -354,7 +346,13 @@ shot() {
   front
   in_front
   sleep 0.5
-  "$d/deskshot" "$app_pid" "$desk_pid" "$out/$1.png" "${2:-0}"
+  # a system overlay can pass over the shot for a moment: three tries, each checked
+  local n
+  for n in 1 2 3; do
+    "$d/deskshot" "$app_pid" "$desk_pid" "$out/$1.png" "${2:-0}" && break
+    [ "$n" = 3 ] && exit 1
+    sleep 1
+  done
   sips -Z $((ww + 2 * ${2:-0})) "$out/$1.png" >/dev/null
   echo "demo-shots: $1.png"
 }

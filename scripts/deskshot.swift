@@ -76,7 +76,7 @@ func check() -> CGRect? {
     else { return no("the backdrop doesn't cover \(rect)") }
     guard at < back else { return no("leon's window is behind the backdrop") }
     if let w = list[..<back].first(where: { bounds($0).intersects(rect) && owner($0) != pid && !clearDock($0) }) {
-        return no("another program's window is over the shot (pid \(owner(w) ?? -1))")
+        return no("another program's window is over the shot (pid \(owner(w) ?? -1), \(w[kCGWindowOwnerName as String] ?? "?") \(w[kCGWindowName as String] ?? "") \(bounds(w)))")
     }
     return rect
 }
