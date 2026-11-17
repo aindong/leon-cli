@@ -77,3 +77,31 @@ fn a_pane_closed_while_zoomed_is_drawn_once(cx: &mut TestAppContext) {
     }
     assert!(end.is_some(), "the pane left fills the window");
 }
+
+/// Flakes round 7 (m6b_panes `zoom_never_hides_where_input_goes`): keys typed while a zoom from
+/// the CLI is still moving go to the zoomed pane, the one input follows, not the focused sibling.
+#[gpui::test]
+fn keys_typed_while_a_zoom_moves_reach_the_zoomed_pane(cx: &mut TestAppContext) {
+    let s = setup();
+    let (ws, cx) = open(cx, &s.app);
+    ws.update(cx, |ws, _| ws.set_reduce_motion(false));
+    // each pane's program prints the line it reads, so the one the keys reached says so
+    let reads = |m: &str| format!("stty -echo; echo {m}; read l; echo \"got:$l\"; exec sleep 300");
+    let a = tab_running(&s, &ws, cx, &reads("a-ready"), "a-ready");
+    let b = split_running(&s, &ws, cx, &a, &reads("b-ready"), "b-ready");
+    to_rest(&ws, cx);
+    let sid = sid(&ws, cx);
+
+    zoom(&s, &sid, &a, true);
+    assert!(moving(&ws, cx), "the zoom moves");
+    frame(&ws, cx, LAYOUT / 2);
+    // the sibling the zoom covers is drawn only while the zoom moves (a focus fade animates too)
+    assert!(tile(cx, &b).is_some(), "still moving");
+    cx.simulate_input("hi");
+    cx.simulate_keystrokes("enter");
+    let got = eventually(|| term(&s.app, &a).text(true).lines().any(|l| l.trim() == "got:hi"));
+    let other = term(&s.app, &b).text(true);
+    s.app.stop();
+    assert!(got, "the zoomed pane's program read the line");
+    assert!(!other.contains("got:"), "its sibling read nothing: {other}");
+}
