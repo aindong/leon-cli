@@ -108,6 +108,11 @@ impl Workspace {
         self.glass.glass
     }
 
+    /// Whether the server's settings were applied once, and the glass with them (tests).
+    pub fn settings_applied(&self) -> bool {
+        self.glass.known
+    }
+
     /// The window backgrounds GPUI was asked for, oldest first.
     pub fn backgrounds_set(&self) -> &[Bg] {
         &self.glass.set

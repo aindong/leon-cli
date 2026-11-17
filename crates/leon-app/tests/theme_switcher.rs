@@ -42,7 +42,7 @@ fn the_list_has_every_theme_and_esc_goes_back(cx: &mut TestAppContext) {
     std::fs::create_dir_all(s.dir.path().join("themes")).unwrap();
     std::fs::write(s.dir.path().join("themes/mine.theme"), MINE).unwrap();
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let before = init_lua(&s);
     assert_eq!(ws.read_with(cx, |ws, _| ws.theme()), DARK);
 
@@ -83,7 +83,7 @@ fn the_list_has_every_theme_and_esc_goes_back(cx: &mut TestAppContext) {
 fn enter_keeps_one_theme_for_both_sides(cx: &mut TestAppContext) {
     let s = setup_with_config("-- mine\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let sand = builtin("leon-sand").unwrap();
     act(&ws, cx, "client.theme.change");
     cx.simulate_input("sand");
@@ -99,7 +99,7 @@ fn enter_keeps_one_theme_for_both_sides(cx: &mut TestAppContext) {
         setting(&s) == ("leon-sand".into(), "leon-sand".into())
     });
     let got = setting(&s);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let after_reload = ws.read_with(cx, |ws, _| ws.theme());
     s.app.stop();
     assert_eq!(at_once, (sand, false), "↩ closes the list and keeps leon-sand at once");
@@ -112,7 +112,7 @@ fn enter_keeps_one_theme_for_both_sides(cx: &mut TestAppContext) {
 fn enter_changes_only_the_side_macos_is_on(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"theme\", { dark = \"leon-dark\", light = \"leon-light\" })\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     assert_eq!(ws.read_with(cx, |ws, _| ws.theme()), LIGHT, "the test window is light");
     act(&ws, cx, "client.theme.change");
     let selected = ws.read_with(cx, |ws, _| ws.palette_selected_row());
@@ -142,7 +142,7 @@ fn a_refused_write_goes_back_and_says_why(cx: &mut TestAppContext) {
     // set by code: `leon config set` can't rewrite the call, so the pick can't be written
     let s = setup_with_config("leon.set(\"theme\", os.getenv(\"LEON_NO_SUCH_VAR\") or \"leon-dark\")\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let before = init_lua(&s);
     act(&ws, cx, "client.theme.change");
     cx.simulate_input("sand");
@@ -160,7 +160,7 @@ fn a_refused_write_goes_back_and_says_why(cx: &mut TestAppContext) {
 fn the_lists_own_key_closes_it_and_the_palettes_key_goes_to_the_actions(cx: &mut TestAppContext) {
     let s = setup_with_config("-- mine\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     cx.simulate_keystrokes("cmd-shift-t down cmd-shift-t");
     let closed = ws.read_with(cx, |ws, _| (ws.palette_open(), ws.theme()));
     cx.simulate_keystrokes("cmd-shift-t down cmd-shift-p");

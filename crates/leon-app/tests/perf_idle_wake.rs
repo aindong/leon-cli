@@ -42,19 +42,21 @@ fn an_idle_window_does_not_poll_on_a_clock(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn a_working_indicator_polls_and_redraws_at_the_spinner_pace(cx: &mut TestAppContext) {
+fn a_working_indicator_ticks_the_pulse_not_the_poll(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
     run_until(&focused(&s.app, &ws, cx), WORKING, "w-sent");
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.activity_rows().len()) == 1), "the pane reports working");
     run_for(&ws, cx, Duration::from_millis(300));
-    let (n, redraws) = run_for(&ws, cx, Duration::from_secs(1));
+    let ticks = ws.read_with(cx, |ws, cx| ws.pulse_state(cx).1);
+    let (n, _) = run_for(&ws, cx, Duration::from_secs(1));
+    let ticks = ws.read_with(cx, |ws, cx| ws.pulse_state(cx).1) - ticks;
     s.app.stop();
-    // 8 frames a second (125 ms each; the old poll ran about 125 times). Under load a slow step
-    // moves the test clock in one jump past a real clock that stands still, and the spinner's
-    // deadline (from the real clock) can come round a few times within it.
-    assert!((5..=40).contains(&n), "the poll ran {n} times in 1 s with a working indicator");
-    assert!(redraws >= 3, "the pulse moved only {redraws} times in 1 s");
+    // the spinner's clock is the Pulse's (GPUI phase 3), 8 ticks a second; the poll runs only
+    // when woken. Under load a slow step moves the test clock in one jump, and the timer can
+    // come round a few times within it.
+    assert!(n <= 5, "the poll ran {n} times in 1 s with a working indicator");
+    assert!((5..=40).contains(&ticks), "the Pulse ticked {ticks} times in 1 s");
 }
 
 #[gpui::test]

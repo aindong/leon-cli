@@ -10,17 +10,14 @@ use serde_json::json;
 fn an_unchanged_font_refits_nothing(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"font.size\", 13)\nleon.set(\"theme\", \"leon-dark\")\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let (_, block) = hidden_session(&s.app, &ws, cx);
     let hidden = term(&s.app, &block);
     assert_eq!(hidden.size(), (24, 80), "a pane never shown has the server's default size");
 
     // a reload that changes the theme and leaves the font
     config_set(&s, "theme", json!("leon-light"));
-    ws.update(cx, |ws, cx| {
-        ws.sync_keymap();
-        cx.notify();
-    });
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.theme()) == LIGHT), "the reload applied");
     let after_reload = stays(cx, &hidden, (24, 80));
 

@@ -38,6 +38,7 @@ use crate::render::{self, Frame};
 use crate::status::{self, Indicator};
 use crate::switcher;
 use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
+use section_inputs::{HeaderInput, HostLabel, SidebarInput, TitleBarInput};
 
 actions!(
     leon,
@@ -117,11 +118,6 @@ enum Drag {
 
 // Truncating text cells use `line_clamp(1)`, not `whitespace_nowrap`: GPUI 0.2.2 caches a no-wrap
 // text's size from its first layout (before its width is known) and never adds the ellipsis.
-
-/// Where the app keeps its settings: `$LEON_STATE_DIR/app.json` (next to the server's sessions).
-pub fn settings_path() -> Option<PathBuf> {
-    leon_core::paths::state_dir().map(|d| d.join("app.json"))
-}
 
 pub struct Workspace {
     /// The selected session's machine's remote: what every action acts on.
@@ -211,6 +207,16 @@ pub struct Workspace {
     /// Each shown pane's grid view (view_grid.rs), and how often each rendered.
     grids: HashMap<String, grid_view::GridSlot>,
     grid_renders: Rc<RefCell<HashMap<String, u64>>>,
+    /// The sidebar, title bar and headers as views (view_sections.rs), and how often each rendered.
+    sections: HashMap<String, sections_view::SectionSlot>,
+    section_renders: Rc<RefCell<HashMap<String, u64>>>,
+    /// The spinners' clock, whether a shown one works, and the root's watch while it draws one.
+    pulse: gpui::Entity<pulse_view::Pulse>,
+    pulse_wanted: bool,
+    pulse_root: Option<Subscription>,
+    /// The pane under the mouse (its header shows its controls), and where the panes were.
+    hovered_pane: Option<String>,
+    hover_rects: Vec<(String, panes::Rect, &'static str)>,
     /// Each shown pane's fade (view_fade.rs).
     fade: fade_view::FadeUi,
     /// The translucent window (view_glass.rs).
@@ -302,6 +308,7 @@ impl Workspace {
             ws.settings.window = Some(state::frame(window.window_bounds().get_bounds()));
             ws.settings.display = window.display(cx).map(|d| u32::from(d.id()));
             ws.update_glass(window, cx); // full screen in or out
+            cx.notify(); // the headers' titles are cut to the panes' widths
         });
         let quit = cx.on_app_quit(|ws, _| {
             ws.save_settings();
@@ -313,12 +320,13 @@ impl Workspace {
             ws.update_glass(window, cx)
         });
         // shortcut: every notify of the workspace brings what render draws from up to date (R5),
-        // and gives each grid its input; a pushed screen reaches its grid from the poll instead
-        // (`poll_grids`). Phase 5 (the model as entities) removes this observer
-        let prepare = cx.observe_self(|ws, cx| {
+        // and gives each grid and section its input; a pushed screen reaches its grid from the poll
+        // instead (`poll_grids`). Phase 5 (the model as entities) removes this observer
+        let prepare = cx.observe_in(&cx.entity(), window, |ws, _, window, cx| {
             let seen = ws.screens_seen();
             ws.prepare();
             ws.sync_grids(&seen, cx);
+            ws.sync_sections(window, cx);
         });
         let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
         let mut ws = Workspace {
@@ -373,6 +381,13 @@ impl Workspace {
             floats: Default::default(),
             grids: HashMap::new(),
             grid_renders: Rc::default(),
+            sections: HashMap::new(),
+            section_renders: Rc::default(),
+            pulse: cx.new(|_| pulse_view::Pulse::new()),
+            pulse_wanted: false,
+            pulse_root: None,
+            hovered_pane: None,
+            hover_rects: Vec::new(),
             fade: Default::default(),
             glass: glass_view::GlassUi::new(window.window_handle()),
             overview: Default::default(),
@@ -395,17 +410,8 @@ impl Workspace {
         ws.sync_grids(&seen, cx);
         ws.note_reduce_transparency();
         ws.update_glass(window, cx);
+        ws.sync_sections(window, cx);
         ws
-    }
-
-    /// Run a layout method on the selected session; redraw.
-    fn call(&mut self, method: &str, mut params: serde_json::Value, cx: &mut Context<Self>) {
-        let Some(sid) = self.session_id.clone() else { return };
-        params["session_id"] = json!(sid);
-        self.app.act_later(method, params, drop);
-        let rows = self.rows();
-        self.settle(&rows);
-        cx.notify();
     }
 }
 
@@ -439,6 +445,12 @@ mod hosts_view;
 mod keys;
 #[path = "view_look.rs"]
 mod look_view;
+#[path = "view_pulse.rs"]
+mod pulse_view;
+#[path = "view_section_inputs.rs"]
+mod section_inputs;
+#[path = "view_sections.rs"]
+mod sections_view;
 #[path = "view_start.rs"]
 mod start;
 #[path = "view_state.rs"]
@@ -451,10 +463,12 @@ pub(crate) use bars::Tip;
 pub(crate) use floats_view::system_reduce_transparency;
 pub(crate) use glass_view::set_blur_material;
 
-pub use drawn_view::{drawing, drawn, sel};
+pub use drawn_view::{drawing, drawing_cached, drawn, drawn_cached, sel};
 pub use grid_view::GridDrawn;
 pub use look_view::is_dark;
+pub use pulse_view::Pulse;
 pub use start::{init, install, quits, run};
+pub use state::settings_path;
 #[path = "view_menus.rs"]
 mod menus;
 #[path = "view_model.rs"]

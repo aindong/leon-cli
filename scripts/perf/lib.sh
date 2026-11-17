@@ -2,7 +2,7 @@
 # scripts/perf/lib.sh: what every perf script shares. Source it, then call perf_init NAME.
 #
 # Every leon it starts uses the release build and a private 0700 temp dir for LEON_RUNTIME_DIR,
-# LEON_STATE_DIR and LEON_CONFIG (a missing file at first: no init.lua runs), with a temp HOME and
+# LEON_STATE_DIR and LEON_CONFIG (a missing file, or PERF_INIT_LUA's text), with a temp HOME and
 # SHELL=/bin/sh whose prompt is the sentinel bar, so no real session, config or shell rc is read
 # or touched. Cleanup stops that server and kills only the pids this script started.
 set -euo pipefail
@@ -65,6 +65,7 @@ perf_init() {
   chmod 700 "$PERF_DIR"
   mkdir -m 700 "$PERF_DIR/run" "$PERF_DIR/state" "$PERF_DIR/home"
   export LEON_RUNTIME_DIR="$PERF_DIR/run" LEON_STATE_DIR="$PERF_DIR/state" LEON_CONFIG="$PERF_DIR/no-init.lua"
+  [ -z "${PERF_INIT_LUA:-}" ] || printf '%s\n' "$PERF_INIT_LUA" >"$LEON_CONFIG"
   export HOME="$PERF_DIR/home" SHELL=/bin/sh ENV="$PERF_DIR/home/.shrc"
   # the prompt: a bar in the sentinel colour, then "$ " (what start-up waits to see drawn)
   cat >"$ENV" <<'SH'

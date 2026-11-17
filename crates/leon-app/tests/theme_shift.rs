@@ -36,7 +36,7 @@ fn frame(ws: &Entity<Workspace>, cx: &mut VisualTestContext, pane: &str, at: Ins
 fn a_change_cross_fades_then_rests(cx: &mut TestAppContext) {
     let s = setup_with_config("-- mine\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let pane = ws.read_with(cx, |ws, _| ws.target_block()).expect("a pane");
     let t0 = Instant::now();
     ws.update(cx, |ws, _| {
@@ -66,7 +66,7 @@ fn a_change_cross_fades_then_rests(cx: &mut TestAppContext) {
 fn reduce_motion_draws_no_frame_in_between(cx: &mut TestAppContext) {
     let s = setup_with_config("-- mine\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let pane = ws.read_with(cx, |ws, _| ws.target_block()).expect("a pane");
     let t0 = Instant::now();
     ws.update(cx, |ws, _| {
@@ -88,7 +88,7 @@ fn the_first_settings_are_drawn_at_once(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"theme\", \"leon-light\")\n");
     let (ws, cx) = open(cx, &s.app);
     ws.update(cx, |ws, _| ws.set_reduce_motion(false));
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     // the look as soon as the settings land: a fade from leon-dark would still be moving
     let mut first = None;
     let landed = shows(cx, |cx| {

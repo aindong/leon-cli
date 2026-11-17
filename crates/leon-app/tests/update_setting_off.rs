@@ -38,9 +38,9 @@ fn wait(cx: &mut VisualTestContext, secs: u64, mut done: impl FnMut() -> bool) -
 }
 
 fn updating(ws: &Entity<Workspace>, cx: &mut VisualTestContext) {
-    ws.update(cx, |ws, _| {
+    ws.update(cx, |ws, cx| {
         ws.enable_updates(None, Arc::new(leon_update::Target::running));
-        ws.sync_keymap(); // the settings arrive: the daily check may start
+        ws.sync_keymap(cx); // the settings arrive: the daily check may start
     });
 }
 

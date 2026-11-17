@@ -30,7 +30,7 @@ fn ticks(cx: &mut VisualTestContext, mut pred: impl FnMut(&mut VisualTestContext
 fn a_card_is_drawn_in_the_theme_a_change_heads_for(cx: &mut TestAppContext) {
     let s = setup_with_config("leon.set(\"theme\", { dark = \"leon-dark\", light = \"leon-light\" })\n");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let (w, _) = window(&s.app, &ws, cx);
     let id = leaves(&w)[0].clone();
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.screen_text(&id).is_some())));

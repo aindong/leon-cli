@@ -3,7 +3,7 @@
 #   scripts/perf/idle-cpu.sh [--secs 300]
 # Twelve idle /bin/sh panes in the shown tab, then three states of SECS each: plain; one pane
 # reporting `working` (its status indicator pulses); the app hidden (as ⌘H does). Per state: CPU
-# seconds used (ps), as a percentage of one core, and idle wake-ups (top's IDLEW).
+# seconds used (ps), as a percentage of one core, idle wake-ups (top's IDLEW), and the app's frames.
 source "$(dirname "$0")/lib.sh"
 secs=300
 [ "${1:-}" = --secs ] && secs=$2
@@ -19,12 +19,15 @@ measure() {
   perf_note "idle-cpu $1"
   sleep 5 # past whatever the change itself drew
   local s0 a0 sw0 aw0 s1 a1 sw1 aw1
-  s0=$(cpu_s "$SERVER_PID") a0=$(cpu_s "$APP_PID") sw0=$(wakeups "$SERVER_PID") aw0=$(wakeups "$APP_PID")
+  local u0 u1
+  s0=$(cpu_s "$SERVER_PID") a0=$(cpu_s "$APP_PID") sw0=$(wakeups "$SERVER_PID") aw0=$(wakeups "$APP_PID") u0=$(uptime_ns)
   sleep "$secs"
-  s1=$(cpu_s "$SERVER_PID") a1=$(cpu_s "$APP_PID") sw1=$(wakeups "$SERVER_PID") aw1=$(wakeups "$APP_PID")
-  awk -v n="$1" -v t="$secs" -v l="$(load1)" \
+  s1=$(cpu_s "$SERVER_PID") a1=$(cpu_s "$APP_PID") sw1=$(wakeups "$SERVER_PID") aw1=$(wakeups "$APP_PID") u1=$(uptime_ns)
+  local frames
+  frames=$(awk -v a="$u0" -v b="$u1" '$1 == "frame" && $2 >= a && $2 < b { n++ } END { print n + 0 }' "$RUN/frames.log")
+  awk -v n="$1" -v t="$secs" -v l="$(load1)" -v f="$frames" \
     -v ds="$(echo "$s1 - $s0" | bc)" -v da="$(echo "$a1 - $a0" | bc)" -v ws="$((sw1 - sw0))" -v wa="$((aw1 - aw0))" \
-    'BEGIN { printf "%s (%d s, load=%s): server %.2f%% of a core, %.1f wakeups/s; app %.2f%% of a core, %.1f wakeups/s\n", n, t, l, 100 * ds / t, ws / t, 100 * da / t, wa / t }' |
+    'BEGIN { printf "%s (%d s, load=%s): server %.2f%% of a core, %.1f wakeups/s; app %.2f%% of a core, %.1f wakeups/s, %.1f frames/s\n", n, t, l, 100 * ds / t, ws / t, 100 * da / t, wa / t, f / t }' |
     tee -a "$RUN/summary.txt"
 }
 measure "12 idle panes"
