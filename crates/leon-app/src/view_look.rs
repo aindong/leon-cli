@@ -9,11 +9,6 @@ pub fn is_dark(a: gpui::WindowAppearance) -> bool {
 }
 
 impl Workspace {
-    /// The theme everything is drawn with now.
-    pub fn theme(&self) -> Theme {
-        self.theme
-    }
-
     pub fn font_family(&self) -> String {
         self.font_family.to_string()
     }
@@ -36,21 +31,26 @@ impl Workspace {
         self.config_path.clone().or_else(leon_lua::config_path)
     }
 
-    /// Draw with a `server.settings` reply: its themes resolved, its font (fitting every pane to
-    /// a new one at the next render).
+    /// Draw with a `server.settings` reply: its themes resolved, its font (a new one only: the panes
+    /// on screen fit it on the next frame).
     pub(super) fn apply_settings(&mut self, reply: &Value) {
         let themes = self.config_path().map(|p| leon_lua::settings::themes_dir(&p)).unwrap_or_default();
         let look = Look::resolve(&reply["settings"], &themes);
         if look.font_size != self.look.font_size {
             self.font_size = look.font_size.clamp(FONT_SIZES.0, FONT_SIZES.1);
-            self.refit = true;
         }
         if look.font_family != self.look.font_family {
             self.font_family = look.font_family.clone().into();
-            self.refit = true;
         }
         self.look = look;
         self.use_theme();
+        // after `use_theme`: the first settings are drawn at once, a change from then on fades
+        self.note_theme_names(&reply["settings"]);
+        // a server older than the setting doesn't report it, and would have skipped a
+        // `check_for_updates = false` as unknown: no look of the app's own until it does
+        self.check_for_updates = reply["settings"]["check_for_updates"].as_bool();
+        self.updates_looked = None; // a reload may have turned it on
+        self.look_for_updates();
     }
 
     /// Show the Settings window: open it, or bring the open one forward.
@@ -69,20 +69,18 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Draw with the theme for the appearance now; scrollback fetched in the old colours goes.
+    /// Head for the theme for the appearance now (`follow_theme`), and have every host resolve its
+    /// screens in it.
     fn use_theme(&mut self) {
-        let t = self.look.theme(self.dark);
-        if t != self.theme {
-            self.theme = t;
-            self.term.panes.values_mut().for_each(|p| p.cache.clear());
-        }
+        self.follow_theme();
         self.send_palette();
     }
 
-    /// Have every host resolve its screens in the theme's colours (a host that just connected too).
+    /// Have every host resolve its screens in the theme's colours (a host that just connected too):
+    /// the theme a change is heading for, not one on the way.
     pub(super) fn send_palette(&self) {
         for (_, remote) in self.hosts.remotes() {
-            remote.set_palette(&self.theme);
+            remote.set_palette(&self.theme());
         }
     }
 }

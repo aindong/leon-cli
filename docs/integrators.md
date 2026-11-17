@@ -189,6 +189,10 @@ it come again, then the new ones, with the same counter. The stream waits 60 s f
 `session.resume` fails with `resume_failed` (the server restarted, or too much happened), attach
 again and start from the new snapshot. `leon events -H` does exactly this.
 
+A block's own events include `title_changed {title}`, `pwd_changed {pwd}`, `bell`,
+`program_status_changed` ([agents.md](agents.md)) and `foreground_changed {foreground}`: the name
+of the program now in front of the block's terminal, as `session.list_blocks` gives it, or null.
+
 Rather than applying events one by one, a client can refetch what it shows
 (`session.list`, `session.view`, `session.list_blocks`) after each batch; the app does that.
 
@@ -216,12 +220,12 @@ ssh -T me@devbox leon server proxy
 Spawn that command, write request lines to its stdin and read replies and events from its stdout.
 ssh runs the proxy as your user on the host, which is what the server's same-user check needs.
 `leon -H` does the same with a few safety options (no forwarding, keepalives), described in
-[cli.md](cli.md#hosts). When the link drops, resume the event stream as above.
+[cli/hosts.md](cli/hosts.md). When the link drops, resume the event stream as above.
 
 ## Compatibility
 
 The socket API has a version of its own, `api_version`, reported by `help.all` and
-`server.version` (it is `1.5.0` today; [CHANGELOG.md](../CHANGELOG.md) lists every change). It
+`server.version` (it is `1.12.0` today; [CHANGELOG.md](../CHANGELOG.md) lists every change). It
 follows semver, for the methods marked `stable`:
 
 - A **major** bump (2.0.0) may break clients: remove or rename a stable method or field, change a

@@ -1,10 +1,10 @@
 //! M22b criterion 6: every theme colour the app uses for text reads at 4.5:1 on every colour it
-//! uses as a surface, in both built-in themes. The tokens come from scanning the views, so a view
+//! uses as a surface, in every built-in theme. The tokens come from scanning the views, so a view
 //! that starts drawing a new pair is checked without anyone listing it here.
 
 use std::collections::BTreeSet;
 
-use leon_app::theme::{contrast, Theme, DARK, LIGHT};
+use leon_app::theme::{contrast, Theme, BUILTIN};
 
 /// Backgrounds that never carry text, and why.
 const NOT_SURFACES: [(&str, &str); 4] = [
@@ -104,7 +104,7 @@ fn every_text_colour_reads_on_every_surface() {
     let text: BTreeSet<String> = scan("text_color(").into_iter().chain(STATUS.map(String::from)).collect();
     let surfaces: Vec<String> = scan(".bg(").into_iter().filter(|b| !skip(b)).collect();
     let mut low = vec![];
-    for (name, t) in [("leon-light", &LIGHT), ("leon-dark", &DARK)] {
+    for (name, t) in BUILTIN.iter().map(|(n, t)| (*n, t)) {
         let mut check = |what: String, fg: &str, bg: &str| {
             let c = contrast(token(t, fg), token(t, bg));
             let known = KNOWN.iter().any(|(n, f, b, _)| (*n, *f, *b) == (name, fg, bg));

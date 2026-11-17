@@ -6,11 +6,9 @@ fn doc(path: &str) -> String {
 
 #[test]
 fn the_docs_cover_hosts_in_the_app() {
-    let readme = doc("README.md");
-    let devbox =
-        readme.split("## Work on your devbox").nth(1).expect("the README section").split("\n## ").next().unwrap();
+    let devbox = doc("docs/remote-hosts.md");
     for want in ["This Mac", "Add Host", "needs login", "leon hosts check"] {
-        assert!(devbox.contains(want), "README's devbox section covers {want:?}");
+        assert!(devbox.contains(want), "docs/remote-hosts.md covers {want:?}");
     }
     let arch =
         // the hosts decisions moved to docs/architecture/hosts.md (file-size limit)
@@ -43,7 +41,7 @@ fn the_screenshots_are_windows() {
         let (w, h) =
             (u32::from_be_bytes(png[16..20].try_into().unwrap()), u32::from_be_bytes(png[20..24].try_into().unwrap()));
         assert!(w >= 1000 && h >= 600, "{name} shows a whole window: {w}x{h}");
-        let readme = doc("README.md");
-        assert!(readme.contains(&format!("docs/images/{name}.png")), "the README shows {name}");
+        let page = doc("docs/remote-hosts.md");
+        assert!(page.contains(&format!("](images/{name}.png)")), "docs/remote-hosts.md shows {name}");
     }
 }

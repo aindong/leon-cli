@@ -22,17 +22,21 @@ pub struct Embedded {
 
 /// Serve on `socket`, keeping no sessions across runs and loading no config.
 pub fn start_at(socket: PathBuf) -> Result<Embedded, String> {
-    start_with(socket, None)
+    start_with(socket, None, Vec::new())
 }
 
 /// Serve on `socket` with `config` as init.lua, keeping no sessions across runs.
 pub fn start_configured(socket: PathBuf, config: PathBuf) -> Result<Embedded, String> {
-    start_with(socket, Some(config))
+    start_with(socket, Some(config), Vec::new())
 }
 
-/// Serve on `socket`, loading `config` (a missing file is an empty config). Fails if a live
-/// server already owns the socket.
-pub fn start_with(socket: PathBuf, config: Option<PathBuf>) -> Result<Embedded, String> {
+/// Serve on `socket`, loading `config` (a missing file is an empty config), with `pane_env` set
+/// for every pane (`Ctx::pane_env`). Fails if a live server already owns the socket.
+pub fn start_with(
+    socket: PathBuf,
+    config: Option<PathBuf>,
+    pane_env: Vec<(String, String)>,
+) -> Result<Embedded, String> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .thread_name("leon-server")
@@ -42,7 +46,9 @@ pub fn start_with(socket: PathBuf, config: Option<PathBuf>) -> Result<Embedded, 
     let listener = rt.block_on(serve::listen(&socket)).map_err(|e| format!("can't serve {}: {e}", socket.display()))?;
     let info =
         Info { pid: std::process::id(), version: env!("CARGO_PKG_VERSION"), socket: socket.display().to_string() };
-    let ctx = Arc::new(Ctx::new(info, false));
+    let mut ctx = Ctx::new(info, false);
+    ctx.pane_env = pane_env;
+    let ctx = Arc::new(ctx);
     let done = Arc::new(AtomicBool::new(false));
     if let Some(path) = config {
         let _in_rt = rt.enter(); // the load runs on the runtime while the socket serves

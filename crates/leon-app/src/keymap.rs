@@ -38,8 +38,11 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+0", "client.font.reset"),
     ("cmd+shift+p", "client.palette.toggle"),
     ("cmd+,", "client.settings"),
+    ("cmd+shift+t", "client.theme.change"),
     ("cmd+k", "session.switch"),
     ("cmd+shift+a", "client.sidebar.activity.toggle"),
+    ("cmd+\\", "client.overview.session.toggle"),
+    ("cmd+shift+\\", "client.overview.toggle"),
     ("cmd+c", "pane.copy"),
     ("cmd+a", "pane.select_all"),
     ("cmd+f", "client.find.open"),
@@ -56,9 +59,9 @@ pub const DEFAULTS: &[(&str, &str)] = &[
 pub const APP_DEFAULTS: &[(&str, &str)] =
     &[("shift+pageup", "client.scroll.page_up"), ("shift+pagedown", "client.scroll.page_down")];
 
-/// A keystroke as a binding chord, written unshifted (docs/lua.md), or None for a key binding syntax
-/// has no name for. shortcut: assumes a US layout for shifted symbols; physical keys (`[KeyA]`)
-/// never match since GPUI keystrokes carry no key code.
+/// A keystroke as a binding chord, written unshifted (docs/lua/keys.md), or None for a key binding
+/// syntax has no name for. shortcut: assumes a US layout for shifted symbols; physical keys
+/// (`[KeyA]`) never match since GPUI keystrokes carry no key code.
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub fn chord(ks: &Keystroke) -> Option<Chord> {
     let m = &ks.modifiers;
@@ -250,14 +253,24 @@ impl Keymap {
         out
     }
 
-    /// The keys that run `action`, as the README writes them (`⌘⇧D`): the config's newest binding,
-    /// else the first default.
+    /// The keys that run `action`, as docs/shortcuts.md writes them (`⌘⇧D`): the config's newest
+    /// binding, else the first default.
     pub fn shortcut(&self, action: &str) -> Option<String> {
         let mut all = self.bindings.iter().filter(|b| b.action.as_deref() == Some(action) && b.args.is_none());
         let first = all.clone().next();
         let b = all.rfind(|b| b.from_config).or(first)?;
-        Some(b.seq.iter().map(glyphs).collect::<Vec<_>>().join(" "))
+        Some(keys_text(&b.seq))
     }
+
+    /// Every binding, defaults first, then the config's in its order.
+    pub fn bindings(&self) -> &[Bound] {
+        &self.bindings
+    }
+}
+
+/// A binding's keys as docs/shortcuts.md writes them: `⌘⇧D`, `⌃B C`.
+pub fn keys_text(seq: &[Chord]) -> String {
+    seq.iter().map(glyphs).collect::<Vec<_>>().join(" ")
 }
 
 /// The window after a repeatable binding ran (tmux `bind -r`): until it closes, a key that

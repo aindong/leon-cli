@@ -2,7 +2,7 @@
 //! parses. Each block runs in `/bin/sh` with PATH holding only a `leon` shim: the shim runs the real
 //! binary with no server to reach (so commands stop after parsing, exit 4) and logs any exit but
 //! 0, 1, 3 and 4: 2 is a bad command line, anything else a crash. Other programs in a block aren't found, and the cwd is a temp dir, so a
-//! block can't build, install or delete anything. The README must also list the app's shortcuts.
+//! block can't build, install or delete anything. docs/shortcuts.md must also list the app's shortcuts.
 
 mod help_walk;
 
@@ -11,15 +11,17 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// (file, the fewest `leon` calls its sh blocks must make)
-const DOCS: [(&str, usize); 8] = [
+const DOCS: [(&str, usize); 10] = [
     ("README.md", 8),
     ("docs/agents.md", 5),
     ("docs/lua.md", 2),
+    ("docs/lua/scripts.md", 2),
     ("docs/cli.md", 5),
     ("docs/cli/layout.md", 5),
     ("docs/cli/sessions.md", 3),
     ("docs/cli/settings.md", 5),
     ("docs/integrators.md", 3),
+    ("docs/updates.md", 3),
 ];
 
 // `leon` and `leon app` open the GUI, `server run|start` would serve: skip them. A failed call
@@ -56,6 +58,9 @@ fn doc_shell_lines_parse() {
                 .env("LEON_RUNTIME_DIR", tmp.path().join("run"))
                 .env("LEON_AUTOSTART", "0")
                 .env("LEON_CONFIG", tmp.path().join("none.lua"))
+                // a documented `leon self-update` asks a closed loopback port, never the release
+                // server: it must not reach the network, let alone replace the binary under test
+                .env("LEON_RELEASE_URL", "http://127.0.0.1:9")
                 .env("DOC_LEON", env!("CARGO_BIN_EXE_leon"))
                 .env("DOC_CALLS", &calls)
                 .env("DOC_BAD", &bad)
@@ -86,7 +91,7 @@ fn doc_shell_lines_parse() {
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
 
-/// A binding's "cmd+shift+d" as the README writes it: ⌘⇧D.
+/// A binding's "cmd+shift+d" as docs/shortcuts.md writes it: ⌘⇧D.
 fn glyphs(binding: &str) -> String {
     binding
         .split('+')
@@ -108,18 +113,20 @@ fn glyphs(binding: &str) -> String {
 }
 
 #[test]
-fn readme_lists_the_app_shortcuts() {
-    let readme = std::fs::read_to_string(help_walk::repo().join("README.md")).unwrap();
+fn shortcuts_md_lists_the_app_shortcuts() {
+    let readme = std::fs::read_to_string(help_walk::repo().join("docs/shortcuts.md")).unwrap();
     // the app's built-in shortcuts are the `DEFAULTS` table, one `("key", "action")` per line
     let keymap = std::fs::read_to_string(help_walk::repo().join("crates/leon-app/src/keymap.rs")).unwrap();
     let table = keymap.split("pub const DEFAULTS").nth(1).and_then(|t| t.split("];").next()).unwrap();
-    let bindings: Vec<&str> = table.split("(\"").skip(1).filter_map(|s| s.split('"').next()).collect();
+    // the source escapes a backslash key (`cmd+\\`)
+    let bindings: Vec<String> =
+        table.split("(\"").skip(1).filter_map(|s| s.split('"').next()).map(|b| b.replace("\\\\", "\\")).collect();
     assert!(bindings.len() >= 15, "found the app's bindings: {bindings:?}");
-    for b in bindings {
-        assert!(readme.contains(&glyphs(b)), "README should list the shortcut {b} as {}", glyphs(b));
+    for b in &bindings {
+        assert!(readme.contains(&glyphs(b)), "docs/shortcuts.md should list the shortcut {b} as {}", glyphs(b));
     }
-    assert!(readme.contains("⌘1"), "README should list ⌘1–⌘9");
-    assert!(readme.contains("⌘Q"), "README should list ⌘Q");
+    assert!(readme.contains("⌘1"), "docs/shortcuts.md should list ⌘1–⌘9");
+    assert!(readme.contains("⌘Q"), "docs/shortcuts.md should list ⌘Q");
 }
 
 #[test]

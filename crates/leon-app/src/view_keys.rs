@@ -39,7 +39,8 @@ impl Workspace {
             return;
         }
         if let Some(c) = chord.as_ref().filter(|_| self.pending.is_empty()) {
-            let now = Instant::now();
+            // GPUI's clock: the wall clock in the app, the test clock in a test (ADR R10)
+            let now = cx.background_executor().now();
             if let Some((b, prefix)) = repeat.press(c, now, |p, k| self.keymap.repeatable(p, k)) {
                 self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, now);
                 self.run_binding(b, prefix, c, window, cx);
@@ -64,7 +65,7 @@ impl Workspace {
                 }
                 Pressed::Run(b) => {
                     let prefix = std::mem::take(&mut self.pending);
-                    self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, Instant::now());
+                    self.repeat.ran(&prefix, b.repeats, self.keymap.repeat_time, cx.background_executor().now());
                     self.run_binding(b, prefix, c, window, cx);
                     cx.stop_propagation();
                     return;
@@ -81,6 +82,13 @@ impl Workspace {
         }
         let Some((sid, id, f)) = self.target_screen() else { return };
         if let Some(bytes) = crate::input::key_bytes(ks, f.app_cursor) {
+            // only a key that reaches the pane is timed (LEON_FRAME_LOG): its echo moves the cursor
+            if self.stats.borrow().logging() {
+                if let Some(stamped) = crate::input::current_event_stamp() {
+                    let cursor = self.drawn(&id).frame.cursor.map(|c| (c.line, c.col));
+                    self.stats.borrow_mut().key(stamped, id.clone(), cursor);
+                }
+            }
             self.app.write(&sid, &id, &bytes);
             if self.view_top(&id).is_some() {
                 self.scroll_to(&id, None); // typing goes back to the prompt
@@ -116,7 +124,8 @@ impl Workspace {
         match name {
             "session.new" => self.new_session_on(self.host_arg(args), cx),
             "session.switch" => self.switch_action(args, cx),
-            "client.host.add" => self.ask_host(cx),
+            "client.host.add" => self.ask_host(args, cx),
+            "client.theme.change" => self.theme_action(args, cx),
             "client.tab.new" => self.new_tab(&NewTab, window, cx),
             "client.tab.next" => self.step_tab(1, cx),
             "client.tab.previous" => self.step_tab(-1, cx),
@@ -157,16 +166,24 @@ impl Workspace {
                 self.activity = !self.activity;
                 cx.notify();
             }
+            "client.overview.toggle" | "client.overview.session.toggle" => self.toggle_overview(name, cx),
             "client.tab_style.toggle" => self.toggle_tab_style(cx),
             "client.settings" => self.open_settings(cx),
             "client.pane_header.reveal" => self.toggle_pane_headers(cx),
-            "client.font.increase" => self.set_font_size(self.font_size + 1., window, cx),
-            "client.font.decrease" => self.set_font_size(self.font_size - 1., window, cx),
-            "client.font.reset" => self.set_font_size(self.look.font_size, window, cx),
+            "client.font.increase" => self.set_font_size(self.font_size + 1., cx),
+            "client.font.decrease" => self.set_font_size(self.font_size - 1., cx),
+            "client.font.reset" => self.set_font_size(self.look.font_size, cx),
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
-                    None => Some(Palette { query: String::new(), selected: 0, ask: None, switch: false, note: None }),
+                    None => Some(Palette {
+                        query: String::new(),
+                        selected: 0,
+                        ask: None,
+                        switch: false,
+                        note: None,
+                        themes: None,
+                    }),
                 };
                 cx.notify();
             }
@@ -185,14 +202,11 @@ impl Workspace {
             "client.scroll.page_up" | "client.scroll.page_down" | "client.scroll.top" | "client.scroll.bottom" => {
                 self.scroll_action(name, cx)
             }
-            "client.config.reload" => {
-                let inbox = self.inbox.clone();
-                self.hosts.local().spawn("server.config_reload", json!({}), move |r| {
-                    report("the config reload", r);
-                    lock(&inbox).asking = false; // fetch the new keymap at the next poll
-                });
-                self.keymap_asked = None;
-            }
+            "client.update.check" => self.updates.check_now(),
+            "client.update.install" => self.updates.install(),
+            "client.update.restart" => self.restart_for_update(cx),
+            n if n.starts_with("client.update.") => self.update_named(n, window, cx),
+            "client.config.reload" => self.reload_config(),
             n if !n.contains('.') => {
                 let (sid, block) = self.local_target().map(|(s, b)| (Some(s), Some(b))).unwrap_or_default();
                 let p = json!({ "action": n, "args": args, "origin": origin, "session_id": sid, "block_id": block });
@@ -200,6 +214,18 @@ impl Workspace {
             }
             other => eprintln!("leon: the app has no action {other}"),
         }
+    }
+
+    /// Have This Mac's server load init.lua again; the poll then asks for the new keymap and
+    /// settings at once.
+    pub(super) fn reload_config(&mut self) {
+        let (inbox, wake) = (self.inbox.clone(), self.wake.clone());
+        self.hosts.local().spawn("server.config_reload", json!({}), move |r| {
+            report("the config reload", r);
+            lock(&inbox).asking = false;
+            wake(); // the poll asks for the new keymap
+        });
+        self.keymap_asked = None;
     }
 
     /// The config's actions run on This Mac's server (the keymap is This Mac's), so they get the
@@ -224,6 +250,7 @@ impl Workspace {
             })
             .collect();
         items.extend(self.host_items());
+        items.extend(self.update_items());
         items
     }
 
@@ -231,7 +258,8 @@ impl Workspace {
     /// its one row: what to type, or why the last try was refused.
     pub fn palette_rows(&self) -> Vec<(String, Option<String>)> {
         if let Some((_, row)) = self.ask_rows() {
-            return vec![(row, None)];
+            let picks = self.palette_matches().into_iter().map(|it| (it.title, it.shortcut));
+            return picks.chain([(row, None)]).collect();
         }
         self.palette_matches().into_iter().map(|it| (it.title, it.shortcut)).collect()
     }
@@ -246,9 +274,17 @@ impl Workspace {
     }
 
     pub(super) fn palette_matches(&self) -> Vec<Item> {
-        let Some(p) = self.palette.as_ref().filter(|p| p.ask.is_none()) else { return Vec::new() };
+        let Some(p) = self.palette.as_ref() else { return Vec::new() };
+        match &p.ask {
+            Some((hosts_view::Ask::Tailnet, _)) => return self.tailnet_items(&p.query),
+            Some(_) => return Vec::new(),
+            None => {}
+        }
         if p.switch {
             return self.switcher_items(&p.query);
+        }
+        if let Some(list) = &p.themes {
+            return self.theme_items(list, &p.query);
         }
         let items = self.palette_items();
         palette::filter(&items, &p.query).into_iter().map(|i| items[i].clone()).collect()
@@ -260,6 +296,19 @@ impl Workspace {
 
     pub(super) fn palette_selected(&self) -> usize {
         self.palette.as_ref().map_or(0, |p| p.selected)
+    }
+
+    /// What the palette's field says while nothing is typed.
+    pub fn palette_prompt(&self) -> String {
+        if let Some((prompt, _)) = self.ask_rows() {
+            return prompt;
+        }
+        match self.palette.as_ref() {
+            Some(p) if p.themes.is_some() => self.theme_prompt(),
+            Some(p) if p.switch => "Go to a session, tab or block…",
+            _ => "Type an action…",
+        }
+        .to_string()
     }
 
     pub(super) fn palette_query(&self) -> String {
@@ -286,9 +335,12 @@ impl Workspace {
             Some("client.palette.toggle") => Some(false),
             _ => None,
         };
-        let toggle = want_switch.is_some_and(|w| self.palette.as_ref().is_some_and(|p| p.switch == w));
+        // the theme list is neither: ⌘⇧P goes to the actions, its own key (⌘⇧T) closes it
+        let themes = self.palette.as_ref().is_some_and(|p| p.themes.is_some());
+        let toggle = want_switch.is_some_and(|w| self.palette.as_ref().is_some_and(|p| p.switch == w && !themes))
+            || (themes && bound.as_deref() == Some("client.theme.change"));
         if let (Some(w), false, Some(p)) = (want_switch, toggle, self.palette.as_mut()) {
-            (p.switch, p.query, p.selected, p.ask, p.note) = (w, String::new(), 0, None, None);
+            (p.switch, p.query, p.selected, p.ask, p.note, p.themes) = (w, String::new(), 0, None, None, None);
             cx.notify();
             return;
         }
@@ -296,10 +348,12 @@ impl Workspace {
         let Some(p) = self.palette.as_mut() else { return };
         if named("escape") || toggle {
             self.palette = None;
-        } else if named("enter") && p.ask.is_some() {
+        } else if named("enter") && p.ask.as_ref().is_some_and(|(a, _)| !matches!(a, hosts_view::Ask::Tailnet)) {
             self.ask_enter(cx);
         } else if named("enter") || (ks.key == "enter" && m.platform && p.switch) {
-            let pick = matches.into_iter().nth(p.selected);
+            // the list may have shrunk under the selection (the tailnet's status came in)
+            let last = matches.len().saturating_sub(1);
+            let pick = matches.into_iter().nth(p.selected.min(last));
             if !(m.platform && p.switch) || pick.is_none() {
                 self.palette = None; // ⌘↩ in the switcher: session.switch closes it, or notes why not
             }
@@ -334,63 +388,6 @@ impl Workspace {
         }
         let prefix = self.pending.iter().map(Chord::to_string).collect::<Vec<_>>().join(">");
         Some((prefix, self.keymap.hints(&self.pending)))
-    }
-
-    /// Ask the server for its keymap now and then, off the UI thread (a reload holds the config
-    /// for up to 5 s); apply a reply whose generation moved, and then the settings of that reload
-    /// (every reload moves the generation, and `settings_changed` only comes with one).
-    pub(super) fn refresh_keymap(&mut self, cx: &mut Context<Self>) {
-        let settings = lock(&self.inbox).settings.take();
-        // one asked for under an older generation may come after a newer one: it is dropped
-        if let Some((_, settings)) = settings.filter(|(g, _)| *g == self.keymap.generation) {
-            self.apply_settings(&settings);
-            cx.notify();
-        }
-        let reply = {
-            let mut inbox = lock(&self.inbox);
-            let due = self.keymap_asked.is_none_or(|t| t.elapsed() >= KEYMAP_POLL);
-            if due && !inbox.asking {
-                inbox.asking = true;
-                self.keymap_asked = Some(Instant::now());
-                let back = self.inbox.clone();
-                self.hosts.local().spawn("client.keymap", json!({}), move |r| {
-                    let mut inbox = lock(&back);
-                    inbox.asking = false;
-                    inbox.reply = r.ok();
-                });
-            }
-            inbox.reply.take()
-        };
-        if let Some(km) = reply.filter(|km| km["generation"].as_u64() != Some(self.keymap.generation)) {
-            self.use_keymap(&km);
-            let (back, generation) = (self.inbox.clone(), self.keymap.generation);
-            self.hosts.local().spawn("server.settings", json!({}), move |r| {
-                let mut inbox = lock(&back);
-                // a slow reply asked for under an older generation never replaces a newer one
-                if let (Ok(s), true) = (r, inbox.settings.as_ref().is_none_or(|(g, _)| *g <= generation)) {
-                    inbox.settings = Some((generation, s));
-                }
-            });
-            cx.notify();
-        }
-    }
-
-    fn use_keymap(&mut self, km: &Value) {
-        self.keymap = Keymap::app(km);
-        // a relative path is the server's, from its own working directory: not one to use here
-        let path = km["path"].as_str().map(PathBuf::from).filter(|p| p.is_absolute());
-        self.config_path = path.or_else(leon_lua::config_path);
-    }
-
-    /// Fetch the keymap and the settings and apply them now, waiting for the server (tests, and
-    /// nothing on a hot path).
-    pub fn sync_keymap(&mut self) {
-        if let Ok(km) = self.hosts.local().call("client.keymap", json!({})) {
-            self.use_keymap(&km);
-        }
-        if let Ok(settings) = self.hosts.local().call("server.settings", json!({})) {
-            self.apply_settings(&settings);
-        }
     }
 }
 

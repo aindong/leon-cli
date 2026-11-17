@@ -21,7 +21,7 @@ fn the_window_writes_init_lua(cx: &mut TestAppContext) {
     let s = setup_with_config(src);
     let config = s.dir.path().join("init.lua");
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     cx.simulate_keystrokes("cmd-,");
     cx.run_until_parked();
     cx.simulate_keystrokes("cmd-,");
@@ -61,7 +61,7 @@ fn a_refused_value_shows_why_and_writes_nothing(cx: &mut TestAppContext) {
     let src = "leon.set(\"font.size\", 13)\n";
     let s = setup_with_config(src);
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     cx.simulate_keystrokes("cmd-,");
     cx.run_until_parked();
     let sw = settings_windows(cx)[0];

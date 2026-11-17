@@ -72,7 +72,9 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
 - **Terminal reads.** A thread per terminal only reads the PTY into a bounded queue (64 reads of
   up to 16 KiB); the parser thread feeds what has queued, up to 64 KiB, to the OSC 7501 tracker and
   the emulator in one go. The macOS tty buffers ~1 KiB, so reading and parsing on one thread
-  stalled the program while it parsed (docs/performance.md).
+  stalled the program while it parsed (docs/performance.md). Leon's own scans of the output (OSC
+  7501, the X10 mouse mode, history clears) jump from ESC to ESC with `memchr` and step over the
+  escapes they don't follow, so most bytes are looked at only by alacritty.
 - **One server per socket.** A server holds `server.lock` beside its socket (an flock) for its
   whole life, and a starting one takes it with `LOCK_NB`. Finding it held, it waits up to 2 s for
   the lock or for the socket to answer, then exits; it never unlinks a socket while the lock is
@@ -89,6 +91,19 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   `LICENSE` and `THIRD-PARTY-NOTICES.txt` in `Contents/Resources`, ad-hoc signed); opened from Finder it runs with no arguments, which opens the app. `scripts/install.sh`
   copies the app to `~/Applications` and links `~/.local/bin/leon` to the binary inside it. Both
   replace only what they made: an app with our bundle id, or a link whose text is our binary's path.
+- **Updates.** `leon self-update` is the `leon-update` crate: `Config::load` (the one place the
+  environment is read for what leon trusts and where it looks: `LEON_RELEASE_URL`, and in debug
+  builds only the tests' `LEON_TEST_UPDATE`; `HOMEBREW_PREFIX` only helps find a cask install),
+  `check` (manifest, signature, rules) and `install` (download, sha256 and signature, unpack,
+  rename). It shells out to `curl` behind `fetch.rs`, pins the keys in
+  `crates/leon/release-keys.pub` with `include_str!`, stages in `.leon-update` beside the install
+  under a `flock`, and never replaces a Homebrew or dpkg install. The rules and their reasons are
+  in docs/updates.md and docs/releases.md. Leon.app's side is `leon-app/src/updates.rs`, with no
+  GPUI: a daily look on a `leon-update` thread once `server.settings` says `check_for_updates`,
+  the time in `$LEON_STATE_DIR/updates.json` before the look starts, and part A's `install` only
+  on the user's Install; `view_update.rs` draws its notice, and the redraw signature hashes its
+  generation, so a notice at rest draws nothing. A debug build looks on its own only with
+  `LEON_RELEASE_URL` or `LEON_TEST_UPDATE` set, so no test reaches the real server.
 - **Linux packages.** `scripts/package-linux.sh [--arch arm64|amd64]` builds a release binary
   (symbols stripped) in the same pinned image and writes, to `target/linux/<arch>/` (emptied
   first), the bare `leon` (which `m16a_docker_sshd` runs behind a real sshd),
@@ -116,11 +131,14 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   distinct license file from the cargo registry once; it is generated per package, never committed.
   `scripts/release.sh` clones one commit into a temp dir, builds `Leon-<version>-macos-<arch>.zip`
   and both Linux arches' packages from it, and writes `SHA256SUMS`; it never tags, pushes or uploads.
+  A pushed tag runs the same scripts on GitHub, signs every file with minisign against the keys
+  pinned in `crates/leon/release-keys.pub`, and publishes the release with its manifest
+  (`docs/releases.md`).
 - **`LEON_BIN_DIR`.** Every terminal gets the server binary's directory as `LEON_BIN_DIR` and at
   the front of `PATH` (empty entries dropped; no PATH at all falls back to the system dirs), so
   `leon` resolves inside the app. A login zsh's `path_helper` moves system dirs ahead of it, so an
   older `leon` in `/usr/local/bin` can win there; the dir is still on PATH.
-- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.5.0`), apart
+- **API contract.** `help.all` and `server.version` report `api_version` (semver, `1.6.0`), apart
   from the build's version. Each method doc carries `stability` (`stable`, `experimental`,
   `internal`), and optionally `deprecated` (`since`, `replacement`, `removal`) and
   `request_example`/`response_example`; all of it comes from one table,
@@ -151,7 +169,7 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   init.lua itself and writes through `leon_lua::rewrite::write_setting`, then reloads the server,
   so init.lua stays the one place settings live.
 - **Docs are tested.** `docs/cli.md` is checked against every `--help`; the `sh` blocks in the docs
-  run against the real binary (a bad command line fails); `docs/lua.md`'s examples go through
+  run against the real binary (a bad command line fails); `docs/lua/`'s examples go through
   `leon config check` and `leon do -e`.
 - **Naming.** Method, action, event and flag names stay as `docs/api.md` lists them, so scripts and
   agents keep working (`docs/integrators.md#compatibility`). Env vars are `LEON_*`.

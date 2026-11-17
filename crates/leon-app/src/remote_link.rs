@@ -62,9 +62,11 @@ pub(super) fn run_queue(shared: Weak<Shared>, jobs: Receiver<Job>) {
     }
 }
 
-/// Every second: ping the event connection once it has been quiet for `PING_AFTER`, and shut it
-/// down (the reader then reconnects) when `PING_AFTER` more passes without a line.
+/// Every second: ping the event connection once it has been quiet for `PING_AFTER` (or
+/// `LEON_LINK_PING_SECS`, tests), and shut it down (the reader then reconnects) when as long
+/// again passes without a line.
 pub(super) fn watchdog(shared: Weak<Shared>) {
+    let ping_after = leon_core::secs_from_env("LEON_LINK_PING_SECS", PING_AFTER);
     loop {
         std::thread::sleep(Duration::from_secs(1));
         let Some(s) = shared.upgrade() else { return };
@@ -77,13 +79,13 @@ pub(super) fn watchdog(shared: Weak<Shared>) {
         let heard = *lock(&s.heard);
         let mut ping = lock(&s.ping);
         match *ping {
-            None if heard.elapsed() >= PING_AFTER => {
+            None if heard.elapsed() >= ping_after => {
                 let line = b"{\"id\":0,\"method\":\"server.version\",\"params\":{}}\n";
                 let _ = io::Write::write_all(&mut *lock(&s.events), line);
                 *ping = Some(Instant::now());
             }
             Some(at) if heard >= at => *ping = None, // answered: watch for the next quiet spell
-            Some(at) if at.elapsed() >= PING_AFTER => {
+            Some(at) if at.elapsed() >= ping_after => {
                 let _ = lock(&s.events).shutdown(std::net::Shutdown::Both);
                 *ping = None;
             }
@@ -111,10 +113,17 @@ pub(super) fn relink(shared: &Shared, limit: Duration) -> Option<(BufReader<Unix
                 (resume_or_attach(shared), Conn::open(&shared.socket, Some(CALL_TIMEOUT)))
             {
                 *lock(&shared.fetch) = fetch;
+                let told = shared.resend_geometry(); // before Up: a popup made once it's up starts at its size
                 *lock(&shared.calls) = calls;
                 *lock(&shared.heard) = Instant::now();
                 *lock(&shared.ping) = None;
                 *lock(&shared.link) = LinkState::Up;
+                // a report made meanwhile failed, the link not up yet: tell that one now
+                let now = lock(&shared.geometry).clone();
+                if now != told {
+                    shared.resend_geometry();
+                }
+                shared.bump();
                 return Some(events);
             }
         }
@@ -175,6 +184,7 @@ impl Remote {
 
     fn enqueue(&self, method: &str, params: Value, refresh: bool, done: Option<Done>) {
         if let Some(queue) = &self.queue {
+            self.asks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let _ = queue.send(Job { method: method.to_string(), params, refresh, done });
             return;
         }

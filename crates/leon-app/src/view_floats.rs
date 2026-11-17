@@ -21,8 +21,11 @@ pub(super) struct FloatUi {
     seen: HashMap<String, HashMap<String, bool>>,
     /// Drawers sliding: when it started, and whether in (else out).
     slides: HashMap<String, (Instant, bool)>,
-    /// Reduce Motion as set by a test; None asks the system.
+    /// Reduce Motion as set by a test; None takes the system's.
     reduce_motion: Option<bool>,
+    /// The system's Reduce Motion, read at launch and when the window becomes active (back from
+    /// System Settings), not on every frame of a motion: each read asks the accessibility prefs.
+    system_reduce: bool,
     /// What the last frame placed, and where the pane area's corner was in the window.
     placed: RefCell<(Placed, (f32, f32))>,
 }
@@ -33,14 +36,19 @@ impl Workspace {
         self.floats.reduce_motion = Some(on);
     }
 
-    /// Whether a drawer is sliding: true until the frame after its slide ended has been drawn (the
-    /// poll redraws while this holds, so a slide's last frame is its end).
+    /// Whether a drawer is sliding: true until the frame after its slide ended has been drawn
+    /// (render asks for frames while this holds, so a slide's last frame is its end).
     pub fn sliding(&self) -> bool {
         !self.floats.slides.is_empty()
     }
 
-    fn reduce_motion(&self) -> bool {
-        self.floats.reduce_motion.unwrap_or_else(system_reduce_motion)
+    pub(super) fn reduce_motion(&self) -> bool {
+        self.floats.reduce_motion.unwrap_or(self.floats.system_reduce)
+    }
+
+    /// Read the system's Reduce Motion again (launch, and the window becoming active).
+    pub(super) fn note_reduce_motion(&mut self) {
+        self.floats.system_reduce = system_reduce_motion();
     }
 
     /// The active window's overlays, as the app last heard them.
@@ -59,7 +67,8 @@ impl Workspace {
     /// frame (not for a window seen the first time: opening the app slides nothing), and forget
     /// the slides that are over.
     pub(super) fn note_slides(&mut self) {
-        self.floats.slides.retain(|_, (at, _)| at.elapsed() < SLIDE);
+        let t = self.motion_now();
+        self.floats.slides.retain(|_, (at, _)| t.saturating_duration_since(*at) < SLIDE);
         let Some(w) = self.active_window() else { return };
         let now: HashMap<String, bool> =
             self.overlays_of(&w).docked.iter().map(|d| (d.block_id.clone(), d.hidden)).collect();
@@ -75,7 +84,7 @@ impl Workspace {
                     // turned back mid-slide: carry on from the part shown now
                     let shown = self.slide_of(&id).unwrap_or(if coming { 0. } else { 1. });
                     let done = if coming { shown } else { 1. - shown };
-                    let start = Instant::now().checked_sub(floats::slide_at(done)).unwrap_or_else(Instant::now);
+                    let start = t.checked_sub(floats::slide_at(done)).unwrap_or(t);
                     self.floats.slides.insert(id, (start, coming));
                 }
             }
@@ -83,10 +92,15 @@ impl Workspace {
         self.floats.seen.insert(w.id.clone(), now);
     }
 
+    /// Which way drawer `id` slides now: in (true), out (false), or not at all (tests).
+    pub fn slide_direction(&self, id: &str) -> Option<bool> {
+        self.floats.slides.get(id).map(|(_, coming)| *coming)
+    }
+
     /// A drawer's shown part while it slides (rising in, falling out).
     fn slide_of(&self, id: &str) -> Option<f32> {
         let (at, coming) = self.floats.slides.get(id)?;
-        floats::slide(at.elapsed(), false).map(|s| if *coming { s } else { 1. - s })
+        floats::slide(self.motion_now().saturating_duration_since(*at), false).map(|s| if *coming { s } else { 1. - s })
     }
 
     /// The active window's overlays placed in a pane area of `size`.
@@ -113,10 +127,11 @@ impl Workspace {
         (area, origin): ((f32, f32), (f32, f32)),
         cx: &mut Context<Self>,
     ) -> Div {
-        let t = &self.theme;
         for d in placed.docks.iter().filter(|d| terms.contains(&d.block_id)) {
             let tile = self.pane_tile("dock", &d.block_id, d.rect, None, tiling, cx);
-            out = out.child(if d.leaving { tile } else { tile.occlude() });
+            // sliding out over the tiles: opaque, so no pixel gets two translucent fills (glass.rs)
+            let opaque = || self.pane_fill("float", &self.pane_theme(&d.block_id));
+            out = out.child(if d.leaving { tile.bg(opaque()) } else { tile.occlude() });
             let Some(h) = d.handle else { continue };
             let grab = Grab::Dock { side: d.side, size: d.size, area };
             let across = d.side != DockSide::Bottom;
@@ -128,6 +143,7 @@ impl Workspace {
         }
         for f in placed.floats.iter().filter(|f| terms.contains(&f.block_id)) {
             let focused = tiling.target.as_deref() == Some(f.block_id.as_str());
+            let t = self.pane_theme(&f.block_id);
             let mv = Grab::Move { bounds: f.bounds, area };
             out = out.child(
                 self.pane_tile("float", &f.block_id, f.rect, Some(mv), tiling, cx)
@@ -247,41 +263,6 @@ impl Workspace {
         let o = m.block(id).and_then(|(s, b)| s.overlays.get(&b.window_id));
         o.is_some_and(|o| o.floating.iter().any(|f| f.block_id == id))
     }
-
-    /// Every block of window `w` with its terminal's area, as it is or would be in a pane area of
-    /// `area`: the tiles (the zoomed one filling their part; a header when `headers`), and every
-    /// float and drawer, hidden ones too, so a font change sizes them all before they are shown.
-    /// A float or drawer always has its header, and a float its border.
-    pub(super) fn window_rects(
-        s: &crate::remote::Session,
-        w: &leon_core::Window,
-        area: (f32, f32),
-        headers: bool,
-    ) -> Vec<(String, Rect)> {
-        let o = s.overlay(&w.id);
-        let placed = floats::place(&o, area, &|_| None);
-        let (tx, ty) = (placed.tiles.x, placed.tiles.y);
-        let mut out = Vec::new();
-        if let Some(tree) = &w.layout {
-            let size = (placed.tiles.w, placed.tiles.h);
-            let zoomed = w.zoomed.as_deref().map(|z| panes::tiles(tree, Some(z), size).panes);
-            for p in panes::tiles(tree, None, size).panes {
-                let r = zoomed.iter().flatten().find(|z| z.block_id == p.block_id).map_or(p.rect, |z| z.rect);
-                out.push((p.block_id, panes::text_rect(Rect { x: r.x + tx, y: r.y + ty, ..r }, headers)));
-            }
-        }
-        let mut all = o;
-        all.floating.iter_mut().for_each(|f| f.hidden = false);
-        all.docked.iter_mut().for_each(|d| d.hidden = false);
-        let shown = floats::place(&all, area, &|_| None);
-        out.extend(shown.docks.into_iter().map(|d| (d.block_id, panes::text_rect(d.rect, true))));
-        for f in shown.floats {
-            let r = f.rect;
-            let inside = Rect { x: r.x + 1., y: r.y + 1., w: (r.w - 2.).max(0.), h: (r.h - 2.).max(0.) };
-            out.push((f.block_id, panes::text_rect(inside, true)));
-        }
-        out
-    }
 }
 
 /// An invisible drag handle over `r`.
@@ -356,6 +337,21 @@ fn system_reduce_motion() -> bool {
             return false;
         }
         let on: Bool = msg_send![ws, accessibilityDisplayShouldReduceMotion];
+        on.as_bool()
+    }
+}
+
+/// System Settings › Accessibility › Display › Reduce transparency (GPUI has no read for it).
+pub(crate) fn system_reduce_transparency() -> bool {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject, Bool};
+    let Some(cls) = AnyClass::get(c"NSWorkspace") else { return false };
+    unsafe {
+        let ws: *mut AnyObject = msg_send![cls, sharedWorkspace];
+        if ws.is_null() {
+            return false;
+        }
+        let on: Bool = msg_send![ws, accessibilityDisplayShouldReduceTransparency];
         on.as_bool()
     }
 }

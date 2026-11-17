@@ -21,14 +21,14 @@ end, nil, { repeats = true })
 
 #[gpui::test]
 fn prefix_then_the_key_again(cx: &mut TestAppContext) {
-    let s = setup_with_config(CONFIG);
+    let s = plain_setup_with_config(CONFIG); // the clock step below reads what a pane's prompt shows
     let km = s.app.call("client.keymap", json!({})).unwrap();
     assert_eq!(km["settings"]["repeat_time"], 2000);
     let h = km["bindings"].as_array().unwrap().iter().find(|b| b["key"] == "ctrl+b>h").unwrap();
     assert_eq!(h["repeats"], true, "client.keymap carries repeats: {h}");
 
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
     for _ in 0..2 {
         cx.simulate_keystrokes("cmd-d");
@@ -54,5 +54,11 @@ fn prefix_then_the_key_again(cx: &mut TestAppContext) {
     };
     assert!(shows(cx, |cx| label(cx) == "runs 3"), "the function ran three times: {:?}", label(cx));
     assert_eq!(term(&s.app, &panes[1]).text(false), before, "and nothing was typed into the pane");
+
+    // the window is timed by GPUI's clock: past repeat_time, k is the pane's again
+    cx.executor().advance_clock(std::time::Duration::from_millis(2001));
+    cx.simulate_keystrokes("k");
+    let typed = shows(cx, |_| term(&s.app, &panes[1]).text(false).trim_end().ends_with('k'));
+    assert!(typed && label(cx) == "runs 3", "k went to the pane: {:?}", label(cx));
     s.app.stop();
 }

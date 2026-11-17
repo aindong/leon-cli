@@ -110,10 +110,15 @@ impl Workspace {
 
     /// The Activity list: blocked, error, done, working, each with where it is, what it says and
     /// how long it has waited; a click goes to its pane (which clears a done or error there).
-    pub(super) fn render_activity(&self, cx: &mut Context<Self>) -> gpui::Div {
-        let t = &self.theme;
-        let (frame, now) = (self.pulse(), Instant::now());
-        let rows = self.attention.rows();
+    /// From the sidebar's input: the rows with their waited times, the sidebar's width.
+    pub(super) fn render_activity(
+        &self,
+        rows: &[(attention::Row, String)],
+        width: f32,
+        t: &Theme,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        let frame = self.pulse();
         let mut list =
             div().debug_selector(|| sel("activity".into())).flex().flex_col().gap(px(1.)).px(px(8.)).pt(px(4.)).child(
                 div().px(px(10.)).h(px(24.)).text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child("Activity"),
@@ -123,10 +128,10 @@ impl Workspace {
         }
         // GPUI clamps a wrapped line mid-word with no ellipsis, so the second line is cut here, at
         // a word, where the wrapper says a third line would start
-        let room = px(self.settings.sidebar_width - ACTIVITY_INSET);
+        let room = px(width - ACTIVITY_INSET);
         let mut wrapper = cx.text_system().line_wrapper(gpui::font(".SystemUIFont"), px(SECONDARY_TEXT));
         let mut title_wrapper = cx.text_system().line_wrapper(gpui::font(".SystemUIFont"), px(UI_TEXT));
-        for (i, r) in rows.into_iter().enumerate() {
+        for (i, (r, waited)) in rows.iter().enumerate() {
             let what = match &r.caption {
                 Some(c) => format!("{} · {c}", attention::state_text(r.status)),
                 None => attention::state_text(r.status),
@@ -178,11 +183,7 @@ impl Workspace {
                             ),
                     )
                     .child(
-                        div()
-                            .flex_none()
-                            .text_size(px(SECONDARY_TEXT))
-                            .text_color(rgb(t.muted))
-                            .child(attention::waited(r.since, now)),
+                        div().flex_none().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(waited.clone()),
                     )
                     .on_mouse_down(
                         MouseButton::Left,

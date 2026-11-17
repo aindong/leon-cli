@@ -11,7 +11,14 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   `$LEON_SSH` (default `ssh`) as argv, never through a local shell:
   `-T -a -x -o ClearAllForwardings=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3
   -o ConnectTimeout=15 [-p PORT] -- [USER@]HOST CMD`, and copies bytes both ways, only for a peer of our uid (as the server checks). So every client that takes a socket path works unchanged over ssh: the CLI,
-  `leon do` scripts, and `leon_app::remote::Remote` (`leon attach`, and the app). leon adds
+  `leon do` scripts, and `leon_app::remote::Remote` (`leon attach`, and the app). That ssh gets its stdin, stdout and stderr and no
+  other descriptor of the client's: every other one is marked close-on-exec in the forked child, because macOS marks a new
+  pipe in a second step, and an ssh forked in between (by another connection's thread) held that connection's pipes, so
+  its `spawn` never returned. A `leon.exec` program starts the same way (`leon_core::spawn::stdio_only`), so it can't hold a pane's
+  PTY that another thread is opening. A pane's program starts the same way as well: leon opens the PTY
+  with `portable-pty` but forks and execs the program itself (`terminal_start.rs`), since
+  portable-pty's spawn closes every descriptor past stderr, std's exec-error pipe among them, and
+  a failed exec then aborted in the pane instead of failing `block.create`. leon adds
   only `-T`, no forwarding (no agent on the host, no port a config's `LocalForward` would bind) and
   the keepalives (a dead Wi-Fi link is noticed in about 45 s) and the connect timeout (a command
   started during an outage fails in 15 s, a stalled banner included); everything else comes from
@@ -24,7 +31,8 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   saved sessions) and bridges stdin and stdout to `server.sock`; the server's peer-uid check holds
   because ssh runs the proxy as the host's user. Only a link's connections until one reaches the
   server may autostart; later ones pass `--autostart=false`, so a server stopped on purpose stays
-  stopped. Nothing listens on TCP. An endpoint is parsed into words of `[A-Za-z0-9._-]` (or an
+  stopped. Over ssh nothing listens on TCP (serving over Tailscale is the one listener, off by
+  default: [tailnet.md](tailnet.md)). An endpoint is parsed into words of `[A-Za-z0-9._-]` (or an
   IPv6 address in brackets) that can't start with `-`, a port 1–65535, and no path: anything that
   could reach ssh as an option or a shell as code is a bad command line (exit 2). The hosts list is
   `$LEON_STATE_DIR/hosts.json` (`{"version":1,"hosts":[{label, endpoints, icon}]}`),
@@ -98,3 +106,42 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   ids (shortcut). The palette lists New Session on each connected machine (`session.new {host}`)
   and Add Host… (`client.host.add`): a label, then an endpoint, each checked as `leon hosts add`
   checks them (`leon_hosts::hosts::add`), and saved through the hosts API.
+
+## Tailscale
+
+- **Discovery, not a new kind of host.** `leon hosts add --tailscale` and the app's Add Host… read
+  the local client's `tailscale status --json`, the only Tailscale command leon runs (no `up`,
+  `set` or `login`: leon never changes the user's Tailscale). A chosen machine is written to
+  `hosts.json` as an ordinary host (label: the first label of its MagicDNS name; endpoint:
+  `ssh://` and that name, or its first Tailscale address, IPv4 first, when
+  `CurrentTailnet.MagicDNSEnabled` is false), so links, resume, attach and the sidebar don't know
+  where it came from. Who a host is on the tailnet is worked out each time it is shown, by
+  matching the endpoint's host to a peer's MagicDNS name or address; nothing about Tailscale is
+  stored. `leon hosts list` and the app read the status only when there are hosts, and the app off its
+  UI thread, at start and when Add Host… opens.
+- **Finding the client.** `$LEON_TAILSCALE` names it (like `LEON_SSH`, for tests and odd installs;
+  a path that isn't there means no client, so a test can never fall through to the real one);
+  else an executable `tailscale` in an absolute `PATH` entry; else, on macOS,
+  `/Applications/Tailscale.app/Contents/MacOS/Tailscale`, the app's binary, which acts as the CLI
+  when given arguments (the Mac app doesn't put `tailscale` on `PATH`). On Linux the packages put
+  it on `PATH`.
+- **The status is another program's output.** It is read with stdin and stderr closed, no
+  descriptor of ours (`stdio_only`), at most 8 MiB and within 3 s on a thread that is abandoned at
+  the deadline (a child of the client holding the pipe can't hang leon), then the client is
+  killed. It is parsed as plain JSON with every field optional: a field of the wrong type counts as
+  missing, at most 4096 peers are kept, and every string shown goes through `shown_text`. A peer's
+  name becomes a host only through `check_label` and the `Endpoint` parser, the same checks a typed
+  host gets, so a name with spaces, `;` or a leading `-` is refused. Not running (`BackendState`
+  other than `Running`), not installed, or failing is one line, and nothing else changes.
+- **Tailscale SSH.** A peer runs it when the status lists its `sshHostKeys` (Tailscale fills that
+  only then); it answers on port 22 with the tailnet identity, so the existing ssh path connects
+  without keys. For a peer without it, leon says to run `tailscale set --ssh` there or set up an ssh
+  key, at once, instead of failing later with ssh's error. The first connection still needs the
+  host key accepted (the app's ssh never prompts), so leon says to run `leon hosts check LABEL`
+  once; a policy that asks for a browser check prints "To authenticate, visit …", which the app
+  sorts as needing a login. Seeding `known_hosts` from `sshHostKeys` would skip that step, but it
+  trusts the status with host keys, so it is not done.
+- **leon on the other side.** A host without `leon` exits 127 from the fixed remote command, and
+  the link says how to install it there (Homebrew, or a release tarball) instead of ssh's words.
+- **Serving over the tailnet** is a separate, opt-in path: `serve_tailscale` and `tailnet://`
+  endpoints, in [tailnet.md](tailnet.md).

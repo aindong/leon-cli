@@ -10,7 +10,7 @@ use crate::methods::MethodDoc;
 
 /// The API's semver, apart from the build's version. A change to a stable method needs a bump:
 /// docs/api-snapshot.json won't take the change without one.
-pub const API_VERSION: &str = "1.5.0";
+pub const API_VERSION: &str = "1.12.0";
 
 #[derive(Serialize, JsonSchema, Clone, Copy, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -81,6 +81,7 @@ const STABILITY: &[(&str, Stability)] = &[
     ("client.action", Experimental),
     ("client.key", Experimental),
     ("client.keymap", Internal),
+    ("client.geometry", Internal),
     ("dev.leon.terminal.write", Stable),
     ("dev.leon.terminal.format", Stable),
     ("dev.leon.terminal.size", Stable),

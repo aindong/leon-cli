@@ -13,6 +13,7 @@ leon-core.workspace = true
 leon-server.workspace = true
 leon-lua.workspace = true
 leon-hosts.workspace = true
+leon-update.workspace = true
 # its GPUI-free modules (the client, keymap, layout) serve `leon attach` on every platform
 leon-app.workspace = true
 clap.workspace = true
@@ -36,6 +37,11 @@ harness = false
 
 [dev-dependencies]
 alacritty_terminal.workspace = true
+# the update tests build archives with bad entries, and hash what was installed
+flate2.workspace = true
+sha2.workspace = true
+tar.workspace = true
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
+zip.workspace = true

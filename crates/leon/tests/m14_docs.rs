@@ -16,8 +16,8 @@ fn the_docs_cover_scrollback_and_resume() {
     for want in ["2 MiB", "8 MiB", "set_resume", "\"ask\"", "\"always\"", "\"never\""] {
         assert!(arch.contains(want), "docs/architecture.md names {want}");
     }
-    let lua = doc("docs/lua.md");
-    assert!(lua.contains("leon.set(\"resume\""), "docs/lua.md documents leon.set");
+    let lua = doc("docs/lua/settings.md");
+    assert!(lua.contains("leon.set(\"resume\""), "docs/lua/settings.md documents leon.set");
     for (file, text) in [("guide.md", doc("crates/leon/src/skill/guide.md")), ("agents.md", doc("docs/agents.md"))] {
         assert!(text.contains("set_resume"), "{file} tells agents about set_resume");
     }

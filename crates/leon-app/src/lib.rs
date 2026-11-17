@@ -4,18 +4,24 @@ pub mod attention;
 pub mod chrome;
 pub mod copy_mode;
 pub mod embedded;
+pub mod fade;
 pub mod floats;
+pub mod glass;
 pub mod hosts;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod icons;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod input;
 pub mod keymap;
+pub mod layout_motion;
 pub mod look;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod notify;
+pub mod overlay_motion;
+pub mod overview;
 pub mod palette;
 pub mod panes;
+pub mod program_kind;
 pub mod remote;
 pub mod render;
 pub mod scrollback;
@@ -25,6 +31,8 @@ pub mod stamp;
 pub mod status;
 pub mod switcher;
 pub mod theme;
+#[cfg(target_os = "macos")]
+pub mod updates;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod view;
 

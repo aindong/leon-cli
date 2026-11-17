@@ -305,7 +305,7 @@ fn restore_session(ctx: &Arc<Ctx>, s: SavedSession, how: &restore::Restoring) ->
             // A dir that has gone starts the shell in $HOME instead.
             let cwd = b.cwd.clone().filter(|d| d.is_dir());
             let shown = restore::shown(b.scrollback.as_deref(), b.resume.is_some(), how);
-            let terminal = Arc::new(crate::blocks::spawn(ctx, &session_id, &b.block_id, vec![], cwd, &shown)?);
+            let terminal = Arc::new(crate::blocks::spawn(ctx, &session_id, &b.block_id, vec![], cwd, &shown, None)?);
             if let Some(title) = &b.title {
                 terminal.restore_title(title);
             }

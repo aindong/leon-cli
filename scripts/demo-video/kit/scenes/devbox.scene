@@ -1,0 +1,12 @@
+title agent: slow /search
+task Find out why /search is slow in last night's log (2 million lines).
+wait_go
+working 5 reading the log
+tool python3 genlog.py 2000000 > night.log
+sh python3 genlog.py 2000000 > night.log
+working 30 summarizing
+test tally right python3 logtally.py night.log
+working 80 comparing
+say /search is 8x slower than any other path at p50:
+say every request re-reads the index.
+done /search re-reads its index on every request. Cache it per process.

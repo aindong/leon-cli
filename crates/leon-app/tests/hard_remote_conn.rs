@@ -38,6 +38,10 @@ fn reply(id: &Value, result: Value) -> Vec<u8> {
 }
 
 fn serve(listing: Listing) -> Fake {
+    // a spawned call's wait, 2 s for every test here (the Lua limit and 5 s by default): set once,
+    // before any test's connection starts
+    static SPAWN_WAIT: std::sync::Once = std::sync::Once::new();
+    SPAWN_WAIT.call_once(|| std::env::set_var("LEON_SPAWN_WAIT_SECS", "2"));
     let dir = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
     let socket = dir.path().join("server.sock");
     let listener = UnixListener::bind(&socket).unwrap();
@@ -169,12 +173,11 @@ fn a_server_that_stops_reading_cant_hold_a_write() {
 
 #[test]
 fn a_spawned_call_to_a_silent_server_ends() {
-    let f = serve(one_session());
+    let f = serve(one_session()); // which sets the wait to 2 s
     let remote = connect(&f);
     let (tx, rx) = mpsc::channel();
     remote.spawn("test.silent", json!({}), move |r| drop(tx.send(r)));
-    // the Lua limit (30 s), and 7 s
-    let r = rx.recv_timeout(Duration::from_secs(37)).expect("the spawned call ended");
+    let r = rx.recv_timeout(Duration::from_secs(2 + 7)).expect("the spawned call ended");
     assert_eq!(r.expect_err("no reply came").code, "unreachable");
 }
 

@@ -119,3 +119,15 @@ impl Workspace {
         replied
     }
 }
+
+impl Workspace {
+    /// Run a layout method on the selected session; redraw.
+    pub(super) fn call(&mut self, method: &str, mut params: serde_json::Value, cx: &mut Context<Self>) {
+        let Some(sid) = self.session_id.clone() else { return };
+        params["session_id"] = json!(sid);
+        self.app.act_later(method, params, drop);
+        let rows = self.rows();
+        self.settle(&rows);
+        cx.notify();
+    }
+}

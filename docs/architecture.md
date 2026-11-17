@@ -9,10 +9,11 @@ agents) drive it through one self-describing API.
 | Crate | Job |
 |---|---|
 | `leon-core` | The object model (server state, sessions, windows, layout tree, blocks), stable IDs and target resolution, terminal blocks (PTY via `portable-pty`, emulation via `alacritty_terminal`), the OSC 7501 program-status parser, and the event log with gapless `seq`. No I/O policy, no sockets. |
-| `leon-server` | The API: a method registry where every method carries a description and JSON Schemas (`help.all`), served over a Unix socket. Also runnable in-process. |
+| `leon-server` | The API: a method registry where every method carries a description and JSON Schemas (`help.all`), served over a Unix socket (and, when `serve_tailscale` is on, to the owner's other machines over Tailscale). Also runnable in-process. |
 | `leon-lua` | Lua 5.1 (`mlua`): `init.lua` config (bindings, sequences, modes, actions), the live config `Runtime`, and `leon do` scripts (`leon.on`, `wait`, timers, `exec`). |
 | `leon` (bin) | The CLI: client commands, `leon server run/start/stop/status`, autostart, and `leon attach` (the terminal client). With no arguments it opens the app; a build without the app runs `leon attach` in a terminal and prints the help elsewhere. |
-| `leon-hosts` | Other machines: `ssh://` endpoints, the hosts list, and the `Link` that reaches a host's server over ssh. No GPUI, so the CLI and (later) the app share it. |
+| `leon-hosts` | Other machines: `ssh://` and `tailnet://` endpoints, the hosts list, the `Link` that reaches a host's server over ssh or directly over Tailscale, and tailscaled's read-only LocalAPI. No GPUI, so the CLI and (later) the app share it. |
+| `leon-update` | The updater: fetches the signed release manifest, verifies it and the release file against the keys built in, and swaps the new leon in atomically. `leon self-update` calls it, and so does Leon.app (`leon-app/src/updates.rs`, docs/updates.md). |
 | `leon-app` | The GPUI client (macOS for now). It attaches to the server over the socket like any client and paints the screens the server pushes, so programs outlive the app. |
 
 ## Platforms
@@ -59,14 +60,15 @@ each other's pipes: pass `--test-threads=1`) and writes `$HOME/.cache/rosetta` (
 
 ## Decisions
 
-The decisions, in six parts:
+The decisions, in eight parts:
 
 - [Protocol and clients](architecture/protocol-and-clients.md): the wire protocol, events, layout,
   the socket path, terminal emulation, Lua (config, runtime, bounds), the app, the screen transport,
   scrollback, selection, find, links and mouse reporting, `leon attach`, the app keymap and look,
   and the agent skill.
 - [Switching and attention](architecture/attention.md): the session switcher, Activity, the
-  badges, notifications and `leon notify`.
+  badges, notifications, the fade of the panes without the focus, the translucent window, and
+  `leon notify`.
 - [Repeat keys, copy mode and hints](architecture/keys-copy-hints.md): repeatable bindings in the
   app and `leon attach`, the app's copy mode and hints, and why `leon attach` has no copy mode.
 - [Floats and drawers in the app](architecture/floats.md): the shared client's overlays, where
@@ -75,6 +77,11 @@ The decisions, in six parts:
   after a restart, terminal reads, packaging (Leon.app, Linux packages), the login shell's PATH,
   `LEON_BIN_DIR`, the API contract, tested docs, and naming.
 - [Hosts](architecture/hosts.md): remote hosts and reconnects, and the app's hosts.
+- [Serving over Tailscale](architecture/tailnet.md): the server's one network listener, who it
+  lets in, `tailnet://` endpoints, and the threat model.
+- [How leon uses GPUI](architecture/gpui.md): the app's view structure, redraws, animation,
+  painting, input, async and tests as GPUI intends them, what may go beside GPUI, and that GPUI
+  is used as published.
 
 ## Verification
 

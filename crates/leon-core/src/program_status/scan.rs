@@ -21,6 +21,8 @@ const SUB: u8 = 0x1a;
 const PREFIX: &[u8] = b"\x1b]7501;";
 /// The whole escape, prefix and terminator included.
 const MAX_SEQUENCE: usize = 4096;
+/// A pass-through run at least this long is handed out as it is, without copying.
+const MIN_RUN: usize = 1024;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum Mode {
@@ -56,9 +58,28 @@ impl Scanner {
         let mut i = 0;
         while i < input.len() {
             if self.mode == Mode::Ground {
-                let n = input[i..].iter().position(|&b| b == ESC).unwrap_or(input.len() - i);
-                self.pass.extend_from_slice(&input[i..i + n]);
-                i += n;
+                // Pass the run up to an escape this scanner acts on (`ESC ]`, `ESC c`, `ESC ESC`) or
+                // an ESC it must hold at the end; any other `ESC x` passes as `step` would. A long run
+                // goes out uncopied; a short one joins `pass`, so escapes close together can't make
+                // a callback per few bytes.
+                let start = i;
+                loop {
+                    let Some(n) = memchr::memchr(ESC, &input[i..]) else {
+                        i = input.len();
+                        break;
+                    };
+                    i += n;
+                    match input.get(i + 1) {
+                        Some(b']' | b'c' | &ESC) | None => break,
+                        Some(_) => i += 2,
+                    }
+                }
+                if i - start >= MIN_RUN {
+                    self.flush(&mut f);
+                    f(Piece::Bytes(&input[start..i]));
+                } else {
+                    self.pass.extend_from_slice(&input[start..i]);
+                }
                 if i == input.len() {
                     break;
                 }

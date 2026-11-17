@@ -66,6 +66,14 @@ pub struct Status {
     pub sessions: usize,
     /// Where sessions are saved, while running and on stop; null when they aren't (the state dir isn't private).
     pub state_file: Option<String>,
+    /// When the server started, in seconds since the Unix epoch.
+    pub started_at: u64,
+    /// The blocks in every session.
+    pub blocks: usize,
+    /// The file the server's output goes to; null when it has none (a server run in a terminal).
+    pub log: Option<String>,
+    /// Serving over Tailscale (`serve_tailscale`): whether, where, for whom, and the last caller turned away.
+    pub tailnet: crate::tailnet::TailnetStatus,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -274,17 +282,27 @@ pub fn registry() -> Registry {
             block_types: blocks::block_types(),
         })
     });
-    r.add("server.status", "Whether the server runs, its pid, version and socket.", |ctx, _: NoParams| {
-        Ok(Status {
-            state: "running".into(),
-            pid: ctx.info.pid,
-            version: ctx.info.version.into(),
-            socket: ctx.info.socket.clone(),
-            autostarted: ctx.is_autostarted(),
-            sessions: ctx.state().sessions.len(),
-            state_file: crate::events::lock(&ctx.state_file).as_ref().map(|f| f.display().to_string()),
-        })
-    });
+    r.add(
+        "server.status",
+        "Whether the server runs, its pid, version and socket, since when, how many sessions and blocks, and whether it serves over Tailscale.",
+        |ctx, _: NoParams| {
+            let st = ctx.state(); // once: a second lock in this statement would wait on the first
+            let blocks = st.sessions.iter().map(|s| s.blocks.len()).sum();
+            Ok(Status {
+                state: "running".into(),
+                pid: ctx.info.pid,
+                version: ctx.info.version.into(),
+                socket: ctx.info.socket.clone(),
+                autostarted: ctx.is_autostarted(),
+                sessions: st.sessions.len(),
+                state_file: crate::events::lock(&ctx.state_file).as_ref().map(|f| f.display().to_string()),
+                started_at: ctx.started_at,
+                blocks,
+                log: ctx.log.clone(),
+                tailnet: ctx.tailnet.status(),
+            })
+        },
+    );
     r.add("server.persist", "Keep running when idle (an autostarted server otherwise exits).", |ctx, _: NoParams| {
         ctx.autostarted.store(false, Ordering::SeqCst);
         Ok(Empty {})
@@ -323,7 +341,7 @@ pub fn registry() -> Registry {
         }
         let mark = st.mark();
         let (session_id, window_id) = st.create_session(p.label.as_deref(), p.window_label.as_deref())?;
-        match blocks::open(ctx, &mut st, &session_id, &window_id, layout, None) {
+        match blocks::open(ctx, &mut st, &session_id, &window_id, layout, None, None) {
             Ok(block_id) => Ok(Created { session_id, window_id, block_id }),
             Err(e) => {
                 let _ = st.destroy_session(&session_id);
@@ -353,7 +371,7 @@ pub fn registry() -> Registry {
             let mut st = ctx.state();
             let (mark, active) = (st.mark(), st.session(&p.session_id)?.active);
             let window_id = st.new_window(&p.session_id, p.window_label.as_deref())?;
-            match blocks::open(ctx, &mut st, &p.session_id, &window_id, Layout::block(p.layout), None) {
+            match blocks::open(ctx, &mut st, &p.session_id, &window_id, Layout::block(p.layout), None, None) {
                 Ok(block_id) => {
                     Ok(WindowCreated { revision: revision(&st, &p.session_id).revision, window_id, block_id })
                 }

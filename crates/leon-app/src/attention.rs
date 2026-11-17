@@ -124,7 +124,27 @@ pub struct Tracker {
     rows: Vec<Row>,
 }
 
+/// `host` after the machine at `removed` went: None for that machine, the ones after it one up.
+fn shifted(host: usize, removed: usize) -> Option<usize> {
+    match host.cmp(&removed) {
+        std::cmp::Ordering::Less => Some(host),
+        std::cmp::Ordering::Equal => None,
+        std::cmp::Ordering::Greater => Some(host - 1),
+    }
+}
+
 impl Tracker {
+    /// The machine at `removed` is gone and the ones after it moved up one (a host removed in
+    /// Settings): keep what each remaining machine's blocks were, under its new index.
+    pub fn forget_host(&mut self, removed: usize) {
+        let seen = std::mem::take(&mut self.seen);
+        self.seen = seen.into_iter().filter_map(|((h, b), s)| Some(((shifted(h, removed)?, b), s))).collect();
+        self.known = self.known.iter().filter_map(|h| shifted(*h, removed)).collect();
+        // Activity's rows too, until the next look rebuilds them: a click goes to the right host
+        let rows = std::mem::take(&mut self.rows);
+        self.rows = rows.into_iter().filter_map(|r| Some(Row { host: shifted(r.host, removed)?, ..r })).collect();
+    }
+
     /// Look at every machine's model at `now`: rebuild the rows and return the blocks that entered
     /// a new state since the last look.
     pub fn update(&mut self, machines: &[(usize, &str, &Model)], now: Instant) -> Vec<Transition> {
@@ -245,6 +265,12 @@ pub struct Notifier {
 }
 
 impl Notifier {
+    /// As [`Tracker::forget_host`], for when each block last notified.
+    pub fn forget_host(&mut self, removed: usize) {
+        let last = std::mem::take(&mut self.last);
+        self.last = last.into_iter().filter_map(|((h, b, r), t)| Some(((shifted(h, removed)?, b, r), t))).collect();
+    }
+
     /// The notice for `t`, if one is due. `active`: the app is in front; `on_screen`: the block is
     /// in the tab shown.
     pub fn offer(&mut self, t: &Transition, now: Instant, active: bool, on_screen: bool) -> Option<Notice> {
@@ -296,6 +322,11 @@ impl Notifier {
             session_id: String::new(),
             block_id: String::new(),
         })
+    }
+
+    /// When the notice for what a storm held back can go (the poll's clock).
+    pub fn due(&self) -> Option<Instant> {
+        self.posted.front().filter(|_| self.held > 0).map(|at| *at + QUIET)
     }
 
     /// Whether another notice fits in the last minute's `BURST`.

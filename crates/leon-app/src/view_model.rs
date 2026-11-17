@@ -2,6 +2,28 @@
 //! the settings, and the signature the poll compares to decide on a redraw.
 
 use super::*;
+use crate::program_kind;
+
+/// What one render needs from the model, copied out under the state lock.
+#[derive(Clone, PartialEq, Debug)]
+pub(super) struct SessionRow {
+    /// Which machine it is on (`Hosts` index; 0 is This Mac).
+    pub(super) host: usize,
+    pub(super) id: String,
+    pub(super) title: String,
+    pub(super) windows: Vec<WindowRow>,
+    pub(super) active: usize,
+    pub(super) status: Option<Indicator>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub(super) struct WindowRow {
+    pub(super) id: String,
+    pub(super) title: String,
+    pub(super) status: Option<Indicator>,
+    /// The kind of program in the pane the tab shows (`named_tile`); None for an empty tab.
+    pub(super) program: Option<Kind>,
+}
 
 impl Workspace {
     /// Every machine's sessions, This Mac's first, then each host's in the hosts list's order.
@@ -18,13 +40,7 @@ impl Workspace {
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                // each block read once: per window per block would be a million a poll at the caps
-                let mut by_window = std::collections::HashMap::<&str, Option<Indicator>>::new();
-                for b in &s.blocks {
-                    let shown = status::indicator_of(&b.newest_first());
-                    let w = by_window.entry(&b.window_id).or_default();
-                    *w = status::aggregate([*w, shown]);
-                }
+                let by_window = crate::overview::tab_statuses(s);
                 let windows: Vec<WindowRow> = s
                     .windows
                     .iter()
@@ -32,6 +48,7 @@ impl Workspace {
                         id: w.id.clone(),
                         title: switcher::tab_title(s, w),
                         status: by_window.get(w.id.as_str()).copied().flatten(),
+                        program: program_kind::tab_kind(s, w),
                     })
                     .collect();
                 SessionRow {
@@ -161,39 +178,18 @@ impl Workspace {
         (self.epoch.elapsed().as_millis() / SPIN.as_millis()) as u64
     }
 
-    /// The pulse's frame while a working indicator is drawn: in the sidebar's rows, the top tabs,
-    /// or a visible pane's header (its own state, which a blocked pane beside it would hide).
-    pub(super) fn spinning(&self, rows: &[SessionRow]) -> Option<u64> {
-        let working = |i: &Option<Indicator>| matches!(i, Some(Indicator::Working { .. }));
-        let places = self.places();
-        let sidebar = places.sidebar.is_some()
-            && rows.iter().any(|r| working(&r.status) || r.windows.iter().any(|w| working(&w.status)));
-        let selected = rows.iter().filter(|r| Some(&r.id) == self.session_id.as_ref());
-        let tabs = places.top_tabs && selected.flat_map(|r| &r.windows).any(|w| working(&w.status));
-        let headers = {
-            let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
-            let m = self.app.model();
-            // a float's or drawer's header shows even with headers off
-            let header = |s: &crate::remote::Session, b: &crate::remote::Block| {
-                self.settings.pane_headers || s.overlays.get(&b.window_id).is_some_and(|o| o.contains(&b.id))
-            };
-            shown.iter().any(|id| {
-                m.block(id).is_some_and(|(s, b)| header(s, b) && working(&status::indicator_of(&b.newest_first())))
-            })
-        };
-        (sidebar || tabs || headers).then(|| self.pulse())
-    }
-
     pub fn font_size(&self) -> f32 {
         self.font_size
     }
 
-    /// Changes worth a redraw: every session's view (its revision moves with layout, focus, zoom
-    /// and labels) and the screen of every pane on screen (only those are watched, so hidden tabs
-    /// and panes hidden by a zoom don't count).
+    /// Changes worth redrawing the window: every session's view (its revision moves with layout,
+    /// focus, zoom and labels), statuses, titles and settings. Not the panes' screens: a pushed
+    /// screen redraws its own grid (`poll_grids`).
     pub fn signature(&self) -> u64 {
         let mut h = DefaultHasher::new();
-        let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
+        // with the overview up its thumbnails redraw themselves (`refresh_thumbs`), never the window
+        let shown = self.shown().map(|(_, ids)| ids).filter(|_| !self.overview_shown()).unwrap_or_default();
+        self.overview_shown().hash(&mut h);
         for (host, remote) in self.hosts.remotes() {
             let m = remote.model();
             host.hash(&mut h);
@@ -204,12 +200,6 @@ impl Workspace {
                 }
             }
         }
-        {
-            let m = self.app.model();
-            for id in &shown {
-                (id, m.screen_updates.get(id)).hash(&mut h);
-            }
-        }
         for m in self.hosts.machines() {
             (&m.label, m.state()).hash(&mut h);
         }
@@ -218,19 +208,22 @@ impl Workspace {
         let rows = self.rows();
         for r in &rows {
             r.status.hash(&mut h);
-            r.windows.iter().for_each(|w| (w.status, &w.title).hash(&mut h));
+            r.windows.iter().for_each(|w| (w.status, &w.title, w.program).hash(&mut h));
         }
-        self.spinning(&rows).hash(&mut h);
         (self.sidebar, self.font_size.to_bits(), self.pending.len(), self.palette.is_some()).hash(&mut h);
         let st = &self.settings;
         (st.tab_style, st.pane_headers, st.sidebar_width.to_bits()).hash(&mut h);
         self.session_id.hash(&mut h);
         self.find_due().hash(&mut h);
         self.activity_signature(&mut h);
-        // each header draws its own pane's state, which its tab's may hide
+        self.updates.generation().hash(&mut h);
+        self.hosts.tailnet_reads().hash(&mut h); // Add Host…'s list and the hosts' tailnet lines
+                                                 // each header draws its own pane's state, which its tab's may hide
         for id in &shown {
-            let state = self.app.model().block(id).and_then(|(_, b)| status::indicator_of(&b.newest_first()));
-            (state, self.header_caption(id), self.pane_title(id)).hash(&mut h);
+            let (state, kind) = self.app.model().block(id).map_or((None, None), |(_, b)| {
+                (status::indicator_of(&b.newest_first()), Some(program_kind::kind_of_block(b)))
+            });
+            (state, kind, self.header_caption(id), self.pane_title(id)).hash(&mut h);
         }
         h.finish()
     }

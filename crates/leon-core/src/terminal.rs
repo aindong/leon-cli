@@ -2,9 +2,10 @@
 //! thread so the screen and scrollback can be read back at any time. The reader also tracks OSC
 //! 7501 program status and reports title, pwd, bell and status changes; the waiter reports the exit.
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::os::fd::FromRawFd;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc;
@@ -16,7 +17,7 @@ use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Point};
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{MasterPty, PtySize};
 use tokio::sync::watch;
 
 use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
@@ -25,16 +26,22 @@ use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
 #[path = "terminal_cwd.rs"]
 mod cwd;
 use cwd::{process_cwd, pwd_path, pwd_url};
+#[path = "terminal_foreground.rs"]
+mod foreground;
+pub use foreground::owned_process_name;
 #[path = "terminal_process.rs"]
 mod process;
-use process::{reap, wait_exit, Registered};
+use process::{reap, wait_exit, Registered, Started};
 #[path = "terminal_reading.rs"]
 mod reading;
+#[path = "terminal_start.rs"]
+mod start;
 #[path = "terminal_status.rs"]
 mod status;
 #[path = "terminal_view.rs"]
 mod view;
-use reading::{Reading, Reported};
+use reading::{parsed_by_then, Reading, Reported};
+pub use view::Escapes;
 
 pub const NAMESPACE: &str = "dev.leon.terminal";
 pub const ROWS: u16 = 24;
@@ -72,9 +79,22 @@ pub enum Notice {
     Pwd(String),
     Bell,
     ProgramStatus(Change),
+    /// The program in front changed (`Terminal::check_foreground`): its name, or None.
+    Foreground(Option<String>),
 }
 
 type Notify = Arc<dyn Fn(Notice) + Send + Sync>;
+/// Our own fd on the PTY's slave (`spawn_showing`), until something lets go of it.
+type Held = Arc<Mutex<Option<File>>>;
+
+/// Lets go of the held slave fd when dropped.
+struct Release(Held);
+
+impl Drop for Release {
+    fn drop(&mut self) {
+        lock(&self.0).take();
+    }
+}
 
 /// What to run.
 pub struct Spec {
@@ -205,29 +225,38 @@ impl Terminal {
         shown: &[u8],
         notify: impl Fn(Notice) + Send + Sync + 'static,
     ) -> io::Result<Terminal> {
+        Self::spawn_sized(spec, shown, None, notify)
+    }
+
+    /// `spawn_showing` at `size` (None: 24x80, clamped as `resize` clamps): the program's first
+    /// look at its size is right.
+    pub fn spawn_sized(
+        spec: Spec,
+        shown: &[u8],
+        size: Option<(u16, u16)>,
+        notify: impl Fn(Notice) + Send + Sync + 'static,
+    ) -> io::Result<Terminal> {
         let notify: Notify = Arc::new(notify);
-        let size = PtySize { rows: ROWS, cols: COLS, pixel_width: 0, pixel_height: 0 };
-        let pair = native_pty_system().openpty(size).map_err(pty)?;
-        let mut cmd = if spec.command.is_empty() {
-            CommandBuilder::new_default_prog()
-        } else {
-            CommandBuilder::from_argv(spec.command.iter().map(Into::into).collect())
-        };
-        if let Some(dir) = &spec.cwd {
-            // portable-pty silently falls back to $HOME for a missing dir; refuse instead.
-            if !dir.is_dir() {
-                return Err(io::Error::new(io::ErrorKind::NotFound, format!("no directory {}", dir.display())));
-            }
-            cmd.cwd(dir);
+        let (rows, cols) = size.map_or((ROWS, COLS), |(r, c)| (r.clamp(1, MAX_SIZE.0), c.clamp(2, MAX_SIZE.1)));
+        let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
+        let pair = start::open_pty(size)?;
+        // portable-pty silently falls back to $HOME for a missing dir; refuse instead.
+        if let Some(dir) = spec.cwd.as_ref().filter(|d| !d.is_dir()) {
+            return Err(io::Error::new(io::ErrorKind::NotFound, format!("no directory {}", dir.display())));
         }
-        for (k, v) in &spec.env {
-            cmd.env(k, v);
-        }
-        let command = if spec.command.is_empty() { vec![cmd.get_shell()] } else { spec.command };
+        let tty = pair.master.tty_name().ok_or_else(|| io::Error::other("the PTY has no name"))?;
+        // On macOS an exit that closes the PTY's last slave fd waits ~0.6 s for its output to be
+        // read, then throws it away: a starved reader missed a fast program's whole output. With
+        // ours open the exit waits for the reads. Let go once the program has exited, or when the
+        // reads end (nothing would read what the exit waits for).
+        let held: Held =
+            Arc::new(Mutex::new(Some(OpenOptions::new().read(true).custom_flags(libc::O_NOCTTY).open(&tty)?)));
+        let child = start::start(&spec, &tty)?;
+        drop(pair.slave);
+        let pid = child.id() as i32;
+        let started = Started::new(pid, held.clone());
+        let command = if spec.command.is_empty() { vec![start::shell(&spec)] } else { spec.command };
         let start_cwd = spec.cwd;
-        let child = pair.slave.spawn_command(cmd).map_err(pty)?;
-        drop(pair.slave); // the child holds the only slave fd, so its exit ends our reads
-        let pid = child.process_id().map_or(0, |p| p as i32);
 
         let reader = pair.master.try_clone_reader().map_err(pty)?;
         // Write through our own dup of the master: portable-pty's writer types "\n" + EOF when dropped,
@@ -255,10 +284,10 @@ impl Terminal {
         let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
         let seen = Arc::new(Mutex::new(Seen::default()));
         let listener = Listener { writer: writer.clone(), seen: seen.clone() };
-        let mut emulator = Term::new(config, &Size { rows: ROWS, cols: COLS }, listener);
+        let mut emulator = Term::new(config, &Size { rows, cols }, listener);
         let mut parser: Processor = Processor::new();
         let scrolled = Arc::new(AtomicUsize::new(0));
-        view::feed(&mut emulator, &mut parser, shown, &scrolled);
+        view::feed(&mut emulator, &mut parser, &mut Escapes::default(), shown, &scrolled);
         let term = Arc::new(Mutex::new(emulator));
         let tracker = Arc::new(Mutex::new(Tracker::default()));
 
@@ -275,21 +304,27 @@ impl Terminal {
             writer: writer.clone(),
             reported: reported.clone(),
             output: output.clone(),
+            read: Arc::default(),
             changes: generation.clone(),
             scrolled: scrolled.clone(),
             x10: Arc::default(),
+            held: held.clone(),
         };
-        let x10 = reading.x10.clone();
+        let (x10, read, parsed_bytes) = (reading.x10.clone(), reading.read.clone(), output.clone());
         let to_reader = notify.clone();
         let to_self = notify.clone();
         std::thread::spawn(move || {
             reading.run(reader, at_eof, &*to_reader);
             drop(parsed);
         });
+        #[cfg(test)]
+        tests::late_failure(pid)?;
         let exited = Arc::new(Mutex::new(false));
         let done = exited.clone();
+        let release = held.clone();
         std::thread::spawn(move || {
             wait_exit(pid);
+            lock(&release).take(); // the reads end once whatever it left behind lets go too
             let status = {
                 let mut done = lock(&done);
                 // The zombie still holds the group ID, so this reaches only what the program left behind.
@@ -299,11 +334,10 @@ impl Terminal {
                 reap(pid)
             };
             drop(child); // reaped above; dropping std's Child neither waits nor kills
-            if eof.recv_timeout(DRAIN_WAIT) == Err(mpsc::RecvTimeoutError::Disconnected) {
-                let _ = drained.recv(); // a bounded backlog: it finishes
-            }
+            parsed_by_then(&eof, &drained, &read, &parsed_bytes, DRAIN_WAIT);
             notify(Notice::Exited(status));
         });
+        started.disarm(); // the exit thread waits for, reaps and lets go from here on
         Ok(Terminal {
             term,
             tracker,

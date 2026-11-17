@@ -20,7 +20,7 @@ panes) in a split layout. Every object has a stable ID such as `block:91c0…`.
   `$LEON_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/leon`, else `~/.local/state/leon/run`; its path
   must fit a Unix socket (under 104 bytes on macOS, 108 on Linux), or leon says so and stops.
 - **Another machine.** `-H HOST` sends any client command to the leon server on another machine,
-  through your own `ssh` (see [Hosts](#hosts)).
+  through your own `ssh` (see [cli/hosts.md](cli/hosts.md)).
 
 ## Global flags
 
@@ -45,6 +45,7 @@ These work with every command.
 | 2 | bad command line (`leon` with a typo suggests the nearest command) |
 | 3 | target not found or ambiguous |
 | 4 | server unreachable |
+| 10 | `self-update --check`: a newer release is available |
 | 130 | interrupted (Ctrl-C) |
 
 `leon wait` and `leon run --wait` exit with the program's own status instead.
@@ -234,7 +235,7 @@ Call a block method, such as `size` or `program_status`, or a full name like
 `dev.leon.terminal.size`. `ARGS` is a JSON object, `@file`, or `-` for stdin.
 
 `set_resume` registers the command that resumes this block's program after a restart (`null`
-clears it); a restored block offers it by the config's `resume` setting (see [lua.md](lua.md)):
+clears it); a restored block offers it by the config's `resume` setting (see [lua/settings.md](lua/settings.md)):
 
 ```sh
 leon block call set_resume '{"command": ["claude", "--resume", "c7583d2c-3133-4d13-b5f0-45883f1cabcb"]}'
@@ -352,7 +353,9 @@ with the text each terminal shows (in the private state dir, 0600).
 
 ### `leon server status`
 
-Show whether a server runs; exit 4 if not.
+Show whether a server runs; exit 4 if not. When [serving over
+Tailscale](cli/hosts.md#serve-over-tailscale) is on, a `tailnet` line says where it serves or why
+it stopped, and another the last connection it refused.
 
 ### `leon server proxy`
 
@@ -362,51 +365,15 @@ yourself.
 
 ## Hosts
 
-`-H HOST` reaches the leon server on another machine (a devbox, a cloud VM, another Mac) through
-the system `ssh`, so `~/.ssh/config`, `ProxyJump`, keys and agents all work, and leon never sees a
-password. Nothing listens on a network port: leon runs `ssh -T … -- [USER@]HOST` and, on the
-host, `leon server proxy` (found on `PATH`, else in `~/.local/bin`), which starts the host's
-server if none runs. `LEON_SSH` names another ssh program. An endpoint is only
-`ssh://[USER@]HOST[:PORT]` with plain names; anything else is refused (exit 2). Each connection is
-one ssh session (`leon attach` opens three), so use keys or an agent, and `ControlMaster auto` in
-`~/.ssh/config` to share one login.
+`-H HOST` reaches the leon server on another machine through the system `ssh`. `leon hosts`
+(list, add, remove, check; `--tailscale` adds a machine from your tailnet) and how `-H` works are
+in [cli/hosts.md](cli/hosts.md).
 
-```text
-leon -H ssh://me@devbox ls
-leon hosts add devbox ssh://me@devbox
-leon -H devbox attach
-```
+## Updates
 
-This machine's working directory means nothing on the host: with `-H`, `run`, `split` and `new`
-start in the host's home unless `--cwd` gives an absolute path there (a relative one exits 2).
+### `leon self-update`
 
-`leon server run|start|proxy`, `leon app`, `leon config check`, `leon skill` and `leon hosts` are
-about this machine and refuse `-H`; `leon server status` and `leon server stop` work over it.
-
-### `leon hosts`
-
-Name other machines for `-H`, and check that they answer. The list is
-`$LEON_STATE_DIR/hosts.json` (mode 0600, in the private state dir).
-
-### `leon hosts list`
-
-List the hosts; `--json` prints `[{"label", "endpoints", "icon"}]`.
-
-### `leon hosts add LABEL ENDPOINT…`
-
-Add a host: a label (letters, digits, `.`, `_`, `-`) and its `ssh://` endpoints. `-H LABEL` uses
-the first. A label is added once (exit 1 if it exists).
-
-- `--icon NAME`: an icon name for the app to show.
-
-### `leon hosts remove LABEL…`
-
-Remove hosts (exit 3 if one isn't there).
-
-### `leon hosts check [LABEL…]`
-
-Reach each host (default: every one) as a command would, and print `ok` with its leon version,
-or why not. Exit 4 if any host failed.
+Updates leon to the newest release; `--check` only reports (exit 10): [updates.md](updates.md).
 
 ## Agents
 
@@ -464,7 +431,10 @@ raised. `--unfloat` returns a float or drawer to the tiles; its terminal keeps r
 Show/hide a float or drawer by its exact, case-insensitive label within `-s/--session`.
 Labels must be unique there. Hidden terminals keep running.
 `--create` opens a scratch login shell docked to the bottom on first use, in the directory of
-the active window's focused block (the session's current directory); subsequent calls toggle it. A bottom panel already occupying that side makes creation fail.
+the active window's focused block (the session's current directory); subsequent calls toggle it. A bottom panel already occupying that side makes creation fail (not with `--float`).
+With `--create`: `--float` makes a popup (a float at `--rect`, default `0.1,0.1,0.8,0.8`)
+instead; `-- CMD` runs CMD instead of a shell. It closes when its program exits, giving the
+focus back, unless `--keep-open`. See [lua/keys.md](lua/keys.md#a-popup-on-a-key).
 
 ### `leon dock left|right|bottom`
 

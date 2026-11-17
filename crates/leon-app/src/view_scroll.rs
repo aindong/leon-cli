@@ -1,6 +1,6 @@
-//! Scrolling a pane back through its history (docs/architecture.md, "Scrollback in the app"):
-//! per-pane view state, history rows fetched from the server in ranges, the wheel and trackpad,
-//! paging keys, and the "↓ N new lines" pill.
+//! Scrolling a pane back through its history (docs/architecture/protocol-and-clients.md,
+//! "Scrollback in the app"): per-pane view state, history rows fetched from the server in ranges,
+//! the wheel and trackpad, paging keys, and the "↓ N new lines" pill.
 
 use std::collections::{HashMap, HashSet};
 
@@ -52,7 +52,7 @@ pub(super) struct TermUi {
     /// Over a link, the cell cmd+hover last asked about (a late answer for another is dropped).
     pub(super) hover_at: Option<(String, Pos)>,
     /// Numbers each history fetch, so a reply only fills the pane that asked.
-    fetches: u64,
+    pub(super) fetches: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -279,7 +279,7 @@ impl Workspace {
     /// to the bottom.
     pub(super) fn render_jump(&self, id: &str, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let n = self.new_lines(id)?;
-        let t = &self.theme;
+        let t = &self.pane_theme(id); // faded with its pane
         let block = id.to_string();
         let label = if n == 1 { "↓ 1 new line".to_string() } else { format!("↓ {n} new lines") };
         Some(

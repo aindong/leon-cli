@@ -1,0 +1,7 @@
+[
+  {"name": "shelf-api", "status": "up", "latency_ms": 12, "uptime": 99.98},
+  {"name": "search", "status": "degraded", "latency_ms": 340, "uptime": 99.41},
+  {"name": "login", "status": "up", "latency_ms": 28, "uptime": 99.99},
+  {"name": "image-cache", "status": "up", "latency_ms": 6, "uptime": 100.0},
+  {"name": "nightly-export", "status": "down", "latency_ms": null, "uptime": 97.2}
+]

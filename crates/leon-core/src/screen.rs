@@ -5,11 +5,11 @@
 //! changed (`diff`, `apply`).
 
 use alacritty_terminal::event::EventListener;
-use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::grid::{Dimensions, Indexed};
 use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::color::Colors;
-use alacritty_terminal::term::{Term, TermMode};
+use alacritty_terminal::term::{RenderableCursor, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 
 use schemars::JsonSchema;
@@ -76,7 +76,7 @@ pub struct Frame {
 pub struct View {
     /// The absolute number of the screen's top row: how many lines were ever pushed into the
     /// scrollback. History line `scrolled - 1` is just above the screen; appended output never
-    /// renumbers a line (docs/architecture.md, "Scrollback in the app").
+    /// renumbers a line (docs/architecture/protocol-and-clients.md, "Scrollback in the app").
     pub scrolled: usize,
     /// Lines kept in the scrollback: the oldest is `scrolled - history`.
     pub history: usize,
@@ -234,19 +234,64 @@ mod shape {
 }
 
 pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
-    let content = term.renderable_content();
-    let (lines, cols) = (term.screen_lines(), term.columns());
+    build(&Shot::of(term), theme)
+}
+
+/// What a frame is built from, copied out of the emulator under its lock: the parse thread then
+/// waits only for the copy, not for the spans built from it.
+pub struct Shot {
+    lines: usize,
+    cols: usize,
+    cells: Vec<Indexed<Cell>>,
+    offset: i32,
+    cursor: RenderableCursor,
+    colors: Colors,
+    pub(crate) mode: TermMode,
+    history: usize,
+}
+
+impl Shot {
+    pub fn of<T: EventListener>(term: &Term<T>) -> Shot {
+        let content = term.renderable_content();
+        let (lines, cols) = (term.screen_lines(), term.columns());
+        let mut cells = Vec::with_capacity(lines * cols);
+        cells.extend(content.display_iter.map(|c| Indexed { point: c.point, cell: drawn(c.cell) }));
+        Shot {
+            lines,
+            cols,
+            cells,
+            offset: content.display_offset as i32,
+            cursor: content.cursor,
+            colors: *content.colors,
+            mode: content.mode,
+            history: term.grid().history_size(),
+        }
+    }
+}
+
+/// `cell` as a frame draws it, sharing nothing with the emulator: a shared mark store would make
+/// the emulator's next mark on the cell copy all of them (alacritty keeps any number).
+fn drawn(cell: &Cell) -> Cell {
+    let mut out = Cell { c: cell.c, fg: cell.fg, bg: cell.bg, flags: cell.flags, extra: None };
+    let marks = cell.zerowidth().into_iter().flatten().copied().filter(|&c| !is_bidi_control(c));
+    marks.take(MAX_MARKS).for_each(|m| out.push_zerowidth(m));
+    out
+}
+
+/// The frame of `shot`, as `frame` builds it.
+pub fn build(shot: &Shot, theme: &Theme) -> Frame {
+    let (lines, cols) = (shot.lines, shot.cols);
     let mut f = Frame { lines, cols, rows: vec![Vec::new(); lines], ..Frame::default() };
-    let offset = content.display_offset as i32;
-    let cursor_at = content.cursor.point;
-    let mut cursor = (content.cursor.shape != CursorShape::Hidden).then(|| Cursor {
+    let offset = shot.offset;
+    let cursor_at = shot.cursor.point;
+    let mut cursor = (shot.cursor.shape != CursorShape::Hidden).then(|| Cursor {
         line: usize::MAX,
         col: cursor_at.column.0,
-        shape: content.cursor.shape,
+        shape: shot.cursor.shape,
         wide: false,
         text: String::new(),
     });
-    for cell in content.display_iter {
+    for cell in &shot.cells {
         let Ok(line) = usize::try_from(cell.point.line.0 + offset) else { continue };
         if line >= lines {
             continue;
@@ -258,7 +303,7 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
             }
             continue;
         }
-        let (span, bg) = cell_span(&cell, cell.point.column.0, content.colors, theme);
+        let (span, bg) = cell_span(cell, cell.point.column.0, &shot.colors, theme);
         if let Some(c) = cursor.as_mut().filter(|_| cell.point == cursor_at) {
             // Concealed text stays concealed under a block cursor too.
             let shown = if cell.flags.contains(Flags::HIDDEN) { " ".to_string() } else { span.text.clone() };
@@ -270,11 +315,11 @@ pub fn frame<T: EventListener>(term: &Term<T>, theme: &Theme) -> Frame {
         trim(r);
     }
     f.cursor = cursor.filter(|c| c.line < lines);
-    let mode = *term.mode();
+    let mode = shot.mode;
     f.app_cursor = mode.contains(TermMode::APP_CURSOR);
     f.bracketed_paste = mode.contains(TermMode::BRACKETED_PASTE);
     f.view = View {
-        history: term.grid().history_size(),
+        history: shot.history,
         alt_screen: mode.contains(TermMode::ALT_SCREEN),
         alternate_scroll: mode.contains(TermMode::ALTERNATE_SCROLL),
         mouse: crate::mouse::report(mode, false),
@@ -355,7 +400,8 @@ fn push_cell(row: &mut Vec<Span>, bgs: &mut Vec<BgRect>, line: usize, span: Span
         Some(s)
             if one_char
                 && s.col + s.cells == col
-                && s.cells == s.text.chars().count()
+                // past 2 cells a span has been joined to, so it holds one char per cell: no count
+                && (s.cells > 2 || s.cells == s.text.chars().count())
                 && (same_style(s, &span) || blank && !s.underline && !s.strikeout) =>
         {
             s.text.push_str(&span.text);

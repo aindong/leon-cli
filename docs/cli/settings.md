@@ -30,7 +30,8 @@ leon config reload
 Print a setting as init.lua leaves it (its `leon.set` call, else the default), or every setting
 and where each is set without KEY. Needs no server. The keys are `theme`, `font.family`,
 `font.size`, `notifications.done`, `notifications.blocked`, `notifications.error`,
-`copy_on_select`, `repeat_time`, `hint_patterns` and `resume` ([docs/lua.md](../lua.md#settings) has what each does). With `--json`
+`copy_on_select`, `repeat_time`, `hint_patterns`, `resume`, `fade_inactive_panes`, `check_for_updates`, `translucency`, `serve_tailscale`,
+`serve_tailscale_port` and `serve_tailscale_tags` ([docs/lua/settings.md](../lua/settings.md#settings) has what each does). With `--json`
 the value is JSON.
 
 ### `leon config set KEY VALUE`
@@ -57,14 +58,26 @@ leon config set notifications.done false
 ## Themes
 
 A theme is the terminal's 16 colours, background, foreground, cursor and selection, plus the app's
-colours around the panes and the status colours. leon has two built in, `leon-dark` and
-`leon-light`; imported ones live as files in `themes/` beside init.lua (by default
+colours around the panes and the status colours. leon has eight built in, made for it from its
+brand palette: `leon-dark` and `leon-light`, the dark `leon-maroon` (warm), `leon-tide` (cool) and
+`leon-coal` (high contrast), and the light `leon-linen` (paper), `leon-sand` (soft) and
+`leon-mist` (cool). Each keeps body text at 4.5:1 or better on its background, as do its ANSI
+colours (1–6 and 9–14). Imported ones live as files in `themes/` beside init.lua (by default
 `~/.config/leon/themes/NAME.theme`), in Ghostty's `key = value` syntax with leon's own colours
 added. `leon config set theme NAME` picks one, and a running app draws with it within a second:
 the panes, the window around them and the status colours. With `dark=A,light=B` the app switches when macOS
 does. The app's Settings window (⌘,) sets the theme, font, notifications and copy on select the
 same way: each change goes through `leon config set`'s code into init.lua, and a setting init.lua
 sets by code it can't rewrite shows read-only there, with the message above.
+
+The command palette's **Change Theme…** (⌘⇧T, the action `client.theme.change`) lists every theme,
+built in and imported. The selected one draws the whole window as you move through the list; ↩
+keeps it and esc goes back to the one you had. ↩ writes init.lua's `theme` the same way: when it
+names one theme for both appearances, the new one is set for both; when it names a pair, only the
+side macOS is on now changes (the list's field says which). A theme change fades in over a moment,
+or switches at once with Reduce Motion.
+
+![Change Theme… with another theme selected, drawing the whole window as a preview](../images/app-theme.png)
 
 ### `leon theme`
 

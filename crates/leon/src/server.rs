@@ -4,7 +4,7 @@
 use std::time::{Duration, Instant};
 
 use leon_core::paths::socket_path;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::client::{spawn_server, Client, Fail};
 use crate::{Cli, ServerCmd};
@@ -47,6 +47,17 @@ pub(crate) fn app(cli: &Cli, _socket: &std::path::Path) -> Result<(), Fail> {
     <Cli as clap::CommandFactory>::command().print_help().map_err(|e| Fail::Other(e.to_string()))
 }
 
+/// `server.log` beside `socket` when this process's stderr is that file (a server `leon` started
+/// in the background, `client::spawn_server`); None for one run in a terminal.
+fn log_file(socket: &std::path::Path) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    let log = socket.with_file_name("server.log");
+    use std::os::fd::AsFd;
+    let stderr = std::fs::File::from(std::io::stderr().as_fd().try_clone_to_owned().ok()?);
+    let (ours, file) = (stderr.metadata().ok()?, std::fs::metadata(&log).ok()?);
+    (ours.dev() == file.dev() && ours.ino() == file.ino()).then(|| log.display().to_string())
+}
+
 pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
     let socket = socket_path();
     match cmd {
@@ -58,7 +69,9 @@ pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                 version: env!("CARGO_PKG_VERSION"),
                 socket: socket.display().to_string(),
             };
-            let ctx = std::sync::Arc::new(leon_server::Ctx::new(info, *autostarted));
+            let mut ctx = leon_server::Ctx::new(info, *autostarted);
+            ctx.log = log_file(&socket);
+            let ctx = std::sync::Arc::new(ctx);
             let state_dir = leon_core::paths::state_dir();
             let opts = leon_server::serve::Options { socket, idle_exit: Duration::from_secs(idle) };
             let rt = tokio::runtime::Runtime::new().map_err(|e| Fail::Other(e.to_string()))?;
@@ -114,6 +127,19 @@ pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                     st["sessions"],
                     st["socket"].as_str().unwrap_or("")
                 );
+                // the host's words, as the app shows them: no control characters
+                let (t, text) = (&st["tailnet"], |v: &Value| leon_hosts::shown_text(v.as_str().unwrap_or(""), 300));
+                match text(&t["state"]).as_str() {
+                    "serving" => {
+                        let at: Vec<String> = t["addresses"].as_array().into_iter().flatten().map(text).collect();
+                        println!("tailnet  serving on {} for {}", at.join(", "), text(&t["login"]));
+                    }
+                    "stopped" => println!("tailnet  stopped: {}", text(&t["reason"])),
+                    _ => {}
+                }
+                if let Some(r) = t["last_refusal"].as_object() {
+                    println!("tailnet  last refused {}: {}", text(&r["peer"]), text(&r["reason"]));
+                }
             }
             Ok(())
         }

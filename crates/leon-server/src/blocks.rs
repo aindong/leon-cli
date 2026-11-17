@@ -45,7 +45,7 @@ pub struct BlockSpec {
 pub struct TerminalOptions {
     /// argv to run directly; omitted runs the login shell.
     pub command: Option<Vec<String>>,
-    /// Working directory; defaults to `$HOME`.
+    /// Working directory; defaults to `$HOME` (in `session.toggle`, the focused block's directory).
     pub cwd: Option<String>,
     pub exit: Option<ExitOptions>,
 }
@@ -64,8 +64,8 @@ impl Layout {
 }
 
 /// Start `spec` in window `window_id`, beside `place`'s anchor (None: as the empty window's only
-/// block). Call with the state lock held, so an instant exit can't be reported before the block is
-/// in the model.
+/// block), at `size` (`spawn`). Call with the state lock held, so an instant exit can't be
+/// reported before the block is in the model.
 pub fn open(
     ctx: &Arc<Ctx>,
     st: &mut State,
@@ -73,6 +73,7 @@ pub fn open(
     window_id: &str,
     spec: BlockSpec,
     place: Option<&Place>,
+    size: Option<(u16, u16)>,
 ) -> Result<String, ApiError> {
     if spec.flavor.as_deref().is_some_and(|f| f != SHELL_FLAVOR) {
         return Err(ApiError::bad_request(format!("unknown flavor; the only one is {SHELL_FLAVOR}")));
@@ -83,7 +84,7 @@ pub fn open(
         return Err(ApiError::bad_request("command needs at least a program name"));
     }
     let id = new_id("block");
-    let terminal = spawn(ctx, session_id, &id, o.command.unwrap_or_default(), o.cwd.map(PathBuf::from), &[])?;
+    let terminal = spawn(ctx, session_id, &id, o.command.unwrap_or_default(), o.cwd.map(PathBuf::from), &[], size)?;
     let keep_open = o.exit.is_some_and(|e| !e.on_completion);
     let block = Block {
         id: id.clone(),
@@ -97,8 +98,8 @@ pub fn open(
     Ok(id)
 }
 
-/// Start the terminal of block `block_id`, showing `shown` first (`Terminal::spawn_showing`); an
-/// empty `command` runs the login shell. Like `open`, call with the state lock held.
+/// Start block `block_id`'s terminal at `size`, showing `shown` first (`Terminal::spawn_sized`);
+/// an empty `command` runs the login shell. Like `open`, call with the state lock held.
 pub(crate) fn spawn(
     ctx: &Arc<Ctx>,
     session_id: &str,
@@ -106,35 +107,13 @@ pub(crate) fn spawn(
     command: Vec<String>,
     cwd: Option<PathBuf>,
     shown: &[u8],
+    size: Option<(u16, u16)>,
 ) -> Result<Terminal, ApiError> {
-    let mut env: Vec<(String, String)> = [
-        ("LEON_SESSION", session_id),
-        ("LEON_BLOCK", block_id),
-        ("LEON_SERVER", ctx.info.socket.as_str()),
-        ("TERM", "xterm-256color"),
-    ]
-    .iter()
-    .map(|(k, v)| (k.to_string(), v.to_string()))
-    .collect();
-    // `leon` resolves in every terminal, even when the user's PATH lacks where it was installed
-    if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(PathBuf::from)) {
-        let path = std::env::var_os("PATH")
-            .filter(|p| !p.is_empty())
-            .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin".into());
-        // no empty entries: one would mean the current directory
-        let entries =
-            std::iter::once(dir.clone()).chain(std::env::split_paths(&path).filter(|p| !p.as_os_str().is_empty()));
-        // join_paths refuses a dir with ':' in it; then the terminal keeps the server's PATH
-        let joined = std::env::join_paths(entries).ok().and_then(|p| p.into_string().ok());
-        if let (Some(dir), Some(path)) = (dir.to_str(), joined) {
-            env.extend([("LEON_BIN_DIR".to_string(), dir.to_string()), ("PATH".to_string(), path)]);
-        }
-    }
-    let program = command.first().cloned();
+    let env = ctx.env_for(session_id, block_id);
     let spec = Spec { command, cwd, env };
     let weak = Arc::downgrade(ctx);
     let block_id = block_id.to_string();
-    Terminal::spawn_showing(spec, shown, move |notice| {
+    Terminal::spawn_sized(spec, shown, size, move |notice| {
         let Some(ctx) = weak.upgrade() else { return };
         let exited = matches!(notice, Notice::Exited(_));
         ctx.state().notice(&block_id, notice);
@@ -142,13 +121,7 @@ pub(crate) fn spawn(
             ctx.exited.send_modify(|n| *n += 1);
         }
     })
-    .map_err(|e| match program {
-        // portable-pty's message lists every PATH entry it tried, kilobytes of them
-        Some(p) if e.to_string().contains("No viable candidates found in PATH") => {
-            ApiError::bad_request(format!("can't start the program: {p} isn't on PATH (or isn't executable)"))
-        }
-        _ => ApiError::bad_request(format!("can't start the program: {e}")),
-    })
+    .map_err(|e| ApiError::bad_request(format!("can't start the program: {e}")))
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -166,6 +139,11 @@ pub struct BlockView {
     pub title: Option<String>,
     /// Where the program is: its cwd, else its last OSC 7 path, else where it started.
     pub cwd: Option<String>,
+    /// The program in front (a shell's job, else the shell): the name of the PTY's foreground
+    /// process, never its arguments; null once it exited or when another user owns it (`sudo`).
+    /// Each change is a `foreground_changed` event; this is the value the last one carried (the
+    /// server looks every 200 ms).
+    pub foreground: Option<String>,
     /// What runs to resume the program after a restart, if it registered one (`set_resume`).
     pub resume: Option<Vec<String>>,
 }
@@ -181,6 +159,7 @@ fn view(b: &Block) -> BlockView {
         exit_code: b.exit_code,
         title: b.terminal.title(),
         cwd: b.terminal.shown_cwd(),
+        foreground: b.terminal.reported_foreground(),
         resume: b.terminal.resume(),
     }
 }
@@ -310,10 +289,12 @@ pub fn add(r: &mut Registry) {
         "Wait for a terminal's program to exit and return its status (128 + signal if killed).",
         |ctx, p: Wait| {
             let mut exits = ctx.exited.subscribe(); // before the check, so no exit slips between
-            let known = ctx.state().exit_status(&p.block_id);
-            if known.is_none() {
-                ctx.state().block(&p.block_id)?;
+                                                    // one lock for both: a program exiting between them leaves no block and was not yet a status
+            let st = ctx.state();
+            if st.exit_status(&p.block_id).is_none() {
+                st.block(&p.block_id)?;
             }
+            drop(st);
             let ctx = ctx.clone();
             let id = p.block_id;
             let wait = async move {

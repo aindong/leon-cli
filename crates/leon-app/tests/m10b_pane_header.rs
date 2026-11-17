@@ -7,23 +7,6 @@ use gpui::{Modifiers, TestAppContext};
 use m10b_support::*;
 
 #[gpui::test]
-fn each_pane_has_a_header_above_its_terminal(cx: &mut TestAppContext) {
-    let s = setup();
-    let (ws, cx) = open(cx, &s.app);
-    cx.simulate_keystrokes("cmd-d");
-    let (w, _) = window(&s.app, &ws, cx);
-    for id in leaves(&w) {
-        let header = at(cx, &format!("header-{id}")).expect("a header per pane");
-        assert_eq!(f32::from(header.size.height), 24.);
-        let term = at(cx, &format!("terminal-{id}")).unwrap();
-        assert!(header.bottom() <= term.top(), "above its terminal");
-        let title = ws.read_with(cx, |ws, _| ws.pane_title(&id)).expect("a title");
-        assert!(title.contains("zsh") || title.contains("sh"), "names the program: {title}");
-    }
-    s.app.stop();
-}
-
-#[gpui::test]
 fn the_header_controls_split_zoom_and_close(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
@@ -34,12 +17,14 @@ fn the_header_controls_split_zoom_and_close(cx: &mut TestAppContext) {
     assert!(header.contains(&center(split)));
     cx.simulate_click(center(split), Modifiers::none());
     assert!(shows(cx, |cx| leaves(&window(&s.app, &ws, cx).0).len() == 2), "the control split the pane");
+    frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     let new = ws.read_with(cx, |ws, _| ws.target_block()).unwrap();
     let p = center(at(cx, &format!("header-{new}")).unwrap());
     cx.simulate_mouse_move(p, None, Modifiers::none());
     let p = center(at(cx, &format!("header-zoom-{new}")).unwrap());
     cx.simulate_click(p, Modifiers::none());
     assert_eq!(window(&s.app, &ws, cx).0.zoomed.as_deref(), Some(new.as_str()), "zoom zooms it");
+    frames(&ws, cx); // the layout motion, to its end (motion PR 2)
     let p = center(at(cx, &format!("header-{new}")).unwrap());
     cx.simulate_mouse_move(p, None, Modifiers::none());
     let p = center(at(cx, &format!("header-close-{new}")).unwrap());

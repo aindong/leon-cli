@@ -72,7 +72,7 @@ pub struct Event {
     pub mods: Mods,
 }
 
-/// The report mode alacritty's flags name, else X10 when the program set `?9` (`X10Scanner`).
+/// The report mode alacritty's flags name, else X10 when the program set `?9` (`terminal::Escapes`).
 pub fn report(mode: TermMode, x10: bool) -> Option<Report> {
     [
         (TermMode::MOUSE_MOTION, Report::Motion),
@@ -163,64 +163,4 @@ pub fn encode(e: &Event, m: &Mode) -> Option<Vec<u8>> {
         }
     }
     Some(out)
-}
-
-/// Follows `CSI ? Pm h` / `CSI ? Pm l` for mode 9 (X10 mouse), which alacritty doesn't parse,
-/// across reads. A sequence's parameters are kept up to `MAX_PARAMS` bytes; a longer one is
-/// dropped, so a program can't make it buffer without bound.
-#[derive(Debug, Default)]
-pub struct X10Scanner {
-    on: bool,
-    state: Scan,
-    params: Vec<u8>,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-enum Scan {
-    #[default]
-    Text,
-    Esc,
-    Csi,
-    Params,
-}
-
-const MAX_PARAMS: usize = 64;
-
-impl X10Scanner {
-    pub fn on(&self) -> bool {
-        self.on
-    }
-
-    pub fn feed(&mut self, bytes: &[u8]) {
-        for &b in bytes {
-            self.state = match (self.state, b) {
-                (_, 0x1b) => Scan::Esc,
-                (Scan::Esc, b'[') => Scan::Csi,
-                (Scan::Esc, b'c') => {
-                    self.on = false; // RIS
-                    Scan::Text
-                }
-                (Scan::Csi, b'?') => {
-                    self.params.clear();
-                    Scan::Params
-                }
-                (Scan::Params, b'0'..=b'9' | b';') if self.params.len() < MAX_PARAMS => {
-                    self.params.push(b);
-                    Scan::Params
-                }
-                (Scan::Params, b'h' | b'l') => {
-                    // the mouse modes replace each other (xterm): setting or resetting another ends X10
-                    for p in self.params.split(|&c| c == b';') {
-                        match p {
-                            b"9" => self.on = b == b'h',
-                            b"1000" | b"1001" | b"1002" | b"1003" => self.on = false,
-                            _ => {}
-                        }
-                    }
-                    Scan::Text
-                }
-                _ => Scan::Text,
-            };
-        }
-    }
 }

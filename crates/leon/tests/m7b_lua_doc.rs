@@ -1,4 +1,4 @@
-//! M7b criterion 7 (.agent/plans/2026-11-14-m7b-ship.md): docs/lua.md's examples run. A fenced
+//! M7b criterion 7 (.agent/plans/2026-11-14-m7b-ship.md): the examples in docs/lua.md and docs/lua/ run. A fenced
 //! block tagged `lua` is a config and must pass `leon config check`; one tagged `lua script` must
 //! exit 0 under `leon do -e` on a private server. Neither may print a warning.
 
@@ -26,8 +26,19 @@ fn lua_blocks(doc: &str) -> Vec<(String, String)> {
     out
 }
 
+/// docs/lua.md and its pages in docs/lua/.
 fn doc() -> String {
-    std::fs::read_to_string(help_walk::repo().join("docs/lua.md")).expect("docs/lua.md exists")
+    let dir = help_walk::repo().join("docs/lua");
+    let mut pages: Vec<_> = std::fs::read_dir(&dir)
+        .expect("docs/lua/ exists")
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "md"))
+        .collect();
+    pages.sort();
+    assert!(pages.len() >= 4, "docs/lua/ has the Lua pages: {pages:?}");
+    pages.into_iter().fold(std::fs::read_to_string(dir.with_extension("md")).expect("docs/lua.md exists"), |all, p| {
+        all + &std::fs::read_to_string(p).unwrap()
+    })
 }
 
 #[test]

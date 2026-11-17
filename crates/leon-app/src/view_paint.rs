@@ -37,7 +37,7 @@ pub(super) enum Mark {
 }
 
 /// Columns `from..=to` of view row `row`, drawn as `mark`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct CellMark {
     pub(super) row: usize,
     pub(super) from: usize,
@@ -56,20 +56,28 @@ pub(super) fn terminal_canvas(
     active: bool,
     (family, font_size, theme): (SharedString, f32, Theme),
     (stats, painted): (Rc<RefCell<Stats>>, scroll::PaintedMap),
+    fits: bool,
 ) -> impl IntoElement {
     let family2 = family.clone();
     canvas(
         move |bounds, window, _| {
             let (cell_w, line_h) = cell_size(window, &family2, font_size);
             let (rows, cols) = cells_in(bounds.size.width, bounds.size.height, cell_w, line_h);
-            app.fit(&sid, &block_id, rows, cols);
+            if fits {
+                app.fit(&sid, &block_id, rows, cols);
+            }
             (frame, cell_w, line_h, (rows as usize, cols as usize), block_id)
         },
         move |bounds, (frame, cell_w, line_h, size, id), window, cx| {
             let p = scroll::Painted { origin: bounds.origin, cell: (cell_w, line_h), size };
-            painted.borrow_mut().insert(id, p);
             paint_frame(&frame, &marks, &theme, bounds, (cell_w, line_h), (&family, font_size), active, window, cx);
-            stats.borrow_mut().painted();
+            if stats.borrow().enabled {
+                let cursor = frame.cursor.as_ref().map(|c| (c.line, c.col));
+                let text =
+                    stats.borrow().wants_text() && frame.rows.iter().flatten().any(|s| !s.text.trim().is_empty());
+                stats.borrow_mut().painted(&id, cursor, text);
+            }
+            painted.borrow_mut().insert(id, p);
         },
     )
     .size_full()

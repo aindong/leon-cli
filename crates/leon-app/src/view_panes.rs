@@ -2,13 +2,19 @@
 
 use super::*;
 
+/// What a drawn frame showed, for the bookkeeping after it (`drew_frame`): the model can move
+/// between the frame and then.
+pub(super) struct Shown {
+    /// (session, block) input went to, on `app`'s machine.
+    target: Option<(String, String)>,
+    active: bool,
+    app: Rc<Remote>,
+}
+
 /// What every tile of one frame shares.
 pub(super) struct Tiling {
-    pub(super) sid: String,
-    pub(super) active: bool,
     pub(super) target: Option<String>,
     pub(super) several: bool,
-    pub(super) stats: Rc<RefCell<Stats>>,
 }
 
 impl Workspace {
@@ -37,10 +43,8 @@ impl Workspace {
         w: &leon_core::Window,
         terms: Panes,
         window: &Window,
-        stats: Rc<RefCell<Stats>>,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &self.theme;
         let size = self.pane_area(window);
         let view = window.viewport_size();
         let origin = (f32::from(view.width) - size.0, f32::from(view.height) - size.1);
@@ -57,19 +61,27 @@ impl Workspace {
             shift(&mut d.rect);
             shift(&mut d.split);
         }
+        // while panes move: where they are this frame, in drawing order, and no dividers
+        if let Some(frame) = self.layout_tiles(w) {
+            l.panes = frame.iter().map(|(id, r)| panes::Pane { block_id: id.clone(), rect: *r }).collect();
+        }
+        if self.layout_moving_panes() {
+            l.dividers.clear();
+        }
         let tiling = Tiling {
-            sid: self.session_id.clone().unwrap_or_default(),
-            active: window.is_window_active(),
             target: target(w).map(str::to_string),
             several: l.panes.len() + placed.docks.len() + placed.floats.len() > 1,
-            stats,
         };
-        let mut out =
-            div().debug_selector(|| sel("panes-area".into())).flex_1().relative().overflow_hidden().bg(rgb(t.chrome));
-        self.app.watch(terms.clone()); // only what is on screen is pushed
+        let mut out = div().debug_selector(|| sel("panes-area".into())).flex_1().relative().overflow_hidden().child({
+            // a ghost tile fills itself like the others (the translucent look's holes)
+            let see: Panes = terms.iter().chain(self.layout_ghosts()).cloned().collect();
+            self.render_gaps(&l, &placed, &see)
+        });
         for p in &l.panes {
             if terms.contains(&p.block_id) {
                 out = out.child(self.pane_tile("pane", &p.block_id, p.rect, None, &tiling, cx));
+            } else if self.layout_ghosts().contains(&p.block_id) {
+                out = out.child(self.ghost_tile(&p.block_id, p.rect));
             }
         }
         for (i, d) in l.dividers.iter().enumerate() {
@@ -96,12 +108,19 @@ impl Workspace {
                     ),
             );
         }
-        self.render_overlays(out, placed, &terms, &tiling, (size, origin), cx)
+        let veil = self.veil();
+        self.render_overlays(out, placed, &terms, &tiling, (size, origin), cx).when(veil > 0., |d| {
+            // a tab or session switch fades in: the chrome over it, fading out (cached grids can't
+            // be drawn faint, so the veil goes over them, as the overview's does)
+            let veil = gpui::Hsla::from(rgb(self.theme.chrome)).opacity(veil);
+            d.child(div().debug_selector(|| sel("panes-veil".into())).absolute().size_full().bg(veil))
+        })
     }
 
     /// One pane's tile at `rect`: its header (always on a float or drawer, which `grab` moves when
-    /// given), its terminal, the find bar and jump labels, and the focus mark. `kind` names it in
-    /// tests (`pane-`, `float-`, `dock-`).
+    /// given), its terminal, the find bar and jump labels, and the focus mark. All but the find bar
+    /// (a control the user opened) are in the pane's own theme, faded without the focus. `kind`
+    /// names it in tests (`pane-`, `float-`, `dock-`).
     pub(super) fn pane_tile(
         &self,
         kind: &str,
@@ -111,35 +130,37 @@ impl Workspace {
         tiling: &Tiling,
         cx: &mut Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
-        let t = &self.theme;
+        let t = &self.pane_theme(id);
         let focused = tiling.target.as_deref() == Some(id);
         let id = id.to_string();
-        let view = self.drawn(&id);
-        let marks = self.pane_marks(&id, &view);
-        let canvas = terminal_canvas(
-            self.app.clone(),
-            (tiling.sid.clone(), id.clone()),
-            (view.frame, marks),
-            tiling.active && focused,
-            (self.font_family.clone(), self.font_size, self.theme),
-            (tiling.stats.clone(), self.term.painted.clone()),
-        );
+        let canvas = self.grid_element(&id);
         let headers = self.settings.pane_headers || kind != "pane";
-        let finding = self.term.find.as_ref().is_some_and(|f| f.block == id);
+        let finding = self.find_drawn(&id).is_some(); // open here, or fading out
         let on_link = self.term.hovered.as_ref().is_some_and(|(b, _)| *b == id);
         // built only when shown: building an element notes it as drawn (`sel`)
         let header = headers.then(|| match grab {
             Some(g) => div()
                 .on_mouse_down(MouseButton::Left, self.grab_listener(&id, g, cx))
-                .child(self.render_header(&id, focused, rect.w, cx))
+                .child(self.header_section(&id, rect.w, cx))
                 .into_any_element(),
-            None => self.render_header(&id, focused, rect.w, cx).into_any_element(),
+            None => self.header_section(&id, rect.w, cx),
         });
         let name = format!("{kind}-{id}");
         div()
             .id(SharedString::from(name.clone()))
             .debug_selector(|| sel(name))
             .group(SharedString::from(format!("pane-{id}")))
+            .on_hover({
+                let id = id.clone();
+                cx.listener(move |ws, on: &bool, _, cx| {
+                    if *on {
+                        ws.hovered_pane = Some(id.clone());
+                    } else if ws.hovered_pane.as_ref() == Some(&id) {
+                        ws.hovered_pane = None;
+                    }
+                    cx.notify();
+                })
+            })
             .absolute()
             .left(px(rect.x))
             .top(px(rect.y))
@@ -147,9 +168,9 @@ impl Workspace {
             .h(px(rect.h))
             .flex()
             .flex_col()
-            .rounded(px(6.))
+            .rounded(px(crate::glass::TILE_RADIUS))
             .overflow_hidden()
-            .bg(rgb(t.bg))
+            .bg(self.pane_fill(kind, t))
             .children(header)
             // with headers off the find bar floats over the pane, so its size stays
             .when(!headers && finding, |d| {
@@ -160,7 +181,7 @@ impl Workspace {
                         .left_0()
                         .right_0()
                         .bg(rgb(t.bg))
-                        .child(self.render_header(&id, focused, rect.w, cx)),
+                        .child(self.header_section(&id, rect.w, cx)),
                 )
             })
             .child(self.terminal_area(&id, on_link, cx).child(canvas))
@@ -227,30 +248,51 @@ impl Workspace {
 
     /// The user arriving at a pane (another pane, tab or session selected, or the window made active)
     /// has seen its done and error: clear them (docs/agents.md, "Lifetime"). Not while they stay on it, so a
-    /// finish in the pane they are looking at still shows until they come back.
-    fn note_focus(&mut self, window: &Window) {
-        let now = self.target().map(|(_, id, _)| (id, window.is_window_active()));
+    /// finish in the pane they are looking at still shows until they come back. After a frame
+    /// (`drew_frame`), for what that frame `showed`: a hidden window draws nothing, so a pane it
+    /// moves to unseen has seen nothing. The poll tells the server.
+    pub(super) fn note_focus(&mut self, showed: Shown) {
+        let now = showed.target.as_ref().map(|(_, id)| (id.clone(), showed.active));
         let arrived = match (&self.seen_focus, &now) {
             (_, None) => false,
             (Some((was, was_active)), Some((id, active))) => was != id || (*active && !was_active),
             (None, Some(_)) => true,
         };
         self.seen_focus = now;
-        if let Some((sid, id, _)) = self.target().filter(|_| arrived) {
+        if let Some((sid, id)) = showed.target.filter(|_| arrived) {
             let event = json!({ "session_id": sid, "block_id": id, "event": { "type": "focus" } });
-            self.app.send_then("block.event", event, drop); // a pane already gone is fine
+            self.focus_event = Some((showed.app, event));
+            (self.wake)();
         }
     }
-}
 
-impl Render for Workspace {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.note_focus(window);
-        if std::mem::take(&mut self.refit) {
-            self.set_font_size(self.font_size, window, cx); // a new font from init.lua
-        }
+    /// The root's last element: its paint ends the frame for `LEON_FRAME_STATS`, whether or not a
+    /// pane's grid painted in it.
+    fn frame_mark(&self) -> impl IntoElement {
+        let stats = self.stats.clone();
+        canvas(
+            |_, _, _| (),
+            move |_, _, window, _| {
+                if stats.borrow().enabled && stats.borrow_mut().frame_end() {
+                    window.on_next_frame(move |_, _| stats.borrow_mut().presented());
+                }
+            },
+        )
+        .absolute()
+        .w(px(0.))
+        .h(px(0.))
+    }
+
+    /// Before a frame: what render draws from, brought up to date with the model and the window
+    /// (ADR R5). It runs after every notify of the workspace, before the frame that notify asks
+    /// for (the observer in `with_hosts`), so render, which may run more often (a hover, a
+    /// resize), only draws. It takes no `cx`: it can't notify, which would run it again.
+    pub(super) fn prepare(&mut self) {
+        self.prepares += 1;
         self.note_slides();
-        DRAWN.with(|d| d.borrow_mut().clear());
+        self.follow_theme();
+        self.settle_overview();
+        self.drop_unshown_thumbs();
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
         if self.term.find.as_ref().is_some_and(|f| !shown.contains(&f.block)) {
@@ -259,30 +301,67 @@ impl Render for Workspace {
         for id in &shown {
             self.sync_pane(id);
         }
-        if self.find_due() {
+        // a window drawing nothing (hidden, covered) asks the server again once it draws (`next_poll`)
+        if self.find_due() && self.undrawn < 2 {
             self.run_find();
-        }
-        let stats = self.stats.clone();
-        if stats.borrow().enabled {
-            stats.borrow_mut().render_start = Some(Instant::now());
         }
         let rows = self.rows();
         self.settle(&rows);
         self.note_recent();
-        let current = rows.iter().find(|r| Some(&r.id) == self.session_id.as_ref());
-        let body = match self.shown() {
-            _ if self.stopped => self.render_stopped(cx).into_any_element(),
-            Some((w, terms)) => self.render_panes(&w, terms, window, stats, cx).into_any_element(),
-            None => self.render_empty(cx).into_any_element(),
+        // after `settle`, which may have moved to another session: the fades are aimed at the
+        // very panes the frame draws
+        let on_screen = self.shown().map(|(_, ids)| ids).unwrap_or_default();
+        self.note_fades(&on_screen);
+        // only what is drawn is pushed: the panes on screen, and every thumbnail's (view_overview.rs);
+        // the panes stay watched under the overview, so they are current when it closes, even when
+        // a filter hid their card
+        if !self.stopped {
+            self.watch_screens(&on_screen);
+        }
+        self.note_overlays(); // last: what each overlay shows now, and its fade
+    }
+}
+
+impl Render for Workspace {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        drawing(cx);
+        self.renders += 1;
+        // after the frame: undrawn redraws back to none, the pane it showed noted as seen, and the
+        // poll woken if that is news or something timed is due sooner (ADR R5, frame bookkeeping)
+        let showed = Shown {
+            target: self.target().map(|(sid, id, _)| (sid, id)),
+            active: window.is_window_active(),
+            app: self.app.clone(),
         };
-        let places = self.places();
-        let column = div()
-            .flex_1()
-            .flex()
-            .flex_col()
-            .min_w(px(0.))
-            .when(self.titlebar_shown() && !self.stopped, |d| d.child(self.render_titlebar(current, cx)))
-            .child(body);
+        cx.defer_in(window, move |ws, _, cx| ws.drew_frame(showed, cx));
+        self.ask_frame(window); // the next step of whatever moves (R6)
+        let stats = self.stats.clone();
+        if stats.borrow().enabled {
+            stats.borrow_mut().render_start = Some(Instant::now());
+        }
+        let body_shown = self.shown();
+        let preview = self.render_preview(window, cx).filter(|_| !self.stopped);
+        // the overview takes the sidebar's and the panes' place, in the same root as they are, so
+        // the menu's actions and the window's listeners still reach the workspace
+        let main: Vec<gpui::AnyElement> = if self.overview_shown() && !self.stopped {
+            vec![self.render_overview(window, cx)]
+        } else {
+            let body = match body_shown {
+                _ if self.stopped => self.render_stopped(cx).into_any_element(),
+                Some((w, terms)) => self.render_panes(&w, terms, window, cx).into_any_element(),
+                None => self.render_empty(cx).into_any_element(),
+            };
+            let column = div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .min_w(px(0.))
+                .when(self.titlebar_shown() && !self.stopped, |d| d.child(self.titlebar_section(cx)))
+                .child(body);
+            // a stopped server's sessions are gone: nothing of them stays drawn
+            let sidebar = self.places().sidebar.filter(|_| !self.stopped).map(|_| self.sidebar_section(cx));
+            sidebar.into_iter().chain([column.into_any_element()]).collect()
+        };
         div()
             .key_context("Workspace")
             .track_focus(&self.focus)
@@ -311,16 +390,17 @@ impl Render for Workspace {
             .on_action(cx.listener(|ws, _: &OpenSettings, w, cx| ws.run_action("client.settings", None, "menu", w, cx)))
             .size_full()
             .flex()
-            .bg(rgb(self.theme.chrome))
+            .bg(self.root_fill())
             .font_family(".SystemUIFont")
             .text_size(px(UI_TEXT))
             .text_color(rgb(self.theme.text))
-            // a stopped server's sessions are gone: nothing of them stays drawn
-            .children(places.sidebar.filter(|_| !self.stopped).map(|list| self.render_sidebar(&rows, list, cx)))
-            .child(column)
+            .children(main)
             .children(self.render_stale(window))
+            .children(self.render_update(cx).filter(|_| !self.stopped))
+            .children(preview)
             // last, so it paints over the panes: GPUI paints children in order
             .children(self.render_overlay(cx).filter(|_| !self.stopped))
+            .child(self.frame_mark())
     }
 }
 

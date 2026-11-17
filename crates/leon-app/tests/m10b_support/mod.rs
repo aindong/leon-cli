@@ -18,6 +18,7 @@ pub fn open_with<'a>(
     app: &Rc<Embedded>,
     settings: Option<PathBuf>,
 ) -> (Entity<Workspace>, &'a mut VisualTestContext) {
+    no_tailscale();
     cx.update(view::init);
     let app = app.clone();
     let (ws, vcx) = cx.add_window_view(move |window, cx| {
@@ -35,6 +36,13 @@ pub fn at(cx: &mut VisualTestContext, sel: &str) -> Option<Bounds<Pixels>> {
     cx.run_until_parked();
     if !view::drawn().contains(sel) {
         return None;
+    }
+    // drawn by a cached view: GPUI notes an element's bounds only when it prepaints, and keeps
+    // them, so a frame that reused the view left the bounds of the last one that drew it; draw a
+    // frame of every view, and nothing after it (the update draws as it ends, no task in between).
+    // Only for those: a frame costs the time a slide is timed by.
+    if view::drawn_cached(sel) {
+        cx.update(|window, _| window.refresh());
     }
     cx.debug_bounds(Box::leak(sel.to_string().into_boxed_str()))
 }

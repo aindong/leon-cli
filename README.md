@@ -9,9 +9,9 @@ or through your coding agent, which can open a pane beside itself, run your test
 the result. Programs can report whether they are working, blocked or done, so you can see which
 one needs you. It runs on macOS and Linux (the app is macOS only for now) and is written in Rust.
 
-![The leon app: splitting a tab, switching sessions with ⌘K, a scratch drawer, and an agent that reports it is working and then blocked](docs/images/demo-app.gif)
+![The leon app: splitting a tab, switching tabs, splitting from the command palette, a git popup, switching sessions with ⌘K, and an agent working, then blocked](docs/images/demo-app.gif)
 
-![The leon command in a terminal: a new session, a run that waits for its program, typing into Python and waiting for its answer, then leon attach and a split](docs/images/demo-cli.gif)
+![The leon command: a new session, a run that waits, typing into Python and waiting for its answer, then leon attach and a split](docs/images/demo-cli.gif)
 
 ## Features
 
@@ -23,7 +23,7 @@ one needs you. It runs on macOS and Linux (the app is macOS only for now) and is
   them, read their screens and wait for programs, with fixed exit codes and `--json` output.
   `leon attach` shows a session in any terminal, over ssh too.
 - **The macOS app.** Sidebar or titlebar tabs, splits, floating panes, a scratch drawer, a
-  command palette, a session switcher, scrollback with find and copy mode, and themes.
+  command palette, a session switcher, scrollback with find and copy mode, and eight themes.
 - **Agents.** `leon skill setup` teaches Claude Code and Codex to work in panes beside
   themselves, and their panes offer to resume the same conversation after a restart.
 - **Status and attention.** A program that writes an OSC 7501 report (agents do) shows its state
@@ -37,64 +37,56 @@ one needs you. It runs on macOS and Linux (the app is macOS only for now) and is
 
 ## Install
 
-There is no published release yet, so build leon from source. You need a Rust toolchain
-([rustup](https://rustup.rs)) and git.
-
-### macOS
-
-You need macOS 11 or later. From a checkout of this repository:
+### Homebrew
 
 ```sh
-scripts/install.sh
+brew install --cask aindong/leon/leon   # macOS: Leon.app, with the leon command
+brew install aindong/leon/leon          # the CLI alone, on macOS or Linux
 ```
 
-That builds `Leon.app`, copies it to `~/Applications`, and links the `leon` command into
-`~/.local/bin` (use `--prefix DIR` for `DIR/bin`). It never uses root, prints each thing it does,
-is safe to run again, and refuses to replace anything at those paths that it didn't install.
-`scripts/install.sh --uninstall` removes both. Open **Leon** from Finder, Spotlight or the Dock, or
-type `leon`. To build only the app, `scripts/bundle.sh` writes `target/release/Leon.app`.
-
-The app is a client of the leon server. It attaches to the one running (from the shell or an
-earlier launch) or starts it. Quitting the app leaves the server and your programs running;
-`leon server stop`, or **Quit and End All Sessions…** in the leon menu, ends them.
-
-### Linux
-
-On Linux leon is the server, the CLI and `leon attach` (agents and Lua scripts too); the app isn't
-there yet, so `leon` alone in a terminal runs `leon attach`. Build it with `cargo`:
+Pick one: the cask's `leon` is the one inside the app. `brew upgrade` brings new releases.
+Leon.app is not notarized by Apple, so macOS will not open it while it carries the quarantine flag
+that Homebrew puts on a download. After the cask installs, and before you open the app, remove it:
 
 ```sh
-cargo build --release -p leon
+xattr -dr com.apple.quarantine /Applications/Leon.app
 ```
 
-That gives a headless `target/release/leon`; put it on your `PATH`. It needs glibc 2.34 or newer
-(Debian 12, Ubuntu 22.04, RHEL 9 and later). The socket goes in `$XDG_RUNTIME_DIR/leon` when your
-session sets it. With Docker you can build packages instead:
+### From a release
+
+Each release is at <https://github.com/aindong/leon-cli/releases/latest>: `Leon-<version>-macos-<arch>.zip`
+(Leon.app), a tarball of the CLI for macOS and for Linux, and a `.deb`, each for arm64 and x86_64.
+On macOS, unzip the app into `/Applications` and run the `xattr` command above (a file from a
+browser is quarantined too). Opened before that, macOS refuses it (it says it could not verify
+Leon is free of malware); run the command and open it again. The CLI tarball for macOS carries
+the flag onto its `leon` as well: after unpacking, run `xattr -dr com.apple.quarantine` on its
+folder. On Linux, with the file for your machine downloaded:
 
 ```sh
-scripts/package-linux.sh                 # or --arch amd64 / --arch arm64
+dpkg -i leon_*.deb                               # Debian or Ubuntu, as root
+tar xzf leon-*-linux.tar.gz -C ~/.local          # anywhere else: unpack it,
+ln -s ~/.local/leon-*-linux/leon ~/.local/bin/   # and put its leon on your PATH
 ```
 
-That writes a tarball and a `.deb` to `target/linux/<arch>/` and checks that both install and run
-in clean containers. Install the `.deb` on Debian or Ubuntu with `dpkg` (as root):
+Every file is signed: [docs/releases.md](docs/releases.md#checking-a-download) says how to check
+one.
+
+### Updating
 
 ```sh
-dpkg -i target/linux/$(dpkg --print-architecture)/leon_*.deb
+leon self-update --check   # is there a newer release?
+leon self-update           # download it, check its signature, and replace this leon
 ```
 
-or unpack the tarball anywhere and put its `leon` on your `PATH`:
+leon updates only when you ask, and checks the release's signature before it installs anything.
+A leon from Homebrew is updated by `brew upgrade`, and one from a `.deb` by installing the new
+`.deb`; `leon self-update` tells you which. A running server keeps the old version until
+`leon server stop`. The details are in [docs/updates.md](docs/updates.md).
 
-```sh
-tar xzf target/linux/*/leon-*-"$(uname -m)"-linux.tar.gz -C ~/.local
-ln -s ~/.local/leon-*-linux/leon ~/.local/bin/leon
-```
+### From source
 
-### Release files
-
-`scripts/release.sh` builds, from a clean clone of one commit, the files a release will have:
-`Leon-<version>-macos-arm64.zip` (Leon.app, signed ad hoc and not notarized), a tarball and a
-`.deb` for Linux on arm64 and x86_64, and `SHA256SUMS`. It runs on macOS and needs Docker for the
-Linux packages. `leon --version` names the release and the commit it was built from.
+To build leon yourself, `scripts/install.sh` on macOS or `cargo` on Linux:
+[docs/install.md](docs/install.md) has the steps, and the files a release has.
 
 ## The first five commands
 
@@ -164,28 +156,12 @@ leon hosts add devbox ssh://me@devbox.example.com
 leon -H devbox run -c /home/me/app -- make test   # runs on the devbox, in its /home/me/app
 leon -H devbox attach               # its sessions, in this terminal
 leon hosts check
+leon hosts add --tailscale          # from your tailnet (Tailscale SSH: no keys)
 ```
 
-A dropped Wi-Fi link is retried for a minute: `leon events` and the app resume without losing or
-repeating an event, and `leon attach` says it is reconnecting, then reconnects and redraws. Keys
-typed while the link is stalled or down arrive whole or not at all, and the status bar says how many
-were not sent (a stall that starts mid-word, within a second of the last reply, can still catch the
-keys already on their way). Use ssh keys or an agent, because each connection is its own ssh session.
+Dropped links, keys typed while one is down, and the hosts in the app's sidebar are in
+[docs/remote-hosts.md](docs/remote-hosts.md).
 
-The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
-and tabs and a dot for its connection. A remote pane works like a local one, with the host's name in
-its header; New Session, New Tab and splits act on the machine of the focused pane, and the palette
-has New Session on each machine and Add Host… (a label, then an `ssh://` endpoint). Click a host's
-label to fold it away. The app's ssh never asks for a password. A host that needs one says
-`needs login: run leon hosts check devbox in a terminal`; do that once (accept the host key, unlock
-your key), and the app's next try gets in. While a link is down the host's panes keep their last
-screens under a "reconnecting" note.
-
-![The sidebar with This Mac and a devbox, each with its sessions and tabs](docs/images/m16b-hosts.png)
-
-![A pane on the devbox, focused, with the host's name in its header](docs/images/m16b-remote-pane.png)
-
-![A host that can't be reached, with ssh's reason under its label](docs/images/m16b-unreachable.png)
 
 ## Let an agent drive it
 
@@ -212,7 +188,22 @@ what it created. See [docs/agents.md](docs/agents.md).
 Programs report what they're doing (working, blocked, done), and the app shows it in two places.
 The tab's row gets a symbol, and the pane's header gets the symbol with the program's own words.
 
-![The leon app: three sessions in the sidebar with their tabs as rows, a tab split into three panes, and an agent's progress on its tab row and its pane header](docs/images/app-status.png)
+![The leon app: sessions in the sidebar with their tabs as rows, a tab split in three, and an agent's progress on its row and pane header](docs/images/app-status.png)
+
+With more than one pane in a tab, the panes you aren't in are faded, so your eye stays on
+the focused one. What you are waiting for is never faded: a status symbol keeps its
+colour, and a pane that is blocked, has failed, or finished since you last looked stays at full
+strength. `leon.set("fade_inactive_panes", N)` sets it from 0 (off) to 0.8 (default 0.35).
+
+The window is translucent, tinted by the theme, with text readable over any desktop;
+`leon.set("translucency", 0)` makes it opaque.
+
+![The leon window over a plain blue-to-violet desktop, which shows through its sidebar and title bar](docs/images/app-translucent.png)
+
+Each tab, sidebar row and pane header has an icon for the program in it: an agent, an editor,
+tests, a server, a monitor, ssh or a shell.
+
+![Tabs in the title bar, each with its program's icon: a shell, an agent, an editor, tests, a server, a monitor and ssh](docs/images/app-icons.png)
 
 ⌘K switches to any session, tab or block on any host, the most recent first, and ⌘⇧A lists what
 needs you: blocked first (with what it is waiting for), then errors, finished runs you haven't
@@ -225,47 +216,13 @@ OSC 7501 reports for its own block with `leon notify`:
 leon notify --state blocked --title "Deploy" --body "approve the rollout?"
 ```
 
-![The Activity list in the sidebar: two blocked agents with their questions, a failed deploy, a finished README review and builds in progress, and the blocked count on the toolbar](docs/images/app-activity.png)
+![The Activity list: two blocked agents with questions, a failed deploy, a finished review, builds in progress, the blocked count](docs/images/app-activity.png)
 
 ## App shortcuts
 
-| Keys | Action |
-|---|---|
-| ⌘N | New session |
-| ⌘T | New tab |
-| ⌘D | Split right |
-| ⌘⇧D | Split down |
-| ⌘⌥←, ⌘⌥→, ⌘⌥↑, ⌘⌥↓ | Focus the pane that way |
-| ⌘⇧↩ | Zoom the pane (again to undo) |
-| ⌘W | Close the pane |
-| ⌘⌥F, ⌘⌥⇧F | Float the pane above the others, put it back in the tiles (drag its header to move it, an edge to resize it) |
-| ⌘J | Show or hide the scratch drawer: a shell at the bottom, opened in the focused pane's directory, that keeps running while hidden |
-| ⌘⌃←, ⌘⌃→, ⌘⌃↓ | Dock the pane as a drawer on the left, right or bottom (drag its edge to resize it) |
-| ⌘⇧], ⌘⇧[ | Next, previous tab |
-| ⌘1 … ⌘9 | Go to tab 1–9 |
-| ⌘C, ⌘V | Copy the selection, paste |
-| ⌘A | Select everything in the pane, scrollback too |
-| ⌘F | Find in the pane: ↩ and ⇧↩ step, ⌥C case, ⌥R regex, esc closes |
-| ⌘G, ⌘⇧G | Next, previous match |
-| ⌘⇧C | Copy mode: vi keys over the scrollback (h j k l, w b, 0 $, g ⇧G, ⌃U ⌃D), v and ⇧V select, / and ? search with n and ⇧N, y copies, esc or q leaves |
-| ⌘⇧H | Hints: a label on every URL, path, hash, IP and long number on screen; type one to copy it, in upper case to type it into the pane |
-| ⇧PageUp, ⇧PageDown | Scroll a page back, forward |
-| ⌘↑, ⌘↓ | Scroll to the oldest line, back to the bottom |
-| ⌘B | Show or hide the sidebar |
-| ⌘⇧S | Tabs in the sidebar or in the titlebar (saved for the next launch) |
-| ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
-| ⌘, | Settings: the theme for dark and for light mode, font, notifications, copy on select; each change is written to init.lua |
-| ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
-| ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
-| ⌘=, ⌘⇧=, ⌘-, ⌘0 | Bigger, bigger, smaller, default font size (every pane) |
-| ⌘Q | Quit; every program keeps running (leon › Quit and End All Sessions… ends them) |
+Every key the app has, from ⌘N to ⌘Q, with how to change one, is in
+[docs/shortcuts.md](docs/shortcuts.md).
 
-These are defaults. A `leon.bind` in your `init.lua` replaces one key by key, and `leon.unbind`
-removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow. Every
-button names its action and shortcut on hover. The wheel scrolls a pane back through its
-scrollback; drag to select, option+drag for a rectangle; hold ⌘ over a link to open it with a click.
-A program that asks for the mouse (an editor or `htop`) gets clicks and the wheel; hold shift to
-select anyway.
 
 ## Configuration
 
@@ -296,12 +253,12 @@ leon do name_session label=api
 leon do -e 'print(#leon.session.view().windows .. " tabs")'
 ```
 
-`leon theme import FILE` brings in a color scheme from another terminal's theme file. See
-[docs/lua.md](docs/lua.md) for every setting and function, and [docs/cli/settings.md](docs/cli/settings.md).
+`leon theme import FILE` brings in another terminal's theme. See [docs/lua.md](docs/lua.md) and
+[docs/cli/settings.md](docs/cli/settings.md).
 
 ## Roadmap
 
-leon is at 0.1.0, not yet tagged. What has landed, milestone by milestone, is in
+leon 0.1.0 is the first release. What has landed, milestone by milestone, is in
 [docs/roadmap.md](docs/roadmap.md) and [CHANGELOG.md](CHANGELOG.md). What comes next:
 
 - **The app on Linux.** Linux has the server, the CLI, `leon attach`, agents and Lua; the GPUI app
@@ -323,6 +280,7 @@ leon is at 0.1.0, not yet tagged. What has landed, milestone by milestone, is in
   language, and the compatibility promise. [docs/api.md](docs/api.md): every method.
 - [docs/architecture.md](docs/architecture.md): how it's built.
   [docs/performance.md](docs/performance.md): what it costs, measured.
+- [docs/releases.md](docs/releases.md): how a release is cut and signed, and the manifest format.
 - [CHANGELOG.md](CHANGELOG.md): what changed.
 
 ## Build and test
@@ -336,7 +294,8 @@ cargo fmt --check
 
 GPUI is built with its `runtime_shaders` feature, so you don't need Xcode's Metal toolchain. The
 terminal tests run a real shell in a PTY, and the doc tests run the commands in these docs.
-`scripts/linux-test.sh` runs the tests for everything but the app on Linux, in Docker.
+`scripts/linux-test.sh` runs the tests for everything but the app on Linux, in Docker. The release
+tests sign with a throwaway key, so they need `minisign` and `jq`.
 
 ## License
 

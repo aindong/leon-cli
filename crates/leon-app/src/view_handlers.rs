@@ -271,7 +271,7 @@ impl Workspace {
     /// Start It Again: run this leon as it was started (`leon app` starts the server first), with
     /// its environment (the private LEON_* dirs), then quit. Not GPUI's restart, which `open`s an
     /// unbundled binary in Terminal with none of that environment.
-    pub(super) fn start_again(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn start_again(&mut self, cx: &mut Context<Self>) {
         let exe = match std::env::current_exe() {
             Ok(exe) => exe,
             Err(e) => return eprintln!("leon: can't find leon to start it again: {e}"),
@@ -311,33 +311,11 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Set the terminal font size (clamped) and fit every terminal to it at once, hidden tabs too, so
-    /// `capture` and agents see the new size before the tab is shown.
-    pub(super) fn set_font_size(&mut self, pt: f32, window: &mut Window, cx: &mut Context<Self>) {
+    /// Set the terminal font size (clamped). The panes on screen fit it on the next frame (their
+    /// canvases do); a hidden one keeps its size until it is shown, since a resize reallocates its
+    /// whole history at the new width.
+    pub(super) fn set_font_size(&mut self, pt: f32, cx: &mut Context<Self>) {
         self.font_size = pt.clamp(FONT_SIZES.0, FONT_SIZES.1);
-        let (cell_w, line_h) = cell_size(window, &self.font_family, self.font_size);
-        let area = self.pane_area(window);
-        // (remote, session, block, its terminal's area) for every pane of every window on every
-        // machine, then resize off the lock
-        let mut fits: Vec<(Rc<Remote>, String, String, panes::Rect)> = Vec::new();
-        for (_, remote) in self.hosts.remotes() {
-            let m = remote.model();
-            let out = &mut fits;
-            for s in &m.sessions {
-                for w in &s.windows {
-                    // panes a zoom hides keep their split size; hidden floats and drawers theirs
-                    for (id, rect) in Self::window_rects(s, w, area, self.settings.pane_headers) {
-                        if s.blocks.iter().any(|b| b.id == id) {
-                            out.push((remote.clone(), s.id.clone(), id, rect));
-                        }
-                    }
-                }
-            }
-        }
-        for (remote, sid, id, r) in fits {
-            let (rows, cols) = cells_in(px(r.w), px(r.h), cell_w, line_h);
-            remote.fit(&sid, &id, rows, cols);
-        }
         cx.notify();
     }
 

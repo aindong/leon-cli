@@ -68,7 +68,7 @@ fn labels_copy_and_insert(cx: &mut TestAppContext) {
 fn the_config_adds_patterns(cx: &mut TestAppContext) {
     let s = setup_with_config(r#"leon.set("hint_patterns", { "TICKET-\\d+" })"#);
     let (ws, cx) = open(cx, &s.app);
-    ws.update(cx, |ws, _| ws.sync_keymap());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let id = tab_running(&s, &ws, cx, SCRIPT, "TICKET-42");
     cx.simulate_keystrokes("cmd-shift-h");
     let found = hints(&ws, cx, &id);

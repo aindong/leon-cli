@@ -33,6 +33,7 @@ macro_rules! icons {
 icons! {
     Sidebar => "sidebar",
     Command => "command",
+    Grid => "grid",
     Plus => "plus",
     SplitRight => "split-right",
     SplitDown => "split-down",
@@ -48,6 +49,13 @@ icons! {
     Permission => "permission",
     Auth => "auth",
     Error => "error",
+    ProgramAgent => "program-agent",
+    ProgramEditor => "program-editor",
+    ProgramServer => "program-server",
+    ProgramTest => "program-test",
+    ProgramMonitor => "program-monitor",
+    ProgramRemote => "program-remote",
+    ProgramGeneric => "program-generic",
 }
 
 impl Icon {

@@ -15,3 +15,13 @@ fn the_home_folder_is_a_tilde() {
     assert_eq!(at("/etc/leon/init.lua"), "/etc/leon/init.lua", "outside home: as it is");
     assert_eq!(home_relative(Path::new("/Users/someone/init.lua"), None), "/Users/someone/init.lua", "no HOME");
 }
+
+#[test]
+fn an_error_naming_a_home_file_shows_it_from_home() {
+    use leon_app::settings_window::hide_home;
+    let home = std::path::Path::new("/Users/someone");
+    let e = "can't write /Users/someone/.local/state/leon/hosts.json: denied";
+    assert_eq!(hide_home(e, Some(home)), "can't write ~/.local/state/leon/hosts.json: denied");
+    assert_eq!(hide_home(e, Some(std::path::Path::new("/"))), e, "a home of / changes nothing");
+    assert_eq!(hide_home(e, None), e);
+}

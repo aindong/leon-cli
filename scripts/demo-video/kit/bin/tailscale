@@ -1,0 +1,21 @@
+#!/bin/sh
+# tailscale: a stand-in for the demo, found through LEON_TAILSCALE. It answers only
+# `status --json`, with a made-up tailnet; leon never runs any other tailscale command.
+[ "$1 $2" = "status --json" ] || { echo "demo tailscale: only 'status --json'" >&2; exit 2; }
+cat <<'JSON'
+{
+  "BackendState": "Running",
+  "Self": { "DNSName": "leon-demo.example-tailnet.ts.net.", "OS": "macOS", "UserID": 1001, "Online": true,
+            "TailscaleIPs": ["100.101.12.4"] },
+  "User": { "1001": { "ID": 1001, "LoginName": "demo@example.com", "DisplayName": "Demo" } },
+  "CurrentTailnet": { "Name": "example-tailnet.ts.net", "MagicDNSSuffix": "example-tailnet.ts.net", "MagicDNSEnabled": true },
+  "Peer": {
+    "nodekey:devbox": { "DNSName": "devbox.example-tailnet.ts.net.", "OS": "linux", "Online": true,
+      "TailscaleIPs": ["100.101.12.20"], "sshHostKeys": ["ssh-ed25519 AAAAdemo"] },
+    "nodekey:gpubox": { "DNSName": "gpu-box.example-tailnet.ts.net.", "OS": "linux", "Online": true,
+      "TailscaleIPs": ["100.101.12.31"] },
+    "nodekey:ci": { "DNSName": "ci-box.example-tailnet.ts.net.", "OS": "linux", "Online": false,
+      "TailscaleIPs": ["100.101.12.42"] }
+  }
+}
+JSON

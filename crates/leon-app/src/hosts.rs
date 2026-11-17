@@ -1,11 +1,13 @@
-//! The machines the window shows (docs/architecture.md, "The app's hosts"): This Mac, then each
-//! host from the hosts list, reached through a `leon_hosts::Link` whose ssh never prompts. A thread
-//! per connection attempt does the slow part; the UI thread picks the result up in `poll`.
+//! The machines the window shows (docs/architecture/hosts.md, "The app's hosts"): This Mac, then
+//! each host from the hosts list, reached through a `leon_hosts::Link` whose ssh never prompts. A
+//! thread per connection attempt does the slow part; the UI thread picks the result up in `poll`.
 
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
+use leon_hosts::tailscale::{self, Tailnet};
 use leon_hosts::{Host, Link};
 
 use crate::remote::{LinkState, Remote};
@@ -44,12 +46,33 @@ impl HostState {
     }
 }
 
+/// A host as Settings › Remote Hosts lists it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HostLine {
+    pub label: String,
+    /// Its `ssh://` endpoints.
+    pub endpoint: String,
+    pub connected: bool,
+    /// Why not, while it isn't (`unreachable: …`, `needs login: …`).
+    pub note: Option<String>,
+    /// `tailnet: LOGIN` for a machine on this machine's tailnet.
+    pub tailnet: Option<String>,
+}
+
 /// Sort a failure: in BatchMode ssh fails where it would have asked something, and those need a
 /// terminal; anything else is a host that can't be reached.
 pub fn classify(why: String) -> HostState {
     let why = leon_hosts::shown_text(&why, 200); // the host's words go on screen
     let l = why.to_lowercase();
-    let asks = ["permission denied", "host key verification failed", "passphrase", "password", "authentication"];
+    // the last: Tailscale SSH's browser check ("To authenticate, visit: …")
+    let asks = [
+        "permission denied",
+        "host key verification failed",
+        "passphrase",
+        "password",
+        "authentication",
+        "to authenticate",
+    ];
     match asks.iter().any(|w| l.contains(w)) {
         true => HostState::NeedsLogin(why),
         false => HostState::Unreachable(why),
@@ -111,9 +134,19 @@ impl Machine {
     }
 }
 
+/// A tailnet status read: the tailnet, or why there is none.
+pub type Status = Result<Arc<Tailnet>, String>;
+
 pub struct Hosts {
     machines: Vec<Machine>,
     wake: Arc<dyn Fn() + Send + Sync>,
+    /// The last tailnet status read (None until one comes), kept while the next is read.
+    tailnet: Arc<Mutex<Option<Status>>>,
+    /// Counts the reads that came in, so the window redraws when one does.
+    tailnet_reads: Arc<AtomicU64>,
+    /// A read is running: one at a time, so a hung client costs one process, and an older read
+    /// can't land after a newer one.
+    reading: Arc<AtomicBool>,
 }
 
 impl Hosts {
@@ -121,9 +154,53 @@ impl Hosts {
     /// thread) whenever a host's state or model changes.
     pub fn new(local: Rc<Remote>, hosts: Vec<Host>, wake: Arc<dyn Fn() + Send + Sync>) -> Hosts {
         let this_mac = Machine::new(THIS_MAC.into(), None, Some(local));
-        let mut out = Hosts { machines: vec![this_mac], wake };
+        let any = !hosts.is_empty();
+        let mut out = Hosts {
+            machines: vec![this_mac],
+            wake,
+            tailnet: Arc::default(),
+            tailnet_reads: Arc::default(),
+            reading: Arc::default(),
+        };
         hosts.into_iter().for_each(|h| out.add(h));
+        if any {
+            out.read_tailnet(); // which hosts are tailnet machines
+        }
         out
+    }
+
+    /// Read the tailnet's status again on a thread of its own (it may take up to its deadline);
+    /// `tailnet` has it once it comes. False when there is no Tailscale client here.
+    pub fn read_tailnet(&self) -> bool {
+        if tailscale::client().is_none() {
+            return false;
+        }
+        if self.reading.swap(true, Ordering::SeqCst) {
+            return true;
+        }
+        let (into, wake, reading) = (self.tailnet.clone(), self.wake.clone(), self.reading.clone());
+        let reads = self.tailnet_reads.clone();
+        let read = move || {
+            let status = tailscale::status().map(Arc::new);
+            *into.lock().unwrap_or_else(PoisonError::into_inner) = Some(status);
+            reads.fetch_add(1, Ordering::SeqCst);
+            reading.store(false, Ordering::SeqCst);
+            wake();
+        };
+        if std::thread::Builder::new().name("leon-tailnet".into()).spawn(read).is_err() {
+            self.reading.store(false, Ordering::SeqCst);
+        }
+        true
+    }
+
+    /// The last tailnet status read, if one has come.
+    pub fn tailnet(&self) -> Option<Status> {
+        self.tailnet.lock().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
+    /// How many tailnet reads have come in (the window's signature: a new one is drawn).
+    pub fn tailnet_reads(&self) -> u64 {
+        self.tailnet_reads.load(Ordering::SeqCst)
     }
 
     /// Show `host` and start connecting to it.
@@ -131,6 +208,23 @@ impl Hosts {
         let mut m = Machine::new(host.label.clone(), Some(host), None);
         Self::spawn(&mut m, self.wake.clone());
         self.machines.push(m);
+    }
+
+    /// Stop showing the host at `i` (never This Mac); its link closes.
+    pub fn remove(&mut self, i: usize) {
+        if i > 0 && i < self.machines.len() {
+            self.machines.remove(i);
+        }
+    }
+
+    /// Call the host at `i` (never This Mac) `label` from now on.
+    pub fn rename(&mut self, i: usize, label: &str) {
+        if let Some(m) = self.machines.get_mut(i).filter(|m| !m.is_local()) {
+            m.label = label.to_string();
+            if let Some(h) = &mut m.host {
+                h.label = label.to_string();
+            }
+        }
     }
 
     pub fn machines(&self) -> &[Machine] {
@@ -148,6 +242,11 @@ impl Hosts {
     /// The remotes of the hosts that are connected (or reconnecting), with their index.
     pub fn remotes(&self) -> impl Iterator<Item = (usize, &Rc<Remote>)> {
         self.machines.iter().enumerate().filter_map(|(i, m)| m.remote.as_ref().map(|r| (i, r)))
+    }
+
+    /// When the next host's retry is due (the poll's clock).
+    pub fn next_retry(&self) -> Option<Instant> {
+        self.machines.iter().filter(|m| m.remote.is_none()).filter_map(|m| m.retry_at).min()
     }
 
     /// Pick up finished attempts, drop links that gave up, start due retries. True when a host
@@ -210,7 +309,7 @@ fn connect(host: &Host) -> Result<(Remote, Link), HostState> {
     let endpoint = host.endpoint().map_err(HostState::Unreachable)?;
     let link = Link::open(&host.label, &endpoint, true).map_err(|e| HostState::Unreachable(e.to_string()))?;
     link.never_prompt(); // no terminal to answer in: ssh fails instead, and the row says so
-    match Remote::connect_retrying(link.socket(), leon_server::resume::HOLD) {
+    match Remote::connect_retrying(link.socket(), leon_server::resume::link_hold()) {
         Ok(r) => Ok((r, link)),
         Err(e) => Err(classify(link.last_error().unwrap_or(e))),
     }
@@ -226,6 +325,7 @@ mod tests {
             "me@box: Permission denied (publickey,password).",
             "Host key verification failed.",
             "Enter passphrase for key: ",
+            "# Tailscale SSH requires an additional check. To authenticate, visit: https://login.example/a/1",
         ] {
             assert!(matches!(classify(why.into()), HostState::NeedsLogin(_)), "{why}");
         }

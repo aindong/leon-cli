@@ -3,19 +3,15 @@
 
 mod m20b_support;
 
-use std::time::Duration;
-
 use gpui::{Entity, TestAppContext, VisualTestContext};
 use leon_app::embedded::{self, Embedded};
 use leon_app::view::Workspace;
 use m20b_support::*;
 use serde_json::json;
 
-/// After the slide: a fresh frame.
+/// After the slide: the frames the app asked for, to its end.
 fn after_slide(ws: &Entity<Workspace>, cx: &mut VisualTestContext) {
-    std::thread::sleep(Duration::from_millis(150));
-    ws.update(cx, |_, cx| cx.notify());
-    cx.run_until_parked();
+    frames(ws, cx);
 }
 
 fn toggle(app: &Embedded, sid: &str, create: bool) {

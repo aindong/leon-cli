@@ -66,6 +66,7 @@ fn clipboard_after(cx: &mut VisualTestContext, was: &str) -> Option<String> {
 #[gpui::test]
 fn a_hosts_replies_dont_decide_what_is_copied_or_opened(cx: &mut TestAppContext) {
     let h = hosted();
+    std::env::set_var("LEON_LINK_HOLD_SECS", "3"); // the link's hold, 60 s by default
     let script = "stty -echo; seq 1 200; printf 'copy me please\\ngo https://good.example/page now\\nready-remote\\n'; sleep 300";
     let (sid, b) = session_running(&h.r.remote, "api", script);
     let (ws, cx) = open(cx, &h, vec![host("hostile", "ssh://hostile")], None);
@@ -151,8 +152,8 @@ fn a_hosts_replies_dont_decide_what_is_copied_or_opened(cx: &mut TestAppContext)
     assert!(held, "history rows fetched: {:?}", ws.read_with(cx, |ws, _| ws.cached_rows(&b)));
     std::fs::write(h.r.fake.path().join("down"), "").unwrap();
     assert!(h.r.kill_transports() >= 3);
-    // the link keeps trying for its hold (60 s), then the host is gone
-    let end = Instant::now() + Duration::from_secs(120);
+    // the link keeps trying for its hold (3 s here), then the host is gone
+    let end = Instant::now() + Duration::from_secs(30);
     while ws.read_with(cx, |ws, _| ws.host_remote("hostile")).is_some() && Instant::now() < end {
         cx.run_until_parked();
         std::thread::sleep(Duration::from_millis(100));
