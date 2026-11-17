@@ -64,6 +64,7 @@ impl Workspace {
                             .cursor_pointer()
                             .when(current, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
                             .when(!current, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
+                            .children(win.program.map(|k| program_mark(k, format!("row-program-{i}-{w}"), t.muted)))
                             .child(
                                 div()
                                     .flex_1()

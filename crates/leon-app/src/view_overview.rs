@@ -383,6 +383,7 @@ impl Workspace {
                     .px(px(10.))
                     .text_color(rgb(if selected { t.title } else { t.text }))
                     .children(c.status.map(|s| status_mark(s, frame, t).debug_selector(move || sel(status_name))))
+                    .children(c.program.map(|k| program_mark(k, format!("card-program-{wid}"), t.muted)))
                     .child(div().flex_1().min_w(px(0.)).line_clamp(1).text_ellipsis().child(c.title.clone()))
                     .children(c.status.map(|s| {
                         let word = format!("card-word-{}", c.window_id);
