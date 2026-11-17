@@ -10,7 +10,7 @@ out), an end card; eased zooms onto the cue's zoom beats, a drawn pointer glidin
 with a ripple, keycaps for each shortcut, burned-in captions, the take inset on a brand gradient
 with rounded corners and a shadow. Writes OUT.srt beside it. square: 1080x1080, the 30-second cut
 (SQUARE_CUT below), each piece framed on its focus region, dissolving into the next. Both get a
-silent stereo track for the voice-over. --frames renders only those output frames (for checking a
+silent stereo track (no voice-over, no music). --frames renders only those output frames (for checking a
 stretch); --blur turns on motion blur for the camera's moves (off by default: it ghosts terminal
 text); --workers splits the frames over N processes (default 4). stills writes single frames at
 output times T, as PNGs, to check a look.
@@ -37,19 +37,22 @@ COLD = 3.0  # the cold open: the 50-tab overview, live, so a feed sees motion in
 ESC_MARGIN = 0.3  # seconds the cold open ends before the overview's esc
 
 # the 30-second cut: (video start, end, focus region in raw pixels, caption, small line); the times
-# are a take's whose video leads the script by 1.5 s, moved to the take's own measured lead
+# are a take's whose video leads the script by 1.5 s, moved to the take's own measured lead. The
+# square shows at most 1602 px of the screen's 2848: a wide piece takes its left square (1430 + the
+# 12% margin), so the sidebar and the panes' text start at its edge instead of being cut
 SQUARE_CUT = [
     (43.4, 47.9, [1000, 260, 1300, 1000], "115 MB/s, and typing keeps up.", ""),
-    (50.0, 53.2, [0, 0, 1700, 1400], "50 tabs. Every one live.", ""),
-    (81.1, 84.5, [880, 100, 1120, 360], "Pick a machine from your tailnet.", ""),
+    (50.0, 53.2, [0, 9, 1430, 1430], "50 tabs. Every one live.", ""),
+    (81.1, 84.5, [700, 9, 1430, 1000], "Pick a machine from your tailnet.", ""),
     (84.5, 87.5, [0, 0, 1200, 1000], "Its sessions, beside your own.", ""),
     # the banner over the attached terminal and its click; then leon on the agent's question (one
     # frame can't hold both: the banner is at the right edge, the pane's text starts at the sidebar)
     (98.4, 100.2, [1440, 9, 1408, 1100], "It tells you when an agent needs you.", ""),
-    (100.4, 102.4, [512, 9, 1900, 1400], "It tells you when an agent needs you.", ""),
-    (103.0, 104.1, [0, 9, 2848, 1602], "Quit the app…", ""),
-    (107.3, 110.8, [0, 9, 2848, 1602], "…everything keeps running.", ""),
-    (113.5, 116.0, [0, 0, 2000, 1560], "Keep your work in view.", ""),
+    (100.4, 102.4, [512, 9, 1430, 1400], "It tells you when an agent needs you.", ""),
+    (103.0, 104.1, [0, 9, 1430, 1430], "Quit the app…", ""),
+    # from 0.5 s after full screen: the panes are fitted to it again by then
+    (107.8, 111.3, [0, 9, 1430, 1430], "…everything is still running.", ""),
+    (113.5, 116.0, [0, 9, 1430, 1430], "Keep your work in view.", ""),
 ]
 
 

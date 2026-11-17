@@ -15,7 +15,7 @@ ROOT = pathlib.Path(__file__).parent.parent
 
 
 class BigPageTest(unittest.TestCase):
-    def test_5000_services_render_in_under_a_second(self):
+    def test_5000_services_in_under_a_second(self):
         many = [{"name": f"svc-{i}", "status": ["up", "degraded", "down"][i % 3], "latency_ms": i % 500,
                  "uptime": 99.0} for i in range(5000)]
         start = time.perf_counter()
