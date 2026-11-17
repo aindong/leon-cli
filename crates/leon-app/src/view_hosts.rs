@@ -288,7 +288,8 @@ impl Workspace {
             false => Ask::HostLabel,
         };
         let query = typed.clone().unwrap_or_default();
-        self.palette = Some(Palette { query, selected: 0, ask: Some((ask, None)), switch: false, note: None });
+        self.palette =
+            Some(Palette { query, selected: 0, ask: Some((ask, None)), switch: false, note: None, themes: None });
         if typed.is_some_and(|t| !t.is_empty()) {
             return self.ask_enter(cx); // the label typed into the tailnet's search
         }
@@ -345,7 +346,7 @@ impl Workspace {
             }
             Err(e) => {
                 let ask = Some((Ask::Tailnet, Some(e)));
-                self.palette = Some(Palette { query, selected: 0, ask, switch: false, note: None });
+                self.palette = Some(Palette { query, selected: 0, ask, switch: false, note: None, themes: None });
             }
         }
         cx.notify();

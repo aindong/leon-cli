@@ -4,6 +4,15 @@
 
 use super::*;
 
+/// The last `client.keymap` reply, handed over from the runtime thread that fetched it.
+#[derive(Default)]
+pub(super) struct KeymapInbox {
+    pub(super) asking: bool,
+    reply: Option<Value>,
+    /// The `server.settings` reply asked for when the keymap's generation moved to the one given.
+    settings: Option<(u64, Value)>,
+}
+
 /// How long the Activity list's waited times (`12s`) stay right.
 const WAITED_TICK: Duration = Duration::from_secs(1);
 

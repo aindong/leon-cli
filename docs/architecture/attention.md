@@ -85,8 +85,14 @@ of [the architecture](../architecture.md).
   focus that moves on mid-fade never jumps; a pane seen for the first time is drawn in place.
   The poll redraws only while a fade is on its way (`Workspace::fading`), so an idle app still
   draws nothing. `leon.set("fade_inactive_panes", N)` is the strength, 0 (off) to 0.8; the
-  default, 0.35, is the strongest step at which body text keeps 4.5:1 on leon-dark and
-  leon-light. The app reads it from `server.settings`. `leon attach` doesn't fade.
+  default, 0.35, is the strongest step at which body text keeps 4.5:1 on every built-in theme.
+  The app reads it from `server.settings`. `leon attach` doesn't fade.
+- **A theme change fades in.** A new theme (Change Theme…, Settings, init.lua, the appearance)
+  moves every colour from the old theme's to the new one's over the same slide time, and every
+  pane, one that needs the user too, dips toward the window mid-way (at most 0.8), so its text,
+  which the server sends again in the new colours, fades out and back in. `render` asks GPUI for
+  animation frames only while it moves (ADR R6); Reduce Motion, and the first settings after a
+  launch, switch at once. The theme list's preview is drawn the same way.
 - **`leon notify`.** `dev.leon.terminal.report_status {state, title, msg}` (experimental) builds an
   OSC 7501 report (title and msg base64) and runs it through the same parser and store as PTY
   output, so every limit applies; text the parser would drop is refused (400) instead. `leon notify`

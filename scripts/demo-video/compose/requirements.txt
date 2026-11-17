@@ -1,0 +1,4 @@
+# The compositor's Python packages, pinned. Install into a venv of your own (run-demo.sh render
+# makes one under target/demo-video/venv); nothing goes into the system Python.
+numpy==2.5.5   # BSD-3-Clause
+pillow==13.0.0 # MIT-CMU (HPND); reads the brand's WOFF2 font directly

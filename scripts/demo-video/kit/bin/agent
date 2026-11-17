@@ -1,0 +1,118 @@
+#!/bin/bash
+# agent [SCENE]: a scripted stand-in for a coding agent, so every take is the same. It reads SCENE
+# (one step a line), prints at a reading pace, reports its state to leon with OSC 7501, and drives
+# leon the way an agent with leon's skill does (leon split, leon wait, leon capture).
+# AGENT_PACE scales every pause (default 1). AGENT_GO is a file it waits for before it starts.
+set -u
+scene=${1:-$HOME/kit/scenes/$(basename "$PWD").scene} # by default, the scene for this project
+pace=${AGENT_PACE:-1}
+go=${AGENT_GO:-$HOME/kit/go}
+
+B=$'\033[1m' D=$'\033[2m' R=$'\033[0m' G=$'\033[32m' Y=$'\033[33m' C=$'\033[36m' M=$'\033[35m' RED=$'\033[31m'
+b64() { printf %s "$1" | base64; }
+nap() { sleep "$(awk -v s="$1" -v p="$pace" 'BEGIN { printf "%.2f", s * p }')"; }
+osc() { printf '\033]7501;%s\007' "$1"; }
+status() { # status STATE [PROGRESS] [MSG]
+  local s="state=$1:app=agent"
+  [ -n "${2:-}" ] && [ "$2" != - ] && s="$s:progress=$2"
+  [ -n "${3:-}" ] && s="$s:msg=$(b64 "$3")"
+  osc "$s"
+}
+# type a line out at a quick, readable pace
+say() {
+  local text="  $*" i
+  for ((i = 0; i < ${#text}; i += 3)); do printf %s "${text:i:3}"; sleep 0.012; done
+  printf '\n'
+}
+spin() { # spin SECS TEXT: a spinner line that settles into a tick
+  local n f=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') end i=0
+  end=$(awk -v s="$1" -v p="$pace" 'BEGIN { printf "%d", s * p * 10 }')
+  for ((n = 0; n < end; n++)); do printf '\r  %s%s%s %s' "$M" "${f[i++ % 10]}" "$R" "$2"; sleep 0.1; done
+  printf '\r  %s✓%s %s\033[K\n' "$G" "$R" "$2"
+}
+tool() { printf '  %s⏺%s %s%s%s\n' "$C" "$R" "$B" "$*" "$R"; }
+diffstat() { # show the change a stage makes, as a coloured diff with its indent trimmed
+  local f
+  for f in $(cd ".next/$1" && find . -type f | sed 's|^\./||' | sort); do
+    tool "Edit $f"
+    if [ ! -e "$f" ]; then
+      printf '    %s+ %s lines (new file)%s\n' "$G" "$(wc -l <".next/$1/$f" | tr -d ' ')" "$R"
+      continue
+    fi
+    diff -u "$f" ".next/$1/$f" | tail -n +4 | grep -E '^[+-]' | head -${2:-8} |
+      awk -v g="$G" -v r="$RED" -v z="$R" '
+        { line[NR] = $0; body = substr($0, 2); match(body, /^ */)
+          if (body ~ /[^ ]/ && (min == "" || RLENGTH < min)) min = RLENGTH }
+        END { for (i = 1; i <= NR; i++) {
+          c = substr(line[i], 1, 1) == "+" ? g : r
+          printf "    %s%s %s%s\n", c, substr(line[i], 1, 1), substr(line[i], 2 + min), z } }'
+  done
+}
+apply() { (cd ".next/$1" && find . -type f) | while read -r f; do mkdir -p "$(dirname "$f")"; cp ".next/$1/$f" "$f"; done; }
+tests=
+run_tests() { # run_tests LABEL SPLIT CMD...: the tests in a pane beside this one, as the skill says
+  local label=$1 side=$2; shift 2
+  tool "leon split --label $label --split $side -- $*"
+  [ -n "$tests" ] && leon block close "$tests" >/dev/null 2>&1
+  tests=$(leon split -b "$LEON_BLOCK" --label "$label" --keep-open --focus=false --split "$side" --ratio 40 -- "$@") ||
+    { status error - "leon split failed"; return 1; }
+  tool "leon wait $label"
+  leon wait -b "$tests"
+}
+
+title=
+while IFS= read -r line <&3 || [ -n "$line" ]; do
+  set -f; set -- $line; set +f
+  [ $# -eq 0 ] && continue
+  cmd=$1; shift
+  case "$cmd" in
+    \#*) ;;
+    title) title="$*"; printf '\033]2;%s\007' "$title" ;;
+    task)
+      printf '\033[H\033[2J\033[?25l'
+      printf '  %s◆ agent%s %s· %s%s\n\n' "$B$M" "$R" "$D" "${PWD/#$HOME/~}" "$R"
+      printf '  %s>%s %s\n\n' "$B" "$R" "$*" ;;
+    wait_go) f=$go${1:+.$1}; while [ ! -e "$f" ]; do sleep 0.1; done ;;
+    working) p=$1; shift; status working "$p" "$*" ;;
+    say) say "$*" ;;
+    dim) say "$D$*$R" ;;
+    tool) tool "$*" ;;
+    read) tool "Read $1"; printf '    %s%s lines%s\n' "$D" "$(wc -l <"$1" | tr -d ' ')" "$R" ;;
+    spin) s=$1; shift; spin "$s" "$*" ;;
+    nap) nap "$1" ;;
+    sh) bash -c "$*" ;;
+    diff) diffstat "$@" ;;
+    apply) apply "$1" ;;
+    test)
+      label=$1 side=$2; shift 2
+      if run_tests "$label" "$side" "$@"; then
+        n=$(leon capture -b "$tests" --trim | sed -n 's/^\([0-9][0-9]*\) passed.*/\1/p' | tail -1)
+        if [ -n "$n" ]; then printf '  %s✓ %s tests passed%s\n' "$G" "$n" "$R"; else printf '  %s✓ %s finished%s\n' "$G" "$label" "$R"; fi
+      else
+        failed=$(leon capture -b "$tests" --trim | sed -n 's/.* \([0-9][0-9]*\) failed.*/\1/p' | tail -1)
+        printf '  %s✗ %s failed%s\n' "$RED" "${failed:-a test}" "$R"
+        status error - "${failed:-a} test(s) failed"
+      fi ;;
+    ask)
+      kind=$1; shift
+      printf '\n  %s? %s%s %s[y/n]%s \033[?25h' "$Y$B" "$*" "$R" "$D" "$R"
+      osc "state=blocked:app=agent:kind=$kind:title=$(b64 "$*")"
+      read -r answer
+      printf '\033[?25l'
+      status working - "answer: $answer"
+      printf '\n' ;;
+    close) [ -n "$tests" ] && leon block close "$tests" >/dev/null 2>&1; tests= ;;
+    done)
+      status done - "$*"
+      printf '\n  %s●%s %s\n' "$G" "$R" "$*" ;;
+    error) status error - "$*"; printf '\n  %s●%s %s\n' "$RED" "$R" "$*" ;;
+    *) printf 'agent: unknown step %s\n' "$cmd" >&2; exit 2 ;;
+  esac
+done 3<"$scene"
+# then take the next request, like an agent at its prompt: the terminal echoes what is typed
+while :; do
+  printf '\n  %s>%s \033[?25h' "$B" "$R"
+  IFS= read -r ask || exec sleep 100000
+  printf '\033[?25l'
+  [ -n "$ask" ] && printf '  %s●%s Noted: %s. I\x27ll start on it after this review.\n' "$C" "$R" "$ask"
+done

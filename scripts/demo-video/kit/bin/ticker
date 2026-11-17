@@ -1,0 +1,9 @@
+#!/bin/bash
+# ticker NAME: a quiet background job for the 50-tab overview: a line every second or two.
+printf '\033]2;%s\007' "$1"
+n=0
+while :; do
+  n=$((n + 1))
+  printf '\033[2m%s\033[0m %s: batch %d, %d rows, %d ms\n' "$(date +%T)" "$1" "$n" $((RANDOM % 9000 + 100)) $((RANDOM % 400 + 20))
+  sleep $((RANDOM % 2 + 1))
+done

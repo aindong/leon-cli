@@ -114,17 +114,10 @@ struct Palette {
     ask: Option<(hosts_view::Ask, Option<String>)>,
     /// The session switcher (⌘K): places to go instead of actions.
     switch: bool,
-    /// Why the last ⌘↩ couldn't split (a row of another machine).
+    /// Why the last ⌘↩ couldn't split (another machine's row), or a theme wasn't kept.
     note: Option<String>,
-}
-
-/// The last `client.keymap` reply, handed over from the runtime thread that fetched it.
-#[derive(Default)]
-struct KeymapInbox {
-    asking: bool,
-    reply: Option<Value>,
-    /// The `server.settings` reply asked for when the keymap's generation moved to the one given.
-    settings: Option<(u64, Value)>,
+    /// The theme list: every theme; the selected one is drawn while it is open.
+    themes: Option<Vec<(String, Theme)>>,
 }
 
 /// The blocks on screen, in leaf order.
@@ -182,7 +175,7 @@ pub struct Workspace {
     /// When the poll looks next without a wake (None: only a wake).
     planned: Option<Instant>,
     keymap: Keymap,
-    inbox: Arc<Mutex<KeymapInbox>>,
+    inbox: Arc<Mutex<poll_view::KeymapInbox>>,
     keymap_asked: Option<Instant>,
     /// The chords of a sequence typed so far (`ctrl+b`).
     pending: Vec<Chord>,
@@ -215,7 +208,9 @@ pub struct Workspace {
     /// and the terminal font.
     look: Look,
     dark: bool,
+    /// The colours this frame draws with (`themes`: a change fading in).
     theme: Theme,
+    themes: theme_view::ThemeUi,
     font_family: SharedString,
     /// The config the local server loaded, from its keymap: where the theme files and the
     /// Settings window's init.lua are.
@@ -390,6 +385,7 @@ impl Workspace {
             window_active: window.is_window_active(),
             font_size: look.font_size,
             theme: look.theme(dark),
+            themes: theme_view::ThemeUi::new(look.theme(dark)),
             font_family: look.font_family.clone().into(),
             look,
             dark,
@@ -468,6 +464,8 @@ mod sections_view;
 mod start;
 #[path = "view_state.rs"]
 mod state;
+#[path = "view_theme.rs"]
+mod theme_view;
 pub(crate) use bars::Tip;
 pub use drawn_view::{drawing, drawing_cached, drawn, drawn_cached, sel};
 pub use grid_view::GridDrawn;
