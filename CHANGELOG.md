@@ -32,15 +32,12 @@ fields it doesn't know. The full policy is in
 
 #### Added
 
-- Leon.app shows what kind of program each pane runs as a small icon: a shell, an agent, an
-  editor, a server, a test run, a monitor, ssh or another remote, or any other program. The icon
-  is on the pane's header, and on each tab, sidebar row and overview card for the pane the tab
-  shows. An agent is one that reports itself (OSC 7501, [docs/agents.md](docs/agents.md)); the
-  rest are known by the program's name. The status indicator keeps its place and colour.
-- `session.list_blocks` gives each block `foreground`, the name of the program in front of its
-  terminal: its name only, never its arguments, and null once it exited or when another user
-  owns it (`sudo`). A change is a `foreground_changed` block event.
-  It is a new result field on a stable method, so `api_version` goes from `1.8.0` to `1.9.0`.
+- Each pane's header, tab, sidebar row and overview card shows an icon for the kind of program in
+  it: shell, agent, editor, server, test run, monitor, remote or other
+  ([docs/architecture/attention.md](docs/architecture/attention.md)).
+- `session.list_blocks` gives each block `foreground`, the name of the program in front
+  (never its arguments; null for another user's), and a change is a `foreground_changed` event: a
+  new result field on a stable method, so `api_version` goes from `1.8.0` to `1.9.0`.
 
 ### A translucent window in Leon.app
 

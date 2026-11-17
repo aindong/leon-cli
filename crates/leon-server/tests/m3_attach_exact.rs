@@ -46,6 +46,17 @@ fn snapshots_and_events_line_up_under_concurrent_changes() {
     let mut c = connect();
     let layout = json!({ "block": { "options": { "command": ["sleep", "60"] } } });
     let sid = call(&mut c, "session.create", json!({ "layout": layout })).0["session_id"].as_str().unwrap().to_string();
+    // `sleep` comes to the front once, and the server's 200 ms look sends that as an event at no
+    // fixed place: let it go by before counting
+    let mut first = connect();
+    call(&mut first, "session.attach", json!({ "session_id": sid }));
+    loop {
+        let mut line = String::new();
+        first.read_line(&mut line).unwrap();
+        if line.contains("foreground_changed") {
+            break;
+        }
+    }
 
     let stop = Arc::new(AtomicBool::new(false));
     let (busy, s2, mut c2) = (stop.clone(), sid.clone(), connect());
