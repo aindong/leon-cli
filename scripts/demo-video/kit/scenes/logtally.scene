@@ -14,3 +14,8 @@ apply 1
 working 75 running the tests
 test tests below python3 runtests.py
 done --errors 4xx is in: 21 tests pass. Errors: 0.39% → 0.90%.
+wait_go banner
+ask question Ship it to staging too?
+working 60 deploying to staging
+spin 1.2 Deploying
+done On staging: 429s count as errors now.

@@ -4,7 +4,8 @@
   compose.py square RAW CUE OUT.mp4 [--frames=F0:F1] [--workers=N]
   compose.py stills MODE RAW CUE OUTDIR [--cut=A:B] T...
 
-main: 16:9 1920x1080 at 60 fps: a title card, the take (with the stretch A..B of video time cut
+main: 16:9 1920x1080 at 60 fps: a cold open (COLD seconds of the 50-tab overview, cut straight to the
+empty state; a title card instead when the cue has no "5 overview" mark), the take (with the stretch A..B of video time cut
 out), an end card; eased zooms onto the cue's zoom beats, a drawn pointer gliding to each click
 with a ripple, keycaps for each shortcut, burned-in captions, the take inset on a brand gradient
 with rounded corners and a shadow. Writes OUT.srt beside it. square: 1080x1080, the 30-second cut
@@ -32,6 +33,7 @@ from frame import BASE, FPS, MAIN, SQUARE, SRC_H, SRC_W, Renderer, fit, load_cue
 END_LINES = ["a terminal multiplexer for coding agents", "github.com/aindong/leon-cli",
              os.environ.get("LEON_DEMO_INSTALL", "Open source (MIT) · macOS app · CLI for macOS and Linux")]
 TITLE, END = 2.5, 6.0
+COLD = 3.0  # the cold open: the 50-tab overview, live, so a feed sees motion in the first second
 
 # the 30-second cut: (video start, end, focus region in raw pixels, caption, small line)
 SQUARE_CUT = [
@@ -46,12 +48,15 @@ SQUARE_CUT = [
 ]
 
 
-def pieces(mode, cut, duration):
-    """the output, as pieces: ("card", kind, dur) or ("take", start, end, fixed_region, caption)"""
+def pieces(mode, cut, duration, cue=()):
+    """the output, as pieces: ("card", kind, dur) or ("take", start, end, fixed_region, caption);
+    main's cold open is a take piece whose caption is the string cold"""
     if mode == "main":
         a, b = cut if cut else (duration, duration)
-        return [("card", "title", TITLE), ("take", 0.0, a, None, None), ("take", b, duration, None, None),
-                ("card", "end", END)]
+        # from just after the overview opens (its cards fade in), before its esc
+        m = next((r["vt"] + 0.4 for r in cue if r["type"] == "mark" and r["name"] == "5 overview"), None)
+        head = ("card", "title", TITLE) if m is None else ("take", m, m + COLD, None, "cold")
+        return [head, ("take", 0.0, a, None, None), ("take", b, duration, None, None), ("card", "end", END)]
     out = [("take", s, e, r, (c, sm)) for s, e, r, c, sm in SQUARE_CUT]
     return out + [("card", "end", 30.0 - sum(e - s for s, e, *_ in SQUARE_CUT))]
 
@@ -96,9 +101,11 @@ def decode(raw, start, dur):
 XFADE = 0.3  # seconds each piece dissolves in from the one before
 
 
-def soft(mode, i):
-    """whether piece i dissolves in: every join but the main cut's quit, which is a cut on purpose"""
-    return i > 0 and not (mode == "main" and i == 2)
+def soft(mode, i, ps=()):
+    """whether piece i of ps dissolves in: every join but the main cut's quit and the cut out of its
+    cold open, which are cuts on purpose"""
+    cold = bool(ps) and ps[0][-1] == "cold"
+    return i > 0 and not (mode == "main" and (i == 2 or (i == 1 and cold)))
 
 
 def piece_frame(R, L, p, pt, src, out_t):
@@ -106,6 +113,8 @@ def piece_frame(R, L, p, pt, src, out_t):
     if p[0] == "card":
         return card(L, p[1], pt, p[2], END_LINES)
     t = p[1] + pt
+    if p[4] == "cold":  # the take as it is: its caption and keycap belong to the story, later
+        return R.frame(src, t, out_t, captions=[], keys=False, show_cursor=False)
     if p[3] is not None:  # square: framed on the piece's region, its own caption
         cam = fit(p[3], L.vw / L.vh, max_zoom=BASE[2] / L.vw)
         return R.frame(src, t, pt, fixed=cam, captions=[(0, p[2] - p[1], p[4][0], p[4][1])])
@@ -134,7 +143,7 @@ def render_chunk(args):
     L = MAIN if mode == "main" else SQUARE
     cue = load_cue(cue_path)
     R = Renderer(L, cue, blur)
-    ps = pieces(mode, cut, duration)
+    ps = pieces(mode, cut, duration, cue)
     plan = frame_plan(ps)[f0:f1]
     enc = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
                             "-s", f"{L.W}x{L.H}", "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "medium",
@@ -150,7 +159,7 @@ def render_chunk(args):
                 src_iter, cur_piece = decode(raw, p[1] + pt, p[2] - p[1] - pt + 0.1), pi
             src = next(src_iter)
         img = piece_frame(R, L, p, pt, src, out_t)
-        if soft(mode, pi) and pt < XFADE:
+        if soft(mode, pi, ps) and pt < XFADE:
             if pi not in before:
                 before[pi] = last_frame(R, L, raw, ps[pi - 1], out_t - pt - 1 / FPS)
             img = Image.blend(before[pi], img, ease((pt + 1 / FPS) / (XFADE + 1 / FPS)))
@@ -168,12 +177,15 @@ def srt(mode, cue_path, cut, duration, out):
     rows = []
     if mode == "main":
         a, b = cut if cut else (duration, duration)
-        for c in [r for r in load_cue(cue_path) if r["type"] == "caption"]:
+        cue = load_cue(cue_path)
+        head = pieces(mode, cut, duration, cue)[0]
+        head = head[2] if head[0] == "card" else head[2] - head[1]  # the title card or the cold open
+        for c in [r for r in cue if r["type"] == "caption"]:
             s, e, line = c["vt"], c["vuntil"], (c["text"], c.get("small", ""))
             if s < a:  # before the cut: shown up to it
-                rows.append((TITLE + s, TITLE + min(e, a), *line))
+                rows.append((head + s, head + min(e, a), *line))
             if e > b:  # after it: shown from it, shifted back by the cut's length
-                rows.append((TITLE + max(s, b) - (b - a), TITLE + e - (b - a), *line))
+                rows.append((head + max(s, b) - (b - a), head + e - (b - a), *line))
     else:
         t = 0.0
         for s, e, _, c, sm in SQUARE_CUT:
@@ -187,10 +199,11 @@ def srt(mode, cue_path, cut, duration, out):
 def stills(mode, raw, cue_path, outdir, times, cut=None):
     """single output frames as PNGs, at output times (seconds), for checking the look"""
     L = MAIN if mode == "main" else SQUARE
-    R = Renderer(L, load_cue(cue_path))
+    cue = load_cue(cue_path)
+    R = Renderer(L, cue)
     duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
                                      raw], capture_output=True, text=True, check=True).stdout)
-    ps = pieces(mode, cut, duration)
+    ps = pieces(mode, cut, duration, cue)
     plan = frame_plan(ps)
     Path(outdir).mkdir(exist_ok=True)
     for ot in times:
@@ -198,7 +211,7 @@ def stills(mode, raw, cue_path, outdir, times, cut=None):
         p = ps[pi]
         src = next(decode(raw, p[1] + pt, 1.0)) if p[0] == "take" else None
         img = piece_frame(R, L, p, pt, src, ot)
-        if soft(mode, pi) and pt < XFADE:  # as render_chunk does
+        if soft(mode, pi, ps) and pt < XFADE:  # as render_chunk does
             before = last_frame(R, L, raw, ps[pi - 1], ot - pt - 1 / FPS)
             img = Image.blend(before, img, ease((pt + 1 / FPS) / (XFADE + 1 / FPS)))
         img.save(Path(outdir) / f"{mode}-{ot:06.2f}.png")
@@ -217,7 +230,7 @@ def main():
     workers = int(next((o.split("=")[1] for o in opts if o.startswith("--workers=")), "4"))
     duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
                                      raw], capture_output=True, text=True, check=True).stdout)
-    n = len(frame_plan(pieces(mode, cut, duration)))
+    n = len(frame_plan(pieces(mode, cut, duration, load_cue(cue_path))))
     f0, f1 = frames if frames else (0, n)
     out = Path(out)
     tmp = out.with_suffix(".parts")

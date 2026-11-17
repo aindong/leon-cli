@@ -5,7 +5,7 @@
 #   push          build keypost, copy target/release/Leon.app (or $DEMO_APP), kit/ and this Mac's
 #                 git into the VM (build first: scripts/bundle.sh)
 #   setup         a clean take: reset, stage the sessions and agents, full screen, pointer parked
-#   take [A-B]    record scenes A to B (default 1-11), pull the clip, make take.mp4 and take-cut.mp4
+#   take [A-B]    record scenes A to B (default 1-12), pull the clip, make take.mp4 and take-cut.mp4
 #   cue [BEATS]   rebuild a take's cue file (take-cue.jsonl) from its beats file (default the last
 #                 take's), sending nothing
 #   render        the finished videos from the take: renders/leon-demo-main.mp4 (16:9) and
@@ -191,19 +191,31 @@ scene9() { # Tailscale: Add Host lists the tailnet; pick devbox; its session
   at 87.2; k key return show
   at 87.6; zoom 0 9 1714 720 90.6 # devbox in the sidebar, its agent with the devbox badge, to the pane border
 }
-scene10() { # quit the app; the programs keep going; open it again
-  at 91; mark "10 quit"; k combo cmd+q
-  caption "Quit the app…" 93
-  at 93; mark "10 reopen"; g app
-  g fullscreen # it opens windowed: the compositor and take-cut.mp4 drop that second
-  at 96.9; caption "…everything is still running." 101.3
-  at 97; k combo cmd+k
-  at 97.7; k type review
-  at 98.5; k key return show
+scene10() { # leon attach in a plain terminal; an agent elsewhere asks: its banner takes you there
+  at 91; mark "10 attach"; g banner # on now: the app has it well before the agent asks
+  g front # the Terminal setup left on the desktop: macOS slides there
+  caption "The same sessions, from any terminal." 96.3 "leon attach"
+  at 92; k type "leon attach shelf-api"; k key return show # the session's tab: its agent and shell, live
+  at 94.3; k type "then update the README"; k key return show # to its agent: the app has it too
+  at 96.5; mark "10 banner"; g go banner # logtally's agent asks again; leon's banner (the app is behind)
+  caption "It tells you when an agent needs you." 100.8
+  at 96.8; zoom 1400 9 1448 815 98.6 # the banner, top right
+  at 98.4; k click 1250 78 # the banner: leon comes forward on that agent's pane
+  at 99.8; k type y; k key return show
 }
-scene11() { # the payoff: every tab, This Mac and devbox, live
-  at 101.5; mark "11 overview"; k combo 'cmd+shift+\' # live cards: screencapture -V needs frames to stop
-  caption "Keep your work in view." 104.5
+scene11() { # quit the app; the programs keep going; open it again
+  at 101.5; mark "11 quit"; k combo cmd+q
+  caption "Quit the app…" 103.5
+  at 103.5; mark "11 reopen"; g app
+  g fullscreen # it opens windowed: the compositor and take-cut.mp4 drop that second
+  at 107.4; caption "…everything is still running." 111.8
+  at 107.5; k combo cmd+k
+  at 108.2; k type review
+  at 109; k key return show
+}
+scene12() { # the payoff: every tab, This Mac and devbox, live
+  at 112; mark "12 overview"; k combo 'cmd+shift+\' # live cards: screencapture -V needs frames to stop
+  caption "Keep your work in view." 115
 }
 
 case "${1:-}" in
@@ -238,14 +250,15 @@ case "${1:-}" in
     g prefs
     g reset
     g stage
-    sleep 2
+    g terminal # the attach scene's terminal, on the desktop before the app goes full screen
+    sleep 1
     g fullscreen
     sleep 2
     echo "setup: ready; check it with: $0 shot setup" ;;
   take)
-    range=${2:-1-11}
+    range=${2:-1-12}
     from=${range%-*} to=${range#*-}
-    secs=${TAKE_SECS:-106}
+    secs=${TAKE_SECS:-117}
     # screencapture hangs when it is started in the background inside the VM, so it runs in the
     # foreground of its own ssh session, and that session is in the background here
     ssh $(ssh_opts) "demo@$(cat "$work/.ip")" "rm -f ~/take.mov; screencapture -v -V $secs -x ~/take.mov </dev/null 2>~/take.err; echo \"screencapture: exit \$? \$(cat ~/take.err)\" >&2" &
@@ -275,7 +288,7 @@ case "${1:-}" in
     [ -f "$anchor" ] || { echo "run-demo: no beats file $anchor" >&2; exit 1; }
     CUE_ONLY=1
     printf '{"t": 0, "type": "take", "lead": 1.5, "width": 2880, "height": 1620}\n' >"$cuefile"
-    for ((n = 1; n <= 11; n++)); do "scene$n"; done
+    for ((n = 1; n <= 12; n++)); do "scene$n"; done
     echo "cue: $cuefile ($(wc -l <"$cuefile" | tr -d ' ') lines, rebuilt from $anchor)" ;;
   render)
     venv=$work/venv

@@ -2,13 +2,17 @@
 # guest.sh STEP: the launch demo inside the VM, run as `demo` over ssh by run-demo.sh.
 #   reset       quit the app, stop both leon servers, forget their sessions, fresh copies of the projects
 #               (status-page with a made-up git history, for the popup)
-#   prefs       once per VM: no desktop widgets, no macOS tips, the tailnet's ssh name, the big log
+#   prefs       once per VM: no desktop widgets, no macOS tips, the tailnet's ssh name, the big log,
+#               the plain terminal's look (Terminal's "Demo" profile)
 #   stage       the app on an empty leon; the devbox's agent already running on its own server
 #   build N     the take's build-up beats: 1 a dev server tab, 2 logtally's agent, 3 status-page's
 #   tabs        about 44 more tabs of quiet background jobs, for the 50-tab overview (untabs: gone)
-#   go [NAME]   start the agents (or one named beat: shelf-tests, status-fix)
+#   go [NAME]   start the agents (or one named beat: shelf-tests, status-fix, banner)
 #   answer TEXT type an answer into the blocked agent (the take does it with real keys)
 #   app         start the app again (after a ⌘Q in the take)
+#   terminal    a plain Terminal window on the desktop, with the take's LEON_* (before full screen)
+#   front       bring that Terminal forward (macOS slides from the full-screen app to the desktop)
+#   banner      turn the blocked banner on (seconds before `go banner`: the app reads it within ~1 s)
 #   quit        quit the app (kills its pid; the take uses ⌘Q)
 #   fullscreen  click the window's green button (pointer parked again at once)
 #   key ARGS    keypost ARGS: combo cmd+k | type TEXT | key return | park | click X Y
@@ -58,7 +62,9 @@ case "${1:-}" in
     leon --autostart=false server stop --discard >/dev/null 2>&1 || true
     # started without restoring first: a server killed with the VM left saved sessions behind
     ssh devbox '~/.local/bin/leon server start --restore=false; ~/.local/bin/leon server stop --discard' >/dev/null 2>&1 || true
-    pkill -f 'kit/bin/agent|traffic.sh|serve.py|watch.py|logtally.py' 2>/dev/null || true
+    pkill -f 'kit/bin/agent|traffic.sh|serve.py|watch.py|logtally.py|leon attach' 2>/dev/null || true
+    pkill -x Terminal 2>/dev/null || true # the attach scene's terminal, and nothing to restore
+    rm -rf "$HOME/Library/Saved Application State/com.apple.Terminal.savedState"
     rm -rf "${d:?}" "$HOME/work" "$kit"/go* /tmp/review.log
     mkdir -m 700 -p "$d" "$d/run" "$d/state"
     cp "$kit/init.lua" "$d/init.lua"
@@ -88,6 +94,27 @@ Host devbox.example-tailnet.ts.net
   IdentityFile ~/.ssh/devbox
   StrictHostKeyChecking accept-new
 EOF
+    # the attach scene's plain terminal: Terminal's own Clear Dark, opaque, a font that reads on a
+    # phone, no "Last login" line, no windows restored at launch
+    pkill -x Terminal 2>/dev/null && sleep 1
+    defaults export com.apple.Terminal /tmp/term.plist
+    python3 - /tmp/term.plist <<'EOF'
+import plistlib, sys
+p = plistlib.load(open(sys.argv[1], "rb"))
+demo = dict(p["Window Settings"]["Clear Dark"], name="Demo", columnCount=118, rowCount=30, BackgroundBlur=0.0,
+            ShowDimensionsInTitle=False, ShowActiveProcessInTitle=False)
+for key, edit in (("Font", lambda o: o[1].update(NSSize=16.0)),
+                  ("BackgroundColor", lambda o: o[1].update(NSRGB=o[1]["NSRGB"].rsplit(b" ", 1)[0] + b" 1\0"))):
+    a = plistlib.loads(demo[key])
+    edit(a["$objects"])
+    demo[key] = plistlib.dumps(a, fmt=plistlib.FMT_BINARY)
+p["Window Settings"]["Demo"] = demo
+p["Default Window Settings"] = p["Startup Window Settings"] = "Demo"
+p["NSQuitAlwaysKeepsWindows"] = False
+plistlib.dump(p, open(sys.argv[1], "wb"))
+EOF
+    defaults import com.apple.Terminal /tmp/term.plist
+    touch "$HOME/.hushlogin"
     mkdir -p "$HOME/logs"
     [ -s "$HOME/logs/app.log" ] || python3 "$kit/bin/mklog.py" "$HOME/logs/app.log" 400 ;;
 
@@ -157,6 +184,20 @@ json.dump(s, open(p, "w"))' "$d/state/app.json"
 
   fullscreen) keypost click 247 85 ;; # the window's green button (⌃⌘F does nothing in leon)
 
+  terminal)
+    # a .command file opens a Terminal window running it: the take's LEON_*, then a login shell
+    printf '#!/bin/zsh\nexport LEON_RUNTIME_DIR=%q LEON_STATE_DIR=%q LEON_CONFIG=%q PATH=%q\nprintf "\\033[3;112;86t"; clear; exec zsh -l\n' \
+      "$LEON_RUNTIME_DIR" "$LEON_STATE_DIR" "$LEON_CONFIG" "$PATH" >"$d/shell.command"
+    chmod +x "$d/shell.command"
+    open "$d/shell.command"
+    sleep 2
+    open "$app" # the app in front again, to go full screen
+    sleep 1 ;;
+  front) open -a Terminal ;;
+  # init.lua has every banner off (scene 4's agent blocks off screen too): only the attach
+  # scene's is on. A blocked state the app sees before it has the new setting posts nothing
+  banner) leon config set notifications.blocked true >/dev/null ;;
+
   key) shift; keypost "$@" ;;
   l) shift; leon "$@" ;;
   quit) p=$(app_pid); [ -n "$p" ] && kill $p; echo "app: quit" ;;
@@ -184,5 +225,5 @@ json.dump(s, open(p, "w"))' "$d/state/app.json"
     rm -rf "${t:?}"
     exit $rc ;;
 
-  *) sed -n '2,16s/^# \{0,1\}//p' "$0"; exit 2 ;;
+  *) sed -n '2,20s/^# \{0,1\}//p' "$0"; exit 2 ;;
 esac
