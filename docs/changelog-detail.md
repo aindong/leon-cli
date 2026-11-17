@@ -257,6 +257,8 @@ summary bullet per feature, linking its section here.
   registers a resume command. (F10)
 - With a translucent window, the title bar's strip to the right of the last tab is tinted like
   the rest of the bar instead of showing the desktop through it.
+- A pane header's split, zoom and close controls (unfloat and close on a float or drawer) sit at
+  the header's right end again, not right after its title.
 - Keys typed into `leon -H … attach` while the link is stalled no longer arrive in part (the
   research run left `ec` of `echo …⏎` at the remote prompt). After a quiet second, keys wait for
   a probe of the link; if it fails they are all dropped, and so are keys typed while it
