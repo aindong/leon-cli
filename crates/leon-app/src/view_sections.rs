@@ -140,9 +140,13 @@ impl Render for Section {
         *self.renders.borrow_mut().entry(self.name.clone()).or_default() += 1;
         let (input, stamp, name) = (self.input.clone(), self.stamp, self.name.clone());
         let drawn = self.ws.update(cx, |ws, cx| {
+            // compared only if nothing off the UI thread moved since the sync, before the fresh
+            // read or during it (a waited time turning, a slide ending on the clock)
             if cfg!(debug_assertions) && ws.input_stamp() == stamp {
                 let fresh = ws.input_of(&name, window, cx);
-                debug_assert_eq!(fresh.as_ref(), Some(&input), "section {name} drew from a stale input");
+                if ws.input_stamp() == stamp {
+                    debug_assert_eq!(fresh.as_ref(), Some(&input), "section {name} drew from a stale input");
+                }
             }
             ws.draw_section(&input, cx)
         });
@@ -162,6 +166,7 @@ impl Workspace {
         self.hosts.remotes().for_each(|(i, r)| (i, r.model().fetches).hash(&mut h));
         self.hosts.machines().iter().for_each(|m| m.state().hash(&mut h));
         self.hosts.tailnet_reads().hash(&mut h);
+        self.shown().map(|(_, ids)| ids).hash(&mut h); // a drawer's slide ends on the clock
         if self.activity {
             let now = Instant::now();
             self.attention.rows().iter().for_each(|r| attention::waited(r.since, now).hash(&mut h));
@@ -303,6 +308,9 @@ impl Workspace {
     /// came on screen and drop those that left; run the Pulse while a shown indicator works. After
     /// `prepare`, with the grids; it notifies only sections, never the workspace.
     pub(super) fn sync_sections(&mut self, window: &Window, cx: &mut Context<Self>) {
+        // a pane gone from under the mouse sent no leave
+        let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
+        self.hovered_pane = self.hovered_pane.take().filter(|id| shown.contains(id));
         let stamp = self.input_stamp();
         let wanted = self.section_inputs(window, cx);
         self.sections.retain(|n, _| wanted.iter().any(|(w, _)| w == n));
@@ -338,7 +346,11 @@ impl Workspace {
         // the root's own working indicators: the overview's cards, the switcher's rows
         let working = |i: Option<Indicator>| matches!(i, Some(Indicator::Working { .. }));
         let cards = self.overview_shown() && self.overview_cards().iter().any(|c| working(c.status));
-        let switcher = self.switcher_open() && self.rows().iter().any(|r| r.windows.iter().any(|w| working(w.status)));
+        // the switcher lists blocks with their own status, which a tab's may hide
+        let blocks = |m: &crate::remote::Model| {
+            m.sessions.iter().flat_map(|s| &s.blocks).any(|b| working(status::indicator_of(&b.newest_first())))
+        };
+        let switcher = self.switcher_open() && self.hosts.remotes().any(|(_, r)| blocks(&r.model()));
         let root = cards || switcher;
         self.pulse_root = match (root, self.pulse_root.take()) {
             (true, None) => Some(cx.observe(&pulse, |_, _, cx| cx.notify())),
