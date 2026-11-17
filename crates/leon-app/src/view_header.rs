@@ -73,7 +73,7 @@ impl Workspace {
             .pl(px(10.))
             .pr(px(4.))
             .text_size(px(SECONDARY_TEXT))
-            .child(div().flex_none().text_color(rgb(t.muted)).child(Icon::Terminal.at(ROW_ICON, t.muted)))
+            .child(program_mark(input.program, format!("header-program-{id}"), t.muted))
             .child(
                 div()
                     .id(SharedString::from(format!("header-title-{id}")))

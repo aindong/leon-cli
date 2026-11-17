@@ -34,7 +34,10 @@ fn readme_covers_what_a_visitor_needs() {
     {
         assert!(readme.lines().any(|l| l == heading), "the README has {heading}");
     }
-    assert!(readme.contains("scripts/release.sh"), "says what the release script makes");
+    // the build-from-source steps and the release files moved to docs/install.md (file-size limit)
+    assert!(readme.contains("](docs/install.md)"), "links the build-from-source steps");
+    let install = std::fs::read_to_string(repo("docs/install.md")).unwrap();
+    assert!(install.contains("scripts/release.sh"), "says what the release script makes");
     let roadmap = readme.split("## Roadmap").nth(1).unwrap().split("\n## ").next().unwrap();
     for limit in ["The app on Linux", "Two clients on one tab", "Lookalike", "codex exec"] {
         assert!(roadmap.contains(limit), "the roadmap names the known limit {limit:?}");
@@ -43,7 +46,11 @@ fn readme_covers_what_a_visitor_needs() {
 
 #[test]
 fn readme_names_no_other_terminal_product() {
-    let readme = std::fs::read_to_string(repo("README.md")).unwrap().to_lowercase();
+    // the README and the pages split out of it (file-size limit)
+    let readme = ["README.md", "docs/install.md", "docs/shortcuts.md", "docs/remote-hosts.md"]
+        .map(|p| std::fs::read_to_string(repo(p)).unwrap())
+        .concat()
+        .to_lowercase();
     for name in ["tmux", "zellij", "wezterm", "iterm", "ghostty", "kitty", "alacritty", "warp"] {
         assert!(!readme.contains(name), "the README names {name}");
     }

@@ -32,12 +32,13 @@ use crate::icons::{Icon, ROW_ICON, TOOLBAR_ICON, TOOLBAR_TARGET};
 use crate::keymap::{self, Bound, Keymap, Pressed};
 use crate::look::Look;
 use crate::panes::{self, Divider, GAP};
+use crate::program_kind::Kind;
 use crate::remote::Remote;
 use crate::render::{self, Frame};
 use crate::status::{self, Indicator};
 use crate::switcher;
 use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
-use sections_view::{HeaderInput, HostLabel, SidebarInput, TitleBarInput};
+use section_inputs::{HeaderInput, HostLabel, SidebarInput, TitleBarInput};
 
 actions!(
     leon,
@@ -86,25 +87,6 @@ const KEYMAP_POLL: Duration = Duration::from_secs(1);
 
 /// The block input goes to.
 use crate::floats::target;
-
-/// What one render needs from the model, copied out under the state lock.
-#[derive(Clone, PartialEq, Debug)]
-struct SessionRow {
-    /// Which machine it is on (`Hosts` index; 0 is This Mac).
-    host: usize,
-    id: String,
-    title: String,
-    windows: Vec<WindowRow>,
-    active: usize,
-    status: Option<Indicator>,
-}
-
-#[derive(Clone, PartialEq, Debug)]
-struct WindowRow {
-    id: String,
-    title: String,
-    status: Option<Indicator>,
-}
 
 /// The palette while it is open.
 struct Palette {
@@ -465,6 +447,8 @@ mod keys;
 mod look_view;
 #[path = "view_pulse.rs"]
 mod pulse_view;
+#[path = "view_section_inputs.rs"]
+mod section_inputs;
 #[path = "view_sections.rs"]
 mod sections_view;
 #[path = "view_start.rs"]
@@ -484,6 +468,7 @@ pub use state::settings_path;
 mod menus;
 #[path = "view_model.rs"]
 mod model;
+use model::{SessionRow, WindowRow};
 #[path = "view_overlay.rs"]
 mod overlay;
 #[path = "view_overview.rs"]
@@ -506,7 +491,7 @@ mod stats;
 mod switch;
 #[path = "view_update.rs"]
 mod update_view;
-use bars::status_mark;
+use bars::{program_mark, status_mark};
 pub use menus::{about_text, menus, set_version};
 use paint::*;
 use panes_view::*;

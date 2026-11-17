@@ -7,17 +7,17 @@ fn doc(path: &str) -> String {
 
 #[test]
 fn the_docs_cover_m12_and_m13() {
-    let readme = doc("README.md");
+    let readme = doc("docs/shortcuts.md");
     for row in ["| ⌘K |", "| ⌘⇧A |"] {
-        assert!(readme.contains(row), "README's shortcut table has {row}");
+        assert!(readme.contains(row), "docs/shortcuts.md's table has {row}");
     }
     let cli = doc("docs/cli.md");
     assert!(cli.contains("### `leon notify"), "cli.md documents leon notify");
     let guide = doc("crates/leon/src/skill/guide.md");
     assert!(guide.contains("leon notify"), "the agent guide tells agents about leon notify");
-    let lua = doc("docs/lua.md");
+    let lua = doc("docs/lua/settings.md");
     for s in ["notifications.blocked", "notifications.error", "notifications.done"] {
-        assert!(lua.contains(s), "lua.md documents {s}");
+        assert!(lua.contains(s), "lua/settings.md documents {s}");
     }
     // main split the decisions into docs/architecture/ (M15)
     let arch = [

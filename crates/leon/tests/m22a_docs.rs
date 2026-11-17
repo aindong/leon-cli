@@ -14,11 +14,11 @@ fn m22a_documented_contract() {
     ] {
         assert!(cli.contains(text), "docs/cli/settings.md misses {text}");
     }
-    let lua = include_str!("../../../docs/lua.md");
+    let lua = include_str!("../../../docs/lua/settings.md");
     for key in leon_lua::settings::KEYS {
-        assert!(lua.contains(&format!("`{key}`")), "docs/lua.md doesn't document the setting {key}");
+        assert!(lua.contains(&format!("`{key}`")), "docs/lua/settings.md doesn't document the setting {key}");
     }
-    assert!(lua.contains("settings_changed") && lua.contains("server.settings"), "docs/lua.md");
+    assert!(lua.contains("settings_changed") && lua.contains("server.settings"), "docs/lua/settings.md");
     let changelog = include_str!("../../../docs/changelog-milestones.md");
     assert!(changelog.contains("M22a") && changelog.contains("server.settings"), "the milestones' changelog");
     let minor: u64 = leon_server::API_VERSION.split('.').nth(1).unwrap().parse().unwrap();

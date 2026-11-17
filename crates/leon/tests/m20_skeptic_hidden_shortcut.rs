@@ -5,7 +5,7 @@ use support::Env;
 #[test]
 fn scratch_shortcut_reopens_a_hidden_float_only_window() {
     let e = Env::new();
-    let docs = include_str!("../../../docs/lua.md");
+    let docs = include_str!("../../../docs/lua/keys.md");
     let recipe = docs
         .split("<!-- m20-scratch -->")
         .nth(1)
