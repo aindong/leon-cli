@@ -108,3 +108,11 @@ fn the_app_reports_its_geometry_only_when_it_changes(cx: &mut TestAppContext) {
     assert!(resized, "a resized window didn't report its new geometry");
     assert!(font, "a font change didn't report the new cell");
 }
+
+/// A dragged sidebar keeps a whole width, so the pane area's edges fall on whole pixels, as the
+/// server's sum for a new drawer assumes.
+#[test]
+fn a_dragged_sidebar_width_is_whole() {
+    let w = leon_app::chrome::clamp_width(250.4);
+    assert_eq!(w, w.round(), "{w}");
+}

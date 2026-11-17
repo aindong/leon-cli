@@ -106,7 +106,9 @@ impl Settings {
 
 pub fn clamp_width(w: f32) -> f32 {
     if w.is_finite() {
-        w.clamp(SIDEBAR_WIDTHS.0, SIDEBAR_WIDTHS.1)
+        // whole points: a fraction would put the pane area's edges between pixels, and the cells
+        // the server works out for a new drawer (`client.geometry`) one column off
+        w.round().clamp(SIDEBAR_WIDTHS.0, SIDEBAR_WIDTHS.1)
     } else {
         Settings::default().sidebar_width
     }

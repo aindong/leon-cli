@@ -8,7 +8,9 @@ impl Shared {
     /// Tell the server again what was last told, on a re-attach: it may have restarted, or missed
     /// it while a link was down. Off the UI's connection, as a re-attach's other calls are.
     pub(super) fn resend_geometry(&self) {
-        if let Some(p) = lock(&self.geometry).clone() {
+        // not held over the call: over a link it can take seconds, and the UI reports through it
+        let last = lock(&self.geometry).clone();
+        if let Some(p) = last {
             let _ = lock(&self.fetch).call("client.geometry", p);
         }
     }
@@ -26,7 +28,8 @@ impl Remote {
         }
         *last = Some(p.clone());
         drop(last);
-        // a failure needs nothing: a re-attach tells it again, a refusal won't change
+        // a failure needs nothing: a re-attach tells the last one again (so it isn't forgotten
+        // here), and a refusal (a server too old for it) won't change
         self.send_then("client.geometry", p, |_| {});
     }
 }
