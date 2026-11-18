@@ -1,14 +1,11 @@
 # scenes.sh: the take's scenes, sourced by run-demo.sh, which defines at, k, g, mark, caption and zoom
 scene1() { # the empty state: the lion, "Keep your work in view", the shortcuts
-  mark "1 empty state" # no caption: the empty state says it
-  # zoomed on its top half from before the first frame (the move ends at -1.6 s, so the video
-  # opens on it): the empty state's third row names two other products. It chains into scene 2's zoom
-  printf '{"t": -2.3, "type": "zoom", "region": [757, 271, 1365, 768], "until": 4.6}\n' >>"$cuefile"
+  mark "1 empty state" # no caption: the empty state says it; no zoom: the whole window, every row in frame
 }
 scene2() { # build up: a session, a shell, an agent beside it, then the others one by one
   at 4; mark "2 build-up"; k combo cmd+n
   caption "Start with one terminal." 10.5
-  at 5.2; zoom 0 9 1600 900 10.3 # the sidebar and the shell, as it is typed into
+  at 4.4; zoom 0 9 1600 900 10.3 # the sidebar and the shell as they appear, one move from the whole window
   at 5.5; k type "cd work/shelf-api"; k key return
   at 7.3; k type "leon split --ratio 60 -- agent"; k key return
   at 10.6; caption "Add agents as you go." 17.3
