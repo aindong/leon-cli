@@ -37,6 +37,8 @@ fn the_alternate_screen_leaves_the_store_alone() {
     let lines: String = (0..3000).map(|i| format!("kept {i}\r\n")).collect();
     t.write(lines.as_bytes()).unwrap();
     wait(&t, "printed the lines", |t| t.text(true).ends_with("kept 2999"));
+    // a pause in output moves history past alacritty's window into the store
+    wait(&t, "moved into the store", |t| t.with_term(|t| t.grid().history_size()) <= 1000);
     let before = kept(&t);
     assert!(before.len() > 2900, "the history is kept: {}", before.len());
     assert!(t.with_term(|t| t.grid().history_size()) < before.len(), "the store holds lines");

@@ -20,6 +20,15 @@ fn numbered(from: usize, to: usize) -> String {
     (from..to).map(|i| format!("{i}\r\n")).collect()
 }
 
+/// Wait for the pause in output that moves history past alacritty's window into the store.
+fn settled(t: &Terminal) {
+    let end = Instant::now() + Duration::from_secs(10);
+    while t.with_term(|t| t.grid().history_size()) > MOST_IN_ALACRITTY {
+        assert!(Instant::now() < end, "history never moved into the store");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 fn line(t: &Terminal, line: usize) -> Option<String> {
     let l = t.lines(line, 1, &DARK);
     l.rows.iter().find(|r| r.line == line).map(|r| row_text(&r.spans))
@@ -40,8 +49,9 @@ fn ten_thousand_lines_keep_their_numbers_with_most_of_them_in_the_store() {
     let oldest_in_alacritty = 29977 - alacritty;
     let from = oldest_in_alacritty - 500;
     let rows = t.lines(from, 1000, &DARK).rows;
-    let got: Vec<(usize, String)> = rows.iter().map(|r| (r.line, row_text(&r.spans))).collect();
-    let want: Vec<(usize, String)> = (from..from + 1000).map(|n| (n, n.to_string())).collect();
+    let got: Vec<(usize, String)> =
+        rows.iter().filter(|r| r.line < 30000).map(|r| (r.line, row_text(&r.spans))).collect();
+    let want: Vec<(usize, String)> = (from..30000).map(|n| (n, n.to_string())).collect();
     assert_eq!(got, want, "a range across the boundary");
 }
 
@@ -71,6 +81,7 @@ fn a_line_read_before_it_moves_reads_the_same_after() {
     assert_eq!(t.with_term(|t| t.grid().history_size()), t.lines(0, 0, &DARK).history, "nothing stored yet");
     t.write(numbered(600, 5000).as_bytes()).unwrap();
     wait("4999");
+    settled(&t);
     let l = t.lines(0, 0, &DARK);
     let alacritty = t.with_term(|t| t.grid().history_size());
     assert!(

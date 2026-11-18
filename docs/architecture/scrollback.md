@@ -1,42 +1,52 @@
-# Scrollback: alacritty's window and leon's store
+# Scrollback: alacritty's rows and leon's store
 
 How a terminal keeps its history (`crates/leon-core/src/terminal_history.rs`). The numbering
 clients see is in [Protocol and clients](protocol-and-clients.md), "Scrollback in the app".
 
 - **Why a store.** alacritty keeps every history row at the pane's full width, 24 bytes a cell:
-  10,000 lines at 80 columns hold 19.7 MB whatever they say, 48 MB at 200 columns. leon keeps
-  alacritty's history to `WINDOW` (1,000) rows and moves older rows into a store of its own, as
-  their characters and runs of style (colours and flags, 12 bytes a run), with alacritty's own
-  `CellExtra` (combining marks, underline colour, OSC 8 link) kept for the few cells that have one.
-  A line of 70 characters with a few colours costs about 170 bytes instead of 1,920. 10,000 such
-  lines cost 3.5 MB in all (`b1_store_memory.rs` counts it). Without a fork: rows are read through
-  `Term::grid()`, and `Grid::update_history` drops them from alacritty.
-- **Why nothing is lost on the way.** alacritty drops its oldest row when a push finds its history
-  full. So output is fed in pieces that can't push more rows than the window has room for: a row is
-  pushed by a line feed (LF, VT, FF, `ESC D`, `ESC E`) or by text wrapping past the last column, so
-  a piece holds at most half its room in line feeds and `cols` × the other half in bytes. Before
-  each piece on the primary screen, alacritty's rows past 800 move into the store, which keeps 200
-  rows of room: half of it for whatever a piece that started on the alternate screen pushes after
-  switching back. `CSI n S` and a delete-line on the top row push up to a screen at once; a piece of
-  them can overflow the window, which `feed` sees, and then it moves the count by `GAP` (past any
-  number a client keeps), since the store's lines would otherwise be numbered one too far.
-- **Numbering.** The store's lines are numbered just above alacritty's oldest: line `scrolled -
-  history` is the store's oldest, and `history` counts both. A row keeps its number as it moves, so
-  nothing a client holds (its cache, a selection, a find result) changes. `lines` reads a range
-  across both; `text` (`capture`, persistence, `leon attach`) is the store's text then alacritty's.
+  10,000 lines at 80 columns hold 19.7 MB whatever they say, 48 MB at 200 columns. leon moves
+  history into a store of its own, as each row's characters and runs of style (colours and flags,
+  12 bytes a run, none for a row in the default style), with alacritty's own `CellExtra`
+  (combining marks, underline colour, OSC 8 link) kept for the few cells that have one. A line of
+  70 characters with a few colours costs about 170 bytes instead of 1,920: 10,000 such lines cost
+  2.2 MB (`b1_store_memory.rs` counts it). Without a fork: rows are read through `Term::grid()`
+  and dropped with `Grid::update_history`.
+- **When rows move.** While output streams, alacritty keeps its rows as it does alone, so `cat`
+  of a big file runs as fast as before: copying every row as it scrolls cost a one-character line
+  seven times its parse. When output pauses for 100 ms, and at least once a second while it
+  streams, `Store::settle` moves alacritty's history into the store once it holds more than
+  `WINDOW` (1,000) rows. It moves all of it: alacritty's storage grows 1,000 rows at a time and
+  only shrinks when more than 1,000 rows are dropped at once, so leaving 1,000 behind would keep
+  2,000 allocated. So at rest alacritty holds the newest 1,000 rows at most (none just after a
+  burst), and the store the rest. Only rows the cap keeps are copied.
+- **Why nothing is lost.** alacritty's limit is the `scrollback` cap, so a row it drops as a burst
+  scrolls (a synchronized update applies up to 2 MiB at once) is one the cap drops too; the store,
+  older still, is emptied then. `counting` sees alacritty's limit reached and moves the count by
+  `GAP`, past any number a client keeps.
+- **Numbering.** The store's lines are numbered just above alacritty's oldest: line
+  `scrolled - history` is the store's oldest, and `history` counts both. A row keeps its number as
+  it moves, so nothing a client holds (its cache, a selection, a find result) changes. `lines`
+  reads a range across both; `text` (`capture`, persistence, `leon attach`) is the store's text
+  then alacritty's.
 - **The alternate screen.** It has no history, as before: nothing moves while it shows (alacritty's
   primary grid is out of reach then), `history` is 0 and `text` is that screen alone.
-- **Clears.** `ESC c` resets both screens, so it clears the store. `CSI 3 J` clears only the history
-  of the screen showing, so it clears the store only when its piece ran on the primary screen.
+- **Clears.** A slice of output ends at a history clear, so the screen showing after it is the one
+  it cleared. `ESC c` resets both screens and clears the store; `CSI 3 J` (any leading zeros,
+  further parameters ignored, as vte reads it) clears the store when it ran on the primary screen.
 - **Resize.** alacritty re-wraps its own rows; the store's are never re-wrapped. A narrower pane
   cuts a stored row at its edge in `lines` (`text` keeps it whole); a wider one shows it as it was.
   Before a re-wrap on the primary screen alacritty's limit is raised, so the re-wrap drops nothing,
-  and what spills past the window moves into the store. On the alternate screen the primary grid
-  re-wraps out of reach, keeping 1,000 rows (known limit).
+  and what goes past 1,000 rows then moves into the store. On the alternate screen the primary grid
+  re-wraps out of reach, within the cap.
 - **The cap.** `leon.set("scrollback", N)` (0 to 100,000, default 10,000) caps the store and
   alacritty's rows together. The server applies it to every terminal on a reload and to each new
-  one, and a lower value drops the oldest lines at once.
-- **Known limits.** Find, selection and links read alacritty's rows only, so they reach the newest
-  1,000 lines of history, not the store's. A stored tab is shown in `text` with alacritty's default
-  8-column stops (a program's own, set with HTS, aren't readable from outside). The underline colour
-  is kept but not drawn, as before.
+  one (a restored block's saved text included), and a lower value drops the oldest lines at once;
+  on the alternate screen, the primary screen's rows in alacritty only when it shows again.
+- **Cost.** A stored cell is its character (1 to 4 bytes); a 12-byte run per style change and a
+  16-byte entry per cell with a mark or a link come on top. Ordinary text is about 2 bytes a cell;
+  output that changes style and stacks a mark on every cell, the worst case, about 32, more than
+  alacritty's 24 (still bounded by the cap times the width).
+- **Known limits.** Find, selection and links read alacritty's rows only, so they reach the store's
+  lines only when B2 lands. A stored tab is shown in `text` with alacritty's default 8-column stops
+  (a program's own, set with HTS, aren't readable from outside). The underline colour is kept but
+  not drawn, as before.

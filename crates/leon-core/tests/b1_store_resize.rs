@@ -46,7 +46,7 @@ fn narrowing_a_wide_window_loses_no_line() {
     let wide = |n: usize| format!("wide-{n:04}-{}", "y".repeat(189));
     let bytes: String = (0..3000).map(|n| wide(n) + "\r\n").collect();
     let spec = Spec { command: vec!["/bin/sleep".into(), "60".into()], cwd: None, env: vec![] };
-    let t = Terminal::spawn_sized(spec, bytes.as_bytes(), Some((24, 200)), |_| {}).unwrap();
+    let t = Terminal::spawn_sized(spec, bytes.as_bytes(), Some((24, 200)), 10_000, |_| {}).unwrap();
     let all: Vec<String> = (0..3000).map(wide).collect();
     t.resize(24, 30).unwrap();
     let got: Vec<String> = t.text(true).lines().map(str::to_string).collect();

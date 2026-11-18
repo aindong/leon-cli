@@ -231,15 +231,17 @@ impl Terminal {
         shown: &[u8],
         notify: impl Fn(Notice) + Send + Sync + 'static,
     ) -> io::Result<Terminal> {
-        Self::spawn_sized(spec, shown, None, notify)
+        Self::spawn_sized(spec, shown, None, SCROLLBACK, notify)
     }
 
     /// `spawn_showing` at `size` (None: 24x80, clamped as `resize` clamps): the program's first
-    /// look at its size is right.
+    /// look at its size is right. It keeps `scrollback` lines of history (`set_scrollback`), what
+    /// it shows first included.
     pub fn spawn_sized(
         spec: Spec,
         shown: &[u8],
         size: Option<(u16, u16)>,
+        scrollback: usize,
         notify: impl Fn(Notice) + Send + Sync + 'static,
     ) -> io::Result<Terminal> {
         let notify: Notify = Arc::new(notify);
@@ -287,14 +289,16 @@ impl Terminal {
                 written
             })
         });
-        let config = Config { scrolling_history: WINDOW, ..Config::default() };
+        let scrollback = scrollback.min(MAX_SCROLLBACK);
+        let config = Config { scrolling_history: scrollback.max(1), ..Config::default() };
         let seen = Arc::new(Mutex::new(Seen::default()));
         let listener = Listener { writer: writer.clone(), seen: seen.clone() };
         let term = Term::new(config, &Size { rows, cols }, listener);
-        let mut emulator = Emu { term, store: Store::new(SCROLLBACK) };
+        let mut emulator = Emu { term, store: Store::new(scrollback) };
         let mut parser: Processor = Processor::new();
         let scrolled = Arc::new(AtomicUsize::new(0));
         view::feed(&mut emulator, &mut parser, &mut Escapes::default(), shown, &scrolled);
+        emulator.store.settle(&mut emulator.term);
         let term = Arc::new(Mutex::new(emulator));
         let tracker = Arc::new(Mutex::new(Tracker::default()));
 
