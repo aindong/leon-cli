@@ -13,7 +13,8 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 #### Added
 - In Leon.app's command palette: Close Tab (⌥⌘W), Close Session (⌥⇧⌘W), Rename Tab… and Rename
   Session…. A close asks first when a program other than a shell is in front in that tab or
-  session, naming it, as quitting does; only shells close at once.
+  session, naming it, as quitting does; only shells close at once. A server older than the
+  `foreground` field names no programs, so its tabs and sessions close without asking.
 - A × on hover on each sidebar tab row and session, top style's session rows, and titlebar tabs
   (whose × used to close without asking), by the same rule.
 - A right-click on a sidebar row or a titlebar tab opens a menu: Rename Tab… and Close Tab, or New
@@ -30,8 +31,9 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   escape or a non-ASCII script could disguise it (as punycode) or the address was cut; then Copy and
   Open in Browser. A right-click on a link opens the same card at once, ready for the arrow keys and
   Enter. A program that asked for the mouse (vim, htop) gets the click and shows no card. ⌘-click
-  still opens a link at once, and its prompt shows the same lines. The card closes when the mouse
-  leaves the link and the card, on any key, and on scroll.
+  still opens a link at once, and its prompt shows the same lines. A card the mouse opened closes
+  when the mouse leaves the link and the card, on any key, and on scroll; the right-click card
+  closes on Escape, on any key but the arrows and Enter, and on a click outside it.
 - `leon.set("link_card", false)` turns the card off (a toggle in Settings, Terminal).
   `server.settings` reports `link_card`, a new result field on a stable method, so `api_version`
   goes from `1.12.0` to `1.13.0`.

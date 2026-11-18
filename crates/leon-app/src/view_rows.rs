@@ -59,9 +59,15 @@ impl Workspace {
     /// given), on whichever machine has it: what a close asks about. One the server can't name
     /// (another user's, under `sudo` or `su`) is "a program": it runs all the same.
     pub fn running_programs(&self, session: &str, window: Option<&str>) -> Vec<String> {
-        let Some(remote) = self.rows().iter().find(|r| r.id == session).and_then(|r| self.row_remote(r.host)) else {
-            return Vec::new();
-        };
+        let Some(host) = self.rows().iter().find(|r| r.id == session).map(|r| r.host) else { return Vec::new() };
+        let row = RowRef { host, session: session.to_string(), window: window.map(String::from) };
+        self.running_on(&row)
+    }
+
+    /// `running_programs` of a row, on its own machine.
+    fn running_on(&self, row: &RowRef) -> Vec<String> {
+        let (session, window) = (row.session.as_str(), row.window.as_deref());
+        let Some(remote) = self.row_remote(row.host) else { return Vec::new() };
         let model = remote.model();
         let Some(s) = model.session(session) else { return Vec::new() };
         let blocks = s.blocks.iter().filter(|b| window.is_none_or(|w| b.window_id == w));
@@ -97,7 +103,7 @@ impl Workspace {
 
     /// The name a row shows: its session's or its tab's title.
     fn row_name(&self, row: &RowRef) -> Option<String> {
-        let s = self.rows().into_iter().find(|r| r.id == row.session)?;
+        let s = self.rows().into_iter().find(|r| r.id == row.session && r.host == row.host)?;
         match &row.window {
             Some(w) => s.windows.into_iter().find(|t| &t.id == w).map(|t| t.title),
             None => Some(s.title),
@@ -106,9 +112,11 @@ impl Workspace {
 
     /// Close a tab or a session; with programs other than shells running there, after asking.
     pub(in crate::view) fn close_row(&mut self, row: RowRef, window: &mut Window, cx: &mut Context<Self>) {
-        let running = self.running_programs(&row.session, row.window.as_deref());
+        // the machine now: a host removed while the prompt is open shifts the others' places
+        let Some(remote) = self.row_remote(row.host) else { return };
+        let running = self.running_on(&row);
         if running.is_empty() {
-            return self.close_now(row, cx);
+            return self.close_now(&remote, row, cx);
         }
         let what = if row.window.is_some() { "Tab" } else { "Session" };
         let (n, list) = (running.len(), running.join(", "));
@@ -121,14 +129,13 @@ impl Workspace {
         let answer = window.prompt(PromptLevel::Warning, &title, Some(&detail), &buttons, cx);
         cx.spawn(async move |this, cx| {
             if answer.await == Ok(0) {
-                let _ = this.update(cx, |ws, cx| ws.close_now(row, cx));
+                let _ = this.update(cx, |ws, cx| ws.close_now(&remote, row, cx));
             }
         })
         .detach();
     }
 
-    fn close_now(&mut self, row: RowRef, cx: &mut Context<Self>) {
-        let Some(remote) = self.row_remote(row.host) else { return };
+    fn close_now(&mut self, remote: &Remote, row: RowRef, cx: &mut Context<Self>) {
         match &row.window {
             Some(w) => {
                 remote.act_later("session.close_window", json!({ "session_id": row.session, "window_id": w }), drop)

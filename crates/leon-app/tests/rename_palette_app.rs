@@ -25,7 +25,9 @@ fn renaming_a_tab_and_a_session(cx: &mut TestAppContext) {
     assert_eq!(ws.read_with(cx, |ws, _| ws.tab_titles()), ["logs"], "Escape changes nothing");
     act(&ws, cx, "client.tab.rename");
     cx.simulate_keystrokes("enter");
-    assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.tab_titles()) == [before.clone()]), "empty clears the label");
+    // the program's own title again (whatever the shell set by now), not the label
+    let cleared = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.tab_titles()).first().is_some_and(|t| t != "logs"));
+    assert!(cleared, "empty clears the label");
 
     act(&ws, cx, "session.rename");
     cx.simulate_keystrokes("w e b enter");

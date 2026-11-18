@@ -62,10 +62,11 @@ pub fn link_card_lines(uri: &str) -> Vec<String> {
         None => s.to_string(),
     };
     let shown = strip_hidden(uri);
-    // `scheme://authority` as it is, then the rest
+    // `scheme://authority` as it is, then the rest; a browser ends a web address's authority at
+    // `\` too (WHATWG URL, special schemes)
     let head = shown.find("://").map_or(0, |i| {
         let from = i + 3;
-        from + shown[from..].find(['/', '?', '#']).unwrap_or(shown.len() - from)
+        from + shown[from..].find(['/', '?', '#', '\\']).unwrap_or(shown.len() - from)
     });
     let authority = shown[..head].split_once("://").map_or("", |(_, a)| a);
     let plain = format!("{}{}", &shown[..head], decoded(&shown[head..]));
@@ -75,10 +76,13 @@ pub fn link_card_lines(uri: &str) -> Vec<String> {
     }
     let host = authority.rsplit('@').next().unwrap_or("");
     let host = host.rsplit_once(':').filter(|(_, p)| p.bytes().all(|b| b.is_ascii_digit())).map_or(host, |(h, _)| h);
-    let disguised = authority.contains(['@', '%']) || !authority.is_ascii() || lines[0].ends_with('…');
+    // an `@` just past a `\` reads as user-info to a person, not to a browser
+    let after = shown[head..].split(['/', '?', '#']).next().unwrap_or("");
+    let disguised =
+        authority.contains(['@', '%']) || after.contains('@') || !authority.is_ascii() || lines[0].ends_with('…');
     if !host.is_empty() && disguised {
         let named = decoded(host);
-        lines.push(format!("host {}", idna::domain_to_ascii(&named).unwrap_or(named)));
+        lines.push(format!("host {}", cut(&idna::domain_to_ascii(&named).unwrap_or(named))));
     }
     lines
 }
@@ -106,6 +110,7 @@ impl Workspace {
             c.pane != id || self.grid_pos(id, ev.position).is_none_or(|p| !(c.link.start..=c.link.end).contains(&p))
         };
         if self.term.card.open.as_ref().is_some_and(|c| !c.focused && off(c)) {
+            self.card_cancel(); // back on the same cell, the wait starts again
             self.close_card(window, cx);
         }
         self.card_rest(id, ev, cx);
@@ -270,6 +275,7 @@ impl Workspace {
         let Some(c) = self.term.card.open.as_ref().filter(|c| !c.focused) else { return };
         let on = self.grid_pos(&c.pane, at).is_some_and(|p| (c.link.start..=c.link.end).contains(&p));
         if !on {
+            self.card_cancel();
             self.close_card(window, cx);
         }
     }
