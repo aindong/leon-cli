@@ -211,7 +211,7 @@ impl Workspace {
 
     /// The inline field in a row's place.
     pub(in crate::view) fn rename_field(&self, r: &Renaming, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let text = div().when(r.fresh, |d| d.bg(rgb(t.selection))).child(r.text.clone());
+        let text = div().when(r.fresh, |d| d.bg(rgb(t.selected))).child(r.text.clone());
         div()
             .debug_selector(|| sel("rename-field".into()))
             .flex()
@@ -225,7 +225,7 @@ impl Workspace {
             .bg(rgb(t.bg))
             .text_color(rgb(t.title))
             .child(text)
-            .when(!r.fresh, |d| d.child(div().w(px(1.)).h(px(14.)).bg(rgb(t.title))))
+            .when(!r.fresh, |d| d.child(div().h(px(14.)).border_l_1().border_color(rgb(t.title))))
             .on_mouse_down_out(cx.listener(|ws, _, _, cx| ws.rename_commit(cx)))
             // a press in the field is the field's: not the row's select, fold or rename again
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
