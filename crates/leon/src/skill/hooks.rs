@@ -1,5 +1,6 @@
-//! Our SessionStart hook inside a Claude Code `settings.json` or a Codex `hooks.json`. Both use
-//! `{"hooks":{"SessionStart":[{"matcher"?,"hooks":[{"type":"command","command":…}]}]}}`.
+//! Our hooks inside a Claude Code `settings.json` or a Codex `hooks.json`. Both use
+//! `{"hooks":{"<Event>":[{"matcher"?,"hooks":[{"type":"command","command":…}]}]}}`. Each agent gets a
+//! SessionStart hook (where it is, how to resume it) and one per event that sets its status.
 
 use std::path::Path;
 
@@ -7,27 +8,71 @@ use serde_json::{json, Value};
 
 use super::{Agent, State};
 
-/// Runs `leon skill hook --agent <agent>` when leon is on PATH, and never fails the agent's
-/// session start. The agent's name says which resume command the hook records.
-pub fn command(agent: Agent) -> String {
-    format!("command -v leon >/dev/null 2>&1 && leon skill hook --agent {} || true", agent.name())
+/// The events leon hooks for `agent`: (event, matcher, the `--on` its command passes). Claude Code
+/// asks its questions with the AskUserQuestion tool; Codex has no question tool, but an
+/// Interrupt event.
+fn events(agent: Agent) -> &'static [(&'static str, Option<&'static str>, Option<&'static str>)] {
+    match agent {
+        Agent::Claude => &[
+            ("SessionStart", None, None),
+            ("UserPromptSubmit", None, Some("user-prompt-submit")),
+            ("PermissionRequest", None, Some("permission-request")),
+            ("PreToolUse", Some("AskUserQuestion"), Some("pre-tool-use")),
+            ("PostToolUse", None, Some("post-tool-use")),
+            ("PostToolUseFailure", None, Some("post-tool-use-failure")),
+            ("Stop", None, Some("stop")),
+        ],
+        Agent::Codex => &[
+            ("SessionStart", None, None),
+            ("UserPromptSubmit", None, Some("user-prompt-submit")),
+            ("PermissionRequest", None, Some("permission-request")),
+            ("PostToolUse", None, Some("post-tool-use")),
+            ("Stop", None, Some("stop")),
+            ("Interrupt", None, Some("interrupt")),
+        ],
+    }
+}
+
+/// Every event either agent's hooks use: where to look for ours.
+const ALL_EVENTS: &[&str] = &[
+    "SessionStart",
+    "UserPromptSubmit",
+    "PermissionRequest",
+    "PreToolUse",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "Stop",
+    "Interrupt",
+];
+
+/// Runs `leon skill hook --agent <agent> [--on <event>]` when leon is on PATH, and never fails the
+/// agent. The agent's name says which resume command the session-start hook records.
+pub fn command(agent: Agent, on: Option<&str>) -> String {
+    let on = on.map(|e| format!(" --on {e}")).unwrap_or_default();
+    format!("command -v leon >/dev/null 2>&1 && leon skill hook --agent {}{on} || true", agent.name())
 }
 
 /// Commands an older leon wrote, so setup can replace them and remove can find them. A command is
-/// ours only when it is one of these, or `command` for an agent, exactly: a user's hook that
-/// merely mentions `leon skill hook` is theirs.
+/// ours only when it is one of these, or `command` for an agent and event, exactly: a user's hook
+/// that merely mentions `leon skill hook` is theirs.
 const OLD_COMMANDS: &[&str] = &["leon skill hook", "command -v leon >/dev/null 2>&1 && leon skill hook || true"];
 
 fn is_ours(hook: &Value) -> bool {
     hook["command"].as_str().is_some_and(|c| {
         let c = c.trim();
-        OLD_COMMANDS.contains(&c) || Agent::ALL.iter().any(|a| command(*a) == c)
+        OLD_COMMANDS.contains(&c)
+            || Agent::ALL.iter().any(|a| events(*a).iter().any(|(_, _, on)| command(*a, *on) == c))
     })
 }
 
-/// The group setup adds: no matcher, so it runs on startup, resume, clear and compact.
-fn our_group(agent: Agent) -> Value {
-    json!({ "hooks": [{ "type": "command", "command": command(agent) }] })
+/// The group setup adds for an event: SessionStart's has no matcher, so it runs on startup, resume,
+/// clear and compact.
+fn our_group(agent: Agent, matcher: Option<&str>, on: Option<&str>) -> Value {
+    let mut g = json!({ "hooks": [{ "type": "command", "command": command(agent, on) }] });
+    if let Some(m) = matcher {
+        g.as_object_mut().expect("an object").shift_insert(0, "matcher".into(), json!(m));
+    }
+    g
 }
 
 /// The file's JSON (`None` if it doesn't exist), or why we won't edit it.
@@ -38,71 +83,90 @@ pub fn read(path: &Path) -> Result<Option<Value>, String> {
         Ok(t) => t,
     };
     let v: Value = serde_json::from_str(&text).map_err(|e| format!("{}: not JSON: {e}", path.display()))?;
-    let bad = |what: &str| Err(format!("{}: {what}", path.display()));
+    let bad = |what: String| Err(format!("{}: {what}", path.display()));
     if !v.is_object() {
-        return bad("not a JSON object");
+        return bad("not a JSON object".into());
     }
     match v.get("hooks") {
         None => {}
-        Some(Value::Object(h)) => match h.get("SessionStart") {
-            None => {}
-            Some(Value::Array(groups)) => {
-                for g in groups {
-                    if !g.is_object() || g.get("hooks").is_some_and(|h| !h.is_array()) {
-                        return bad("a hooks.SessionStart entry is not {\"hooks\": [...]}");
+        Some(Value::Object(h)) => {
+            for event in ALL_EVENTS {
+                match h.get(*event) {
+                    None => {}
+                    Some(Value::Array(groups)) => {
+                        for g in groups {
+                            if !g.is_object() || g.get("hooks").is_some_and(|h| !h.is_array()) {
+                                return bad(format!("a hooks.{event} entry is not {{\"hooks\": [...]}}"));
+                            }
+                        }
                     }
+                    Some(_) => return bad(format!("hooks.{event} is not an array")),
                 }
             }
-            Some(_) => return bad("hooks.SessionStart is not an array"),
-        },
-        Some(_) => return bad("\"hooks\" is not an object"),
+        }
+        Some(_) => return bad("\"hooks\" is not an object".into()),
     }
     Ok(Some(v))
 }
 
-fn groups(v: &Value) -> &[Value] {
-    v["hooks"]["SessionStart"].as_array().map_or(&[], Vec::as_slice)
+fn groups<'a>(v: &'a Value, event: &str) -> &'a [Value] {
+    v["hooks"][event].as_array().map_or(&[], Vec::as_slice)
 }
 
 fn ours_count(v: &Value) -> usize {
-    groups(v).iter().filter_map(|g| g["hooks"].as_array()).flatten().filter(|h| is_ours(h)).count()
+    ALL_EVENTS
+        .iter()
+        .flat_map(|e| groups(v, e))
+        .filter_map(|g| g["hooks"].as_array())
+        .flatten()
+        .filter(|h| is_ours(h))
+        .count()
 }
 
-/// Current means exactly one entry of ours, in exactly the group setup writes for `agent`.
+/// Current means exactly one entry of ours per event `agent` uses, each in exactly the group setup
+/// writes.
 pub fn state(v: &Value, agent: Agent) -> State {
+    let all = events(agent);
     match ours_count(v) {
         0 => State::Missing,
-        1 if groups(v).contains(&our_group(agent)) => State::Current,
+        n if n == all.len() && all.iter().all(|(e, m, on)| groups(v, e).contains(&our_group(agent, *m, *on))) => {
+            State::Current
+        }
         _ => State::Outdated,
     }
 }
 
-/// `v` without our entries. Groups, `SessionStart` and `hooks` that only held ours go too; anything
-/// else (an empty group the user wrote, other keys) stays as it was.
-// shortcut: a `hooks` or `SessionStart` the user had left empty before setup goes too; record what
+/// `v` without our entries. Groups, events and `hooks` that only held ours go too; anything else
+/// (an empty group the user wrote, other keys) stays as it was.
+// shortcut: an event list or `hooks` the user had left empty before setup goes too; record what
 // setup created if that ever matters.
 pub fn without_ours(v: Value) -> Value {
     strip(v, true)
 }
 
-/// Take out our entries and the groups that held only them; with `prune`, also an emptied
-/// `SessionStart` and `hooks`.
+/// Take out our entries and the groups that held only them; with `prune`, also an emptied event
+/// list and `hooks`.
 fn strip(mut v: Value, prune: bool) -> Value {
     if ours_count(&v) == 0 {
         return v;
     }
     let root = v.as_object_mut().expect("read() checked");
     let hooks = root.get_mut("hooks").and_then(Value::as_object_mut).expect("ours_count found some");
-    let starts = hooks.get_mut("SessionStart").and_then(Value::as_array_mut).expect("ours_count found some");
-    starts.retain_mut(|g| match g.get_mut("hooks").and_then(Value::as_array_mut) {
-        Some(list) if list.iter().any(is_ours) => {
-            list.retain(|h| !is_ours(h));
-            !list.is_empty()
+    for event in ALL_EVENTS {
+        let Some(list) = hooks.get_mut(*event).and_then(Value::as_array_mut) else { continue };
+        if !list.iter().filter_map(|g| g["hooks"].as_array()).flatten().any(is_ours) {
+            continue;
         }
-        _ => true,
-    });
-    if prune && starts.is_empty() {
-        hooks.shift_remove("SessionStart");
+        list.retain_mut(|g| match g.get_mut("hooks").and_then(Value::as_array_mut) {
+            Some(l) if l.iter().any(is_ours) => {
+                l.retain(|h| !is_ours(h));
+                !l.is_empty()
+            }
+            _ => true,
+        });
+        if prune && list.is_empty() {
+            hooks.shift_remove(*event);
+        }
     }
     if prune && hooks.is_empty() {
         root.shift_remove("hooks");
@@ -110,13 +174,16 @@ fn strip(mut v: Value, prune: bool) -> Value {
     v
 }
 
-/// `v` (or a new file) with exactly our group, appended after the user's own. Keys stay where they are.
+/// `v` (or a new file) with exactly our groups, each appended after the user's own. Keys stay where
+/// they are.
 pub fn with_ours(v: Option<Value>, agent: Agent) -> Value {
     let mut v = v.map_or_else(|| json!({}), |v| strip(v, false));
     let root = v.as_object_mut().expect("read() checked");
-    let hooks = root.entry("hooks").or_insert_with(|| json!({}));
-    let starts = hooks.as_object_mut().expect("read() checked").entry("SessionStart").or_insert_with(|| json!([]));
-    starts.as_array_mut().expect("read() checked").push(our_group(agent));
+    let hooks = root.entry("hooks").or_insert_with(|| json!({})).as_object_mut().expect("read() checked");
+    for (event, matcher, on) in events(agent) {
+        let list = hooks.entry(*event).or_insert_with(|| json!([]));
+        list.as_array_mut().expect("read() checked").push(our_group(agent, *matcher, *on));
+    }
     v
 }
 
@@ -126,10 +193,17 @@ mod tests {
 
     #[test]
     fn add_then_remove_round_trips() {
-        let mine = json!({ "a": 1, "hooks": { "Stop": [], "SessionStart": [{ "matcher": "x", "hooks": [] }] } });
+        let mine =
+            json!({ "a": 1, "hooks": { "Notification": [], "SessionStart": [{ "matcher": "x", "hooks": [] }] } });
         let added = with_ours(Some(mine.clone()), Agent::Claude);
         assert_eq!(state(&added, Agent::Claude), State::Current);
-        assert_eq!(without_ours(added), mine, "an empty group the user wrote stays");
+        assert_eq!(without_ours(added), mine, "an empty group and an event leon doesn't use stay");
+        let theirs = json!({ "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "say hi" }] }] } });
+        assert_eq!(
+            without_ours(with_ours(Some(theirs.clone()), Agent::Codex)),
+            theirs,
+            "a user's hook on our event stays"
+        );
         assert_eq!(without_ours(with_ours(None, Agent::Codex)), json!({}));
     }
 
@@ -143,15 +217,17 @@ mod tests {
         assert_eq!(fixed["hooks"]["SessionStart"][0]["hooks"], json!([{ "type": "command", "command": "x" }]));
         assert_eq!(state(&with_ours(Some(fixed.clone()), Agent::Claude), Agent::Claude), State::Current);
         assert_eq!(state(&fixed, Agent::Codex), State::Outdated, "the other agent's command is outdated here");
-        let twice = json!({ "hooks": { "SessionStart": [our_group(Agent::Codex), our_group(Agent::Codex)] } });
+        let twice = json!({ "hooks": { "SessionStart": [our_group(Agent::Codex, None, None), our_group(Agent::Codex, None, None)] } });
         assert_eq!(state(&twice, Agent::Codex), State::Outdated);
     }
 
     #[test]
     fn ours_means_exactly_our_command() {
         let cmd = |c: &str| json!({ "command": c });
-        assert!(is_ours(&cmd(&command(Agent::Claude))));
-        assert!(is_ours(&cmd(&command(Agent::Codex))));
+        assert!(is_ours(&cmd(&command(Agent::Claude, None))));
+        assert!(is_ours(&cmd(&command(Agent::Codex, None))));
+        assert!(is_ours(&cmd(&command(Agent::Claude, Some("stop")))));
+        assert!(!is_ours(&cmd(&command(Agent::Claude, Some("made-up")))), "only events leon hooks");
         assert!(is_ours(&cmd(OLD_COMMANDS[1])));
         assert!(is_ours(&cmd("leon skill hook")));
         assert!(!is_ours(&cmd("~/bin/ctx.sh; leon skill hook --legacy")));

@@ -7,6 +7,11 @@ feature here on 2026-11-18 shipped in 0.1.0.
 
 ## Since 0.1.0: the detail
 
+### Agents orchestrating agents
+
+`leon agent start|ls|tell`, `leon inbox`, status hooks, the permission guard; API `1.13.0`
+([agents.md](agents.md#orchestrate-other-agents)).
+
 ### Contributing and translations
 
 #### Added

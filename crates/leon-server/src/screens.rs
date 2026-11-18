@@ -117,6 +117,11 @@ fn terminals(ctx: &Ctx, ids: &[String]) -> Result<Vec<Arc<Terminal>>, ApiError> 
 }
 
 impl Screens {
+    /// Whether this connection watches block `id`.
+    pub fn watches(&self, id: &str) -> bool {
+        self.watched.contains_key(id)
+    }
+
     /// Replace the watched set. Blocks already watched keep what was sent (the client has it);
     /// new ones get a whole screen first.
     pub fn watch(&mut self, ctx: &Ctx, params: Value) -> Result<Value, ApiError> {

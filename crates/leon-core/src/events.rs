@@ -100,6 +100,9 @@ impl State {
             Notice::Bell => ("bell", json!({})),
             Notice::Foreground(name) => ("foreground_changed", json!({ "foreground": name })),
             Notice::ProgramStatus(change) => {
+                if let Change::Changed { id: None, record, .. } = &change {
+                    self.agent_reported(block_id, record);
+                }
                 let name = match change {
                     Change::Changed { .. } => "program_status_changed",
                     Change::Removed { .. } => "program_status_removed",

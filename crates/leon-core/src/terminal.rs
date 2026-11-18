@@ -202,6 +202,8 @@ pub struct Terminal {
     scrolled: Arc<AtomicUsize>,
     /// The program set X10 mouse mode (`?9`), which alacritty doesn't track.
     x10: Arc<AtomicBool>,
+    /// When input was last queued (`write`): leon's typed notices wait for a quiet pane.
+    last_input: Mutex<Option<std::time::Instant>>,
 }
 
 impl std::fmt::Debug for Terminal {
@@ -354,6 +356,7 @@ impl Terminal {
             resume: Mutex::default(),
             scrolled,
             x10,
+            last_input: Mutex::new(None),
         })
     }
 
@@ -368,7 +371,13 @@ impl Terminal {
 
     /// Queue input for the program; never blocks.
     pub fn write(&self, data: &[u8]) -> io::Result<()> {
+        *lock(&self.last_input) = Some(std::time::Instant::now());
         self.writer.input(data.to_vec())
+    }
+
+    /// When input was last queued for the program, from any client.
+    pub fn last_input(&self) -> Option<std::time::Instant> {
+        *lock(&self.last_input)
     }
 
     /// Whether the program asked for bracketed paste (a line editor does while it reads a line).

@@ -28,7 +28,14 @@ impl Terminal {
     /// Set this terminal's root record as an OSC 7501 report from its program would (`leon notify`):
     /// built into a report and run through the same parser, so the spec's limits and text rules
     /// hold. A title or msg the parser would drop is refused instead, so the caller hears of it.
-    pub fn report_status(&self, state: &str, title: Option<&str>, msg: Option<&str>) -> Result<(), String> {
+    /// `kind` (`permission`, `question` or `auth`) goes with `blocked` only.
+    pub fn report_status(
+        &self,
+        state: &str,
+        kind: Option<&str>,
+        title: Option<&str>,
+        msg: Option<&str>,
+    ) -> Result<(), String> {
         use base64::Engine as _;
         let b64 = |t: &str| base64::engine::general_purpose::STANDARD.encode(t);
         // a word, never pairs: `done:id=x` would reach another record than the root
@@ -37,6 +44,12 @@ impl Terminal {
             return Err(format!("{state:?} is not a state: working, blocked, done, error, idle or clear"));
         }
         let mut payload = format!("state={state}");
+        if let Some(k) = kind {
+            if state != "blocked" || !["permission", "question", "auth"].contains(&k) {
+                return Err(format!("{k:?} is not a kind: permission, question or auth, with state blocked"));
+            }
+            payload.push_str(&format!(":kind={k}"));
+        }
         for (key, text) in [("title", title), ("msg", msg)] {
             if let Some(t) = text {
                 payload.push_str(&format!(":{key}={}", b64(t)));
@@ -58,5 +71,12 @@ impl Terminal {
         }
         changes.into_iter().for_each(|c| (self.notify)(Notice::ProgramStatus(c)));
         Ok(())
+    }
+
+    /// Whether the program waits on a permission prompt: its root record is blocked/permission.
+    pub fn awaits_permission(&self) -> bool {
+        use crate::program_status::{Kind, State};
+        let root = lock(&self.tracker).store.get(None);
+        root.is_some_and(|r| r.state == State::Blocked && r.kind == Some(Kind::Permission))
     }
 }

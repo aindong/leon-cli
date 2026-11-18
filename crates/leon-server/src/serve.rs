@@ -141,12 +141,13 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
                 if !same_user(&stream) {
                     continue; // dropping the stream closes it
                 }
+                let peer = stream.peer_cred().ok().and_then(|c| c.pid());
                 shared.open.fetch_add(1, Ordering::SeqCst);
                 shared.touch();
                 let guard = Open(shared.clone());
                 tokio::spawn(async move {
                     let (read, write) = stream.into_split();
-                    let _ = connection(read, write, &guard.0).await;
+                    let _ = connection(read, write, &guard.0, peer).await;
                     drop(guard);
                 });
             }
@@ -162,6 +163,7 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
                 if idle { break; }
                 shared.ctx.sweep_parked();
                 shared.ctx.check_foregrounds(); // a program that starts silently prints nothing to notice
+                crate::agents::deliver(&shared.ctx);
                 if let Some(file) = &state_file {
                     autosave.tick(&shared.ctx, file);
                 }
@@ -286,7 +288,8 @@ enum Line {
 
 /// One connection (the Unix socket's, or one tailnet.rs let in): requests are answered one at a
 /// time, in order, while events the connection attached to are written between replies.
-pub(crate) async fn connection<R, W>(read: R, mut write: W, shared: &Shared) -> io::Result<()>
+/// `peer` is the client's pid, when the socket says (a local connection).
+pub(crate) async fn connection<R, W>(read: R, mut write: W, shared: &Shared, peer: Option<i32>) -> io::Result<()>
 where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin,
@@ -295,7 +298,7 @@ where
     let _reader = Reader(tokio::spawn(read_lines(read, tx)));
     let sub = Arc::new(Subscriber::default());
     let mut screens = Screens::default();
-    let result = serve_lines(&mut lines, &mut write, &sub, &mut screens, shared).await;
+    let result = serve_lines(&mut lines, &mut write, &sub, &mut screens, shared, peer).await;
     shared.ctx.park(&sub); // a resumable stream waits for its client to come back
     result
 }
@@ -323,6 +326,7 @@ async fn serve_lines(
     sub: &Arc<Subscriber>,
     screens: &mut Screens,
     shared: &Shared,
+    peer: Option<i32>,
 ) -> io::Result<()> {
     // Order: a finished call's reply, then the next request, then events, then screens, so an
     // event flood can't hold up replies and an attach reply precedes its events.
@@ -366,7 +370,10 @@ async fn serve_lines(
                 shared.touch();
                 match serde_json::from_str::<Request>(&text) {
                     Ok(req) => {
-                        let later: Later<Value> = if is_attach(&req.method) {
+                        let guard = crate::agents::guard(&shared.ctx, peer, |b| screens.watches(b), &req.method, &req.params);
+                        let later: Later<Value> = if let Err(e) = guard {
+                            Box::pin(std::future::ready(Err(e)))
+                        } else if is_attach(&req.method) {
                             // Here, not in the registry: attaching subscribes this connection.
                             Box::pin(std::future::ready(shared.ctx.attach(sub, &req.method, req.params)))
                         } else if req.method == "block.watch" {
@@ -450,25 +457,5 @@ async fn send(write: &mut (impl AsyncWrite + Unpin), line: &[u8], sub: &Subscrib
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn bind_refuses_an_open_dir_and_leaves_it_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(bind(&dir.path().join("server.sock")).await.is_err());
-        let mode = std::fs::metadata(dir.path()).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o755, "LEON_RUNTIME_DIR=/tmp must not chmod /tmp");
-    }
-
-    #[tokio::test]
-    async fn bind_makes_a_new_dir_private_and_the_socket_0600() {
-        let parent = tempfile::tempdir().unwrap();
-        let socket = parent.path().join("leon/server.sock");
-        let _l = bind(&socket).await.unwrap();
-        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode(&parent.path().join("leon")), 0o700);
-        assert_eq!(mode(&socket), 0o600);
-    }
-}
+#[path = "serve_tests.rs"]
+mod tests;
