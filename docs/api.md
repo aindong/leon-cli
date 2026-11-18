@@ -5401,7 +5401,7 @@ same facts for the server you run.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `reports` | [`Report`] | yes | Oldest first. A report's `state` is `done`, `blocked` or `error` as the worker reported it, or `exited`/`closed` when it ended; `body` is its message. |
+| `reports` | [`Report`] | yes | Oldest first. |
 
 **`Report`:** What a worker told its orchestrator.
 
@@ -5447,7 +5447,7 @@ same facts for the server you run.
     "type": "object",
     "properties": {
       "reports": {
-        "description": "Oldest first. A report's `state` is `done`, `blocked` or `error` as the worker reported it,\nor `exited`/`closed` when it ended; `body` is its message.",
+        "description": "Oldest first.",
         "type": "array",
         "items": {
           "$ref": "#/$defs/Report"
