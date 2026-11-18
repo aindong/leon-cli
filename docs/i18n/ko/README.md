@@ -1,4 +1,4 @@
-<!-- i18n: source=README.md commit=14af788efc95 -->
+<!-- i18n: source=README.md commit=b441b60b83aa -->
 > 이 문서는 번역본입니다. 기준은 [영어 문서](../../../README.md)이며, 영어 문서가 더 최신일 수 있습니다.
 
 # leon
@@ -45,7 +45,8 @@ xattr -dr com.apple.quarantine /Applications/Leon.app
 
 ```sh
 dpkg -i leon_*.deb                               # Debian or Ubuntu, as root
-tar xzf leon-*-linux.tar.gz -C ~/.local          # anywhere else: unpack it,
+mkdir -p ~/.local/bin                            # anywhere else: make the folder,
+tar xzf leon-*-linux.tar.gz -C ~/.local          # unpack it,
 ln -s ~/.local/leon-*-linux/leon ~/.local/bin/   # and put its leon on your PATH
 ```
 
@@ -146,27 +147,7 @@ leon block close "$id"
 
 ## 내 확인이 필요한 것 알기
 
-프로그램은 자신이 무엇을 하는지(작업 중, 응답 대기, 완료) 알리고, 앱은 이를 두 곳에 표시합니다. 탭의 행에는 기호가, 페인의 헤더에는 기호와 프로그램이 직접 쓴 문구가 나타납니다.
-
-![leon 앱: 사이드바의 세션과 행으로 나열된 그 탭들, 셋으로 분할된 탭, 그리고 행과 페인 헤더에 표시된 에이전트의 진행 상황](../../images/app-status.png)
-
-탭에 페인이 여러 개 있으면 포커스가 없는 페인은 흐리게 표시되어, 시선이 포커스된 페인에 머뭅니다. 내가 기다리는 것은 절대 흐려지지 않습니다. 상태 기호는 색을 유지하고, 마지막으로 본 뒤에 응답 대기가 되었거나, 실패했거나, 완료된 페인은 원래 밝기로 남습니다. `leon.set("fade_inactive_panes", N)`으로 0(끔)부터 0.8까지 설정합니다(기본값 0.35).
-
-창은 반투명하고 테마 색으로 물들어 있으며, 어떤 바탕화면 위에서도 글자를 읽기 쉽습니다. `leon.set("translucency", 0)`으로 불투명하게 만들 수 있습니다.
-
-![파란색에서 보라색으로 이어지는 단색 바탕화면 위의 leon 창. 사이드바와 제목 표시줄로 바탕화면이 비쳐 보입니다](../../images/app-translucent.png)
-
-각 탭, 사이드바 행, 페인 헤더에는 그 안의 프로그램을 나타내는 아이콘이 있습니다. 에이전트, 편집기, 테스트, 서버, 모니터, ssh, 셸입니다.
-
-![제목 표시줄의 탭. 각각 프로그램 아이콘이 있습니다: 셸, 에이전트, 편집기, 테스트, 서버, 모니터, ssh](../../images/app-icons.png)
-
-⌘K는 어느 호스트의 어떤 세션, 탭, 블록으로든 전환하며 최근 것이 먼저 나옵니다. ⌘⇧A는 내 확인이 필요한 것을 보여 줍니다. 먼저 응답 대기 중인 것(무엇을 기다리는지 함께), 다음으로 오류, 아직 보지 않은 완료된 실행, 그리고 진행 중인 작업 순입니다. 이 목록의 도구 막대 버튼에는 응답 대기 중인 블록 수가 표시되고, Dock에도 표시됩니다. Leon.app은 블록이 응답 대기가 되거나 실패할 때, 그리고 다른 앱을 쓰는 동안 30초 이상 걸린 실행이 끝날 때도 알림을 보내며, 알림을 클릭하면 그 페인으로 이동합니다. OSC 7501을 출력할 수 없는 도구는 `leon notify`로 자기 블록의 상태를 알릴 수 있습니다.
-
-```text
-leon notify --state blocked --title "Deploy" --body "approve the rollout?"
-```
-
-![활동 목록: 질문을 남기고 응답을 기다리는 두 에이전트, 실패한 배포, 완료된 리뷰, 진행 중인 빌드, 응답 대기 개수](../../images/app-activity.png)
+프로그램은 작업 중, 응답 대기, 완료 중 어느 상태인지 알리고, 앱은 이를 탭과 페인, 활동(Activity, ⌘⇧A) 목록, Dock, 알림에 표시합니다. 자세한 내용과 설정은 [docs/shortcuts.md](../../shortcuts.md#know-what-needs-you)(영어)에 있습니다.
 
 ## 앱 단축키
 

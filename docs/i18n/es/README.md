@@ -1,4 +1,4 @@
-<!-- i18n: source=README.md commit=14af788efc95 -->
+<!-- i18n: source=README.md commit=b441b60b83aa -->
 > Esta es una traducción. La [página en inglés](../../../README.md) es la referencia; puede estar más actualizada.
 
 # leon
@@ -74,7 +74,8 @@ de tu máquina ya descargado:
 
 ```sh
 dpkg -i leon_*.deb                               # Debian or Ubuntu, as root
-tar xzf leon-*-linux.tar.gz -C ~/.local          # anywhere else: unpack it,
+mkdir -p ~/.local/bin                            # anywhere else: make the folder,
+tar xzf leon-*-linux.tar.gz -C ~/.local          # unpack it,
 ln -s ~/.local/leon-*-linux/leon ~/.local/bin/   # and put its leon on your PATH
 ```
 
@@ -198,41 +199,9 @@ lo que creó. Consulta [docs/agents.md](agents.md).
 
 ## Mira qué te necesita
 
-Los programas informan de lo que están haciendo (trabajando, bloqueados, terminados), y la app lo
-muestra en dos lugares. La fila de la pestaña recibe un símbolo, y la cabecera del panel recibe el
-símbolo con las palabras del propio programa.
-
-![La app leon: sesiones en la barra lateral con sus pestañas como filas, una pestaña dividida en tres y el progreso de un agente en su fila y en la cabecera de su panel](../../images/app-status.png)
-
-Con más de un panel en una pestaña, los paneles en los que no estás se atenúan, así tu vista se
-queda en el que tiene el foco. Lo que estás esperando nunca se atenúa: un símbolo de estado
-conserva su color, y un panel que está bloqueado, que falló o que terminó desde la última vez que
-lo miraste se queda con toda su intensidad. `leon.set("fade_inactive_panes", N)` lo ajusta de 0
-(desactivado) a 0.8 (por defecto 0.35).
-
-La ventana es translúcida, teñida por el tema, con el texto legible sobre cualquier escritorio;
-`leon.set("translucency", 0)` la hace opaca.
-
-![La ventana de leon sobre un escritorio liso de azul a violeta, que se ve a través de su barra lateral y su barra de título](../../images/app-translucent.png)
-
-Cada pestaña, fila de la barra lateral y cabecera de panel tiene un icono según el programa que
-contiene: un agente, un editor, pruebas, un servidor, un monitor, ssh o una shell.
-
-![Pestañas en la barra de título, cada una con el icono de su programa: una shell, un agente, un editor, pruebas, un servidor, un monitor y ssh](../../images/app-icons.png)
-
-⌘K cambia a cualquier sesión, pestaña o bloque de cualquier host, primero los más recientes, y ⌘⇧A
-lista lo que te necesita: primero lo bloqueado (con lo que está esperando), luego los errores, las
-ejecuciones terminadas que no has mirado y el trabajo en curso. Su botón en la barra de
-herramientas muestra cuántos bloques están bloqueados, y el Dock también. Leon.app además envía
-una notificación cuando un bloque se bloquea o falla, o cuando una ejecución de 30 s o más termina
-mientras estás en otra app; al hacer clic en ella vas al panel. Una herramienta que no puede
-imprimir OSC 7501 informa por su propio bloque con `leon notify`:
-
-```text
-leon notify --state blocked --title "Deploy" --body "approve the rollout?"
-```
-
-![La lista de Actividad (Activity): dos agentes bloqueados con preguntas, un despliegue fallido, una revisión terminada, compilaciones en curso y el número de bloqueados](../../images/app-activity.png)
+Los programas informan si están trabajando, bloqueados o terminados, y la app lo muestra en sus
+pestañas y paneles, en la lista de Actividad (Activity, ⌘⇧A), en el Dock y en notificaciones.
+[docs/shortcuts.md](../../shortcuts.md#know-what-needs-you) (en inglés) tiene los detalles y los ajustes.
 
 ## Atajos de la app
 
