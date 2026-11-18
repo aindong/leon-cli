@@ -1,4 +1,4 @@
-<!-- i18n: source=README.md commit=28ab3cd4a46d -->
+<!-- i18n: source=README.md commit=14af788efc95 -->
 > Esta es una traducción. La [página en inglés](../../../README.md) es la referencia; puede estar más actualizada.
 
 # leon
@@ -292,7 +292,7 @@ leon 0.1.0 es la primera versión. Lo que ya está hecho, hito por hito, está e
 
 ## Documentación
 
-- [docs/cli.md](../../cli.md) (en inglés): todos los comandos y opciones.
+- [docs/cli.md](cli.md): todos los comandos y opciones.
 - [docs/lua.md](lua.md): la configuración y los scripts, con ejemplos que ejecuta una prueba.
 - [docs/agents.md](agents.md): agentes que manejan leon, y el formato de estado OSC 7501.
 - [docs/recipes.md](recipes.md): sesiones por proyecto y por worktree de git, como receta de Lua.
@@ -319,6 +319,15 @@ Xcode. Las pruebas de terminal ejecutan una shell real en un PTY, y las pruebas 
 ejecutan los comandos de estas páginas. `scripts/linux-test.sh` ejecuta en Linux, dentro de Docker,
 las pruebas de todo menos la app. Las pruebas de versiones firman con una clave desechable, así que
 necesitan `minisign` y `jq`.
+
+## Contribuir
+
+Los informes de errores, las ideas, el código y las traducciones son bienvenidos.
+[CONTRIBUTING.md](../../../CONTRIBUTING.md) (en inglés) explica cómo preparar el entorno, las normas
+de la casa y cómo se incorpora un cambio; [docs/i18n/README.md](../README.md) (en inglés) explica
+cómo traducir el README y las guías. Todas las personas que participan siguen el
+[Código de conducta](../../../CODE_OF_CONDUCT.md) (Code of Conduct, en inglés), y un problema de
+seguridad se informa en privado, como indica [SECURITY.md](../../../SECURITY.md).
 
 ## Licencia
 
