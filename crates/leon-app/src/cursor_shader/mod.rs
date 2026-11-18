@@ -14,7 +14,7 @@ mod wrap;
 
 pub use cursor::{Cursor, Drawn, Next, Style};
 #[cfg(feature = "gui")]
-pub use overlay::{attach, configure, detach, enable, feed, fit, state};
+pub use overlay::Overlay;
 #[cfg(feature = "gui")]
 pub use program::{compile, texture, Program};
 pub use wrap::{color, fragment_name, hoist_globals, msl, translate, wrap, Error, Mode, Uniforms, Wrapped, PREFIX};

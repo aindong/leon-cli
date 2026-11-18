@@ -2,8 +2,8 @@
 //! added as a sublayer of GPUI's view's layer, drawn by a `CVDisplayLink` of its own that runs
 //! only while a cursor change animates, on the link's thread, never the main thread. A sublayer
 //! is not a view: AppKit sends events to views only, so it never takes one. It never asks GPUI
-//! for a frame (ADR R2). One per window; a window GPUI's test platform makes has no layer, only
-//! the cursor state, which tests read.
+//! for a frame (ADR R2). Each workspace owns its window's; on GPUI's test platform, which has no
+//! AppKit view, it has no layer and keeps the cursor state only, which tests read.
 
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -47,36 +47,115 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Each window's overlay.
-static OVERLAYS: Mutex<Vec<(gpui::WindowId, Arc<Overlay>)>> = Mutex::new(Vec::new());
-
-fn get(window: &gpui::Window) -> Option<Arc<Overlay>> {
-    let id = window.window_handle().window_id();
-    lock(&OVERLAYS).iter().find(|(w, _)| *w == id).map(|(_, o)| o.clone())
+/// Equal only to itself: a grid's input holds its window's overlay, and compares by which.
+impl PartialEq for Overlay {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
 }
 
-/// Give `window` an overlay drawing `program`, or replace the program of the one it has. With no
-/// program (GPUI's test windows, which have no AppKit view) it keeps the cursor state only.
-pub fn attach(window: &gpui::Window, program: Option<Arc<Program>>) -> Result<(), String> {
-    let o = get(window).unwrap_or_else(|| {
-        let o = Arc::new(Overlay {
+impl Overlay {
+    /// An overlay with no layer yet: it keeps the cursor state until `attach` gives it a program.
+    pub fn new() -> Arc<Self> {
+        Arc::new(Overlay {
             cursor: Mutex::new(Cursor::new(Instant::now())),
             gpu: Mutex::new(None),
             stats: (std::env::var("LEON_FRAME_STATS").as_deref() == Ok("1")).then(Mutex::default),
-        });
-        lock(&OVERLAYS).push((window.window_handle().window_id(), o.clone()));
-        o
-    });
-    let Some(program) = program else { return Ok(()) };
-    let mut gpu = lock(&o.gpu);
-    if let Some(g) = gpu.as_mut() {
-        g.program = program;
-        return Ok(());
+        })
     }
-    *gpu = Some(make(window, &o, program)?);
-    drop(gpu);
-    fit(window);
-    Ok(())
+
+    /// Draw `program` over `window`: the layer and link made on the first, the program replaced
+    /// after. Main thread.
+    pub fn attach(self: &Arc<Self>, window: &gpui::Window, program: Arc<Program>) -> Result<(), String> {
+        let mut gpu = lock(&self.gpu);
+        if let Some(g) = gpu.as_mut() {
+            g.program = program;
+            return Ok(());
+        }
+        *gpu = Some(make(window, self, program)?);
+        drop(gpu);
+        self.fit(window);
+        Ok(())
+    }
+
+    /// Take the layer away: its link stopped, its layer off GPUI's. Main thread.
+    pub fn detach(&self) {
+        if let Some(g) = lock(&self.gpu).take() {
+            // SAFETY: a link this module made; the layer is ours, removed on the main thread
+            unsafe {
+                CVDisplayLinkStop(g.link);
+                let _: () = msg_send![g.layer.as_ref().as_ptr() as *mut AnyObject, removeFromSuperlayer];
+            }
+        }
+    }
+
+    /// How long a change animates, and the theme's colours.
+    pub fn configure(&self, duration: Duration, theme: &Theme) {
+        let mut c = lock(&self.cursor);
+        c.duration = duration;
+        c.set_theme(theme);
+    }
+
+    /// Draw or not: the window is active, Reduce Motion is off, nothing covers the panes. Off
+    /// ends a running animation with a clear frame, after which the link stops.
+    pub fn enable(&self, on: bool) {
+        lock(&self.cursor).enable(on, Instant::now());
+    }
+
+    /// The cursor the focused pane's grid just painted (None: none, it is hidden). A move starts
+    /// the animation and the link. Main thread (it may fit the layer).
+    pub fn feed(&self, window: &gpui::Window, drawn: Option<&Drawn>) {
+        let start = lock(&self.cursor).feed(drawn, Instant::now());
+        if !start {
+            return;
+        }
+        self.fit(window);
+        if let Some(g) = lock(&self.gpu).as_ref() {
+            // SAFETY: a link this module made
+            unsafe {
+                if CVDisplayLinkIsRunning(g.link) == 0 {
+                    CVDisplayLinkStart(g.link);
+                }
+            }
+        }
+    }
+
+    /// The cursor state (tests).
+    pub fn state(&self) -> Cursor {
+        lock(&self.cursor).clone()
+    }
+
+    /// Whether a layer draws the shader (false on GPUI's test platform).
+    pub fn drawing(&self) -> bool {
+        lock(&self.gpu).is_some()
+    }
+
+    /// Match the layer to GPUI's view: its frame, Retina scale and pixel size. Main thread:
+    /// the bounds observer (resize, full screen, another display) and each animation's start.
+    pub fn fit(&self, window: &gpui::Window) {
+        let gpu = lock(&self.gpu);
+        let Some(g) = gpu.as_ref() else { return };
+        let scale = window.scale_factor() as f64;
+        let size = window.viewport_size();
+        let (w, h) = (f32::from(size.width) as f64, f32::from(size.height) as f64);
+        let ml = g.layer.as_ref().as_ptr() as *mut AnyObject;
+        // SAFETY: our own layer, on the main thread; no implicit animation of the change
+        unsafe {
+            let Some(ca) = AnyClass::get(c"CATransaction") else { return };
+            let _: () = msg_send![ca, begin];
+            let _: () = msg_send![ca, setDisableActions: true];
+            let _: () = msg_send![ml, setFrame: CgRect { x: 0., y: 0., w, h }];
+            let _: () = msg_send![ca, commit];
+        }
+        g.layer.set_contents_scale(scale);
+        let now = g.layer.drawable_size();
+        if (now.width, now.height) != (w * scale, h * scale) {
+            // SAFETY: as above
+            unsafe {
+                let _: () = msg_send![ml, setDrawableSize: CgSize { w: w * scale, h: h * scale }];
+            }
+        }
+    }
 }
 
 fn make(window: &gpui::Window, o: &Arc<Overlay>, program: Arc<Program>) -> Result<Gpu, String> {
@@ -115,65 +194,6 @@ fn make(window: &gpui::Window, o: &Arc<Overlay>, program: Arc<Program>) -> Resul
     Ok(Gpu { queue: program.device.new_command_queue(), layer, link, program })
 }
 
-/// Take `window`'s overlay away: its link stopped, its layer off GPUI's.
-pub fn detach(window: &gpui::Window) {
-    let id = window.window_handle().window_id();
-    let gone = {
-        let mut all = lock(&OVERLAYS);
-        let at = all.iter().position(|(w, _)| *w == id);
-        at.map(|i| all.remove(i).1)
-    };
-    if let Some(g) = gone.and_then(|o| lock(&o.gpu).take()) {
-        // SAFETY: a link this module made; the layer is ours, removed on the main thread
-        unsafe {
-            CVDisplayLinkStop(g.link);
-            let _: () = msg_send![g.layer.as_ref().as_ptr() as *mut AnyObject, removeFromSuperlayer];
-        }
-    }
-}
-
-/// How long a change animates, and the theme's colours, for `window`'s overlay.
-pub fn configure(window: &gpui::Window, duration: Duration, theme: &Theme) {
-    if let Some(o) = get(window) {
-        let mut c = lock(&o.cursor);
-        c.duration = duration;
-        c.set_theme(theme);
-    }
-}
-
-/// Draw or not: the window is active, Reduce Motion is off, nothing covers the panes. Off ends a
-/// running animation with a clear frame, after which the link stops.
-pub fn enable(window: &gpui::Window, on: bool) {
-    if let Some(o) = get(window) {
-        lock(&o.cursor).enable(on, Instant::now());
-    }
-}
-
-/// The cursor the focused pane's grid just painted in `window` (None: none, it is hidden). A move
-/// starts the animation and the link.
-pub fn feed(window: &gpui::Window, drawn: Option<&Drawn>) {
-    let Some(o) = get(window) else { return };
-    let start = lock(&o.cursor).feed(drawn, Instant::now());
-    if !start {
-        return;
-    }
-    fit(window);
-    let gpu = lock(&o.gpu);
-    if let Some(g) = gpu.as_ref() {
-        // SAFETY: a link this module made
-        unsafe {
-            if CVDisplayLinkIsRunning(g.link) == 0 {
-                CVDisplayLinkStart(g.link);
-            }
-        }
-    }
-}
-
-/// `window`'s overlay's cursor state (tests).
-pub fn state(window: &gpui::Window) -> Option<Cursor> {
-    get(window).map(|o| lock(&o.cursor).clone())
-}
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct CgRect {
@@ -202,34 +222,6 @@ unsafe impl objc2::Encode for CgRect {
             objc2::Encoding::Struct("CGSize", &[f64::ENCODING, f64::ENCODING]),
         ],
     );
-}
-
-/// Match `window`'s overlay to GPUI's view: its frame, Retina scale and pixel size. Main thread:
-/// the bounds observer (resize, full screen, another display) and each animation's start.
-pub fn fit(window: &gpui::Window) {
-    let Some(o) = get(window) else { return };
-    let gpu = lock(&o.gpu);
-    let Some(g) = gpu.as_ref() else { return };
-    let scale = window.scale_factor() as f64;
-    let size = window.viewport_size();
-    let (w, h) = (f32::from(size.width) as f64, f32::from(size.height) as f64);
-    let ml = g.layer.as_ref().as_ptr() as *mut AnyObject;
-    // SAFETY: our own layer, on the main thread; no implicit animation of the change
-    unsafe {
-        let Some(ca) = AnyClass::get(c"CATransaction") else { return };
-        let _: () = msg_send![ca, begin];
-        let _: () = msg_send![ca, setDisableActions: true];
-        let _: () = msg_send![ml, setFrame: CgRect { x: 0., y: 0., w, h }];
-        let _: () = msg_send![ca, commit];
-    }
-    g.layer.set_contents_scale(scale);
-    let now = g.layer.drawable_size();
-    if (now.width, now.height) != (w * scale, h * scale) {
-        // SAFETY: as above
-        unsafe {
-            let _: () = msg_send![ml, setDrawableSize: CgSize { w: w * scale, h: h * scale }];
-        }
-    }
 }
 
 extern "C" fn tick(

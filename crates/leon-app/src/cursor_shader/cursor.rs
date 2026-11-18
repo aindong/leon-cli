@@ -59,6 +59,11 @@ pub struct Cursor {
 }
 
 impl Cursor {
+    /// The block whose cursor was fed last.
+    pub fn block(&self) -> Option<&str> {
+        self.block.as_deref()
+    }
+
     /// `iTime` counts from `start`.
     pub fn new(start: Instant) -> Self {
         Cursor {
