@@ -44,13 +44,33 @@ fn images() -> Vec<PathBuf> {
     all
 }
 
+/// Every file under docs/i18n/ (none before the first translation lands).
+fn translations() -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).into_iter().flatten() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                walk(&p, out)
+            } else {
+                out.push(p)
+            }
+        }
+    }
+    let mut out = vec![];
+    walk(&root().join("docs/i18n"), &mut out);
+    out
+}
+
 #[test]
 fn image_names_readme_and_image_bytes_name_no_user_or_machine() {
     let names = private_names();
     assert!(!names.is_empty(), "found the login and hostname to look for");
-    // the README and the pages split out of it (file-size limit)
-    let pages = ["README.md", "docs/install.md", "docs/shortcuts.md", "docs/remote-hosts.md"]
-        .map(|p| (p, std::fs::read_to_string(root().join(p)).unwrap()));
+    // the README and the pages split out of it (file-size limit), and every translation
+    let mut pages: Vec<(String, String)> =
+        ["README.md", "docs/install.md", "docs/shortcuts.md", "docs/remote-hosts.md"]
+            .map(|p| (p.to_string(), std::fs::read_to_string(root().join(p)).unwrap()))
+            .into();
+    pages.extend(translations().into_iter().map(|p| (p.display().to_string(), std::fs::read_to_string(&p).unwrap())));
     for name in &names {
         for (page, text) in &pages {
             assert!(!mentions(text, name), "{page} mentions {name:?}");

@@ -1,6 +1,7 @@
 //! M15 criterion 5 (.agent/plans/2026-11-15-m15-linux-server-cli.md): the CI workflow has a macOS
 //! job with the full gate and Linux jobs on both arches running the server + CLI suite. Also when
 //! it runs: once per push to a PR, and on `main` and `dev` (the why is in ci.yml's comments).
+//! Which of its jobs a change needs is ci_paths.rs's.
 
 mod help_walk;
 
@@ -42,7 +43,10 @@ fn ci() -> String {
 #[test]
 fn a_push_to_a_pr_branch_starts_one_run() {
     let ci = ci();
-    assert_eq!(section(&ci, "on"), ["  push:", "    branches: [main, dev]", "  pull_request:"], "the triggers: {ci}");
+    // the paths each leaves out are ci_paths.rs's to check
+    let on: Vec<&str> = section(&ci, "on").into_iter().filter(|l| !l.starts_with("      - ")).collect();
+    let want = ["  push:", "    branches: [main, dev]", "    paths-ignore:", "  pull_request:", "    paths-ignore:"];
+    assert_eq!(on, want, "the triggers: {ci}");
 }
 
 #[test]
@@ -107,10 +111,12 @@ fn the_macos_tests_run_in_parallel_under_a_pinned_checked_runner_without_retries
     let want =
         ["      - run: cargo nextest run --profile ci --workspace", "        run: cargo test --doc --no-fail-fast"];
     assert_eq!(tests, want, "the macOS job's test steps");
-    // the one condition: doc-tests run after a failed test too, as under cargo test
+    // the job's own condition (ci_paths.rs), and one step's: doc-tests run after a failed test
+    // too, as under cargo test
     let condition = |l: &&str| l.trim_start().trim_start_matches("- ").starts_with("if:");
     let conditions: Vec<&str> = code.iter().copied().filter(condition).collect();
-    assert_eq!(conditions, ["      - if: ${{ !cancelled() }}"], "the macOS job's conditions");
+    let want = ["    if: needs.changes.outputs.kind == 'full'", "      - if: ${{ !cancelled() }}"];
+    assert_eq!(conditions, want, "the macOS job's conditions");
     let doc = code.iter().position(|l| l.contains("cargo test --doc")).unwrap();
     assert!(condition(&code[doc - 1]), "the condition is the doc-test step's");
     assert!(!mac.contains("--retries"), "no retries: {mac}");
