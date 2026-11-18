@@ -1,4 +1,4 @@
-<!-- i18n: source=README.md commit=14af788efc95 -->
+<!-- i18n: source=README.md commit=b441b60b83aa -->
 > 本页是译文，以[英文原文](../../../README.md)为准，英文版可能更新。
 
 # leon
@@ -45,7 +45,8 @@ xattr -dr com.apple.quarantine /Applications/Leon.app
 
 ```sh
 dpkg -i leon_*.deb                               # Debian or Ubuntu, as root
-tar xzf leon-*-linux.tar.gz -C ~/.local          # anywhere else: unpack it,
+mkdir -p ~/.local/bin                            # anywhere else: make the folder,
+tar xzf leon-*-linux.tar.gz -C ~/.local          # unpack it,
 ln -s ~/.local/leon-*-linux/leon ~/.local/bin/   # and put its leon on your PATH
 ```
 
@@ -146,27 +147,7 @@ leon block close "$id"
 
 ## 知道什么需要你处理
 
-程序会报告自己在做什么（工作中、阻塞、完成），应用会在两个地方显示：标签页所在的行会出现一个符号，窗格标题栏会显示该符号和程序自己的描述。
-
-![leon 应用：侧边栏中的会话，每个标签页占一行；一个拆成三块的标签页；智能体的进度显示在它的行和窗格标题栏上](../../images/app-status.png)
-
-一个标签页中有多个窗格时，你不在的那些窗格会变淡，让你的视线停留在获得焦点的窗格上。你正在等待的东西永远不会变淡：状态符号保持颜色，自你上次查看后阻塞、失败或已完成的窗格保持完整亮度。`leon.set("fade_inactive_panes", N)` 可以在 0（关闭）到 0.8 之间设置（默认 0.35）。
-
-窗口是半透明的，带有主题色调，文字在任何桌面背景上都清晰可读；`leon.set("translucency", 0)` 可以让它不透明。
-
-![leon 窗口位于一张从蓝到紫的纯色桌面上，桌面透过侧边栏和标题栏显现出来](../../images/app-translucent.png)
-
-每个标签页、侧边栏行和窗格标题栏都有一个图标，表示其中的程序：智能体、编辑器、测试、服务器、监视器、ssh 或 shell。
-
-![标题栏中的标签页，各带其程序的图标：shell、智能体、编辑器、测试、服务器、监视器和 ssh](../../images/app-icons.png)
-
-⌘K 可以切换到任意主机上的任意会话、标签页或块，最近使用的排在最前；⌘⇧A 列出需要你处理的内容：先是被阻塞的（附带它在等什么），然后是错误、你还没看过的已完成运行，以及进行中的工作。工具栏上对应的按钮会显示有多少个块被阻塞，程序坞也会显示。Leon.app 还会在某个块被阻塞或失败时，或在你使用其他应用期间一次持续 30 秒以上的运行结束时发送通知；点击通知会跳转到对应窗格。无法输出 OSC 7501 的工具可以用 `leon notify` 为自己的块报告状态：
-
-```text
-leon notify --state blocked --title "Deploy" --body "approve the rollout?"
-```
-
-![活动列表：两个带着问题被阻塞的智能体、一次失败的部署、一次已完成的评审、进行中的构建，以及阻塞计数](../../images/app-activity.png)
+程序会报告自己是在工作中、被阻塞还是已完成，应用会把这些显示在标签页和窗格上、活动列表（Activity，⌘⇧A）中、程序坞上以及通知里。详情和相关设置见 [docs/shortcuts.md](../../shortcuts.md#know-what-needs-you)（英文）。
 
 ## 应用快捷键
 

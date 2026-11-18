@@ -1,4 +1,4 @@
-<!-- i18n: source=README.md commit=14af788efc95 -->
+<!-- i18n: source=README.md commit=b441b60b83aa -->
 > これは翻訳です。[英語のページ](../../../README.md)が正式な内容で、こちらより新しい場合があります。
 
 # leon
@@ -45,7 +45,8 @@ xattr -dr com.apple.quarantine /Applications/Leon.app
 
 ```sh
 dpkg -i leon_*.deb                               # Debian or Ubuntu, as root
-tar xzf leon-*-linux.tar.gz -C ~/.local          # anywhere else: unpack it,
+mkdir -p ~/.local/bin                            # anywhere else: make the folder,
+tar xzf leon-*-linux.tar.gz -C ~/.local          # unpack it,
 ln -s ~/.local/leon-*-linux/leon ~/.local/bin/   # and put its leon on your PATH
 ```
 
@@ -146,27 +147,7 @@ leon block close "$id"
 
 ## 対応が必要なものを知る
 
-プログラムは自分が何をしているか（作業中、対応待ち、完了）を報告し、アプリはそれを 2 か所に表示します。タブの行には記号が、ペインのヘッダーには記号とプログラム自身の言葉が出ます。
-
-![leon アプリ: サイドバーのセッションと行として並ぶタブ、3 分割のタブ、行とペインヘッダーに出るエージェントの進捗](../../images/app-status.png)
-
-タブにペインが複数あるとき、フォーカスしていないペインは薄くなり、視線がフォーカス中のペインにとどまります。あなたが待っているものは薄くなりません。状態の記号は色を保ち、最後に見たあとで対応待ち・失敗・完了になったペインは元の濃さのままです。`leon.set("fade_inactive_panes", N)` で 0（オフ）から 0.8 の間で設定できます（デフォルトは 0.35）。
-
-ウィンドウは半透明でテーマの色が付き、どんなデスクトップの上でも文字が読みやすくなっています。`leon.set("translucency", 0)` で不透明になります。
-
-![青から紫への無地のデスクトップ上の leon のウィンドウ。サイドバーとタイトルバー越しに透けて見える](../../images/app-translucent.png)
-
-タブ、サイドバーの行、ペインのヘッダーには、中のプログラムを表すアイコンが付きます: エージェント、エディター、テスト、サーバー、モニター、ssh、シェル。
-
-![タイトルバーのタブ。それぞれにプログラムのアイコン: シェル、エージェント、エディター、テスト、サーバー、モニター、ssh](../../images/app-icons.png)
-
-⌘K は、どのホストのどのセッション、タブ、ブロックにも切り替えます（最近使ったものが先）。⌘⇧A は対応が必要なものを一覧にします: 対応待ち（何を待っているかも表示）、エラー、まだ見ていない完了した実行、進行中の作業の順です。ツールバーのボタンと Dock には、対応待ちのブロックの数が表示されます。Leon.app は、ブロックが対応待ちになったり失敗したりしたとき、また別のアプリを使っている間に 30 秒以上の実行が終わったときにも通知を送り、クリックするとそのペインに移動します。OSC 7501 を出力できないツールは、`leon notify` で自分のブロックの状態を報告できます:
-
-```text
-leon notify --state blocked --title "Deploy" --body "approve the rollout?"
-```
-
-![アクティビティ一覧: 質問を抱えて対応待ちの 2 つのエージェント、失敗したデプロイ、完了したレビュー、進行中のビルド、対応待ちの件数](../../images/app-activity.png)
+プログラムは作業中、対応待ち、完了のどれかを報告し、アプリはそれをタブとペイン、アクティビティ（Activity、⌘⇧A）一覧、Dock、通知に表示します。詳しい内容と設定は [docs/shortcuts.md](../../shortcuts.md#know-what-needs-you)（英語）にあります。
 
 ## アプリのショートカット
 

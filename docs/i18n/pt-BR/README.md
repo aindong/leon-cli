@@ -1,4 +1,4 @@
-<!-- i18n: source=README.md commit=14af788efc95 -->
+<!-- i18n: source=README.md commit=b441b60b83aa -->
 > Esta é uma tradução. A [página em inglês](../../../README.md) é a referência; ela pode estar mais atualizada.
 
 # leon
@@ -73,7 +73,8 @@ tarball da CLI para macOS também passa a marca para o `leon` dele: depois de de
 
 ```sh
 dpkg -i leon_*.deb                               # Debian or Ubuntu, as root
-tar xzf leon-*-linux.tar.gz -C ~/.local          # anywhere else: unpack it,
+mkdir -p ~/.local/bin                            # anywhere else: make the folder,
+tar xzf leon-*-linux.tar.gz -C ~/.local          # unpack it,
 ln -s ~/.local/leon-*-linux/leon ~/.local/bin/   # and put its leon on your PATH
 ```
 
@@ -196,41 +197,9 @@ criou. Veja [docs/agents.md](agents.md).
 
 ## Veja o que precisa de você
 
-Os programas informam o que estão fazendo (trabalhando, bloqueados, concluídos), e o app mostra
-isso em dois lugares. A linha da aba ganha um símbolo, e o cabeçalho do painel ganha o símbolo com
-as palavras do próprio programa.
-
-![O app leon: sessões na barra lateral com as abas como linhas, uma aba dividida em três e o progresso de um agente na linha e no cabeçalho do painel](../../images/app-status.png)
-
-Com mais de um painel em uma aba, os painéis em que você não está ficam esmaecidos, para o seu olhar
-ficar no painel em foco. O que você está esperando nunca é esmaecido: um símbolo de status mantém a
-cor, e um painel que está bloqueado, que falhou ou que terminou desde a última vez que você olhou
-fica com intensidade total. `leon.set("fade_inactive_panes", N)` ajusta isso de 0 (desligado) a
-0.8 (padrão 0.35).
-
-A janela é translúcida, tingida pelo tema, com o texto legível sobre qualquer área de trabalho;
-`leon.set("translucency", 0)` a deixa opaca.
-
-![A janela do leon sobre uma área de trabalho lisa, do azul ao violeta, que aparece através da barra lateral e da barra de título](../../images/app-translucent.png)
-
-Cada aba, linha da barra lateral e cabeçalho de painel tem um ícone para o programa que está nele:
-um agente, um editor, testes, um servidor, um monitor, ssh ou um shell.
-
-![Abas na barra de título, cada uma com o ícone do seu programa: um shell, um agente, um editor, testes, um servidor, um monitor e ssh](../../images/app-icons.png)
-
-⌘K troca para qualquer sessão, aba ou bloco em qualquer host, os mais recentes primeiro, e ⌘⇧A
-lista o que precisa de você: primeiro o que está bloqueado (com o que está esperando), depois os
-erros, as execuções concluídas que você ainda não viu e o trabalho em andamento. O botão dele na
-barra de ferramentas mostra quantos blocos estão bloqueados, e o Dock também. O Leon.app também
-envia uma notificação quando um bloco fica bloqueado ou falha, ou quando uma execução de 30 s ou
-mais termina enquanto você está em outro app; clicar nela leva você ao painel. Uma ferramenta que
-não consegue imprimir OSC 7501 informa pelo próprio bloco com `leon notify`:
-
-```text
-leon notify --state blocked --title "Deploy" --body "approve the rollout?"
-```
-
-![A lista de Atividade (Activity): dois agentes bloqueados com perguntas, um deploy que falhou, uma revisão concluída, builds em andamento e a contagem de bloqueados](../../images/app-activity.png)
+Os programas informam se estão trabalhando, bloqueados ou concluídos, e o app mostra isso nas abas
+e nos painéis, na lista de Atividade (Activity, ⌘⇧A), no Dock e em notificações.
+[docs/shortcuts.md](../../shortcuts.md#know-what-needs-you) (em inglês) traz os detalhes e as configurações.
 
 ## Atalhos do app
 
