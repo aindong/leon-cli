@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/agents.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/agents.md commit=a525beb0ae17 -->
 > これは翻訳です。[英語のページ](../../agents.md)が正式な内容で、こちらより新しい場合があります。
 
 # エージェントが leon を操作する

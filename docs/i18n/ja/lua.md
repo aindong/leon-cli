@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/lua.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/lua.md commit=a525beb0ae17 -->
 > これは翻訳です。[英語のページ](../../lua.md)が正式な内容で、こちらより新しい場合があります。
 
 # Lua：設定とスクリプト
