@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/lua.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/lua.md commit=a525beb0ae17 -->
 > Esta é uma tradução. A [página em inglês](../../lua.md) é a referência; ela pode estar mais atualizada.
 
 # Lua: configuração e scripts

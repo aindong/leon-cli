@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/shortcuts.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/shortcuts.md commit=a525beb0ae17 -->
 > Esta é uma tradução. A [página em inglês](../../shortcuts.md) é a referência; ela pode estar mais atualizada.
 
 # Atalhos do app

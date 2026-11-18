@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/install.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/install.md commit=a525beb0ae17 -->
 > Esta é uma tradução. A [página em inglês](../../install.md) é a referência; ela pode estar mais atualizada.
 
 # Compilar o leon a partir do código-fonte
