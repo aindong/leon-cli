@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use leon_core::agents::{Report, Worker};
+use leon_core::agents::{Report, Worker, Worktree};
 use leon_core::layout::Node;
 use leon_core::model::clean_label;
 use leon_core::panes::check_ratio;
@@ -28,7 +28,7 @@ use crate::Ctx;
 
 pub const FILE: &str = "sessions.json";
 /// Version 3 adds window overlays and nullable layouts, version 4 each block's `title`, version 5
-/// each block's `worker` link and `inbox`; versions 1 to 4 still load.
+/// each block's `worker` link, `inbox` and `worktree`; versions 1 to 4 still load.
 const VERSION: u64 = 5;
 /// A bigger file is taken as corrupt: the saved text (`restore::TOTAL`) at most doubles in JSON.
 const MAX_FILE: u64 = 32 << 20;
@@ -106,6 +106,9 @@ struct SavedBlock {
     /// Its workers' unread reports.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     inbox: Vec<Report>,
+    /// The git worktree made for it (`leon agent start --worktree`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    worktree: Option<Worktree>,
 }
 
 /// Check the state dir is private and no other server uses it, and restore from it if asked.
@@ -228,6 +231,7 @@ fn snapshot(st: &State) -> Saved {
                 title: b.terminal.title(),
                 worker: st.agents.workers.get(&b.id).cloned(),
                 inbox: saved_inbox(st, &b.id, &mut reports_left),
+                worktree: st.agents.worktrees.get(&b.id).cloned(),
             })
             .collect(),
     });
@@ -256,11 +260,18 @@ fn restore(ctx: &Arc<Ctx>, file: &Path, policy: Resume) -> bool {
     let how = restore::Restoring { cap, saved_at: saved.saved_at, policy };
     for s in saved.sessions {
         let id = s.session_id.clone();
-        let agents: Vec<_> = s.blocks.iter().map(|b| (b.block_id.clone(), b.worker.clone(), b.inbox.clone())).collect();
+        let agents: Vec<_> = s
+            .blocks
+            .iter()
+            .map(|b| (b.block_id.clone(), b.worker.clone(), b.inbox.clone(), b.worktree.clone()))
+            .collect();
         match restore_session(ctx, s, &how) {
             Ok(session) => {
                 st.sessions.push(session);
-                for (block, worker, inbox) in agents {
+                for (block, worker, inbox, tree) in agents {
+                    if let Some(t) = tree {
+                        st.agents.worktrees.insert(block.clone(), t);
+                    }
                     if let Some(w) = worker {
                         st.agents.workers.insert(block.clone(), w);
                     }

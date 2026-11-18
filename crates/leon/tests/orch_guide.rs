@@ -25,7 +25,7 @@ fn the_guide_and_its_orchestration_part() {
     for must in ["leon agent start", "leon inbox", "leon agent tell", "leon agent ls", "leon notify", "permission"] {
         assert!(orch.contains(must), "the orchestration part covers {must}");
     }
-    assert!(orch.contains("leon block close"), "cleaning up");
+    assert!(orch.contains("leon agent close"), "cleaning up");
     let bad = Command::new(env!("CARGO_BIN_EXE_leon")).args(["skill", "show", "nope"]).output().unwrap();
     assert_eq!(bad.status.code(), Some(2), "an unknown part is a bad command line");
 }

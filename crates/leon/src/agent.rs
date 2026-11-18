@@ -41,6 +41,13 @@ pub enum AgentCmd {
         /// Working directory [default: the current directory].
         #[arg(short = 'c', long = "cwd")]
         cwd: Option<PathBuf>,
+        /// Give it a git worktree and branch of its own, beside the checkout (-c DIR, else here);
+        /// `leon agent close` removes them.
+        #[arg(long)]
+        worktree: bool,
+        /// The worktree's new branch [default: agent/LABEL, else agent/AGENT-TIME].
+        #[arg(long, value_name = "NAME", requires = "worktree")]
+        branch: Option<String>,
         /// Read the task from FILE.
         #[arg(short = 'f', long, value_name = "FILE", conflicts_with = "task")]
         file: Option<PathBuf>,
@@ -54,6 +61,16 @@ pub enum AgentCmd {
     },
     /// List the agents working for you: label, state, agent, age, unread reports, block.
     Ls,
+    /// Close a worker, and remove its worktree and branch; refused while they hold work that
+    /// isn't committed and pushed (or on another branch), unless --force.
+    Close {
+        /// The worker's block.
+        #[arg(value_name = "BLOCK")]
+        target: String,
+        /// Remove the worktree and branch even with work in them, which is then lost.
+        #[arg(long)]
+        force: bool,
+    },
     /// Type TEXT and press Enter in a worker, once its agent reports its turn ended.
     Tell {
         /// The worker's block.
@@ -69,15 +86,34 @@ pub enum AgentCmd {
 
 pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
     match cli.cmd() {
-        Cmd::Agent(AgentCmd::Start { label, split, cwd, file, agent, task, args }) => {
+        Cmd::Agent(AgentCmd::Start { label, split, cwd, worktree, branch, file, agent, task, args }) => {
             if block_query(cli, None).is_none() {
                 return Err(Fail::Usage(
                     "no block for the worker to report to: run inside leon ($LEON_BLOCK) or pass -b BLOCK".into(),
                 ));
             }
+            if *worktree && cli.host.is_some() {
+                return Err(Fail::Usage("--worktree runs git here; it can't make one on another machine (-H)".into()));
+            }
             let task = read_task(file.as_deref(), task.as_deref())?;
             let (sid, parent) = pick_block(c, cli, None)?;
-            let cwd = crate::commands::block_cwd(cli, cwd.as_deref())?;
+            let name = Path::new(agent).file_name().map_or(agent.clone(), |n| n.to_string_lossy().into_owned());
+            let mut cwd = crate::commands::block_cwd(cli, cwd.as_deref())?;
+            let tree = match worktree {
+                false => None,
+                true => {
+                    let here =
+                        cwd.clone().map_or_else(std::env::current_dir, Ok).map_err(|e| Fail::Other(e.to_string()))?;
+                    let default = || match label {
+                        Some(l) => format!("agent/{l}"),
+                        None => format!("agent/{name}-{}", leon_core::agents::now_secs()),
+                    };
+                    let branch = crate::agent_worktree::branch_name(&branch.clone().unwrap_or_else(default));
+                    let tree = crate::agent_worktree::create(&here, &branch)?;
+                    cwd = tree["path"].as_str().map(PathBuf::from);
+                    Some(tree)
+                }
+            };
             let mut command: Vec<String> = std::iter::once(agent.clone()).chain(args.iter().cloned()).collect();
             // a prompt starting with `-` would be read as an option
             let lead = if task.starts_with('-') { "Task:\n" } else { "" };
@@ -85,18 +121,25 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
             // kept open after it exits, so its last screen can still be read; the orchestrator closes it
             let options = json!({ "command": command, "cwd": cwd, "exit": { "on_completion": false } });
             let layout = json!({ "block": { "label": label, "options": options } });
-            let r = match split {
-                None => c.call("session.new_window", json!({ "session_id": sid, "layout": layout }))?,
+            let started = match split {
+                None => c.call("session.new_window", json!({ "session_id": sid, "layout": layout })),
                 Some(edge) => {
                     let (direction, side) = crate::layout::place(*edge);
                     let params = json!({ "session_id": sid, "anchor_id": parent, "direction": direction,
                         "side": side, "ratio": crate::layout::ratio(side, 50), "focus": false, "layout": layout });
-                    c.call("session.new_split", params)?
+                    c.call("session.new_split", params)
                 }
             };
+            let r = match (started, &tree) {
+                (Ok(r), _) => r,
+                (Err(e), Some(t)) => {
+                    let _ = crate::agent_worktree::remove(t, false); // just made, so empty
+                    return Err(e);
+                }
+                (Err(e), None) => return Err(e),
+            };
             let id = r["block_id"].as_str().unwrap_or_default().to_string();
-            let name = Path::new(agent).file_name().map_or(agent.clone(), |n| n.to_string_lossy().into_owned());
-            c.call("agent.link", json!({ "block_id": id, "parent_id": parent, "agent": name }))?;
+            c.call("agent.link", json!({ "block_id": id, "parent_id": parent, "agent": name, "worktree": tree }))?;
             println!("{id}");
         }
         Cmd::Agent(AgentCmd::Ls) => {
@@ -118,6 +161,25 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
                     w["unread"],
                     w["block_id"].as_str().unwrap_or("")
                 );
+            }
+        }
+        Cmd::Agent(AgentCmd::Close { target, force }) => {
+            let (sid, w) = pick_block(c, cli, Some(target))?;
+            let tree = c.call("agent.list", json!({ "block_id": w }))?["worktree"].clone();
+            if !tree.is_null() && !force {
+                let lost = crate::agent_worktree::would_lose(&tree)?;
+                if !lost.is_empty() {
+                    return Err(Fail::Other(format!(
+                        "{w}'s worktree {} holds work that removing it would lose:\n  {}\nCommit and push it \
+                         (or merge it into another branch), or pass --force to remove it anyway. Nothing was closed.",
+                        tree["path"].as_str().unwrap_or(""),
+                        lost.join("\n  ")
+                    )));
+                }
+            }
+            c.call("block.close", json!({ "session_id": sid, "block_id": w }))?;
+            if !tree.is_null() {
+                crate::agent_worktree::remove(&tree, *force)?;
             }
         }
         Cmd::Agent(AgentCmd::Tell { target, text, timeout }) => {

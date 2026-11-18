@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use leon_core::agents::{now_secs, Report, Worker};
+use leon_core::agents::{now_secs, Report, Worker, Worktree};
 use leon_core::model::clean_label;
 use leon_core::program_status::{Kind, State as Status};
 use leon_core::{ApiError, State};
@@ -30,6 +30,8 @@ pub struct Link {
     pub parent_id: String,
     /// The agent's program name, e.g. `claude`.
     pub agent: String,
+    /// The git worktree made for it, kept with the block until it closes.
+    pub worktree: Option<Worktree>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -60,6 +62,7 @@ pub struct WorkerView {
     pub kind: Option<Kind>,
     /// Its reports the orchestrator hasn't read.
     pub unread: usize,
+    pub worktree: Option<Worktree>,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -69,6 +72,8 @@ pub struct Team {
     /// The state this block's own program last reported, and its kind.
     pub state: Option<Status>,
     pub kind: Option<Kind>,
+    /// The git worktree made for this block, if any.
+    pub worktree: Option<Worktree>,
     /// The blocks that work for this one, oldest first.
     pub workers: Vec<WorkerView>,
 }
@@ -101,6 +106,9 @@ pub fn add(r: &mut Registry) {
             }
             let worker = Worker { parent: p.parent_id, agent, label, started_at: now_secs() };
             st.agents.workers.insert(p.block_id.clone(), worker);
+            if let Some(tree) = p.worktree {
+                st.agents.worktrees.insert(p.block_id.clone(), tree);
+            }
             // a report it made before the link counts too
             let root = st.block(&p.block_id)?.1.terminal.program_status().into_iter().find(|(id, _)| id.is_none());
             if let Some((_, record)) = root {
@@ -149,6 +157,7 @@ fn team(st: &State, id: &str) -> Team {
                 state: last.map(|l| l.state),
                 kind: last.and_then(|l| l.kind),
                 unread: st.agents.unread_from(id, b),
+                worktree: st.agents.worktrees.get(b).cloned(),
             }
         })
         .collect();
@@ -159,6 +168,7 @@ fn team(st: &State, id: &str) -> Team {
         parent: st.agents.workers.get(id).map(|w| w.parent.clone()),
         state: last.map(|l| l.state),
         kind: last.and_then(|l| l.kind),
+        worktree: st.agents.worktrees.get(id).cloned(),
         workers,
     }
 }

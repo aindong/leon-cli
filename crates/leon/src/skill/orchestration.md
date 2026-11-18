@@ -14,6 +14,10 @@ git diff | leon agent start --label review claude -  # the task from stdin
 leon agent start claude "the task" -- --model sonnet # agent arguments after --
 ```
 
+Give workers that edit files a worktree each, so they don't step on each other or on you:
+`leon agent start --worktree --branch fix-parser claude "…"` runs it in a new git worktree and
+branch beside the checkout.
+
 `leon agent start AGENT TASK` runs `AGENT [ARGS…] PROMPT` in a new tab (`--split DIR` for a pane
 beside you, `-c DIR` for its directory, `--label` to name it) and prints its block ID. PROMPT is
 your task followed by a paragraph from leon telling the worker how to report. The worker works for
@@ -69,7 +73,10 @@ that reports no state (no leon hooks, or its agent quit). `leon send -b W` and
 ## Clean up
 
 A worker's pane stays open after its program exits, so you can still read it. Close each one you
-started when you are done with it: `leon block close "$id"`. Never close workers you didn't start.
+started when you are done with it: `leon agent close "$id"`, which also removes its worktree and
+branch. If it refuses, the worktree holds work that isn't committed and pushed: look at it, keep it
+(merge or push the branch), or tell the user; use `--force` only when you are sure it can go. Never
+close workers you didn't start.
 
 ## If you are the worker
 
