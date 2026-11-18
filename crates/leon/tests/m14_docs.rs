@@ -21,7 +21,8 @@ fn the_docs_cover_scrollback_and_resume() {
     for (file, text) in [("guide.md", doc("crates/leon/src/skill/guide.md")), ("agents.md", doc("docs/agents.md"))] {
         assert!(text.contains("set_resume"), "{file} tells agents about set_resume");
     }
-    let cli = doc("docs/cli.md");
+    // `leon skill` moved to docs/cli/agents.md (file-size limit)
+    let cli = doc("docs/cli.md") + &doc("docs/cli/agents.md");
     for want in ["skill hook --agent", "set_resume", "resume command"] {
         assert!(cli.contains(want), "docs/cli.md mentions {want}");
     }

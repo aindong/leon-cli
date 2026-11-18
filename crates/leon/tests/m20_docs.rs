@@ -1,6 +1,7 @@
 #[test]
 fn m20_documented_contract() {
-    let cli = include_str!("../../../docs/cli.md");
+    // float, toggle and dock moved to docs/cli/agents.md (file-size limit)
+    let cli = [include_str!("../../../docs/cli.md"), include_str!("../../../docs/cli/agents.md")].concat();
     for text in ["### `leon float", "### `leon toggle", "### `leon dock", "--rect", "--unfloat", "--size", "--create"] {
         assert!(cli.contains(text), "missing {text}");
     }
