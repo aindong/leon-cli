@@ -16,16 +16,14 @@ fn hidden_characters_are_stripped() {
 #[test]
 fn an_encoded_address_also_shows_what_it_opens() {
     let lines = link_card_lines("https://ex%61mple.com/%2e%2e/admin");
-    assert_eq!(
-        lines,
-        vec!["https://ex%61mple.com/%2e%2e/admin".to_string(), "opens https://example.com/../admin".to_string()]
-    );
+    let want = ["https://ex%61mple.com/%2e%2e/admin", "opens https://ex%61mple.com/../admin", "host example.com"];
+    assert_eq!(lines, want.map(String::from));
 }
 
 #[test]
 fn a_huge_address_is_cut() {
     let long = format!("https://example.com/{}", "a".repeat(10_000));
     let lines = link_card_lines(&long);
-    assert_eq!(lines.len(), 1);
-    assert!(lines[0].chars().count() <= 2049 && lines[0].ends_with('…'), "{} chars", lines[0].chars().count());
+    assert_eq!(lines[1], "host example.com", "a cut address shows its host");
+    assert!(lines[0].chars().count() <= 513 && lines[0].ends_with('…'), "{} chars", lines[0].chars().count());
 }

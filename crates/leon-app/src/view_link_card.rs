@@ -14,9 +14,9 @@ use crate::popover::{self, Item, Popover, PopoverEvent};
 
 /// How long the mouse rests on a link before its card shows.
 pub const CARD_DELAY: Duration = Duration::from_millis(450);
-/// The most of an address the card shows, in characters: a link can be as long as its program
-/// likes.
-const ADDRESS_MAX: usize = 2048;
+/// The most of an address the card shows, in characters (about nine lines): a link can be as
+/// long as its program likes, and the card must leave its host and items in view.
+const ADDRESS_MAX: usize = 512;
 
 /// The link card's state, in `TermUi`.
 #[derive(Default)]
@@ -41,16 +41,35 @@ struct Card {
     _events: Subscription,
 }
 
-/// The card's text: the address with hidden characters stripped, and what it opens when that
-/// differs (an encoded address), each cut to `ADDRESS_MAX`.
+/// The card's text: the address with hidden characters stripped; what it opens when escapes
+/// change it, decoding only what follows the host (a `%2F` in user-info must not read as a path);
+/// and the host on a line of its own, as punycode when not plain ASCII, whenever user-info, an
+/// escape or another script could disguise it, or the address was cut.
 pub fn link_card_lines(uri: &str) -> Vec<String> {
-    let cut = |s: String| match s.char_indices().nth(ADDRESS_MAX) {
+    let cut = |s: &str| match s.char_indices().nth(ADDRESS_MAX) {
         Some((i, _)) => format!("{}…", &s[..i]),
-        None => s,
+        None => s.to_string(),
     };
-    let (shown, plain) = (strip_hidden(uri), decoded(uri));
-    let opens = (plain != shown).then(|| format!("opens {}", cut(plain)));
-    std::iter::once(cut(shown)).chain(opens).collect()
+    let shown = strip_hidden(uri);
+    // `scheme://authority` as it is, then the rest
+    let head = shown.find("://").map_or(0, |i| {
+        let from = i + 3;
+        from + shown[from..].find(['/', '?', '#']).unwrap_or(shown.len() - from)
+    });
+    let authority = shown[..head].split_once("://").map_or("", |(_, a)| a);
+    let plain = format!("{}{}", &shown[..head], decoded(&shown[head..]));
+    let mut lines = vec![cut(&shown)];
+    if plain != shown {
+        lines.push(format!("opens {}", cut(&plain)));
+    }
+    let host = authority.rsplit('@').next().unwrap_or("");
+    let host = host.rsplit_once(':').filter(|(_, p)| p.bytes().all(|b| b.is_ascii_digit())).map_or(host, |(h, _)| h);
+    let disguised = authority.contains(['@', '%']) || !authority.is_ascii() || lines[0].ends_with('…');
+    if !host.is_empty() && disguised {
+        let named = decoded(host);
+        lines.push(format!("host {}", idna::domain_to_ascii(&named).unwrap_or(named)));
+    }
+    lines
 }
 
 impl Workspace {

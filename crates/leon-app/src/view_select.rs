@@ -6,7 +6,6 @@ use std::collections::HashMap;
 
 use gpui::{ClipboardItem, Modifiers, MouseDownEvent};
 use leon_core::mouse::Button;
-use leon_core::program_status::strip_hidden;
 use leon_core::screen::{Lines, Span};
 use leon_core::search::{needs_confirm, Kind, Link, Pos, Range, Selected};
 
@@ -377,8 +376,8 @@ impl Workspace {
             return;
         }
         let buttons = [PromptButton::Ok("Open".into()), PromptButton::Cancel("Cancel".into())];
-        let (shown, plain) = (strip_hidden(&uri), strip_hidden(&leon_core::search::decoded(&uri)));
-        let detail = if plain == shown { shown } else { format!("{shown}\n\nwhich opens {plain}") };
+        // the link card's lines: what it opens and its host, which escapes can't disguise
+        let detail = super::link_card::link_card_lines(&uri).join("\n\n");
         let answer = window.prompt(PromptLevel::Info, "Open this link?", Some(&detail), &buttons, cx);
         cx.spawn(async move |_, cx| {
             if answer.await == Ok(0) {
