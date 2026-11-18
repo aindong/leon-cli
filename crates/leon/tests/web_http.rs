@@ -62,12 +62,14 @@ fn pages_carry_a_strict_policy() {
         ("/grid.js", "text/javascript"),
         ("/app.css", "text/css"),
         ("/theme.css", "text/css"),
+        ("/icon.svg", "image/svg+xml"),
     ] {
         let r = web::get(s.port, path, &web::host(s.port));
         assert_eq!(r.status, 200, "{path}");
         assert!(r.header("Content-Type").is_some_and(|t| t.starts_with(kind)), "{path}: {r:?}");
         assert!(r.header("Content-Security-Policy").is_some(), "{path} has the CSP too");
-        assert!(!r.body.contains("https://") && !r.body.contains("http://"), "{path} loads nothing from elsewhere");
+        let body = r.body.replace("xmlns=\"http://www.w3.org/2000/svg\"", ""); // a namespace's name, not a load
+        assert!(!body.contains("https://") && !body.contains("http://"), "{path} loads nothing from elsewhere");
     }
     assert_eq!(web::get(s.port, "/nope", &web::host(s.port)).status, 404);
     let post = web::raw(

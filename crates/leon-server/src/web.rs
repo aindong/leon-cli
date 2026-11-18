@@ -25,6 +25,7 @@ const ASSETS: &[(&str, &str, &str)] = &[
     ("/conn.js", "text/javascript; charset=utf-8", include_str!("../web/conn.js")),
     ("/grid.js", "text/javascript; charset=utf-8", include_str!("../web/grid.js")),
     ("/app.css", "text/css; charset=utf-8", include_str!("../web/app.css")),
+    ("/icon.svg", "image/svg+xml", include_str!("../web/icon.svg")),
 ];
 const PAGE: &str = include_str!("../web/index.html");
 
