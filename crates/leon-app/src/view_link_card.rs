@@ -97,9 +97,11 @@ impl Workspace {
         self.term.card.rests += 1;
     }
 
-    /// The wait for rest `n` is over: look the cell up if the mouse is still on it.
+    /// The wait for rest `n` is over: look the cell up if the mouse is still on it and no card is
+    /// open (a right-click during the wait opened one).
     fn rested(&mut self, n: u64, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((id, pos)) = self.term.card.rest.clone().filter(|_| self.term.card.rests == n) else { return };
+        let card = &self.term.card;
+        let Some((id, pos)) = card.rest.clone().filter(|_| card.rests == n && card.open.is_none()) else { return };
         if self.grid_pos(&id, window.mouse_position()) == Some(pos) {
             self.ask_card(id, pos, false, window, cx);
         }
@@ -146,8 +148,8 @@ impl Workspace {
 
     fn open_card(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some((pane, pos, link, focus)) = self.term.card.found.take() else { return };
-        // a hover's answer that came after the mouse moved on is dropped
-        if !focus && self.term.card.rest.as_ref() != Some(&(pane.clone(), pos)) {
+        // a hover's answer that came after the mouse moved on, or after another card opened, is dropped
+        if !focus && (self.term.card.open.is_some() || self.term.card.rest.as_ref() != Some(&(pane.clone(), pos))) {
             return;
         }
         let Some(anchor) = self.card_anchor(&pane, pos, &link) else { return };
