@@ -21,6 +21,9 @@ pub struct Effective {
     pub notifications: Notifications,
     /// The app copies a selection to the clipboard as it is made.
     pub copy_on_select: bool,
+    /// Leon.app shows a card with a link's address, Copy and Open in Browser when the mouse rests
+    /// on the link or it is right-clicked; false, ⌘-click only.
+    pub link_card: bool,
     /// Milliseconds after a repeatable binding during which its keys work without the prefix
     /// (0 turns repeat off).
     pub repeat_time: u64,

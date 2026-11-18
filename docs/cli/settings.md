@@ -30,7 +30,7 @@ leon config reload
 Print a setting as init.lua leaves it (its `leon.set` call, else the default), or every setting
 and where each is set without KEY. Needs no server. The keys are `theme`, `font.family`,
 `font.size`, `notifications.done`, `notifications.blocked`, `notifications.error`,
-`copy_on_select`, `repeat_time`, `hint_patterns`, `resume`, `fade_inactive_panes`, `check_for_updates`, `translucency`, `serve_tailscale`,
+`copy_on_select`, `link_card`, `repeat_time`, `hint_patterns`, `resume`, `fade_inactive_panes`, `check_for_updates`, `translucency`, `serve_tailscale`,
 `serve_tailscale_port` and `serve_tailscale_tags` ([docs/lua/settings.md](../lua/settings.md#settings) has what each does). With `--json`
 the value is JSON.
 

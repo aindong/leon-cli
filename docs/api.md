@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.12.0**. Every method is marked:
+API version **1.13.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -479,7 +479,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.12.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.13.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -582,6 +582,7 @@ same facts for the server you run.
 | `font` | `Font` | yes |  |
 | `notifications` | `Notifications` | yes |  |
 | `copy_on_select` | boolean | yes | The app copies a selection to the clipboard as it is made. |
+| `link_card` | boolean | yes | Leon.app shows a card with a link's address, Copy and Open in Browser when the mouse rests on the link or it is right-clicked; false, ⌘-click only. |
 | `repeat_time` | integer (uint64) | yes | Milliseconds after a repeatable binding during which its keys work without the prefix (0 turns repeat off). |
 | `hint_patterns` | [string] | yes | Regular expressions hints match besides the built-in ones. |
 | `resume` | string | yes | What a restored block does with its program's resume command: `ask`, `always` or `never`. |
@@ -663,6 +664,10 @@ same facts for the server you run.
             "description": "The app copies a selection to the clipboard as it is made.",
             "type": "boolean"
           },
+          "link_card": {
+            "description": "Leon.app shows a card with a link's address, Copy and Open in Browser when the mouse rests\non the link or it is right-clicked; false, ⌘-click only.",
+            "type": "boolean"
+          },
           "repeat_time": {
             "description": "Milliseconds after a repeatable binding during which its keys work without the prefix\n(0 turns repeat off).",
             "type": "integer",
@@ -718,6 +723,7 @@ same facts for the server you run.
           "font",
           "notifications",
           "copy_on_select",
+          "link_card",
           "repeat_time",
           "hint_patterns",
           "resume",
