@@ -1,9 +1,9 @@
-<!-- i18n: source=README.md commit=28ab3cd4a46d -->
+<!-- i18n: source=README.md commit=14af788efc95 -->
 > 이 문서는 번역본입니다. 기준은 [영어 문서](../../../README.md)이며, 영어 문서가 더 최신일 수 있습니다.
 
 # leon
 
-[English](../../../README.md) · [简体中文](../zh-CN/README.md) · [日本語](../ja/README.md) · 한국어 · [Español](../es/README.md) · [Português (Brasil)](../pt-BR/README.md)
+[English](../../../README.md) · [简体中文](../zh-CN/README.md) · [日本語](../ja/README.md) · 한국어
 
 <p align="center"><img src="../../images/banner.png" alt="leon: 작업을 늘 눈앞에. 사자 앱 아이콘 옆에 페인 스케치가 있고, 에이전트가 작업 중이며 테스트는 완료되었고 리뷰 하나가 응답 대기 중입니다." width="100%"></p>
 
@@ -233,6 +233,10 @@ cargo fmt --check
 ```
 
 GPUI는 `runtime_shaders` 기능으로 빌드되므로 Xcode의 Metal 툴체인이 필요 없습니다. 터미널 테스트는 PTY 안에서 실제 셸을 실행하고, 문서 테스트는 이 문서들에 있는 명령을 실행합니다. `scripts/linux-test.sh`는 앱을 제외한 모든 것의 테스트를 Docker 안의 Linux에서 실행합니다. 릴리스 테스트는 일회용 키로 서명하므로 `minisign`과 `jq`가 필요합니다.
+
+## 기여하기
+
+버그 보고, 아이디어, 코드, 번역 모두 환영합니다. [CONTRIBUTING.md](../../../CONTRIBUTING.md)에는 개발 환경 설정, 규칙, 변경이 반영되는 과정이 있고, [docs/i18n/README.md](../README.md)에는 README와 가이드를 번역하는 방법이 있습니다. 참여하는 모든 사람은 [행동 강령](../../../CODE_OF_CONDUCT.md)을 따릅니다. 보안 문제는 [SECURITY.md](../../../SECURITY.md)에 안내된 대로 비공개로 알려 주세요.
 
 ## 라이선스
 
