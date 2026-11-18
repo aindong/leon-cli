@@ -23,6 +23,9 @@ fn a_sidebar_tab_row_and_session_label(cx: &mut TestAppContext) {
     assert!(drawn(cx, "rename-field"), "and is drawn");
     cx.simulate_keystrokes("a p i x backspace");
     assert_eq!(renaming(&ws, cx).as_deref(), Some("api"), "typing replaced the name; backspace edits");
+    let pane = ws.read_with(cx, |ws, _| ws.target_block()).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    assert!(!term(&s.app, &pane).text(true).contains("apix"), "the keys went to the field, not the pane");
     cx.simulate_keystrokes("enter");
     assert_eq!(renaming(&ws, cx), None);
     assert!(shows(cx, |cx| ws.read_with(cx, |ws, _| ws.tab_titles()) == ["api"]), "the tab is api");
@@ -39,6 +42,7 @@ fn a_sidebar_tab_row_and_session_label(cx: &mut TestAppContext) {
 
     double_click(cx, p);
     assert!(renaming(&ws, cx).is_some(), "the session's name too");
+    assert!(drawn(cx, "row-0-0"), "and its tabs stay shown (the first click doesn't fold it)");
     cx.simulate_keystrokes("o p s");
     // a click elsewhere sets it
     let pane = format!("terminal-{}", ws.read_with(cx, |ws, _| ws.target_block()).unwrap());

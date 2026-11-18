@@ -209,6 +209,7 @@ impl Workspace {
                 MouseButton::Left,
                 cx.listener(move |ws, ev: &gpui::MouseDownEvent, _, cx| {
                     if ev.click_count == 2 {
+                        ws.collapsed.remove(&renamed.session); // the first click may have folded it
                         return ws.start_rename(renamed.clone(), cx);
                     }
                     let collapsed = ws.collapsed.contains(&id);

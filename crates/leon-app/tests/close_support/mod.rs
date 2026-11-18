@@ -21,6 +21,13 @@ pub fn busy_tab(s: &Setup, ws: &Entity<Workspace>, cx: &mut VisualTestContext) -
     (sid, wid)
 }
 
+/// Wait until the app has heard every pane of session `sid` is at its shell: until the server's
+/// first look a pane's program is unnamed, which a close counts as running.
+pub fn shells_only(ws: &Entity<Workspace>, cx: &mut VisualTestContext, sid: &str) {
+    let quiet = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.running_programs(sid, None)).is_empty());
+    assert!(quiet, "the app never heard the panes are at their shells");
+}
+
 /// Session `sid`'s label on the server.
 pub fn label(s: &Setup, sid: &str) -> Value {
     let list = s.app.call("session.list", json!({})).unwrap();

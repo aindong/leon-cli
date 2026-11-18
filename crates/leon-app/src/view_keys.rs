@@ -11,14 +11,14 @@ impl Workspace {
             return; // nothing to type into: the notice's buttons and ⌘Q are what's left
         }
         self.close_hover_card(window, cx);
-        if self.term.rows.renaming.is_some() {
-            self.rename_key(ev, cx);
-            return cx.stop_propagation();
-        }
         let ks = &match (self.native_key)() {
             Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
             None => ev.keystroke.clone(),
         };
+        if self.renaming_open() {
+            self.rename_key(ks, cx);
+            return cx.stop_propagation();
+        }
         let chord = keymap::chord(ks);
         // every key closes the repeat window; only a repeatable one opens it again
         let mut repeat = std::mem::take(&mut self.repeat);

@@ -4,15 +4,15 @@
 //! server's `session.close_window`, `session.destroy`, `session.set_window_label` and
 //! `session.set_label` do the work, on the row's own machine.
 
-use gpui::{Entity, KeyDownEvent, Subscription};
+use gpui::{Entity, Keystroke, Subscription};
 
 use super::super::hosts_view::Ask;
 use super::super::*;
 use crate::popover::{self, Item, Popover, PopoverEvent};
 use crate::program_kind::{kind_of, Kind};
 
-/// The longest name the inline field takes.
-const NAME_MAX: usize = 200;
+/// The longest name a tab or session takes (the server's `clean_label` refuses longer).
+const NAME_MAX: usize = 128;
 
 /// A sidebar row or titlebar tab: a session, or one of its tabs, on machine `host`.
 #[derive(Clone, PartialEq, Debug)]
@@ -56,7 +56,8 @@ impl Workspace {
     }
 
     /// The programs other than shells in front in session `session` (in its tab `window` only, if
-    /// given), on whichever machine has it: what a close asks about.
+    /// given), on whichever machine has it: what a close asks about. One the server can't name
+    /// (another user's, under `sudo` or `su`) is "a program": it runs all the same.
     pub fn running_programs(&self, session: &str, window: Option<&str>) -> Vec<String> {
         let Some(remote) = self.rows().iter().find(|r| r.id == session).and_then(|r| self.row_remote(r.host)) else {
             return Vec::new();
@@ -64,7 +65,7 @@ impl Workspace {
         let model = remote.model();
         let Some(s) = model.session(session) else { return Vec::new() };
         let blocks = s.blocks.iter().filter(|b| window.is_none_or(|w| b.window_id == w));
-        let names = blocks.filter_map(|b| b.foreground.clone().flatten());
+        let names = blocks.filter_map(|b| b.foreground.clone().map(|n| n.unwrap_or_else(|| "a program".into())));
         names.filter(|n| kind_of(n) != Kind::Shell).collect()
     }
 
@@ -142,14 +143,19 @@ impl Workspace {
     /// Set a row's name; an empty one clears its label, so it shows its program's title again.
     pub(in crate::view) fn rename_row(&mut self, row: RowRef, name: String, cx: &mut Context<Self>) {
         let Some(remote) = self.row_remote(row.host) else { return };
-        let label = name.trim();
+        let label: String = name.trim().chars().take(NAME_MAX).collect();
+        let failed = |r: Result<Value, leon_core::ApiError>| {
+            if let Err(e) = r {
+                eprintln!("leon: can't rename: {}", e.message);
+            }
+        };
         match &row.window {
             Some(w) => remote.act_later(
                 "session.set_window_label",
                 json!({ "session_id": row.session, "window_id": w, "label": label }),
-                drop,
+                failed,
             ),
-            None => remote.act_later("session.set_label", json!({ "session_id": row.session, "label": label }), drop),
+            None => remote.act_later("session.set_label", json!({ "session_id": row.session, "label": label }), failed),
         }
         cx.notify();
     }
@@ -172,9 +178,17 @@ impl Workspace {
         }
     }
 
+    /// Whether the inline field is open; one whose row went (closed elsewhere) lets go of the keys.
+    pub(in crate::view) fn renaming_open(&mut self) -> bool {
+        let gone = self.term.rows.renaming.as_ref().is_some_and(|r| self.row_name(&r.row).is_none());
+        if gone {
+            self.term.rows.renaming = None;
+        }
+        self.term.rows.renaming.is_some()
+    }
+
     /// A key while the inline field is open: it edits the name, and goes nowhere else.
-    pub(in crate::view) fn rename_key(&mut self, ev: &KeyDownEvent, cx: &mut Context<Self>) {
-        let ks = &ev.keystroke;
+    pub(in crate::view) fn rename_key(&mut self, ks: &Keystroke, cx: &mut Context<Self>) {
         let Some(r) = self.term.rows.renaming.as_mut() else { return };
         match ks.key.as_str() {
             "enter" => return self.rename_commit(cx),
@@ -213,6 +227,8 @@ impl Workspace {
             .child(text)
             .when(!r.fresh, |d| d.child(div().w(px(1.)).h(px(14.)).bg(rgb(t.title))))
             .on_mouse_down_out(cx.listener(|ws, _, _, cx| ws.rename_commit(cx)))
+            // a press in the field is the field's: not the row's select, fold or rename again
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
     }
 
     /// A right-click on a row or tab: its menu at the mouse, for the keyboard too.
@@ -250,6 +266,9 @@ impl Workspace {
         window.focus(&self.focus);
         cx.notify();
         let PopoverEvent::Chose(what) = ev else { return };
+        if self.row_name(&menu.row).is_none() {
+            return; // its row went while the menu was open
+        }
         match what.as_str() {
             "new_tab" => {
                 self.select(&menu.row.session, None, cx);
