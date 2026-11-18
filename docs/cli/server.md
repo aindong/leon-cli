@@ -21,7 +21,10 @@ nothing else that ran is run again.
 
 ### `leon server start`
 
-Start a server in the background. Does nothing if one runs (except make it persistent).
+Start a server in the background that keeps running until `leon server stop`, even with no
+sessions and no client connected. A server that another `leon` command started on its own stops
+once it has had no sessions and no client for 10 seconds. If such a server is running,
+`leon server start` doesn't start a second one. It tells that server to keep running from then on.
 
 - `--restore[=BOOL]`: restore the sessions the last server saved (default true).
 
@@ -40,6 +43,6 @@ it stopped, and another the last connection it refused.
 
 ### `leon server proxy`
 
-Connect stdin and stdout to this machine's server, starting a persistent one first unless
-`--autostart=false`. This is what `leon -H` runs on the other machine over ssh; you don't run it
-yourself.
+Connect stdin and stdout to this machine's server. Unless `--autostart=false`, it first does what
+`leon server start` does, so the server keeps running after the ssh session ends. This is what
+`leon -H` runs on the other machine over ssh; you don't run it yourself.

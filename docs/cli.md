@@ -191,10 +191,14 @@ leon wait -b "$id" --for 10s
 
 ### `leon notify`
 
-Report a status for your own block (`-b`, else `$LEON_BLOCK`; with neither, exit 2), as an OSC
-7501 report from its program would: it shows on the tab and pane header, in the app's Activity list,
-and for blocked, error and a long run's done as a notification. For tools that can't write OSC 7501
-(a hook, a job with no tty). It replaces the block's root record, with that record's lifetime.
+Set a block's status, as an OSC 7501 report from the program in it would. It is for tools that
+can't write OSC 7501 to the terminal, such as a hook or a job with no tty. The block is the one `-b`
+names, or else `$LEON_BLOCK` when `-s` isn't given; with neither, `leon notify` exits 2. The status
+shows on the block's tab and pane header and in the app's Activity list. A `blocked` or `error`
+status also sends a notification, unless the app is in front with that block on screen. `done`
+sends one only while the app is in the background, and only when the block reported `working` for
+30 seconds or more before it. The status replaces the block's root record and goes away when that record would
+([the OSC 7501 format](agents.md#the-osc-7501-format)).
 
 - `--state working|blocked|done|error`: the state (default `done`).
 - `--kind permission|question|auth`: what a `blocked` program waits for (with `--state blocked`).

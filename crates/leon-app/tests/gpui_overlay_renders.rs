@@ -9,10 +9,25 @@ use layout_support::*;
 
 #[gpui::test]
 fn a_fade_renders_only_what_draws_it(cx: &mut TestAppContext) {
-    let s = setup();
+    let s = plain_setup(); // a login shell's prompt may set its tab's title at any time
     let (ws, cx) = open(cx, &s.app);
     ws.update(cx, |ws, _| ws.set_reduce_motion(false));
     let a = tab_running(&s, &ws, cx, &quiet("a-ready"), "a-ready");
+    // the server looks at each pane's program every 200 ms, so a change (sh, stty, then sleep here)
+    // can reach the app after the marker and render the sidebar and the header: count once the app
+    // knows every pane's program
+    let programs = |cx: &mut gpui::VisualTestContext| {
+        let remote = ws.read_with(cx, |ws, _| ws.host_remote(leon_app::hosts::THIS_MAC)).unwrap();
+        let model = remote.model();
+        model.sessions.iter().flat_map(|s| &s.blocks).map(|b| (b.id.clone(), b.foreground.clone())).collect::<Vec<_>>()
+    };
+    let known = |p: &[(String, Option<Option<String>>)]| {
+        p.iter().all(
+            |(id, f)| if *id == a { f.as_ref() == Some(&Some("sleep".into())) } else { matches!(f, Some(Some(_))) },
+        )
+    };
+    assert!(shows(cx, |cx| known(&programs(cx))), "the app knows each pane's program: {:?}", programs(cx));
+    cx.run_until_parked();
     to_rest(&ws, cx);
     let counts = |cx: &mut gpui::VisualTestContext| -> (u64, HashMap<String, u64>) {
         (grid_renders(&ws, cx, &a), ws.read_with(cx, |ws, _| ws.section_renders()))
