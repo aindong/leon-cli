@@ -21,6 +21,7 @@ pub mod overlay_motion;
 pub mod overview;
 pub mod palette;
 pub mod panes;
+pub mod popover;
 pub mod program_kind;
 pub mod remote;
 pub mod render;
