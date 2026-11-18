@@ -370,7 +370,7 @@ async fn serve_lines(
                 shared.touch();
                 match serde_json::from_str::<Request>(&text) {
                     Ok(req) => {
-                        let guard = crate::agents::guard(&shared.ctx, peer, |b| screens.watches(b), &req.method, &req.params);
+                        let guard = crate::agents::guard(&shared.ctx, peer, &req.method, &req.params);
                         let later: Later<Value> = if let Err(e) = guard {
                             Box::pin(std::future::ready(Err(e)))
                         } else if is_attach(&req.method) {

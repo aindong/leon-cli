@@ -181,18 +181,20 @@ next prompt. Codex has no question tool; it asks in its last message, which arri
 
 ### Only the user answers permission prompts
 
-While a block's root status is `blocked` with kind `permission`, leon refuses input to it from its
-commands and the API (`leon send`, `send-key`, `agent tell`, `api call` of `block.event`,
-`dev.leon.terminal.write` or `client.key`) with error `permission_pending`, so an agent can't
-approve its own or another agent's prompt. The app's keys still reach the pane, and the Activity
-list and the notification take the user there. A client gets through only if it watches the block
-(`block.watch`, as the app and `leon attach` do) and doesn't run inside a leon terminal: a person's
-`leon attach` in a plain terminal answers too, while `leon attach` started in a leon pane doesn't.
-Only the block's own program (its hooks) can lift that status; `leon notify -b BLOCK` from
-elsewhere is refused.
+While a block's root status is `blocked` with kind `permission`, leon refuses input to it from
+any program running inside a leon terminal, which is where agents run: `leon send`, `send-key`,
+`agent tell`, `api call` of `block.event`, `dev.leon.terminal.write` or `client.key`, a `leon attach`
+started in a pane, or a socket client of its own, all get error `permission_pending`. So an agent
+can't approve its own or another agent's prompt. A person outside leon still answers: the app's
+keys reach the pane (the Activity list and the notification take them there), and so does
+`leon attach` in a plain terminal, or `leon send` from their own shell. Only the block's own
+program (its hooks) can lift that status from inside leon; `leon notify -b BLOCK` from another
+pane is refused.
 
-This stops agents in leon panes. It is not a sandbox: a program running as you outside leon can
-still talk to the socket as the app does, and a config action run in the server isn't checked.
+The server tells where a client runs from its process: the peer of the socket and its parents, up
+to a block's program. It is not a sandbox: a program running as you outside leon is treated as you,
+as is a request from another machine (`-H`, which arrives through that host's `leon server proxy`),
+and a config action run in the server isn't checked.
 
 ## Program status: let the user see what the agent is doing
 

@@ -226,21 +226,16 @@ fn input_target(ctx: &Ctx, method: &str, params: &Value) -> Option<String> {
 }
 
 /// Refuse a request that would answer a permission prompt for an agent: input to a block waiting
-/// on one, unless it comes from a connection that `watches` it (the app, `leon attach`) whose
-/// process (`peer`) doesn't run inside a leon block; and a status report that would lift the
-/// prompt's record, unless it comes from the block's own program or what it runs (its hooks).
-pub fn guard(
-    ctx: &Ctx,
-    peer: Option<i32>,
-    watches: impl Fn(&str) -> bool,
-    method: &str,
-    params: &Value,
-) -> Result<(), ApiError> {
+/// on one, or a status report that would lift that record, from a program running inside a leon
+/// block, which is where agents run. Its own program and what it runs (its hooks) may lift it. The
+/// app, `leon attach` in a terminal, a person's own shell, and other machines (`peer` None, or a
+/// host's `leon server proxy`) run outside leon blocks: a person is there.
+pub fn guard(ctx: &Ctx, peer: Option<i32>, method: &str, params: &Value) -> Result<(), ApiError> {
     let lifts = method == "block.method"
         && params["method"] == "dev.leon.terminal.report_status"
         && !(params["args"]["state"] == "blocked" && params["args"]["kind"] == "permission");
     let target = if lifts { params["block_id"].as_str().map(String::from) } else { input_target(ctx, method, params) };
-    let Some(id) = target else { return Ok(()) };
+    let (Some(id), Some(peer)) = (target, peer) else { return Ok(()) };
     let t = match ctx.state().block(&id) {
         Ok((_, b)) => b.terminal.clone(),
         Err(_) => return Ok(()), // the method says not found
@@ -249,26 +244,17 @@ pub fn guard(
         return Ok(());
     }
     use leon_core::process_tree::descends_from;
-    if lifts {
-        if peer.is_some_and(|p| descends_from(p, &[t.pid()])) {
-            return Ok(());
-        }
-        return Err(ApiError::new(
-            403,
-            "permission_pending",
-            format!("{id} waits on a permission prompt; only its own program can change that status, once a person answered it"),
-        ));
-    }
     let programs: Vec<i32> = ctx.state().sessions.iter().flat_map(|s| &s.blocks).map(|b| b.terminal.pid()).collect();
-    if watches(&id) && !peer.is_some_and(|p| descends_from(p, &programs)) {
+    if !descends_from(peer, &programs) || (lifts && descends_from(peer, &[t.pid()])) {
         return Ok(());
     }
+    let what = if lifts { "change its status" } else { "type into it" };
     Err(ApiError::new(
         403,
         "permission_pending",
         format!(
-            "{id} waits on a permission prompt, which only a person answers: in the leon app, or in \
-             `leon attach` from a terminal outside leon"
+            "{id} waits on a permission prompt, which only a person answers (in the leon app, or \
+             `leon attach` in a terminal outside leon); a program inside a leon terminal can't {what} now"
         ),
     ))
 }
