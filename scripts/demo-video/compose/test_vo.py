@@ -48,6 +48,18 @@ class PlaceTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             place(ws, {3: ws[3][1] - ws[3][0] + 0.01})
 
+    def test_the_error_names_the_clip_that_runs_long(self):
+        ws = vo_windows("square", None, 117.0, CUE)
+        with self.assertRaises(SystemExit) as e:
+            place(ws, {0: 30.0}, {0: "square.mp3"})
+        self.assertIn("square.mp3", str(e.exception))
+
+    def test_a_take_without_a_scenes_mark_is_named_not_a_traceback(self):
+        partial = load_cue(cue_file([{"t": t, "type": "mark", "name": n} for t, n in MARKS[:5]]))
+        with self.assertRaises(SystemExit) as e:
+            vo_windows("main", CUT, 117.0, partial)
+        self.assertIn("6 switch", str(e.exception))
+
     def test_square_clip_must_end_before_the_end_card(self):
         ws = vo_windows("square", None, 117.0, CUE)
         room = ws[0][1] - VO_LEAD

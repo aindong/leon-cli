@@ -100,11 +100,14 @@ def vo_windows(mode, cut, duration, cue):
     def out(vt):  # video time -> output time: after the cold open, less the cut where it's past it
         return lens[0] + (min(vt, a) if vt < b else vt - (b - a))
     at = {"cold": 0.0, "take": lens[0], "end": total - lens[-1]}
+    missing = [m for m in VO_SCENES if m not in at and m not in marks]
+    if missing:
+        sys.exit(f"compose: the voice-over needs every scene; the cue has no mark {', '.join(missing)}")
     starts = [at[m] if m in at else out(marks[m]) for m in VO_SCENES]
     return list(zip(starts, starts[1:] + [total]))
 
 
-def place(windows, lengths):
+def place(windows, lengths, names=None):
     """{scene: clip seconds} -> [(scene, start, end)]: each clip VO_LEAD into its scene, ending before
     the next scene's clip would start (the last one: before its window ends); one that doesn't fit
     stops the render rather than talk over the next line"""
@@ -113,7 +116,7 @@ def place(windows, lengths):
         start = windows[i][0] + VO_LEAD
         limit = windows[i + 1][0] + VO_LEAD if i + 1 < len(windows) else windows[i][1]
         if start + lengths[i] > limit:
-            sys.exit(f"compose: voice-over clip {i} runs {start + lengths[i] - limit:.2f} s past its scene")
+            sys.exit(f"compose: voice-over clip {(names or {}).get(i, i)} runs {start + lengths[i] - limit:.2f} s past its scene")
         placed.append((i, start, start + lengths[i]))
     return placed
 
@@ -332,8 +335,13 @@ def main():
     n = len(frame_plan(pieces(mode, cut, duration, cue)))
     f0, f1 = frames if frames else (0, n)
     out = Path(out)
+    clips = {} if frames else vo_clips(mode, vo_dir)  # a stretch rendered for a look stays silent
+    if clips:  # before any frame is rendered: a clip that doesn't fit stops it now
+        windows = vo_windows(mode, cut, duration, cue)
+        placed = place(windows, {i: seconds(p) for i, p in clips.items()}, {i: p.name for i, p in clips.items()})
     tmp = out.with_suffix(".parts")
     tmp.mkdir(exist_ok=True)
+    (tmp / "voice.wav").unlink(missing_ok=True)  # left by a render that stopped
     step = math.ceil((f1 - f0) / workers)
     jobs = [(mode, raw, cue_path, a, min(a + step, f1), cut, duration, tmp / f"part{i:02}.mp4", blur)
             for i, a in enumerate(range(f0, f1, step))]
@@ -341,11 +349,8 @@ def main():
         parts = list(pool.map(render_chunk, jobs))
     lst = tmp / "parts.txt"
     lst.write_text("".join(f"file '{p.name}'\n" for p in parts))
-    clips = {} if frames else vo_clips(mode, vo_dir)  # a stretch rendered for a look stays silent
     track, norm = None, None
     if clips:
-        windows = vo_windows(mode, cut, duration, cue)
-        placed = place(windows, {i: seconds(p) for i, p in clips.items()})
         for i, s, e in placed:
             w = windows[i]
             print(f"vo: {clips[i].name} {s:7.2f}-{e:7.2f} in scene {w[0]:7.2f}-{w[1]:7.2f}")
