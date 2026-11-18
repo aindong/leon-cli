@@ -107,3 +107,23 @@ fn claude_md_states_the_rule() {
     assert!(rules.contains("scripts/demo-shots.sh"), "CLAUDE.md says how screenshots are made");
     assert!(rules.contains("m13_privacy"), "and which test holds them to it");
 }
+
+/// `.agent/` (worker notes, red runs) and every other git-ignored path stay out of the public repo:
+/// a `git add -f` once published three such files, one holding a home path.
+#[test]
+fn no_ignored_file_is_tracked() {
+    let root = root();
+    let root = root.to_str().unwrap();
+    let (Some(ignored), Some(agent)) = (
+        output("git", &["-C", root, "ls-files", "-ci", "--exclude-standard"]),
+        output("git", &["-C", root, "ls-files", "--", ".agent"]),
+    ) else {
+        // a worktree mounted into Docker has no repo to ask; CI checks out a whole one
+        eprintln!("not a git checkout: the tracked-ignored check is skipped");
+        return;
+    };
+    let mut tracked: Vec<&str> = ignored.lines().chain(agent.lines()).collect();
+    tracked.sort();
+    tracked.dedup();
+    assert!(tracked.is_empty(), "git-ignored files are tracked (git rm them):\n{}", tracked.join("\n"));
+}
