@@ -120,7 +120,9 @@ impl Workspace {
             self.close_card(window, cx);
             self.ask_card(id.to_string(), pos, true, window, cx);
             // the root takes the focus on a press it isn't told to leave (gpui's div.rs, `track_focus`)
-            window.prevent_default();
+            if self.term.card.open.as_ref().is_some_and(|c| c.focused) {
+                window.prevent_default();
+            }
         }
     }
 
