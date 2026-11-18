@@ -45,7 +45,7 @@ pub enum AgentCmd {
         /// `leon agent close` removes them.
         #[arg(long)]
         worktree: bool,
-        /// The worktree's new branch [default: agent/LABEL, else agent/AGENT-TIME].
+        /// The worktree's new branch [default: agent/LABEL, else agent/AGENT-TIME-PID].
         #[arg(long, value_name = "NAME", requires = "worktree")]
         branch: Option<String>,
         /// Read the task from FILE.
@@ -133,7 +133,14 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
             let r = match (started, &tree) {
                 (Ok(r), _) => r,
                 (Err(e), Some(t)) => {
-                    let _ = crate::agent_worktree::remove(t, false); // just made, so empty
+                    // just made, so it holds nothing
+                    if let Err(left) = crate::agent_worktree::remove(t, false) {
+                        let hand = crate::agent_worktree::by_hand(t);
+                        eprintln!(
+                            "leon: the worktree made for it stays ({}); to remove it: {hand}",
+                            crate::commands::message(&left)
+                        );
+                    }
                     return Err(e);
                 }
                 (Err(e), None) => return Err(e),
@@ -166,21 +173,54 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
         Cmd::Agent(AgentCmd::Close { target, force }) => {
             let (sid, w) = pick_block(c, cli, Some(target))?;
             let tree = c.call("agent.list", json!({ "block_id": w }))?["worktree"].clone();
-            if !tree.is_null() && !force {
+            let close = |c: &mut Client| c.call("block.close", json!({ "session_id": sid, "block_id": w }));
+            if tree.is_null() {
+                close(c)?;
+                return Ok(());
+            }
+            if cli.host.is_some() {
+                return Err(Fail::Usage(format!(
+                    "{w} has a worktree on the machine its server runs on: run `leon agent close` there; nothing was closed"
+                )));
+            }
+            let path = tree["path"].as_str().unwrap_or("").to_string();
+            crate::agent_worktree::check_ours(&tree)?;
+            let refuse = |lost: Vec<String>, closed: bool| {
+                let then = match closed {
+                    false => "Nothing was closed.".to_string(),
+                    true => format!(
+                        "The worker is closed; its worktree stays. To remove it: {}",
+                        crate::agent_worktree::by_hand(&tree)
+                    ),
+                };
+                Fail::Other(format!(
+                    "{w}'s worktree {path} holds work that removing it would lose:\n  {}\nCommit and push it (or \
+                     merge it into another branch), or pass --force to remove it anyway. {then}",
+                    lost.join("\n  ")
+                ))
+            };
+            if !force {
                 let lost = crate::agent_worktree::would_lose(&tree)?;
                 if !lost.is_empty() {
-                    return Err(Fail::Other(format!(
-                        "{w}'s worktree {} holds work that removing it would lose:\n  {}\nCommit and push it \
-                         (or merge it into another branch), or pass --force to remove it anyway. Nothing was closed.",
-                        tree["path"].as_str().unwrap_or(""),
-                        lost.join("\n  ")
-                    )));
+                    return Err(refuse(lost, false));
                 }
             }
-            c.call("block.close", json!({ "session_id": sid, "block_id": w }))?;
-            if !tree.is_null() {
-                crate::agent_worktree::remove(&tree, *force)?;
+            close(c)?;
+            if !force {
+                // the agent may have written as it ended
+                std::thread::sleep(Duration::from_millis(300));
+                let lost = crate::agent_worktree::would_lose(&tree)?;
+                if !lost.is_empty() {
+                    return Err(refuse(lost, true));
+                }
             }
+            crate::agent_worktree::remove(&tree, *force).map_err(|e| {
+                let hand = crate::agent_worktree::by_hand(&tree);
+                Fail::Other(format!(
+                    "{w} is closed, but removing its worktree failed: {}\nTo finish: {hand}",
+                    crate::commands::message(&e)
+                ))
+            })?;
         }
         Cmd::Agent(AgentCmd::Tell { target, text, timeout }) => {
             let (sid, w) = pick_block(c, cli, Some(target))?;

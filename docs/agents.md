@@ -160,9 +160,10 @@ leon block close "$id"
 - **Worktrees.** `leon agent start --worktree [--branch NAME]` gives a worker a git worktree and
   branch of its own beside the checkout (`<checkout>-worktrees/<branch>`), so workers don't edit
   the same files. `leon agent close W` closes it and removes both, but first lists what that would
-  lose (uncommitted changes, commits no other branch or remote holds) and refuses; `--force`
-  removes them anyway. Closing the block any other way leaves the worktree, and its `closed`
-  report says where. leon only removes worktrees it made: it keeps each one with its block.
+  lose (changes not committed, ignored files included, commits no other branch or remote holds, a
+  lock) and refuses; `--force` removes them anyway. Closing the block any other way leaves the
+  worktree, and its `closed` report says where. leon only removes worktrees it made: it keeps each
+  one with its block, and checks with git that the worktree is where it puts them, on its branch.
 - **Lifetime.** When the orchestrator's block closes, its inbox goes and its workers keep running,
   unlinked. When the server restarts, links and unread reports come back with the sessions (the
   agents themselves start again only through `resume`).

@@ -246,7 +246,8 @@ impl State {
 /// A report's body for a worker that ended: its exit status, and the worktree a close left.
 fn body(code: Option<i32>, kept: Option<&Worktree>) -> Option<String> {
     let code = code.map(|c| format!("exit status {c}"));
-    let tree = kept.map(|w| format!("its worktree stays at {} (branch {})", w.path, w.branch));
+    // neutral: `leon agent close` removes it just after, any other close leaves it
+    let tree = kept.map(|w| format!("its worktree: {} (branch {})", w.path, w.branch));
     let parts: Vec<String> = code.into_iter().chain(tree).collect();
     (!parts.is_empty()).then(|| parts.join("; "))
 }
