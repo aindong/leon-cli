@@ -1,9 +1,9 @@
-<!-- i18n: source=README.md commit=28ab3cd4a46d -->
+<!-- i18n: source=README.md commit=14af788efc95 -->
 > 本页是译文，以[英文原文](../../../README.md)为准，英文版可能更新。
 
 # leon
 
-[English](../../../README.md) · 简体中文 · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Español](../es/README.md) · [Português (Brasil)](../pt-BR/README.md)
+[English](../../../README.md) · 简体中文 · [日本語](../ja/README.md) · [한국어](../ko/README.md)
 
 <p align="center"><img src="../../images/banner.png" alt="leon：让你的工作始终在视野中。狮子图标旁是一幅窗格草图：一个智能体在工作，测试已完成，一次评审处于阻塞。" width="100%"></p>
 
@@ -233,6 +233,10 @@ cargo fmt --check
 ```
 
 GPUI 以 `runtime_shaders` 特性构建，因此不需要 Xcode 的 Metal 工具链。终端测试会在 PTY 中运行真实的 shell，文档测试会运行这些文档里的命令。`scripts/linux-test.sh` 在 Docker 中运行除应用以外所有部分的 Linux 测试。发布测试使用一次性密钥签名，因此需要 `minisign` 和 `jq`。
+
+## 参与贡献
+
+欢迎提交 bug 报告、想法、代码和翻译。[CONTRIBUTING.md](../../../CONTRIBUTING.md) 介绍了环境搭建、项目规则以及改动如何合入；[docs/i18n/README.md](../README.md) 说明了如何翻译 README 和各篇指南。所有参与者都遵守[行为准则](../../../CODE_OF_CONDUCT.md)（Code of Conduct），安全问题请按 [SECURITY.md](../../../SECURITY.md) 所述私下报告。
 
 ## 许可证
 
