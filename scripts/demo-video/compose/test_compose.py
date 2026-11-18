@@ -94,20 +94,17 @@ class TimelineTest(unittest.TestCase):
 
 
 class SceneOneTest(unittest.TestCase):
-    def test_the_opening_zoom_chains_into_scene_twos(self):
-        """the camera goes from scene 1's region straight to scene 2's, never home between them:
-        a full frame of the empty state shows its row that names other products"""
-        one = re.search(r'"t": (-?[\d.]+), "type": "zoom", "region": \[([\d, ]+)\], "until": ([\d.]+)', RUN_DEMO)
-        two = re.search(r'scene2\(\) \{.*?at ([\d.]+); zoom (\d+) (\d+) (\d+) (\d+) ([\d.]+)', RUN_DEMO, re.S)
-        rows = [{"t": 0, "type": "take", "lead": 1.5},
-                {"t": float(one[1]), "type": "zoom", "region": [int(x) for x in one[2].split(",")], "until": float(one[3])},
-                {"t": float(two[1]), "type": "zoom", "region": [int(two[i]) for i in range(2, 6)], "until": float(two[6])}]
-        with tempfile.NamedTemporaryFile("w", suffix=".jsonl") as f:
-            f.write("\n".join(json.dumps(r) for r in rows))
-            f.flush()
-            moves = Renderer(MAIN, load_cue(f.name)).moves
-        self.assertEqual(len(moves), 3)  # in at -0.8, on to scene 2, home after it
-        self.assertLess(moves[0][0], 0)  # zoomed before the first frame
+    def test_the_empty_state_is_whole_and_the_camera_meets_the_new_session(self):
+        """no zoom on the empty state (the whole window, every row in frame); scene 2's first zoom
+        starts within half a second of ⌘N, so the camera never holds on an empty dark middle"""
+        one = re.search(r'scene1\(\) \{(.*?)\n\}', RUN_DEMO, re.S)[1]
+        self.assertNotRegex(one, r'(?m)(^ *|; )zoom |"zoom"')  # a zoom step or a raw zoom cue line
+        two = re.search(r'scene2\(\) \{.*?at ([\d.]+);.*?cmd\+n.*?at ([\d.]+); zoom (\d+) (\d+) (\d+) (\d+) ([\d.]+)',
+                        RUN_DEMO, re.S)
+        key, z = float(two[1]), float(two[2])
+        self.assertTrue(0 < z - key <= 0.5, (key, z))
+        moves = Renderer(MAIN, cue((z, [int(two[i]) for i in range(3, 7)], float(two[7])))).moves
+        self.assertEqual(len(moves), 2)  # one move in, one home: no stop between
 
 
 class SrtTest(unittest.TestCase):
@@ -155,7 +152,7 @@ class LayoutTest(unittest.TestCase):
 
 class CaptionTimeTest(unittest.TestCase):
     def test_each_caption_stays_long_enough_to_read(self):
-        """no voice-over: a caption is up at least 2 s, and 1 s for every 4 words"""
+        """the captions carry the story: a caption is up at least 2 s, and 1 s for every 4 words"""
         start, seen = None, 0
         for line in RUN_DEMO.splitlines():
             for m in re.finditer(r'\bat (-?[\d.]+);|caption "([^"]+)" ([\d.]+)', line):
