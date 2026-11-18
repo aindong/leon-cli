@@ -19,6 +19,8 @@ fn text(o: &Output) -> String {
     String::from_utf8_lossy(&o.stdout).into_owned() + &String::from_utf8_lossy(&o.stderr)
 }
 
+// macOS only: the cases that translate a shader are; off macOS nothing reads one.
+#[cfg(target_os = "macos")]
 const GOOD: &str = "void mainImage(out vec4 fragColor, in vec2 fragCoord) {\n    fragColor = texture(iChannel0, fragCoord / iResolution.xy);\n}\n";
 
 // macOS only: cursor shaders are translated on macOS only; the case below is the rest.
