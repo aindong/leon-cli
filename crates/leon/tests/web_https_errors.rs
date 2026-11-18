@@ -73,7 +73,7 @@ fn a_key_others_can_read_is_refused() {
 fn a_cert_for_another_name_is_refused() {
     let ca = Ca::new();
     let dir = tempfile::tempdir().unwrap();
-    let (cert, key) = ca.leaf(&["other.example-tailnet.ts.net"], When::Now).write(dir.path());
+    let (cert, key) = ca.leaf(&["other.example-tailnet.ts.net", "127.0.0.1"], When::Now).write(dir.path());
     let fake = Fake::new();
     let mut st = status(OWNER, &["127.0.0.1"]);
     st["Self"]["DNSName"] = json!("box.example-tailnet.ts.net.");
