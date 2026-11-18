@@ -8,13 +8,14 @@
 #         usually stops the run before this job starts)
 #   docs  English Markdown outside the code too: the doc tests, on Linux
 #   full  anything else, and whenever the diff can't be read: the whole gate
+# A rename counts as both paths, so code moved into docs/ still runs the gate.
 set -euo pipefail
 set -f # the patterns below are for `case`, not for the shell to expand
 
 # The same list as ci.yml's paths-ignore, in the same order (crates/leon/tests/ci_paths.rs checks).
 SKIP="docs/i18n/** docs/images/** brand/** CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md .github/ISSUE_TEMPLATE/** .github/pull_request_template.md"
 
-files=$(git -c core.quotepath=off diff --name-only "${1:-}" HEAD 2>/dev/null) && [ -n "$files" ] || {
+files=$(git -c core.quotepath=off diff --name-only --no-renames "${1:-}" HEAD 2>/dev/null) && [ -n "$files" ] || {
   echo full
   exit 0
 }

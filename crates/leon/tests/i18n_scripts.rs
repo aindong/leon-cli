@@ -94,6 +94,12 @@ fn the_check_passes_a_good_translation_and_names_each_fault_of_a_broken_one() {
             "commit 0123456789ab has no docs/install.md",
         ),
         (
+            "docs/i18n/es/install.md",
+            translation(&commit, "leon new demo", "../../images/a.png")
+                .replace("source=docs/install.md", "source=docs/i18n/ja/install.md"),
+            "its source must be the English page",
+        ),
+        (
             "docs/i18n/es/setup.md",
             translation(&commit, "leon new demo", "../../images/a.png"),
             "is named after install.md",

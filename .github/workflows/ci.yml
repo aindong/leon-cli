@@ -6,7 +6,8 @@ name: CI
 
 # A push to a PR branch is one run (pull_request); a merge into dev or main starts its own. A change
 # to nothing but translations, images, brand files and community files starts no run: translations
-# have scripts/i18n-check.sh, and images and brand files are tested by the next run that starts.
+# have scripts/i18n-check.sh, and the tests that read images, brand files or the README's links to
+# the community files run in the next run that starts.
 # scripts/ci-changes.sh keeps the same list.
 on:
   push:
@@ -64,7 +65,8 @@ jobs:
             base=$BEFORE
             git fetch -q --depth=1 origin "$base" || true
           fi
-          echo "kind=$(scripts/ci-changes.sh "$base")" | tee -a "$GITHUB_OUTPUT"
+          kind=$(scripts/ci-changes.sh "$base") # a failure here fails the run, never skips the jobs
+          echo "kind=$kind" | tee -a "$GITHUB_OUTPUT"
 
   macos:
     needs: changes
