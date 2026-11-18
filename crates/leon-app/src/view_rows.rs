@@ -238,7 +238,8 @@ impl Workspace {
             cx.subscribe_in(&p, window, |ws, _, ev: &PopoverEvent, window, cx| ws.row_menu_event(ev, window, cx));
         p.update(cx, |p, cx| p.focus(window, cx));
         self.term.rows.menu = Some(RowMenu { row, popover: p, _events: events });
-        // the root takes the focus on a press it isn't told to leave (gpui's div.rs, `track_focus`)
+        self.hide_preview(); // a tab's preview would cover the menu
+                             // the root takes the focus on a press it isn't told to leave (gpui's div.rs, `track_focus`)
         window.prevent_default();
         cx.stop_propagation();
         cx.notify();
