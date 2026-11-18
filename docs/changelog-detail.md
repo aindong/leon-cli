@@ -25,15 +25,19 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   prompt once the program in front of its pane reports its turn ended and nobody typed there for
   3 s: one notice for every report that came meanwhile, never into a shell.
 - `leon notify --kind permission|question|auth`; `leon skill show orchestration`.
-- API (experimental): `agent.link`, `agent.list`, `agent.inbox`; `dev.leon.terminal.report_status`
-  takes `kind`. `api_version` goes from `1.12.0` to `1.13.0`.
+- `leon agent start --worktree [--branch NAME]` gives a worker a git worktree and branch of its own
+  beside the checkout, and `leon agent close W [--force]` closes it and removes both, refusing while
+  they hold work that isn't committed and pushed (ignored files and a lock count too).
+- API (experimental): `agent.link`, `agent.list`, `agent.inbox`, with a worker's `worktree`;
+  `dev.leon.terminal.report_status` takes `kind`. `api_version` goes from `1.12.0` to `1.13.0`.
 
 #### Changed
 - A block whose program reports `blocked`/`permission` is held for a person: until a person's
   keys reach it, no program running inside a leon terminal can type into it, change its status from
   outside it, or run config actions or reloads (error `permission_pending`). The app, and
   `leon attach` in a terminal app, type into it as before.
-- The state file is version 5: it keeps each worker's link and up to 1024 unread reports.
+- The state file is version 5: it keeps each worker's link and worktree, and up to 1024 unread
+  reports.
 - The guide says when not to use leon, documents `-H`, what to do on exit 4, and looking before
   repeating a `send`.
 
