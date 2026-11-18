@@ -7,7 +7,7 @@ fn foreground_is_documented() {
         integrators.contains("`foreground_changed {foreground}`"),
         "docs/integrators.md names the event and its payload"
     );
-    let detail = include_str!("../../../docs/changelog-detail.md");
+    let detail = include_str!("../../../docs/changelog-0.1.0.md");
     assert!(
         detail.contains("`foreground_changed`") && detail.contains("never its arguments"),
         "the changelog's detail"
