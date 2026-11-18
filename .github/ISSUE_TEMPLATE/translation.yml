@@ -1,0 +1,35 @@
+name: Translation
+description: A translated page is wrong, out of date, or missing.
+labels: [translation]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        docs/i18n/README.md says how translations work. A fix you can make yourself is welcome as a pull request.
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - 简体中文 (zh-CN)
+        - 日本語 (ja)
+        - 한국어 (ko)
+        - Español (es)
+        - Português (Brasil) (pt-BR)
+        - a new language
+    validations:
+      required: true
+  - type: input
+    id: file
+    attributes:
+      label: File
+      placeholder: docs/i18n/ja/install.md
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What's wrong or missing
+      description: Quote the sentence, and say what it should say or what the English page says now.
+    validations:
+      required: true

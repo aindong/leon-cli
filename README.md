@@ -1,5 +1,7 @@
 # leon
 
+English · [简体中文](docs/i18n/zh-CN/README.md) · [日本語](docs/i18n/ja/README.md) · [한국어](docs/i18n/ko/README.md) · [Español](docs/i18n/es/README.md) · [Português (Brasil)](docs/i18n/pt-BR/README.md)
+
 <p align="center"><img src="docs/images/banner.png" alt="leon: keep your work in view. A lion app icon beside a sketch of panes with an agent working, tests done and a review blocked." width="100%"></p>
 
 **leon is a terminal multiplexer for people who run several terminal programs and coding agents at
@@ -296,6 +298,14 @@ GPUI is built with its `runtime_shaders` feature, so you don't need Xcode's Meta
 terminal tests run a real shell in a PTY, and the doc tests run the commands in these docs.
 `scripts/linux-test.sh` runs the tests for everything but the app on Linux, in Docker. The release
 tests sign with a throwaway key, so they need `minisign` and `jq`.
+
+## Contributing
+
+Bug reports, ideas, code and translations are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the
+setup, the house rules and how a change lands; [docs/i18n/README.md](docs/i18n/README.md) says how
+to translate the README and the guides. Everyone taking part follows the
+[Code of Conduct](CODE_OF_CONDUCT.md), and a security problem is reported privately, as
+[SECURITY.md](SECURITY.md) says.
 
 ## License
 
