@@ -197,6 +197,7 @@ and for blocked, error and a long run's done as a notification. For tools that c
 (a hook, a job with no tty). It replaces the block's root record, with that record's lifetime.
 
 - `--state working|blocked|done|error`: the state (default `done`).
+- `--kind permission|question|auth`: what a `blocked` program waits for (with `--state blocked`).
 - `--title T`, `--body B`: one line each (at most 192 and 2048 bytes). Text OSC 7501 would drop
   (controls, line breaks, invisible characters) is refused (exit 1), and nothing is recorded.
 
