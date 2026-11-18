@@ -240,10 +240,12 @@ fn zoom_never_hides_where_input_goes(cx: &mut TestAppContext) {
     assert!(m9_support::shows(cx, zoomed), "the app shows the zoom from the CLI");
     let shown = term(&s.app, &other);
     settle(&shown);
-    cx.simulate_input("echo seen");
+    // a marker only the output holds, found anywhere: a long prompt (CI's hostnames) redrawn over
+    // the resizes can leave text past the cursor on a wrapped row, which text() joins to the next
+    cx.simulate_input("printf 'z%sz\\n' seen");
     cx.simulate_keystrokes("enter");
-    let text = wait_text(&shown, |x| has_line(x, "seen"));
-    assert!(has_line(&text, "seen"), "typed into the zoomed block ({:?}):\n{text}", shown.size());
+    let text = wait_text(&shown, |x| x.contains("zseenz"));
+    assert!(text.contains("zseenz"), "typed into the zoomed block ({:?}):\n{text}", shown.size());
     s.app.stop();
 }
 

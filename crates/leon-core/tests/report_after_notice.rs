@@ -17,7 +17,8 @@ fn spawn(command: &[&str]) -> (Arc<Terminal>, mpsc::Receiver<(String, Option<Str
     let spec = Spec { command: command.iter().map(|s| s.to_string()).collect(), cwd: None, env: vec![] };
     let mine = me.clone();
     let t = Terminal::spawn(spec, move |n| {
-        let Some(t) = mine.get() else { return };
+        // the program can report before spawn returns: wait for `me`, as the server's state lock does
+        let t = mine.wait();
         let seen = match n {
             Notice::Title(v) => (format!("title {v}"), t.title()),
             Notice::Pwd(v) => (format!("pwd {v}"), t.cwd().map(|p| p.display().to_string())),
