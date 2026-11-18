@@ -1,6 +1,6 @@
 //! Each fixture cursor shader drawn by the overlay's path (the matte: two passes over flat black
 //! and white, no picture) and composited premultiplied over a picture, as Core Animation does,
-//! matches the contract's one-pass draw over that picture. This is the spike's probe as a test.
+//! matches the contract's one-pass draw over that picture.
 
 // macOS only: the shaders are compiled with Metal at runtime and drawn on the GPU.
 #![cfg(target_os = "macos")]
@@ -23,6 +23,9 @@ fn check(name: &str, src: &str, tolerance: u8) {
     assert!(max <= tolerance, "{name}: the overlay is {max}/255 off the contract ({off} pixels past 3/255)");
 }
 
+/// How far a glow past 1.0 may be off (0.4 of a full glow over the picture's colours).
+const SATURATED_GLOW_SLACK: u8 = 64;
+
 #[test]
 fn a_smear_matches_the_contract() {
     check("smear", &smear(), 3);
@@ -30,10 +33,9 @@ fn a_smear_matches_the_contract() {
 
 #[test]
 fn a_glow_over_a_saturated_colour_is_close() {
-    // mixing toward red 1.4, the black pass saturates first, so the matte reads more coverage
-    // than there is, by at most 0.4 of the glow: here 58/255 at worst, like the spike's
-    // cursor_blaze (38/255 at its glow's edge). The same glow within 0..1 is exact.
-    check("glow", GLOW, 64);
+    // mixing toward red 1.4 saturates the black pass first, so the matte over-reads coverage by up
+    // to 0.4 of the glow; the same glow within 0..1 is exact
+    check("glow", GLOW, SATURATED_GLOW_SLACK);
     check("glow within 1.0", &GLOW.replace("vec3(1.4, 0.6, 0.2)", "vec3(1.0, 0.6, 0.2)"), 3);
 }
 

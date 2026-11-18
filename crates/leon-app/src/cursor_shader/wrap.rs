@@ -147,7 +147,8 @@ const TYPES: &[&str] = &[
 /// the user's line it starts on, inside the `#if` chains it sat in. naga 25 evaluates a global's non-constant initializer in the
 /// entry point but never stores it, so the variable stays zero and the shader draws nothing.
 /// shortcut: a scan of comments, braces, parentheses and `;`, not a GLSL parser; what it doesn't
-/// recognize reaches naga unchanged, which then reports it or draws it as naga would.
+/// recognize reaches naga unchanged. The hoist goes once naga stores such initializers
+/// (cursor_shader_hoist_gpu.rs's second test fails then).
 pub fn hoist_globals(src: &str) -> (String, Vec<(u32, String)>) {
     let mut out = String::with_capacity(src.len());
     let mut inits = Vec::new();

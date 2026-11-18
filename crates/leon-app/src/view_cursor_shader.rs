@@ -59,11 +59,12 @@ impl Workspace {
         let secs = settings["cursor_shader_duration"].as_f64().unwrap_or(d.cursor_shader_duration).clamp(lo, hi);
         self.shader.duration = Duration::from_secs_f64(secs);
         let setting = settings["cursor_shader"].as_str().unwrap_or_default();
-        let home = std::env::var_os("HOME").map(PathBuf::from);
+        let home = leon_core::paths::home();
         let path =
             self.config_path().and_then(|config| leon_lua::settings::shader_path(setting, &config, home.as_deref()));
         if path != self.shader.path {
             self.shader.path = path;
+            self.shader.watch = None; // the next sync watches the new one
             self.shader.stamp = None;
             self.shader.want = self.shader.path.is_some();
             self.shader.error = None;
@@ -99,12 +100,10 @@ impl Workspace {
             Some(Err(e)) => self.cursor_shader_failed(e), // the last good shader keeps drawing
             None => {}
         }
-        if self.shader.path.is_none() {
-            self.shader.watch = None;
-            if let Some(o) = self.shader.overlay.take() {
-                o.detach();
-                self.shader = ShaderUi::default();
-            }
+        if self.shader.path.is_none() && self.shader.overlay.is_some() {
+            self.drop_cursor_shader();
+            // a load still running keeps its flag, so a new path doesn't start a second one
+            self.shader = ShaderUi { loading: self.shader.loading, ..Default::default() };
         }
         let Some(overlay) = self.shader.overlay.clone() else { return };
         let look = (self.shader.duration, self.theme);
@@ -197,9 +196,17 @@ impl Workspace {
         Some(Notice { text: format!("Cursor shader: {why}"), actions: vec![Act::Dismiss] })
     }
 
-    /// Dismiss the shader's notice (the update notice comes first when there is one).
-    pub(super) fn dismiss_cursor_shader_notice(&mut self) {
-        self.shader.dismissed = true;
+    /// The notice to show: the update's, else the cursor shader's failure.
+    pub(super) fn notice(&self) -> Option<Notice> {
+        self.updates.notice().or_else(|| self.cursor_shader_notice())
+    }
+
+    /// Dismiss the notice shown: the update's, else the cursor shader's.
+    pub(super) fn dismiss_notice(&mut self) {
+        match self.updates.notice() {
+            Some(_) => self.updates.dismiss(),
+            None => self.shader.dismissed = true,
+        }
     }
 
     /// The window's overlay's cursor state (tests).

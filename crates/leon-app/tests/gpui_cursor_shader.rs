@@ -20,7 +20,7 @@ fn with_shader(shader: &str) -> (Setup, std::path::PathBuf) {
     let file = d.path().join("trail.glsl");
     std::fs::write(&file, shader).unwrap();
     let s = setup_with_config(&format!("leon.set(\"cursor_shader\", {:?})\n", file.to_str().unwrap()));
-    std::mem::forget(d); // the file outlives the test's server
+    let _ = d.keep(); // the file outlives the test's server
     (s, file)
 }
 

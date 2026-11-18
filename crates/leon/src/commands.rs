@@ -195,10 +195,18 @@ fn config_check(path: Option<std::path::PathBuf>) -> Result<(), Fail> {
 /// Translate the `cursor_shader` file as Leon.app will and say how it went; false if it fails.
 #[cfg(target_os = "macos")]
 fn check_shader(setting: &str, config: &std::path::Path) -> bool {
-    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+    let home = leon_core::paths::home();
     let Some(file) = leon_lua::settings::shader_path(setting, config, home.as_deref()) else { return true };
-    match leon_app::cursor_shader::load(&file) {
-        Ok(_) => println!("cursor_shader: {}: ok", file.display()),
+    // with the app built in, Metal compiles it too, as the app will (when this Mac has a GPU)
+    #[cfg(feature = "app")]
+    let compiled = |msl: String| match leon_app::cursor_shader::compiles(&msl) {
+        Some(Err(e)) => Err(format!("{}: {e}", file.file_name().unwrap_or_default().to_string_lossy())),
+        _ => Ok(()),
+    };
+    #[cfg(not(feature = "app"))]
+    let compiled = |_: String| Ok::<(), String>(());
+    match leon_app::cursor_shader::load(&file).and_then(compiled) {
+        Ok(()) => println!("cursor_shader: {}: ok", file.display()),
         Err(e) => {
             println!("cursor_shader: {e}");
             return false;

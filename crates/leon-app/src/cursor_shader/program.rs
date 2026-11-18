@@ -21,11 +21,6 @@ pub struct Program {
     pub channel0: Texture,
 }
 
-// SAFETY: Metal devices, pipeline states and textures are thread-safe objects (Apple's Metal
-// threading guide); the program is only read after it is made.
-unsafe impl Send for Program {}
-unsafe impl Sync for Program {}
-
 /// Programs alive now, by a hash of their MSL: the same file content compiles once.
 fn cache() -> &'static Mutex<HashMap<u64, Weak<Program>>> {
     static CACHE: OnceLock<Mutex<HashMap<u64, Weak<Program>>>> = OnceLock::new();
@@ -47,6 +42,12 @@ pub fn compile(msl: &str) -> Result<Arc<Program>, String> {
     cache.retain(|_, w| w.strong_count() > 0);
     cache.insert(key, Arc::downgrade(&p));
     Ok(p)
+}
+
+/// Whether `msl` compiles as the app compiles it; None when this Mac has no Metal device.
+pub fn compiles(msl: &str) -> Option<Result<(), String>> {
+    Device::system_default()?;
+    Some(compile(msl).map(drop))
 }
 
 impl Program {

@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use core_video::display_link::{
-    CVDisplayLinkCreateWithActiveCGDisplays, CVDisplayLinkIsRunning, CVDisplayLinkRef, CVDisplayLinkSetOutputCallback,
-    CVDisplayLinkStart, CVDisplayLinkStop,
+    CVDisplayLinkCreateWithActiveCGDisplays, CVDisplayLinkIsRunning, CVDisplayLinkRef, CVDisplayLinkRelease,
+    CVDisplayLinkSetOutputCallback, CVDisplayLinkStart, CVDisplayLinkStop,
 };
 use metal::foreign_types::ForeignTypeRef;
 use metal::{CommandQueue, MTLPixelFormat, MetalLayer};
@@ -25,9 +25,24 @@ use crate::theme::Theme;
 struct Gpu {
     layer: MetalLayer,
     queue: CommandQueue,
-    link: CVDisplayLinkRef,
+    link: Link,
     program: Arc<Program>,
 }
+
+/// The display link, and the overlay count its callback holds (released in `detach`).
+#[derive(Clone, Copy)]
+struct Link {
+    link: CVDisplayLinkRef,
+    user: *const Overlay,
+}
+
+// SAFETY: CoreVideo's display link functions may be called from any thread, its own callback's
+// included; `user` is only turned back into its Arc once the link is stopped (`detach`)
+unsafe impl Send for Link {}
+unsafe impl Sync for Link {}
+
+/// kCALayerWidthSizable | kCALayerHeightSizable: the layer follows GPUI's through resizes.
+const SIZABLE: u32 = (1 << 1) | (1 << 4);
 
 /// One window's overlay.
 pub struct Overlay {
@@ -36,12 +51,6 @@ pub struct Overlay {
     /// `LEON_FRAME_STATS=1`: a line per animation (frames, encode time), for scripts/idle-frames.sh.
     stats: Option<Mutex<(u32, Duration, Duration)>>,
 }
-
-// SAFETY: the layer's geometry is changed only on the main thread (`fit`, `attach`); the link
-// thread calls only `nextDrawable` and encodes, which CAMetalLayer and Metal allow from any
-// thread; the display link reference is used under `gpu`'s lock.
-unsafe impl Send for Overlay {}
-unsafe impl Sync for Overlay {}
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
@@ -78,14 +87,18 @@ impl Overlay {
         Ok(())
     }
 
-    /// Take the layer away: its link stopped, its layer off GPUI's. Main thread.
+    /// Take the layer away: its link stopped and released, its layer off GPUI's. Main thread.
     pub fn detach(&self) {
-        if let Some(g) = lock(&self.gpu).take() {
-            // SAFETY: a link this module made; the layer is ours, removed on the main thread
-            unsafe {
-                CVDisplayLinkStop(g.link);
-                let _: () = msg_send![g.layer.as_ref().as_ptr() as *mut AnyObject, removeFromSuperlayer];
-            }
+        // out of the lock first: Stop waits for a tick in progress, which may want that lock
+        let gpu = lock(&self.gpu).take();
+        let Some(g) = gpu else { return };
+        // SAFETY: a link this module made, stopped before it is released, so no tick runs when
+        // the callback's overlay count is given back; the layer is ours, on the main thread
+        unsafe {
+            CVDisplayLinkStop(g.link.link);
+            CVDisplayLinkRelease(g.link.link);
+            drop(Arc::from_raw(g.link.user));
+            let _: () = msg_send![g.layer.as_ref().as_ptr() as *mut AnyObject, removeFromSuperlayer];
         }
     }
 
@@ -105,29 +118,28 @@ impl Overlay {
     /// The cursor the focused pane's grid just painted (None: none, it is hidden). A move starts
     /// the animation and the link. Main thread (it may fit the layer).
     pub fn feed(&self, window: &gpui::Window, drawn: Option<&Drawn>) {
-        let start = lock(&self.cursor).feed(drawn, Instant::now());
-        if !start {
+        let mut c = lock(&self.cursor);
+        if !c.feed(drawn, Instant::now()) {
             return;
         }
-        self.fit(window);
-        if let Some(g) = lock(&self.gpu).as_ref() {
-            // SAFETY: a link this module made
+        // started under the cursor's lock: a tick that decided to stop did so under it too, so
+        // this start comes after that stop, never before it
+        let link = lock(&self.gpu).as_ref().map(|g| g.link);
+        if let Some(l) = link {
+            // SAFETY: a link this module made, alive while `gpu` holds it
             unsafe {
-                if CVDisplayLinkIsRunning(g.link) == 0 {
-                    CVDisplayLinkStart(g.link);
+                if CVDisplayLinkIsRunning(l.link) == 0 {
+                    CVDisplayLinkStart(l.link);
                 }
             }
         }
+        drop(c);
+        self.fit(window);
     }
 
     /// The cursor state (tests).
     pub fn state(&self) -> Cursor {
         lock(&self.cursor).clone()
-    }
-
-    /// Whether a layer draws the shader (false on GPUI's test platform).
-    pub fn drawing(&self) -> bool {
-        lock(&self.gpu).is_some()
     }
 
     /// Match the layer to GPUI's view: its frame, Retina scale and pixel size. Main thread:
@@ -168,17 +180,10 @@ fn make(window: &gpui::Window, o: &Arc<Overlay>, program: Arc<Program>) -> Resul
     layer.set_opaque(false);
     layer.set_framebuffer_only(true);
     // SAFETY: `ns_view` is GPUI's live NSView (we are on the main thread, inside its window's
-    // callbacks); it is layer-backed, and adding a sublayer changes nothing of GPUI's own layer
-    unsafe {
-        let view = h.ns_view.as_ptr() as *mut AnyObject;
-        let host: *mut AnyObject = msg_send![view, layer];
-        if host.is_null() {
-            return Err("GPUI's view has no layer".into());
-        }
-        let ml = layer.as_ref().as_ptr() as *mut AnyObject;
-        // kCALayerWidthSizable | kCALayerHeightSizable: it follows GPUI's layer through resizes
-        let _: () = msg_send![ml, setAutoresizingMask: 18u32];
-        let _: () = msg_send![host, addSublayer: ml];
+    // callbacks); it is layer-backed
+    let host: *mut AnyObject = unsafe { msg_send![h.ns_view.as_ptr() as *mut AnyObject, layer] };
+    if host.is_null() {
+        return Err("GPUI's view has no layer".into());
     }
     let mut link = std::ptr::null_mut();
     // SAFETY: an out-pointer for a new link; checked for null below
@@ -186,12 +191,17 @@ fn make(window: &gpui::Window, o: &Arc<Overlay>, program: Arc<Program>) -> Resul
     if link.is_null() {
         return Err("no display link".into());
     }
-    // shortcut: the link's callback holds one count of the overlay for the app's life (a window
-    // closes once per launch); `detach` stops the link and takes the layer off
-    let user = Arc::into_raw(o.clone()) as *mut c_void;
-    // SAFETY: `tick` reads `user` as the overlay, which that count keeps alive
-    unsafe { CVDisplayLinkSetOutputCallback(link, tick, user) };
-    Ok(Gpu { queue: program.device.new_command_queue(), layer, link, program })
+    // the callback's own count of the overlay, given back by `detach`
+    let user = Arc::into_raw(o.clone());
+    // SAFETY: `tick` reads `user` as the overlay, which that count keeps alive until `detach`
+    // stops the link; adding a sublayer changes nothing of GPUI's own layer
+    unsafe {
+        CVDisplayLinkSetOutputCallback(link, tick, user as *mut c_void);
+        let ml = layer.as_ref().as_ptr() as *mut AnyObject;
+        let _: () = msg_send![ml, setAutoresizingMask: SIZABLE];
+        let _: () = msg_send![host, addSublayer: ml];
+    }
+    Ok(Gpu { queue: program.device.new_command_queue(), layer, link: Link { link, user }, program })
 }
 
 #[repr(C)]
@@ -232,9 +242,10 @@ extern "C" fn tick(
     _: *mut core_video::base::CVOptionFlags,
     user: *mut c_void,
 ) -> core_video::r#return::CVReturn {
-    // SAFETY: `user` is the overlay count `make` gave the link, alive for the app's life
+    // SAFETY: `user` is the overlay count `make` gave the link, alive until `detach` stops it
     let o = unsafe { &*(user as *const Overlay) };
-    o.frame();
+    // the link's thread has no autorelease pool of its own for the drawables and buffers
+    objc2::rc::autoreleasepool(|_| o.frame());
     0
 }
 
@@ -242,29 +253,40 @@ impl Overlay {
     /// One display-link tick: draw a frame of the animation, or its last clear frame, or stop.
     fn frame(&self) {
         debug_assert!(objc2::MainThreadMarker::new().is_none(), "the overlay never draws on the main thread");
+        // what to draw with, held by this tick: `nextDrawable` can wait, and never under a lock
+        // the main thread takes
+        let (layer, queue, program, link) = {
+            let gpu = lock(&self.gpu);
+            let Some(g) = gpu.as_ref() else { return };
+            (g.layer.clone(), g.queue.clone(), g.program.clone(), g.link)
+        };
         let t0 = Instant::now();
         let (next, mut u) = {
             let mut c = lock(&self.cursor);
-            (c.next(t0), c.u)
+            let next = c.next(t0);
+            if next == Next::Stop {
+                // under the cursor's lock, so a feed's start can't fall between deciding and stopping
+                // SAFETY: a link this module made, alive while this tick runs (`detach` waits)
+                unsafe { CVDisplayLinkStop(link.link) };
+                return;
+            }
+            (next, c.u)
         };
-        let gpu = lock(&self.gpu);
-        let Some(g) = gpu.as_ref() else { return };
-        if next == Next::Stop {
-            // SAFETY: a link this module made; stopping it from its own callback is allowed
-            unsafe { CVDisplayLinkStop(g.link) };
+        let Some(drawable) = layer.next_drawable() else {
+            if next == Next::Clear {
+                lock(&self.cursor).until = Some(t0); // the clear frame on the next tick
+            }
             return;
-        }
-        let Some(drawable) = g.layer.next_drawable() else { return };
+        };
         let target = drawable.texture();
         u.set_size(target.width() as f32, target.height() as f32);
-        let cmd = g.queue.new_command_buffer();
+        let cmd = queue.new_command_buffer();
         match next {
-            Next::Draw => g.program.encode(cmd, target, &u, None),
+            Next::Draw => program.encode(cmd, target, &u, None),
             _ => clear(cmd, target),
         }
         cmd.present_drawable(drawable);
         cmd.commit();
-        drop(gpu);
         if let Some(stats) = &self.stats {
             let mut s = lock(stats);
             let spent = t0.elapsed();

@@ -98,9 +98,10 @@ impl Workspace {
         let view = self.drawn(id);
         let marks = self.pane_marks(id, &view);
         let active = self.window_active && focused;
+        // a float shown over it: only the top one feeds (the overlay draws over every float)
         let under_float = |w: &leon_core::Window| {
             let o = self.overlays_of(w);
-            o.floating.iter().any(|f| !f.hidden) && !o.floating.iter().any(|f| f.block_id == id)
+            o.floating.iter().rev().find(|f| !f.hidden).is_some_and(|top| top.block_id != id)
         };
         GridInput {
             frame: crate::fade::frame(view.frame, theme.chrome, self.pane_fade(id)),

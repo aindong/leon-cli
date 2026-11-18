@@ -2,6 +2,7 @@
 //! open panel) and None, and how long it draws after a move.
 
 use super::rows::Steps;
+use super::server::text_button;
 use super::*;
 
 fn seconds(v: f64) -> String {
@@ -17,30 +18,6 @@ const DURATION: Steps = Steps {
     range: "How long it draws after the cursor moves, 0.1 to 5 s",
 };
 
-/// A button with a word on it.
-fn text_button(
-    t: &Theme,
-    id: &'static str,
-    label: &'static str,
-    enabled: bool,
-    cx: &mut Context<SettingsWindow>,
-    run: impl Fn(&mut SettingsWindow, &mut Context<SettingsWindow>) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .debug_selector(move || id.into())
-        .px(px(10.))
-        .py(px(3.))
-        .rounded(px(6.))
-        .border_1()
-        .border_color(rgb(t.border))
-        .text_color(rgb(if enabled { t.title } else { t.muted }))
-        .when(enabled, |d| {
-            d.cursor_pointer().hover(|d| d.bg(rgb(t.hover))).on_click(cx.listener(move |sw, _, _, cx| run(sw, cx)))
-        })
-        .child(label)
-}
-
 impl SettingsWindow {
     pub(super) fn cursor_shader_section(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
         let row = self.row("cursor_shader");
@@ -55,12 +32,16 @@ impl SettingsWindow {
             .items_center()
             .gap(px(8.))
             .child(div().debug_selector(|| "cursor-shader-file".into()).child(shown))
-            .child(text_button(t, "cursor-shader-choose", "Choose…", !locked, cx, |sw, cx| {
-                sw.choose_cursor_shader(cx)
-            }))
-            .child(text_button(t, "cursor-shader-none", "None", !locked && !file.is_empty(), cx, |sw, cx| {
-                sw.choose("cursor_shader", json!(""), cx)
-            }));
+            .when(!locked, |d| {
+                d.child(text_button(t, "cursor-shader-choose".into(), "Choose…", cx, |sw, _, cx| {
+                    sw.choose_cursor_shader(cx)
+                }))
+                .when(!file.is_empty(), |d| {
+                    d.child(text_button(t, "cursor-shader-none".into(), "None", cx, |sw, _, cx| {
+                        sw.choose("cursor_shader", json!(""), cx)
+                    }))
+                })
+            });
         let note = "A Shadertoy-style GLSL file drawn over the window as the cursor moves (macOS)";
         Self::subtitle(t, "Cursor shader")
             .child(
@@ -90,9 +71,7 @@ impl SettingsWindow {
 
     /// Set `cursor_shader` to `path`, written `~/…` when it is in the home folder.
     pub fn pick_cursor_shader(&mut self, path: &Path, cx: &mut Context<Self>) {
-        let home = std::env::var_os("HOME").map(PathBuf::from);
-        let rest = home.as_deref().and_then(|h| path.strip_prefix(h).ok()).filter(|r| !r.as_os_str().is_empty());
-        let text = rest.map_or_else(|| path.display().to_string(), |r| format!("~/{}", r.display()));
+        let text = home_relative(path, leon_core::paths::home().as_deref());
         self.choose("cursor_shader", json!(text), cx);
     }
 }

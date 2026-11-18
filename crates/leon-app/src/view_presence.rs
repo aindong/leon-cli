@@ -68,7 +68,7 @@ impl Workspace {
         let moving = self.fade.overlays.looked && !self.reduce_motion();
         let palette = self.palette_open().then(|| self.palette_view());
         let hint = self.pending_hint();
-        let notice = self.updates.notice().or_else(|| self.cursor_shader_notice());
+        let notice = self.notice();
         let find = self
             .term
             .find

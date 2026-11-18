@@ -34,7 +34,7 @@ pub struct Drawn {
 /// What the overlay does on a display-link tick.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Next {
-    /// Draw the shader with these uniforms.
+    /// Draw the shader with `Cursor::u`.
     Draw,
     /// The animation is over (or the overlay was turned off): draw one clear frame.
     Clear,
@@ -51,7 +51,7 @@ pub struct Cursor {
     cell: (usize, usize),
     last_frame: Option<Instant>,
     /// Draw until then; None when idle (the last frame drawn was a clear one).
-    pub until: Option<Instant>,
+    pub(crate) until: Option<Instant>,
     /// Drawing is wanted: the window is active, Reduce Motion is off, no overview or palette.
     pub enabled: bool,
     /// How long a change animates.
@@ -59,7 +59,7 @@ pub struct Cursor {
 }
 
 impl Cursor {
-    /// The block whose cursor was fed last.
+    /// The block whose cursor was fed last (tests).
     pub fn block(&self) -> Option<&str> {
         self.block.as_deref()
     }
