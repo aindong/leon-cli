@@ -229,7 +229,10 @@ impl Workspace {
         );
         let (moved, wheel) = (id.to_string(), id.to_string());
         d.on_mouse_move(cx.listener(move |ws, ev: &MouseMoveEvent, _, cx| ws.mouse_move(&moved, ev, cx)))
-            .on_scroll_wheel(cx.listener(move |ws, ev: &gpui::ScrollWheelEvent, _, cx| ws.wheel(&wheel, ev, cx)))
+            .on_scroll_wheel(cx.listener(move |ws, ev: &gpui::ScrollWheelEvent, w, cx| {
+                ws.close_hover_card(w, cx);
+                ws.wheel(&wheel, ev, cx)
+            }))
     }
 
     /// The pane area's size (w, h): the window less the sidebar and the titlebar row.
@@ -384,6 +387,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_key_down(cx.listener(Self::key_down))
             .on_modifiers_changed(cx.listener(Self::modifiers_changed))
+            .on_mouse_move(cx.listener(|ws, ev: &MouseMoveEvent, w, cx| ws.card_leave(ev.position, w, cx)))
             .on_action(cx.listener(|ws, _: &Copy, w, cx| ws.run_action("pane.copy", None, "menu", w, cx)))
             .on_action(cx.listener(|ws, _: &SelectAll, w, cx| ws.run_action("pane.select_all", None, "menu", w, cx)))
             .on_action(cx.listener(|ws, _: &Find, w, cx| ws.run_action("client.find.open", None, "menu", w, cx)))
@@ -400,6 +404,7 @@ impl Render for Workspace {
             .children(preview)
             // last, so it paints over the panes: GPUI paints children in order
             .children(self.render_overlay(cx).filter(|_| !self.stopped))
+            .children(self.render_card(cx))
             .child(self.frame_mark())
     }
 }

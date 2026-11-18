@@ -1,11 +1,17 @@
 # Changelog: the detail of each feature
 
 The detail of each feature in [CHANGELOG.md](../CHANGELOG.md) that came after its milestones,
-newest first, moved here to keep that file short; each section is as it was written. The
+newest first, to keep that file short; each section is as it was written. The
 changelog keeps one summary bullet or link per feature, pointing at its section here. Every
 feature here on 2026-11-18 shipped in 0.1.0.
 
 ## Since 0.1.0: the detail
+
+### The link card
+
+#### Added
+- Leon.app: rest on or right-click a link for its address, Copy and Open in Browser.
+- `link_card` turns it off; `server.settings` reports it.
 
 ### Contributing and translations
 

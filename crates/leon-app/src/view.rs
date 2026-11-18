@@ -449,6 +449,8 @@ mod hosts_view;
 mod keys;
 #[path = "view_layout.rs"]
 mod layout_view;
+#[path = "view_link_card.rs"]
+pub mod link_card;
 #[path = "view_look.rs"]
 mod look_view;
 #[path = "view_pulse.rs"]
