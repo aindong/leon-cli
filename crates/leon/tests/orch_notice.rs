@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use support::orch::{until, Orch};
 
-const NOTICE: &str = "GOT: You have 2 leon messages. Run `leon inbox`.";
+const NOTICE: &str = "GOT: You have 2 leon messages. Run leon inbox to read them.";
 
 #[test]
 fn the_notice_waits_for_an_idle_orchestrator_and_coalesces() {

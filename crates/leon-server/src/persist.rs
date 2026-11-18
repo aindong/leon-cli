@@ -180,8 +180,21 @@ pub fn discard(file: &Path) -> io::Result<()> {
     }
 }
 
+/// Unread reports saved in all: about 2.5 KB each at most, so with the scrollback's `restore::TOTAL`
+/// a save stays well under `MAX_FILE`.
+const SAVED_REPORTS: usize = 1024;
+
+/// Block `id`'s newest unread reports, as many as `left` allows.
+fn saved_inbox(st: &State, id: &str, left: &mut usize) -> Vec<Report> {
+    let Some(inbox) = st.agents.inboxes.get(id) else { return vec![] };
+    let n = inbox.unread.len().min(*left);
+    *left -= n;
+    inbox.unread.iter().skip(inbox.unread.len() - n).cloned().collect()
+}
+
 fn snapshot(st: &State) -> Saved {
     let cap = restore::cap(st.sessions.iter().map(|s| s.blocks.len()).sum());
+    let mut reports_left = SAVED_REPORTS;
     let sessions = st.sessions.iter().map(|s| SavedSession {
         session_id: s.id.clone(),
         label: s.label.clone(),
@@ -214,7 +227,7 @@ fn snapshot(st: &State) -> Saved {
                 resume: b.terminal.resume_to_save(),
                 title: b.terminal.title(),
                 worker: st.agents.workers.get(&b.id).cloned(),
-                inbox: st.agents.inboxes.get(&b.id).map(|i| i.unread.iter().cloned().collect()).unwrap_or_default(),
+                inbox: saved_inbox(st, &b.id, &mut reports_left),
             })
             .collect(),
     });
@@ -251,7 +264,12 @@ fn restore(ctx: &Arc<Ctx>, file: &Path, policy: Resume) -> bool {
                     if let Some(w) = worker {
                         st.agents.workers.insert(block.clone(), w);
                     }
-                    inbox.into_iter().for_each(|r| st.agents.push(&block, r));
+                    // the file is ours, but it is printed to terminals: no controls from it
+                    let printable = |r: &Report| {
+                        let fields = [Some(&r.agent), r.label.as_ref(), r.title.as_ref(), r.body.as_ref()];
+                        fields.into_iter().flatten().all(|t| !t.chars().any(char::is_control))
+                    };
+                    inbox.into_iter().filter(printable).for_each(|r| st.agents.push(&block, r));
                 }
             }
             Err(e) => {

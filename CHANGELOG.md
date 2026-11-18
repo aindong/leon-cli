@@ -32,7 +32,9 @@ fields it doesn't know. The full policy is in
 
 - **Agents orchestrating agents.** `leon agent start` runs Claude Code, Codex or any agent in a tab
   or pane, working for you; its hooks report to your `leon inbox`, and leon types a notice into
-  your prompt when your turn ends ([detail](docs/changelog-detail.md#agents-orchestrating-agents)).
+  your prompt when your turn ends. New experimental methods `agent.link`, `agent.list`,
+  `agent.inbox`, and `kind` on `dev.leon.terminal.report_status`; `api_version` 1.13.0
+  ([detail](docs/changelog-detail.md#agents-orchestrating-agents)).
 - **Contributing and translations.** A contributor guide, translations of the README and guides in
   `docs/i18n/`, and CI that skips docs-only changes ([detail](docs/changelog-detail.md#contributing-and-translations)).
 

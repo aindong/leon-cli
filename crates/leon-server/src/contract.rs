@@ -76,7 +76,6 @@ const STABILITY: &[(&str, Stability)] = &[
     ("session.attach", Stable),
     ("session.attach_all", Stable),
     ("session.resume", Stable),
-    // Agents orchestrating agents: new, so free to change while it settles.
     ("agent.link", Experimental),
     ("agent.list", Experimental),
     ("agent.inbox", Experimental),

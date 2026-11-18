@@ -408,7 +408,7 @@ async fn accept(
             tokio::select! {
                 biased; // serving stopped while this was decided: not one request is served
                 _ = ended.changed() => {}
-                _ = crate::serve::connection(read, write, &guard.0, None) => {}
+                _ = crate::serve::connection(read, write, &guard.0, crate::agents::Peer::Remote) => {}
             }
         });
     }

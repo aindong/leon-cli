@@ -35,6 +35,8 @@ type Status = (&'static str, Option<&'static str>, Option<String>, Option<String
 fn status(on: On, input: &Value) -> Option<Status> {
     let text = |v: &Value| v.as_str().and_then(|s| one_line(s, 2048));
     Some(match on {
+        // a subagent's tool says nothing about the main agent, which may still wait on a prompt
+        On::PostToolUse | On::PostToolUseFailure if input.get("agent_id").is_some() => return None,
         On::UserPromptSubmit | On::PostToolUse | On::PostToolUseFailure => ("working", None, None, None),
         On::Interrupt => ("idle", None, None, None),
         On::Stop => ("done", None, None, text(&input["last_assistant_message"])),
@@ -83,17 +85,24 @@ pub fn report(agent: Agent, on: On) {
     if std::env::var_os("LEON_BLOCK").is_none() {
         return;
     }
-    let needs_input = matches!(on, On::PermissionRequest | On::PreToolUse | On::Stop);
+    let needs_input = !matches!(on, On::UserPromptSubmit | On::Interrupt);
     let input = if needs_input { stdin_json(MAX_INPUT).unwrap_or(Value::Null) } else { Value::Null };
     let Some((state, kind, title, msg)) = status(on, &input) else { return };
     if !interactive() || (agent == Agent::Claude && print_mode()) {
         return;
     }
     let Some((mut c, session, block)) = own_block() else { return };
+    let method = |m: &str, args: Value| json!({ "session_id": session, "block_id": block, "method": m, "args": args });
+    if on == On::Stop {
+        // the agent reported its result itself this turn (`leon notify --state done --body`): keep it
+        let now = c.call("block.method", method("dev.leon.terminal.program_status", json!({})));
+        let root = now.ok().and_then(|r| r["records"].as_array()?.iter().find(|x| x["id"].is_null()).cloned());
+        if root.is_some_and(|r| r["record"]["state"] == "done" && r["record"]["msg"].is_string()) {
+            return;
+        }
+    }
     let args = json!({ "state": state, "kind": kind, "title": title, "msg": msg });
-    let params =
-        json!({ "session_id": session, "block_id": block, "method": "dev.leon.terminal.report_status", "args": args });
-    let _ = c.call("block.method", params);
+    let _ = c.call("block.method", method("dev.leon.terminal.report_status", args));
 }
 
 #[cfg(test)]
@@ -122,6 +131,8 @@ mod tests {
         assert_eq!(status(On::Stop, &json!({ "last_assistant_message": null })).unwrap().3, None);
         assert_eq!(status(On::Interrupt, &Value::Null).unwrap().0, "idle");
         assert_eq!(status(On::UserPromptSubmit, &Value::Null).unwrap().0, "working");
+        assert_eq!(status(On::PostToolUse, &Value::Null).unwrap().0, "working");
+        assert!(status(On::PostToolUse, &json!({ "agent_id": "a1" })).is_none(), "a subagent's tool");
     }
 
     #[test]

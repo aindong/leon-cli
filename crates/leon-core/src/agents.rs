@@ -8,10 +8,13 @@ use std::time::Instant;
 use serde::{Deserialize, Serialize};
 
 use crate::model::State;
-use crate::program_status::{Kind, Record, State as Status};
+use crate::program_status::{Kind, Reason, Record, State as Status};
 
 /// Unread reports an orchestrator keeps; past it the oldest goes.
 pub const MAX_UNREAD: usize = 256;
+/// Between typed text and its Enter: an agent's prompt can take text and a return that arrive
+/// together as a paste, where the return is a new line instead of submitting.
+pub const ENTER_AFTER: std::time::Duration = std::time::Duration::from_millis(300);
 
 /// A block started by another (`agent.link`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -41,11 +44,31 @@ pub struct Report {
     pub at: u64,
 }
 
+/// How a worker left its team.
+enum Ended {
+    /// Its orchestrator's block went: nobody to tell.
+    Orphaned,
+    /// Its program exited; its block stays open.
+    Exited(i32),
+    /// Its block closed, with its program's exit status when known.
+    Closed(Option<i32>),
+}
+
 #[derive(Debug, Default)]
 pub struct Inbox {
     pub unread: VecDeque<Report>,
     /// A report came since the last notice was typed or the inbox read.
     pub owed: bool,
+}
+
+/// What a block's program last reported for its root record.
+#[derive(Debug, Clone)]
+pub struct Last {
+    pub state: Status,
+    pub kind: Option<Kind>,
+    pub at: Instant,
+    /// The program in front of the terminal then, when known: the report holds only while it is.
+    front: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -54,8 +77,8 @@ pub struct Agents {
     pub workers: HashMap<String, Worker>,
     /// By orchestrator block.
     pub inboxes: HashMap<String, Inbox>,
-    /// The root record each block's program last reported (state and kind), and when.
-    last: HashMap<String, (Status, Option<Kind>, Instant)>,
+    /// By block: what its program last reported for its root record.
+    last: HashMap<String, Last>,
 }
 
 pub fn now_secs() -> u64 {
@@ -63,17 +86,14 @@ pub fn now_secs() -> u64 {
 }
 
 impl Agents {
-    /// The state block `id`'s program last reported for its root record, and when.
-    pub fn last(&self, id: &str) -> Option<(Status, Option<Kind>, Instant)> {
-        self.last.get(id).copied()
-    }
-
-    /// A report for `parent`: dropped when it says nothing new (no body, and the worker's newest
-    /// unread report has the same state and kind), else kept, the oldest going past the cap.
+    /// A report for `parent`: dropped when it says nothing new (the worker's newest unread report
+    /// has the same state and kind, and the same body or this one has none), else kept, the
+    /// oldest going past the cap.
     pub fn push(&mut self, parent: &str, r: Report) {
         let inbox = self.inboxes.entry(parent.to_string()).or_default();
         let newest = inbox.unread.iter().rev().find(|o| o.block_id == r.block_id);
-        if r.body.is_none() && newest.is_some_and(|o| o.state == r.state && o.kind == r.kind) {
+        let same = |o: &Report| o.state == r.state && o.kind == r.kind && (r.body.is_none() || o.body == r.body);
+        if newest.is_some_and(same) {
             return;
         }
         if inbox.unread.len() == MAX_UNREAD {
@@ -103,7 +123,14 @@ impl State {
     /// Block `id`'s program reported `record` for its root: remember it, and if `id` works for
     /// another block and needs it (done, blocked, error), report to that block.
     pub fn agent_reported(&mut self, id: &str, record: &Record) {
-        self.agents.last.insert(id.to_string(), (record.state, record.kind, Instant::now()));
+        if record.state == Status::Blocked && record.kind == Some(Kind::Permission) {
+            if let Ok((_, b)) = self.block(id) {
+                b.terminal.hold_for_person();
+            }
+        }
+        let front = self.block(id).ok().and_then(|(_, b)| b.terminal.reported_foreground());
+        let last = Last { state: record.state, kind: record.kind, at: Instant::now(), front };
+        self.agents.last.insert(id.to_string(), last);
         let Some(w) = self.agents.workers.get(id) else { return };
         let state = match record.state {
             Status::Done => "done",
@@ -126,27 +153,64 @@ impl State {
         self.agents.push(&parent, report);
     }
 
+    /// What block `id`'s program last reported, while that program is still in front: an agent
+    /// that quit back to its shell said nothing about the shell.
+    pub fn agent_state(&self, id: &str) -> Option<&Last> {
+        let last = self.agents.last.get(id)?;
+        let front = self.block(id).ok()?.1.terminal.reported_foreground();
+        (last.front.is_none() || last.front == front).then_some(last)
+    }
+
+    /// Block `id`'s root record went for `reason`. Looking at the pane changes nothing the program
+    /// said; its program clearing it says it is idle; an exit, a new shell prompt or a reset mean
+    /// what it said no longer holds.
+    pub fn agent_cleared(&mut self, id: &str, reason: Reason) {
+        match reason {
+            Reason::Seen | Reason::Evicted | Reason::Report => {}
+            Reason::Clear => {
+                if let Some(l) = self.agents.last.get_mut(id) {
+                    (l.state, l.kind, l.at) = (Status::Idle, None, Instant::now());
+                }
+            }
+            Reason::Exited | Reason::Prompt | Reason::Reset => {
+                self.agents.last.remove(id);
+            }
+        }
+    }
+
     /// Settle what blocks that went or whose program ended leave behind: a worker that exited or
     /// closed reports so and leaves its team; an orchestrator that closed loses its inbox and its
-    /// workers' links; a closed block's last state goes. Cheap: call it often.
+    /// workers' links; a closed block's last state goes.
     pub fn prune_agents(&mut self) {
-        let alive = |st: &State, id: &str| st.block(id).ok().map(|(_, b)| b.exit_code);
+        if self.agents.workers.is_empty() && self.agents.inboxes.is_empty() && self.agents.last.is_empty() {
+            return;
+        }
+        // each live block, and its program's exit status if it exited
+        let live: HashMap<&str, Option<i32>> =
+            self.sessions.iter().flat_map(|s| &s.blocks).map(|b| (b.id.as_str(), b.exit_code)).collect();
         let mut ended = vec![];
         for (id, w) in &self.agents.workers {
-            if alive(self, &w.parent).is_none() {
-                ended.push((id.clone(), None));
-                continue;
-            }
-            match alive(self, id) {
-                Some(None) => {}
-                Some(Some(code)) => ended.push((id.clone(), Some(("exited", Some(code))))),
-                None => ended.push((id.clone(), Some(("closed", self.exit_status(id))))),
-            }
+            let how = match (live.get(w.parent.as_str()), live.get(id.as_str())) {
+                (None, _) => Ended::Orphaned,
+                (_, None) => Ended::Closed(self.exit_status(id)),
+                (_, Some(Some(code))) => Ended::Exited(*code),
+                (_, Some(None)) => continue,
+            };
+            ended.push((id.clone(), how));
+        }
+        let keys = self.agents.inboxes.keys().chain(self.agents.last.keys());
+        let gone: Vec<String> = keys.filter(|id| !live.contains_key(id.as_str())).cloned().collect();
+        for id in gone {
+            self.agents.inboxes.remove(&id);
+            self.agents.last.remove(&id);
         }
         for (id, how) in ended {
             let w = self.agents.workers.remove(&id).expect("listed above");
-            let Some((state, code)) = how else { continue }; // its orchestrator is gone
-            let state = if code.is_some() { "exited" } else { state };
+            let (state, code) = match how {
+                Ended::Orphaned => continue,
+                Ended::Exited(code) => ("exited", Some(code)),
+                Ended::Closed(code) => ("closed", code),
+            };
             let report = Report {
                 block_id: id.clone(),
                 label: self.block(&id).ok().and_then(|(_, b)| b.label.clone()).or(w.label),
@@ -158,18 +222,6 @@ impl State {
                 at: now_secs(),
             };
             self.agents.push(&w.parent, report);
-        }
-        let gone: Vec<String> = self
-            .agents
-            .inboxes
-            .keys()
-            .chain(self.agents.last.keys())
-            .filter(|id| self.block(id).is_err())
-            .cloned()
-            .collect();
-        for id in gone {
-            self.agents.inboxes.remove(&id);
-            self.agents.last.remove(&id);
         }
     }
 }
@@ -199,6 +251,8 @@ mod tests {
         a.push("p", report("other", "done", None));
         a.push("p", report("w", "done", Some("second turn")));
         a.push("p", report("w", "error", None));
+        a.push("p", report("w", "error", Some("x")));
+        a.push("p", report("w", "error", Some("x")));
         let bodies: Vec<_> = a.take("p", true).into_iter().map(|r| (r.block_id, r.state, r.body)).collect();
         assert_eq!(
             bodies,
@@ -207,11 +261,12 @@ mod tests {
                 ("other".into(), "done".into(), None),
                 ("w".into(), "done".into(), Some("second turn".into())),
                 ("w".into(), "error".into(), None),
+                ("w".into(), "error".into(), Some("x".into())),
             ]
         );
         assert!(a.inboxes["p"].owed);
-        assert_eq!(a.unread_from("p", "w"), 3);
-        assert_eq!(a.take("p", false).len(), 4);
+        assert_eq!(a.unread_from("p", "w"), 4);
+        assert_eq!(a.take("p", false).len(), 5);
         assert!(!a.inboxes["p"].owed, "read: no notice owed");
         assert!(a.take("p", false).is_empty());
         a.push("p", report("w", "done", None));

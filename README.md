@@ -171,9 +171,10 @@ Dropped links, keys typed while one is down, and the hosts in the app's sidebar 
 leon skill setup
 ```
 
-installs a skill and a session-start hook for Claude Code and Codex (each one whose config dir
-exists or whose program is on your PATH; it says which, and why). Then, working in a leon
-terminal, ask "run the tests beside you", and the agent does what you would:
+installs a skill and hooks for Claude Code and Codex (each one whose config dir exists or whose
+program is on your PATH; it says which, and why). The hooks show each agent's state on its pane:
+working, waiting on you, or done. Then, working in a leon terminal, ask "run the tests beside
+you", and the agent does what you would:
 
 ```sh
 id=$(leon split --label tests --keep-open -- cargo test)
@@ -183,7 +184,10 @@ leon block close "$id"
 ```
 
 It knows where it is from `LEON_SESSION` and `LEON_BLOCK`, labels what it opens, and closes only
-what it created. See [docs/agents.md](docs/agents.md).
+what it created. An agent can also start other agents (`leon agent start claude "the task"`) and
+hear back from them: their reports go to its `leon inbox`, and leon types a short notice into its
+prompt when its turn has ended. Permission prompts stay yours: no agent in leon can type into a
+pane that waits on one. See [docs/agents.md](docs/agents.md).
 
 ## Know what needs you
 

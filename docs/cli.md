@@ -270,4 +270,4 @@ Updates leon to the newest release; `--check` only reports (exit 10): [updates.m
 
 ## Agents
 
-`leon skill` (show, setup, status, remove), `leon float`, `leon toggle` and `leon dock` are in [cli/agents.md](cli/agents.md).
+`leon skill` (show, setup, status, remove), `leon agent`, `leon inbox`, `leon float`, `leon toggle` and `leon dock` are in [cli/agents.md](cli/agents.md).

@@ -15,12 +15,11 @@ use serde_json::Value;
 use crate::methods::Empty;
 use crate::{Ctx, Registry};
 
-/// An orchestrator's turn must have ended this long ago before a notice is typed: its prompt is back.
+/// An orchestrator's turn must have ended at least this long ago before a notice is typed: its
+/// prompt is drawn again.
 const SETTLED: Duration = Duration::from_secs(1);
-/// No input for this long before a notice is typed, so it never joins what a person is typing.
+/// No input for this long before a notice is typed: a person typing now isn't joined mid-word.
 const QUIET: Duration = Duration::from_secs(3);
-/// Between the notice's text and its Enter: a text and a return in one read look like a paste.
-const ENTER_AFTER: Duration = Duration::from_millis(300);
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -76,8 +75,7 @@ pub struct Team {
 
 #[derive(Serialize, JsonSchema)]
 pub struct Reports {
-    /// Oldest first. A report's `state` is `done`, `blocked` or `error` as the worker reported it,
-    /// or `exited`/`closed` when it ended; `body` is its message.
+    /// Oldest first.
     pub reports: Vec<Report>,
 }
 
@@ -93,7 +91,9 @@ pub fn add(r: &mut Registry) {
             st.block(&p.parent_id)?;
             let agent = clean_label(Some(&p.agent))?.ok_or_else(|| ApiError::bad_request("agent is empty"))?;
             let mut up = Some(p.parent_id.clone());
-            while let Some(b) = up {
+            // bounded: a state file edited by hand could hold a loop
+            for _ in 0..leon_core::MAX_BLOCKS {
+                let Some(b) = up else { break };
                 if b == p.block_id {
                     return Err(ApiError::bad_request("a block can't work for itself or its own workers"));
                 }
@@ -101,7 +101,7 @@ pub fn add(r: &mut Registry) {
             }
             let worker = Worker { parent: p.parent_id, agent, label, started_at: now_secs() };
             st.agents.workers.insert(p.block_id.clone(), worker);
-            // what it reported before the link counts too
+            // a report it made before the link counts too
             let root = st.block(&p.block_id)?.1.terminal.program_status().into_iter().find(|(id, _)| id.is_none());
             if let Some((_, record)) = root {
                 st.agent_reported(&p.block_id, &record);
@@ -133,21 +133,21 @@ pub fn add(r: &mut Registry) {
 }
 
 fn team(st: &State, id: &str) -> Team {
-    let last = st.agents.last(id);
+    let last = st.agent_state(id);
     let mut workers: Vec<WorkerView> = st
         .agents
         .workers
         .iter()
         .filter(|(_, w)| w.parent == id)
         .map(|(b, w)| {
-            let last = st.agents.last(b);
+            let last = st.agent_state(b);
             WorkerView {
                 block_id: b.clone(),
                 label: st.block(b).ok().and_then(|(_, x)| x.label.clone()),
                 agent: w.agent.clone(),
                 started_at: w.started_at,
-                state: last.map(|l| l.0),
-                kind: last.and_then(|l| l.1),
+                state: last.map(|l| l.state),
+                kind: last.and_then(|l| l.kind),
                 unread: st.agents.unread_from(id, b),
             }
         })
@@ -157,34 +157,41 @@ fn team(st: &State, id: &str) -> Team {
     workers.sort_by_key(|w| order(&w.block_id));
     Team {
         parent: st.agents.workers.get(id).map(|w| w.parent.clone()),
-        state: last.map(|l| l.0),
-        kind: last.and_then(|l| l.1),
+        state: last.map(|l| l.state),
+        kind: last.and_then(|l| l.kind),
         workers,
     }
 }
 
-/// Type "You have N leon messages. Run `leon inbox`." into each orchestrator that is owed one and
-/// is idle at its prompt: its last report says its turn ended (`done` or `idle`) a moment ago, and
-/// nobody typed into it for `QUIET`. A pane that never reported isn't an agent's: never typed into.
+/// The line typed into an orchestrator. No backticks or other shell syntax: typed into a shell by
+/// mistake, it runs nothing.
+pub fn notice(n: usize) -> String {
+    let s = if n == 1 { "" } else { "s" };
+    format!("You have {n} leon message{s}. Run leon inbox to read them.")
+}
+
+/// Type `notice` into each owed orchestrator whose program, still in front, last reported its turn
+/// ended (`done` or `idle`) at least `SETTLED` ago, and that had no input for `QUIET`. A pane
+/// whose program never reported isn't an agent's: it is never typed into.
 pub fn deliver(ctx: &Arc<Ctx>) {
     let due = {
         let mut st = ctx.state();
-        if st.agents.inboxes.is_empty() && st.agents.workers.is_empty() {
+        st.prune_agents();
+        if st.agents.inboxes.is_empty() {
             return;
         }
-        st.prune_agents();
         let now = Instant::now();
         let mut due = vec![];
         let owed: Vec<String> =
             st.agents.inboxes.iter().filter(|(_, i)| i.owed && !i.unread.is_empty()).map(|(b, _)| b.clone()).collect();
         for id in owed {
             let idle = st
-                .agents
-                .last(&id)
-                .is_some_and(|(s, _, at)| matches!(s, Status::Done | Status::Idle) && now >= at + SETTLED);
+                .agent_state(&id)
+                .is_some_and(|l| matches!(l.state, Status::Done | Status::Idle) && now >= l.at + SETTLED);
             let Ok((_, b)) = st.block(&id) else { continue };
             let quiet = b.terminal.last_input().is_none_or(|t| now >= t + QUIET);
-            if idle && quiet && b.exit_code.is_none() {
+            // never into a prompt only a person answers, whatever its status says now
+            if idle && quiet && b.exit_code.is_none() && !b.terminal.held_for_person() {
                 let t = b.terminal.clone();
                 let inbox = st.agents.inboxes.get_mut(&id).expect("listed above");
                 inbox.owed = false;
@@ -194,19 +201,27 @@ pub fn deliver(ctx: &Arc<Ctx>) {
         due
     };
     for (t, n) in due {
-        let s = if n == 1 { "" } else { "s" };
-        if t.write(format!("You have {n} leon message{s}. Run `leon inbox`.").as_bytes()).is_err() {
-            continue;
-        }
-        let typed = t.last_input();
+        let Ok(typed) = t.write_at(notice(n).as_bytes()) else { continue };
+        let typed = Some(typed);
         tokio::spawn(async move {
-            tokio::time::sleep(ENTER_AFTER).await;
+            tokio::time::sleep(leon_core::agents::ENTER_AFTER).await;
             // someone typed meanwhile: leave the line to them
-            if t.last_input() == typed {
+            if t.last_input() == typed && !t.held_for_person() {
                 let _ = t.key("enter");
             }
         });
     }
+}
+
+/// Who sent a request, for the permission guard.
+#[derive(Clone, Copy, Debug)]
+pub enum Peer {
+    /// A local process, by pid.
+    Process(i32),
+    /// A local connection whose process the socket didn't name.
+    Unknown,
+    /// Another machine (Tailscale).
+    Remote,
 }
 
 /// The block an input request types into: `block.event` but `focus`, `block.method` `write`, and
@@ -225,36 +240,58 @@ fn input_target(ctx: &Ctx, method: &str, params: &Value) -> Option<String> {
     }
 }
 
-/// Refuse a request that would answer a permission prompt for an agent: input to a block waiting
-/// on one, or a status report that would lift that record, from a program running inside a leon
-/// block, which is where agents run. Its own program and what it runs (its hooks) may lift it. The
-/// app, `leon attach` in a terminal, a person's own shell, and other machines (`peer` None, or a
-/// host's `leon server proxy`) run outside leon blocks: a person is there.
-pub fn guard(ctx: &Ctx, peer: Option<i32>, method: &str, params: &Value) -> Result<(), ApiError> {
-    let lifts = method == "block.method"
-        && params["method"] == "dev.leon.terminal.report_status"
-        && !(params["args"]["state"] == "blocked" && params["args"]["kind"] == "permission");
-    let target = if lifts { params["block_id"].as_str().map(String::from) } else { input_target(ctx, method, params) };
-    let (Some(id), Some(peer)) = (target, peer) else { return Ok(()) };
-    let t = match ctx.state().block(&id) {
-        Ok((_, b)) => b.terminal.clone(),
-        Err(_) => return Ok(()), // the method says not found
+/// Whether an input request is typing (keys, a paste, text), as answering a prompt takes, rather
+/// than the mouse.
+fn typing(method: &str, params: &Value) -> bool {
+    method != "block.event" || matches!(params["event"]["type"].as_str(), Some("key" | "paste"))
+}
+
+/// Keep agents from answering permission prompts. A block whose program reported one is held
+/// for a person (`Terminal::held_for_person`) until a person's keys reach it; meanwhile a program
+/// inside a leon terminal, which is where agents run, can't type into it, change its status
+/// (only its own program and what that runs, its hooks, may), or run config actions or reloads
+/// (Lua in the server types where nothing here sees). A person is a client outside every leon
+/// terminal (the app, `leon attach` or a shell in a terminal app) or on another machine; a local
+/// client whose process can't be told is taken to be inside.
+pub fn guard(ctx: &Ctx, peer: Peer, method: &str, params: &Value) -> Result<(), ApiError> {
+    let lua = matches!(method, "client.action" | "server.config_reload");
+    let status = method == "block.method" && params["method"] == "dev.leon.terminal.report_status";
+    let target = if status { params["block_id"].as_str().map(String::from) } else { input_target(ctx, method, params) };
+    let (held, programs) = {
+        let st = ctx.state();
+        let blocks = || st.sessions.iter().flat_map(|s| &s.blocks);
+        let held = match (&target, lua) {
+            (Some(id), _) => st.block(id).ok().map(|(_, b)| b.terminal.clone()).filter(|t| t.held_for_person()),
+            (None, true) => blocks().map(|b| b.terminal.clone()).find(|t| t.held_for_person()),
+            (None, false) => None,
+        };
+        let Some(held) = held else { return Ok(()) };
+        (held, blocks().map(|b| b.terminal.pid()).collect::<Vec<_>>())
     };
-    if !t.awaits_permission() {
+    use leon_core::process_tree::inside;
+    let person = match peer {
+        Peer::Remote => true,
+        Peer::Unknown => false,
+        Peer::Process(p) => inside(p, &programs) == Some(false),
+    };
+    if person {
+        if target.is_some() && !status && typing(method, params) {
+            held.person_typed();
+        }
         return Ok(());
     }
-    use leon_core::process_tree::descends_from;
-    let programs: Vec<i32> = ctx.state().sessions.iter().flat_map(|s| &s.blocks).map(|b| b.terminal.pid()).collect();
-    if !descends_from(peer, &programs) || (lifts && descends_from(peer, &[t.pid()])) {
+    // its own hooks report its state; the hold stays until a person types
+    if status && matches!(peer, Peer::Process(p) if inside(p, &[held.pid()]) == Some(true)) {
         return Ok(());
     }
-    let what = if lifts { "change its status" } else { "type into it" };
+    let id = target.unwrap_or_else(|| "a block".into());
     Err(ApiError::new(
         403,
         "permission_pending",
         format!(
-            "{id} waits on a permission prompt, which only a person answers (in the leon app, or \
-             `leon attach` in a terminal outside leon); a program inside a leon terminal can't {what} now"
+            "{id} waits for a person to answer a permission prompt (in the leon app, or `leon attach` \
+             in a terminal outside leon); until one types there, a program inside a leon terminal \
+             can't type into it, change its status, or run config actions"
         ),
     ))
 }

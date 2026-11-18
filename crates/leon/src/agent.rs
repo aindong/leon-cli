@@ -18,10 +18,6 @@ use crate::{Cli, Cmd};
 
 /// A task bigger than this is refused: it goes on the agent's command line.
 const MAX_TASK: usize = 64 << 10;
-/// How long `agent tell` waits for the worker's turn to end, unless `--for`.
-const TELL_WAIT: Duration = Duration::from_secs(600);
-/// Between the text and its Enter: an agent's prompt takes a text and a return in one read as a paste.
-const ENTER_AFTER: Duration = Duration::from_millis(300);
 
 /// What leon adds after the task: how the worker reports.
 const PREAMBLE: &str = "You were started by another agent through leon, and you report to it through leon. \
@@ -58,16 +54,16 @@ pub enum AgentCmd {
     },
     /// List the agents working for you: label, state, agent, age, unread reports, block.
     Ls,
-    /// Type TEXT and press Enter in a worker, once its turn ended (it no longer reports working).
+    /// Type TEXT and press Enter in a worker, once its agent reports its turn ended.
     Tell {
         /// The worker's block.
         #[arg(value_name = "BLOCK")]
         target: String,
         /// The text to type.
         text: String,
-        /// Give up after this long (e.g. 30s, 10m) and exit 1 [default: 10m].
-        #[arg(long = "for", value_parser = crate::blocks::parse_duration)]
-        timeout: Option<std::time::Duration>,
+        /// Give up after this long (e.g. 30s, 10m) and exit 1.
+        #[arg(long = "for", default_value = "10m", value_parser = crate::blocks::parse_duration)]
+        timeout: std::time::Duration,
     },
 }
 
@@ -83,7 +79,9 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
             let (sid, parent) = pick_block(c, cli, None)?;
             let cwd = crate::commands::block_cwd(cli, cwd.as_deref())?;
             let mut command: Vec<String> = std::iter::once(agent.clone()).chain(args.iter().cloned()).collect();
-            command.push(format!("{}\n\n{PREAMBLE}", task.trim_end()));
+            // a prompt starting with `-` would be read as an option
+            let lead = if task.starts_with('-') { "Task:\n" } else { "" };
+            command.push(format!("{lead}{}\n\n{PREAMBLE}", task.trim_end()));
             // kept open after it exits, so its last screen can still be read; the orchestrator closes it
             let options = json!({ "command": command, "cwd": cwd, "exit": { "on_completion": false } });
             let layout = json!({ "block": { "label": label, "options": options } });
@@ -108,7 +106,7 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
                 print_json(&team);
                 return Ok(());
             }
-            let now = now();
+            let now = leon_core::agents::now_secs();
             for w in team["workers"].as_array().into_iter().flatten() {
                 let age = now.saturating_sub(w["started_at"].as_u64().unwrap_or(now));
                 println!(
@@ -124,7 +122,7 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
         }
         Cmd::Agent(AgentCmd::Tell { target, text, timeout }) => {
             let (sid, w) = pick_block(c, cli, Some(target))?;
-            let end = Instant::now() + timeout.unwrap_or(TELL_WAIT);
+            let end = Instant::now() + *timeout;
             loop {
                 let me = c.call("agent.list", json!({ "block_id": w }))?;
                 if me["state"] == "blocked" && me["kind"] == "permission" {
@@ -132,17 +130,23 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
                         "{w} waits on a permission prompt, which only a person answers in the app"
                     )));
                 }
-                if me["state"] != "working" {
+                // null: its agent never reported, or quit back to its shell, which mustn't get the text
+                if !me["state"].is_null() && me["state"] != "working" {
                     break;
                 }
                 if Instant::now() >= end {
-                    return Err(Fail::Other(format!("{w} is still working; nothing was typed")));
+                    let why = if me["state"].is_null() {
+                        "reports no state (no leon hooks, or its agent quit)"
+                    } else {
+                        "is still working"
+                    };
+                    return Err(Fail::Other(format!("{w} {why}; nothing was typed")));
                 }
                 std::thread::sleep(Duration::from_millis(250));
             }
             let method = |m: &str, args: Value| json!({ "session_id": sid, "block_id": w, "method": m, "args": args });
             c.call("block.method", method("dev.leon.terminal.write", json!({ "data": text })))?;
-            std::thread::sleep(ENTER_AFTER);
+            std::thread::sleep(leon_core::agents::ENTER_AFTER);
             c.call(
                 "block.event",
                 json!({ "session_id": sid, "block_id": w, "event": { "type": "key", "key": "enter" } }),
@@ -190,22 +194,21 @@ fn ago(secs: u64) -> String {
     }
 }
 
-fn now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+/// At most one byte past `MAX_TASK` of `r`, so an oversized task is refused without reading it all.
+fn read_capped(r: impl Read) -> std::io::Result<String> {
+    let mut s = String::new();
+    r.take(MAX_TASK as u64 + 1).read_to_string(&mut s)?;
+    Ok(s)
 }
 
 /// The task: `--file`, `-` for stdin, or the text.
 fn read_task(file: Option<&Path>, task: Option<&str>) -> Result<String, Fail> {
     let text = match (file, task) {
-        (Some(f), _) => std::fs::read_to_string(f).map_err(|e| Fail::Other(format!("{}: {e}", f.display())))?,
-        (None, Some("-")) => {
-            let mut s = String::new();
-            std::io::stdin()
-                .take(MAX_TASK as u64 + 1)
-                .read_to_string(&mut s)
-                .map_err(|e| Fail::Other(e.to_string()))?;
-            s
+        (Some(f), _) => {
+            let file = std::fs::File::open(f).map_err(|e| Fail::Other(format!("{}: {e}", f.display())))?;
+            read_capped(file).map_err(|e| Fail::Other(format!("{}: {e}", f.display())))?
         }
+        (None, Some("-")) => read_capped(std::io::stdin()).map_err(|e| Fail::Other(e.to_string()))?,
         (None, Some(t)) => t.to_string(),
         (None, None) => return Err(Fail::Usage("give the task: TEXT, --file FILE, or - for stdin".into())),
     };

@@ -38,7 +38,8 @@ fn command(agent: Agent, input: &Value) -> Option<Vec<String>> {
 }
 
 pub fn record(agent: Agent) {
-    let Some(command) = std::env::var_os("LEON_BLOCK").and(stdin_json(MAX_INPUT)).and_then(|v| command(agent, &v))
+    let Some(command) =
+        std::env::var_os("LEON_BLOCK").and_then(|_| stdin_json(MAX_INPUT)).and_then(|v| command(agent, &v))
     else {
         return;
     };

@@ -72,8 +72,9 @@ agent, age, unread reports and block. `--json` also gives your own parent and st
 
 ### `leon agent tell BLOCK TEXT`
 
-Type TEXT and press Enter in a worker once its turn ended (it no longer reports `working`).
-Refused while it waits on a permission prompt, which only the user answers.
+Type TEXT and press Enter in a worker once its agent reports its turn ended; a worker that reports
+no state (no leon hooks, or its agent quit) isn't typed into. Refused while it waits on a
+permission prompt, which only the user answers.
 
 - `--for DUR`: give up after DUR (e.g. `30s`, `10m`) and exit 1 (default 10m).
 

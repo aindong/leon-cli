@@ -7,7 +7,7 @@ mod support;
 use serde_json::{json, Value};
 use support::orch::{private, until, Orch};
 
-/// (event, matcher) leon hooks per agent, beside SessionStart.
+/// (event, matcher) leon hooks per agent.
 const CLAUDE: &[(&str, Option<&str>)] = &[
     ("SessionStart", None),
     ("UserPromptSubmit", None),

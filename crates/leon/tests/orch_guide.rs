@@ -1,5 +1,5 @@
-//! Agent orchestration criterion 9: the guide stays readable in one pass, fixes what a comparison
-//! with another orchestrator's guide found, and its orchestration part prints on its own.
+//! Agent orchestration criterion 9: the guide stays readable in one pass, says when not to use
+//! leon, covers -H, exit 4 and repeated sends, and its orchestration part prints on its own.
 
 use std::process::Command;
 

@@ -1,7 +1,7 @@
 //! Agent orchestration criterion 4: while a block waits on a permission prompt (root record
 //! blocked/permission), a program inside a leon terminal (where agents run) can't type into it,
 //! however it tries, nor lift the record to get around that. A person outside leon still answers:
-//! `leon attach` in a plain terminal here, which is the app's own client code; then the block's
+//! `leon attach` in a plain terminal here, a client outside leon as the app is; then the block's
 //! own program reports it answered and leon's commands type again.
 
 mod support;
@@ -31,7 +31,7 @@ fn an_agent_in_leon_cannot_answer_a_permission_prompt_but_a_person_can() {
     let s = o.env.json(&["ls", "--json"])[0]["session_id"].as_str().unwrap().to_string();
     o.env.ok(&["notify", "-b", &w, "--state", "blocked", "--kind", "permission", "--body", "Bash: rm -rf build"]);
 
-    // an agent in a pane beside it (W keeps the focus) tries every way leon offers
+    // an agent in a pane beside it (W keeps the focus) tries leon's commands and API
     let out = o.env.dir.path().join("tries");
     let write =
         json!({ "session_id": s, "block_id": w, "method": "dev.leon.terminal.write", "args": { "data": "y\r" } });

@@ -73,6 +73,23 @@ impl Terminal {
         Ok(())
     }
 
+    /// Its program reported a permission prompt: until a person's input reaches it
+    /// (`person_typed`), programs inside leon can't type here. A status change alone, which a
+    /// program can make by writing to the terminal, doesn't end that.
+    pub fn hold_for_person(&self) {
+        self.held.store(true, Ordering::SeqCst);
+    }
+
+    /// A person's keys reached this terminal: it is no longer held for one.
+    pub fn person_typed(&self) {
+        self.held.store(false, Ordering::SeqCst);
+    }
+
+    /// Whether only a person may type here now: held since a permission prompt, or showing one.
+    pub fn held_for_person(&self) -> bool {
+        self.held.load(Ordering::SeqCst) || self.awaits_permission()
+    }
+
     /// Whether the program waits on a permission prompt: its root record is blocked/permission.
     pub fn awaits_permission(&self) -> bool {
         use crate::program_status::{Kind, State};

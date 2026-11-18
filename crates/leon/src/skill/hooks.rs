@@ -139,7 +139,7 @@ pub fn state(v: &Value, agent: Agent) -> State {
 /// `v` without our entries. Groups, events and `hooks` that only held ours go too; anything else
 /// (an empty group the user wrote, other keys) stays as it was.
 // shortcut: an event list or `hooks` the user had left empty before setup goes too; record what
-// setup created if that ever matters.
+// setup created once an agent treats an empty list differently from none.
 pub fn without_ours(v: Value) -> Value {
     strip(v, true)
 }
@@ -219,6 +219,18 @@ mod tests {
         assert_eq!(state(&fixed, Agent::Codex), State::Outdated, "the other agent's command is outdated here");
         let twice = json!({ "hooks": { "SessionStart": [our_group(Agent::Codex, None, None), our_group(Agent::Codex, None, None)] } });
         assert_eq!(state(&twice, Agent::Codex), State::Outdated);
+    }
+
+    #[test]
+    fn every_event_an_agent_hooks_is_one_remove_looks_in() {
+        for a in Agent::ALL {
+            for (event, _, on) in events(a) {
+                assert!(ALL_EVENTS.contains(event), "{event} is missing from ALL_EVENTS");
+                if let Some(on) = on {
+                    assert!(<super::super::On as clap::ValueEnum>::from_str(on, false).is_ok(), "--on {on}");
+                }
+            }
+        }
     }
 
     #[test]

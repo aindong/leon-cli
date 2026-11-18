@@ -19,6 +19,7 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::mpsc;
 
+use crate::agents::Peer;
 use crate::events::{is_attach, Subscriber};
 use crate::persist::{self, Persist};
 use crate::screens::Screens;
@@ -141,7 +142,7 @@ pub async fn serve_on(ctx: Arc<Ctx>, bound: Listener, opts: Options) -> io::Resu
                 if !same_user(&stream) {
                     continue; // dropping the stream closes it
                 }
-                let peer = stream.peer_cred().ok().and_then(|c| c.pid());
+                let peer = stream.peer_cred().ok().and_then(|c| c.pid()).map_or(Peer::Unknown, Peer::Process);
                 shared.open.fetch_add(1, Ordering::SeqCst);
                 shared.touch();
                 let guard = Open(shared.clone());
@@ -288,8 +289,8 @@ enum Line {
 
 /// One connection (the Unix socket's, or one tailnet.rs let in): requests are answered one at a
 /// time, in order, while events the connection attached to are written between replies.
-/// `peer` is the client's pid, when the socket says (a local connection).
-pub(crate) async fn connection<R, W>(read: R, mut write: W, shared: &Shared, peer: Option<i32>) -> io::Result<()>
+/// `peer` is who the client is, for the permission guard.
+pub(crate) async fn connection<R, W>(read: R, mut write: W, shared: &Shared, peer: Peer) -> io::Result<()>
 where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin,
@@ -326,7 +327,7 @@ async fn serve_lines(
     sub: &Arc<Subscriber>,
     screens: &mut Screens,
     shared: &Shared,
-    peer: Option<i32>,
+    peer: Peer,
 ) -> io::Result<()> {
     // Order: a finished call's reply, then the next request, then events, then screens, so an
     // event flood can't hold up replies and an attach reply precedes its events.

@@ -151,11 +151,12 @@ leon block close "$id"
   message right after an unread one of the same state and kind from the same worker adds nothing.
   When a worker's program exits or its block closes, an `exited` or `closed` report says so, and
   it leaves the team. An inbox keeps the newest 256 unread reports.
-- **The notice.** leon types ``You have N leon messages. Run `leon inbox`.`` into the
-  orchestrator's prompt and presses Enter, once: when its own hooks last said its turn ended
-  (`done`, or Codex's interrupt), at least a second ago, and nothing was typed into its pane for 3
-  seconds. Reports that come while it works make one notice. A pane whose program never reported a
-  state (a shell) is never typed into.
+- **The notice.** leon types `You have N leon messages. Run leon inbox to read them.` into the
+  orchestrator's prompt and presses Enter, once: when the program in front of its pane is the one
+  whose hooks last said its turn ended (`done`, or Codex's interrupt), at least a second ago, and
+  nothing was typed into its pane for 3 seconds. Reports that come while it works make one notice.
+  A pane whose program never reported a state (a shell), or whose agent quit back to its shell,
+  is never typed into; the notice holds no shell syntax in case.
 - **Lifetime.** When the orchestrator's block closes, its inbox goes and its workers keep running,
   unlinked. When the server restarts, links and unread reports come back with the sessions (the
   agents themselves start again only through `resume`).
@@ -177,24 +178,37 @@ agent runs), never fail the agent, and give up within about 2 seconds.
 | Codex `Interrupt` | idle |
 
 Claude Code runs no hook when you interrupt it (Esc), so its block stays `working` until your
-next prompt. Codex has no question tool; it asks in its last message, which arrives as `done`.
+next prompt. Codex has no question tool; it asks in its last message, which arrives as `done`. A
+subagent's tool events don't change the block's state (the main agent may still wait on a
+prompt), and a turn whose agent already reported its result with `leon notify --state done --body`
+keeps that result: its Stop hook adds nothing.
 
 ### Only the user answers permission prompts
 
-While a block's root status is `blocked` with kind `permission`, leon refuses input to it from
-any program running inside a leon terminal, which is where agents run: `leon send`, `send-key`,
-`agent tell`, `api call` of `block.event`, `dev.leon.terminal.write` or `client.key`, a `leon attach`
-started in a pane, or a socket client of its own, all get error `permission_pending`. So an agent
-can't approve its own or another agent's prompt. A person outside leon still answers: the app's
-keys reach the pane (the Activity list and the notification take them there), and so does
-`leon attach` in a plain terminal, or `leon send` from their own shell. Only the block's own
-program (its hooks) can lift that status from inside leon; `leon notify -b BLOCK` from another
-pane is refused.
+When an agent's block reports `blocked` with kind `permission`, leon holds it for a person: until a
+person's keys reach that pane, no program running inside a leon terminal can type into it
+(`leon send`, `send-key`, `agent tell`, `api call` of `block.event`, `dev.leon.terminal.write` or
+`client.key`, a `leon attach` started in a pane, a socket client of its own), change its status
+from outside it, or run a config action or reload (`leon do ACTION`, `client.action`,
+`server.config_reload`). Each gets error `permission_pending`. Only the block's own program (its
+hooks) may change its status meanwhile, and that doesn't end the hold: a person typing does. So an
+agent can't approve its own or another agent's prompt, even by writing a report to the terminal
+or starting a job that outlives it.
 
-The server tells where a client runs from its process: the peer of the socket and its parents, up
-to a block's program. It is not a sandbox: a program running as you outside leon is treated as you,
-as is a request from another machine (`-H`, which arrives through that host's `leon server proxy`),
-and a config action run in the server isn't checked.
+A person answers where they are: the app's keys reach the pane (the Activity list and the
+notification take them there), and so do `leon attach` in a terminal app and `leon send` from a
+shell outside leon. leon tells where a client runs from its process: the peer of the socket, its
+parents up to pid 1, and its session, which a job keeps after its parent exits. A client it can't
+place counts as inside.
+
+This keeps agents from answering. It is not a sandbox:
+
+- a program running as you outside leon counts as the person, and so does a request from another
+  machine (`-H`, or a client reaching this server over Tailscale, even from a pane here);
+- a program that moves itself to a new session (`setsid`) and drops its terminal gets past it;
+- a dialog with no hook, such as Claude Code's question whether to trust a new folder, isn't
+  held: start workers in folders the agent already trusts;
+- `agent.link` and `agent.inbox` don't check who asks, as `leon send` doesn't for other blocks.
 
 ## Program status: let the user see what the agent is doing
 

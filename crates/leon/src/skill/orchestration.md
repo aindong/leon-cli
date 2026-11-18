@@ -27,7 +27,7 @@ the files, what done looks like, and what to leave alone.
 Don't poll. End your turn. When a worker reports, leon types one line into your prompt once your
 turn has ended and nobody has typed into your pane for a few seconds:
 
-    You have 2 leon messages. Run `leon inbox`.
+    You have 2 leon messages. Run leon inbox to read them.
 
 Reports that come while you work are gathered into that one notice. leon only types into an agent
 whose hooks say its turn ended (`leon skill setup` installs them). Without them, check
@@ -46,9 +46,9 @@ A report's state is what the worker said:
 - `done`: its turn ended; `body` is its result (or its last message).
 - `blocked`, kind `question`: it asks you something; `body` is the question.
 - `blocked`, kind `permission`: it waits on a permission prompt (to run a command, edit a file).
-  **Only the user answers those**, in the leon app; leon refuses your `send`, `send-key` and
-  `agent tell` to that pane until then. Tell the user which worker waits and what it asks, if they
-  haven't seen it. Don't try to get around the refusal.
+  **Only the user answers those**, in the leon app; until they have typed there, leon refuses your
+  `send`, `send-key` and `agent tell` to that pane. Tell the user which worker waits and what it
+  asks, if they haven't seen it. Don't try to get around the refusal.
 - `error`: it reported a failure.
 - `exited` or `closed`: its program ended (`body` has the exit status) or its pane was closed. It
   is no longer your worker.
@@ -61,9 +61,10 @@ Each report says how to look: `leon capture -b BLOCK --trim | tail -40` shows it
 leon agent tell tests "Use the fixture in tests/data, not a new one."
 ```
 
-`leon agent tell W TEXT` waits until W's turn ended, then types TEXT and presses Enter (`--for 30s`
-to give up sooner; the default is 10 minutes). `leon send -b W` and `leon send-key -b W enter` work
-too, but type at once, even mid-turn.
+`leon agent tell W TEXT` waits until W's agent reports its turn ended, then types TEXT and presses
+Enter (`--for 30s` to give up sooner; the default is 10 minutes). It doesn't type into a worker
+that reports no state (no leon hooks, or its agent quit). `leon send -b W` and
+`leon send-key -b W enter` work too, but type at once, even mid-turn.
 
 ## Clean up
 
