@@ -70,10 +70,13 @@ the picture under it (it can't work here, below).
 
 ## Measurement
 
-From the spike (2026-11-18, machine load 5–6) and this build (the PR's numbers, on a quiet
-machine): GPU 0.07–0.6 ms a frame at 2880×1800 for the shaders tested (one noise-heavy shader
-3.9 ms); nothing while idle; key to echo p50 +2.8 ms with the overlay animating on a busy
-machine, and the quiet machine's off/on numbers in the PR that built it.
+From the spike (2026-11-18): GPU 0.07–0.6 ms a frame at 2880×1800 for the shaders tested (one
+noise-heavy shader 3.9 ms); key to echo p50 +2.8 ms with the overlay animating, at load 5–6.
+From this build (2026-11-19, `scripts/perf/keylat.sh --loads idle --keys 150` with
+`PERF_FRONT=1`, at load 3–3.5: other builds kept it from going under 2): key to echo painted
+p50 10.3 ms and p99 18.9 ms with no shader, 10.0 and 19.9 ms with cursor_smear animating through
+the whole run (1,194 overlay frames), so no measurable cost to typing; and
+`scripts/idle-frames.sh --cursor-shader` draws one animation, then nothing while idle.
 
 ## How it goes away
 
