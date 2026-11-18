@@ -23,7 +23,7 @@ resume its session after a restart (see [agents.md](../agents.md)).
 
 - `--agent claude|codex`: only this agent.
 - `--dry-run`: print what would change; write nothing.
-- `--force`: replace a SKILL.md leon didn't install (the old one is kept as `SKILL.md.leon-backup`).
+- `--force`: replace a SKILL.md leon didn't install (the old one is kept as `SKILL.md.leon-backup`, or as `SKILL.md.leon-backup.2`, `.3` and so on when earlier backups exist).
 
 ### `leon skill status`
 
