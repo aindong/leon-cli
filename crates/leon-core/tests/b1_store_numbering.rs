@@ -59,7 +59,7 @@ fn ten_thousand_lines_keep_their_numbers_with_most_of_them_in_the_store() {
 fn a_line_read_before_it_moves_reads_the_same_after() {
     // `cat` prints what it is sent: the lines arrive in two parts, the second pushing the first's
     // lines out of alacritty's window into the store
-    let script = "stty raw -echo; exec cat";
+    let script = "stty raw -echo; printf 'ready\\r\\n'; exec cat";
     let spec = Spec { command: vec!["sh".into(), "-c".into(), script.into()], cwd: None, env: vec![] };
     let t = Terminal::spawn(spec, |_| {}).unwrap();
     let wait = |what: &str| {
@@ -69,8 +69,7 @@ fn a_line_read_before_it_moves_reads_the_same_after() {
             std::thread::sleep(Duration::from_millis(20));
         }
     };
-    // stty has run once cat echoes
-    t.write(b"ready\r\n").unwrap();
+    // `ready` comes after stty: from then on input isn't echoed, only printed by cat
     wait("ready");
     t.write(numbered(0, 600).as_bytes()).unwrap();
     wait("599");

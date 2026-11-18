@@ -43,10 +43,12 @@ fn a_history_clear_empties_the_store() {
 
 /// A program that prints what it is sent, with `prefix-0..3000` printed and moved into the store.
 fn live_with_a_full_store(prefix: &str) -> Terminal {
-    let spec =
-        Spec { command: vec!["sh".into(), "-c".into(), "stty raw -echo; exec cat".into()], cwd: None, env: vec![] };
+    let spec = Spec {
+        command: vec!["sh".into(), "-c".into(), "stty raw -echo; printf 'ready\\r\\n'; exec cat".into()],
+        cwd: None,
+        env: vec![],
+    };
     let t = Terminal::spawn(spec, |_| {}).unwrap();
-    t.write(b"ready\r\n").unwrap();
     until(&t, "ready", |t| t.text(true).ends_with("ready"));
     t.write((0..3000).map(|i| format!("{prefix}-{i}\r\n")).collect::<String>().as_bytes()).unwrap();
     until(&t, "printed", |t| t.text(true).ends_with(&format!("{prefix}-2999")));

@@ -29,10 +29,9 @@ fn kept(t: &Terminal) -> Vec<String> {
 
 #[test]
 fn the_alternate_screen_leaves_the_store_alone() {
-    let script = "stty raw -echo; exec cat";
+    let script = "stty raw -echo; printf 'ready\\r\\n'; exec cat";
     let spec = Spec { command: vec!["sh".into(), "-c".into(), script.into()], cwd: None, env: vec![] };
     let t = Terminal::spawn(spec, |_| {}).unwrap();
-    t.write(b"ready\r\n").unwrap();
     wait(&t, "ready", |t| t.text(true).ends_with("ready"));
     let lines: String = (0..3000).map(|i| format!("kept {i}\r\n")).collect();
     t.write(lines.as_bytes()).unwrap();

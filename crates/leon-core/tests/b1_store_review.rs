@@ -79,8 +79,11 @@ fn a_clear_on_the_alternate_screen_keeps_the_store() {
 
 #[test]
 fn a_clear_just_before_a_live_alternate_screen_empties_the_store() {
-    let spec =
-        Spec { command: vec!["sh".into(), "-c".into(), "stty raw -echo; exec cat".into()], cwd: None, env: vec![] };
+    let spec = Spec {
+        command: vec!["sh".into(), "-c".into(), "stty raw -echo; printf 'ready\\r\\n'; exec cat".into()],
+        cwd: None,
+        env: vec![],
+    };
     let t = Terminal::spawn(spec, |_| {}).unwrap();
     let wait = |what: &str, pred: &dyn Fn(&Terminal) -> bool| {
         let end = Instant::now() + Duration::from_secs(20);
@@ -89,7 +92,6 @@ fn a_clear_just_before_a_live_alternate_screen_empties_the_store() {
             std::thread::sleep(Duration::from_millis(20));
         }
     };
-    t.write(b"ready\r\n").unwrap();
     wait("ready", &|t| t.text(true).ends_with("ready"));
     t.write((0..3000).map(|i| format!("old-{i}\r\n")).collect::<String>().as_bytes()).unwrap();
     wait("printed", &|t| t.text(true).ends_with("old-2999"));
