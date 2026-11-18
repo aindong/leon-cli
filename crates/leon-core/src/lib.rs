@@ -32,3 +32,5 @@ pub fn secs_from_env(name: &str, default: std::time::Duration) -> std::time::Dur
 pub fn new_id(kind: &str) -> String {
     format!("{kind}:{}", uuid::Uuid::new_v4())
 }
+
+// throwaway: a code change for the CI proof
