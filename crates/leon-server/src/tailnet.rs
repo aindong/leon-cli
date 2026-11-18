@@ -404,11 +404,18 @@ async fn accept(
             shared.touch();
             let guard = Open(shared.clone());
             direct::keepalive(&stream); // a caller gone from the tailnet is noticed, as on its side
-            let (read, write) = stream.into_split();
             tokio::select! {
                 biased; // serving stopped while this was decided: not one request is served
                 _ = ended.changed() => {}
-                _ = crate::serve::connection(read, write, &guard.0) => {}
+                _ = async {
+                    // only the API is served: a connection that starts otherwise (an HTTP request,
+                    // say) is closed unread, so none of its lines is taken for a request
+                    let mut first = [0u8; 1];
+                    if matches!(stream.peek(&mut first).await, Ok(1)) && first[0] == b'{' {
+                        let (read, write) = stream.into_split();
+                        let _ = crate::serve::connection(read, write, &guard.0).await;
+                    }
+                } => {}
             }
         });
     }
