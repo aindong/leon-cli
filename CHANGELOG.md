@@ -15,7 +15,7 @@ no section: the app on Linux (M15's second part; Linux has the server, the CLI a
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.12.0`.
+one is `1.13.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -29,6 +29,10 @@ fields it doesn't know. The full policy is in
 [docs/integrators.md](docs/integrators.md#compatibility).
 
 ## [Unreleased]
+
+- **Scrollback that costs what its text costs.** A pane keeps its 10,000 lines in about a fifth of
+  the memory; `leon.set("scrollback", N)` sets how many, reported by `server.settings` (`api_version`
+  `1.13.0`) ([detail](docs/changelog-detail.md#scrollback-that-costs-what-its-text-costs)).
 
 - **Contributing and translations.** A contributor guide, translations of the README and guides in
   `docs/i18n/`, and CI that skips docs-only changes ([detail](docs/changelog-detail.md#contributing-and-translations)).

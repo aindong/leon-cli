@@ -80,7 +80,7 @@ const fn entry(section: Section, id: &'static str, label: &'static str, keys: &'
 use Section::*;
 
 /// Every settings row, in the order each section shows them.
-pub(super) const ENTRIES: [Entry; 16] = [
+pub(super) const ENTRIES: [Entry; 17] = [
     entry(General, "resume", "Resume programs after a restart", &["resume"]),
     entry(General, "check_for_updates", "Look for updates once a day", &["check_for_updates"]),
     entry(Appearance, "theme", "Theme", &["theme"]),
@@ -90,6 +90,7 @@ pub(super) const ENTRIES: [Entry; 16] = [
     entry(Terminal, "copy_on_select", "Copy text as I select it", &["copy_on_select"]),
     entry(Terminal, "repeat_time", "Repeat keys without the prefix", &["repeat_time"]),
     entry(Terminal, "hint_patterns", "Hint patterns", &["hint_patterns"]),
+    entry(Terminal, "scrollback", "Lines of history each pane keeps", &["scrollback", "history"]),
     entry(Notifications, "notifications.done", rows::NOTIFY_DONE, &["notifications.done"]),
     entry(Notifications, "notifications.blocked", rows::NOTIFY_BLOCKED, &["notifications.blocked"]),
     entry(Notifications, "notifications.error", rows::NOTIFY_ERROR, &["notifications.error"]),
@@ -318,6 +319,7 @@ impl SettingsWindow {
             }
             "resume" => self.choice(t, "resume", label, rows::RESUME_NOTE, &rows::RESUME, cx).into_any_element(),
             "repeat_time" => self.stepper(t, "repeat_time", label, rows::REPEAT, cx).into_any_element(),
+            "scrollback" => self.stepper(t, "scrollback", label, rows::SCROLLBACK, cx).into_any_element(),
             "translucency" => self.stepper(t, "translucency", label, rows::TRANSLUCENCY, cx).into_any_element(),
             "fade_inactive_panes" => self.stepper(t, "fade_inactive_panes", label, rows::FADE, cx).into_any_element(),
             key => self.toggle(t, key, label, cx).into_any_element(),

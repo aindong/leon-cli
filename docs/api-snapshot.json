@@ -1,5 +1,5 @@
 {
-  "api_version": "1.12.0",
+  "api_version": "1.13.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -2966,6 +2966,11 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "scrollback": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
               }
             },
             "required": [
@@ -2981,7 +2986,8 @@
               "translucency",
               "serve_tailscale",
               "serve_tailscale_port",
-              "serve_tailscale_tags"
+              "serve_tailscale_tags",
+              "scrollback"
             ]
           },
           "sources": {

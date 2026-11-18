@@ -42,6 +42,9 @@ pub struct Effective {
     pub serve_tailscale_port: u16,
     /// Tagged machines it lets in too, by tag (`tag:ci`).
     pub serve_tailscale_tags: Vec<String>,
+    /// Lines of history each terminal keeps, from 0 to 100000; a change applies to running
+    /// terminals at once, and a lower value drops their oldest lines.
+    pub scrollback: usize,
 }
 
 /// A theme name for each OS appearance (the same one for both unless init.lua gives two).

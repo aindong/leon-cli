@@ -7,6 +7,10 @@ feature here on 2026-11-18 shipped in 0.1.0.
 
 ## Since 0.1.0: the detail
 
+### Scrollback that costs what its text costs
+
+In [architecture/scrollback.md](architecture/scrollback.md) and [lua/settings.md](lua/settings.md).
+
 ### Contributing and translations
 
 #### Added

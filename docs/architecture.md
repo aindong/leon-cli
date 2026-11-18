@@ -60,12 +60,14 @@ each other's pipes: pass `--test-threads=1`) and writes `$HOME/.cache/rosetta` (
 
 ## Decisions
 
-The decisions, in eight parts:
+The decisions, in nine parts:
 
 - [Protocol and clients](architecture/protocol-and-clients.md): the wire protocol, events, layout,
   the socket path, terminal emulation, Lua (config, runtime, bounds), the app, the screen transport,
   scrollback, selection, find, links and mouse reporting, `leon attach`, the app keymap and look,
   and the agent skill.
+- [Scrollback](architecture/scrollback.md): alacritty's 1,000-row window and leon's store behind
+  it, how a row moves without losing its number or its style, clears, resize and the cap.
 - [Switching and attention](architecture/attention.md): the session switcher, Activity, the
   badges, notifications, the fade of the panes without the focus, the translucent window, and
   `leon notify`.

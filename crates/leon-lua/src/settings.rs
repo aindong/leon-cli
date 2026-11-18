@@ -4,13 +4,14 @@
 
 use std::path::{Path, PathBuf};
 
+use leon_core::terminal::{MAX_SCROLLBACK, SCROLLBACK};
 use leon_core::theme::{self, Theme};
 use serde_json::{json, Value};
 
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 16] = [
+pub const KEYS: [&str; 17] = [
     "theme",
     "font.family",
     "font.size",
@@ -27,6 +28,7 @@ pub const KEYS: [&str; 16] = [
     "serve_tailscale",
     "serve_tailscale_port",
     "serve_tailscale_tags",
+    "scrollback",
 ];
 
 /// How far the app fades the panes without the focus toward the window's background, unless the
@@ -95,6 +97,8 @@ pub struct Settings {
     pub serve_tailscale_port: u16,
     /// Tagged machines let in besides yours: tags such as `tag:ci`.
     pub serve_tailscale_tags: Vec<String>,
+    /// Lines of history each terminal keeps, 0 to `MAX_SCROLLBACK`.
+    pub scrollback: usize,
 }
 
 /// tmux's `repeat-time` default, in milliseconds, for a config that doesn't set `repeat_time`.
@@ -120,6 +124,7 @@ impl Default for Settings {
             serve_tailscale: false,
             serve_tailscale_port: TAILNET_PORT,
             serve_tailscale_tags: vec![],
+            scrollback: SCROLLBACK,
         }
     }
 }
@@ -142,6 +147,7 @@ impl Settings {
             "serve_tailscale": self.serve_tailscale,
             "serve_tailscale_port": self.serve_tailscale_port,
             "serve_tailscale_tags": self.serve_tailscale_tags,
+            "scrollback": self.scrollback,
         })
     }
 
@@ -218,6 +224,12 @@ impl Settings {
                 _ => return Err("serve_tailscale_port is a port, a whole number from 1 to 65535".into()),
             },
             "serve_tailscale_tags" => self.serve_tailscale_tags = tags(v)?,
+            "scrollback" => match v.as_f64() {
+                Some(n) if n.fract() == 0. && (0. ..=MAX_SCROLLBACK as f64).contains(&n) => {
+                    self.scrollback = n as usize
+                }
+                _ => return Err(format!("scrollback is whole lines of history, 0 to {MAX_SCROLLBACK}")),
+            },
             _ if key.starts_with("notifications.") => {
                 return Err(format!("unknown setting {key:?}; the notification kinds are done, blocked and error"))
             }
