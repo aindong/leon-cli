@@ -1,7 +1,8 @@
 # leon command reference
 
 Every `leon` command and flag. `leon <command> --help` prints the same text in short; a test
-(`crates/leon/tests/m7b_cli_doc.rs`) fails if this page misses a command or flag that `--help` shows.
+(`crates/leon/tests/m7b_cli_doc.rs`) fails if this page and its parts in `docs/cli/` miss a command
+or flag that `--help` shows.
 
 ## How commands find things
 
@@ -243,78 +244,7 @@ leon block call set_resume '{"command": ["claude", "--resume", "c7583d2c-3133-4d
 
 ## Automation
 
-### `leon events`
-
-Stream events. By default: sessions being created and destroyed. With `-s`: that session's events,
-block events too. With `--all`: everything.
-
-- `--all`: every session's events, and the server's.
-
-With `--json` it prints a snapshot first, then one JSON line per event, each with a `seq` that
-rises by exactly one.
-
-With `-H`, a dropped link is retried for up to 60 s and the stream resumes after the last event
-printed: nothing is lost or printed twice. If the host's server restarted meanwhile, it prints a
-new snapshot line and goes on from there.
-
-### `leon do ACTION|SCRIPT|-e CODE [k=v…]`
-
-Run a config action on the server, or a Lua script in this process. A word that looks like a path
-(`./x.lua`, `x.lua`) is a script; any other word is an action. `k=v` words become arguments
-(values are parsed as JSON, else kept as strings). See [lua.md](lua.md).
-
-- `-e, --eval CODE`: run this Lua code as a script.
-- `-a, --action NAME`: run this action, even if its name looks like a path.
-- `--args JSON`: arguments as a JSON object (inline, `@file`, or `-` for stdin); `k=v` words
-  override its keys.
-- `--origin ORIGIN`: the action's `ctx.origin` (default `cli`).
-- `--all`: scripts get events from every session, not just `-s`'s.
-- `--for DURATION`: end a script after this long, exiting 0.
-- `--fail-fast`: an error in a script's handler or timer ends it (exit 1) instead of being reported.
-
-```sh
-leon do split_here
-leon do greet name=Ada
-leon do -e 'print(leon.session_id)'
-leon do --for 1m ./watch.lua
-```
-
-### `leon actions`
-
-Config actions, then the app's own actions.
-
-### `leon keymap`
-
-Print the server's key bindings and modes, as resolved from `init.lua`.
-
-### `leon api`
-
-List, describe and call the server's API methods directly. Block methods (`dev.leon.terminal.*`,
-called through `block.method`) are listed and described too. [api.md](api.md) is the same
-reference as a page, and [integrators.md](integrators.md) explains the socket API and its
-compatibility promise.
-
-### `leon api list`
-
-List every method with its stability: `stable` (covered by the compatibility policy),
-`experimental` or `internal`. `--json` gives `name`, `stability`, `description`, and `deprecated`
-when the method is on its way out.
-
-### `leon api describe METHOD`
-
-Show a method's stability, description, JSON Schemas and, for the most-used methods, a request
-and response example.
-
-### `leon api call METHOD [ARGS]`
-
-Call a method with JSON params (inline, `@file`, or `-` for stdin). `-s` fills `session_id`.
-A block method isn't called here: it fails, pointing at `leon block call`.
-
-```sh
-leon api list
-leon api describe session.view
-leon api call server.status
-```
+`leon events`, `leon do`, `leon actions`, `leon keymap` and `leon api` are in [cli/automation.md](cli/automation.md).
 
 ## Config and themes
 
@@ -323,45 +253,7 @@ leon api call server.status
 
 ## Server
 
-### `leon server`
-
-Run, start, stop or check the server.
-
-### `leon server run`
-
-Run the server in the foreground. Sessions are saved in `$LEON_STATE_DIR` (default
-`~/.local/state/leon`) while it runs and when it stops, and restored when it starts. After a crash
-they come back as they were a second or two before it, with each pane's text from up to a minute
-before. A restored block runs a fresh shell under the text it showed before, and offers its resume command if a program registered one;
-nothing else that ran is run again.
-
-- `--config PATH`: the Lua config (default as for `leon config check`).
-- `--restore[=BOOL]`: restore the sessions the last server saved (default true).
-
-### `leon server start`
-
-Start a server in the background. Does nothing if one runs (except make it persistent).
-
-- `--restore[=BOOL]`: restore the sessions the last server saved (default true).
-
-### `leon server stop`
-
-Stop the server. Every program in every session ends; the sessions are saved for the next start,
-with the text each terminal shows (in the private state dir, 0600).
-
-- `--discard`: don't save, and forget the sessions saved before, so the next start is empty.
-
-### `leon server status`
-
-Show whether a server runs; exit 4 if not. When [serving over
-Tailscale](cli/hosts.md#serve-over-tailscale) is on, a `tailnet` line says where it serves or why
-it stopped, and another the last connection it refused.
-
-### `leon server proxy`
-
-Connect stdin and stdout to this machine's server, starting a persistent one first unless
-`--autostart=false`. This is what `leon -H` runs on the other machine over ssh; you don't run it
-yourself.
+`leon server` (run, start, stop, status, proxy) is in [cli/server.md](cli/server.md).
 
 ## Hosts
 
@@ -377,68 +269,4 @@ Updates leon to the newest release; `--check` only reports (exit 10): [updates.m
 
 ## Agents
 
-### `leon skill`
-
-Teach coding agents (Claude Code, Codex) to drive leon. Needs no server. See [agents.md](agents.md).
-
-### `leon skill show`
-
-Print the guide for agents driving leon (a SKILL.md).
-
-### `leon skill setup`
-
-Install the skill and a session-start hook for each agent found: Claude Code or Codex when its
-config dir (`~/.claude`, `~/.codex`) exists or its program (`claude`, `codex`) is on PATH. It
-prints why it picked each agent and every file it wrote; with no agent found it installs only the
-shared `~/.agents/skills/leon/SKILL.md` and says to pass `--agent`. The hook runs
-`leon skill hook --agent claude|codex`, which tells the agent where it is and records how to
-resume its session after a restart (see [agents.md](agents.md)).
-
-- `--agent claude|codex`: only this agent.
-- `--dry-run`: print what would change; write nothing.
-- `--force`: replace a SKILL.md leon didn't install (the old one is kept as `SKILL.md.leon-backup`).
-
-### `leon skill status`
-
-Show each agent's install: current, outdated, missing, foreign or unreadable.
-
-- `--agent claude|codex`: only this agent.
-
-### `leon skill remove`
-
-Remove what setup installed, and nothing else.
-
-- `--agent claude|codex`: only this agent.
-- `--dry-run`: print what would change; write nothing.
-
-```sh
-leon skill setup --dry-run
-leon skill setup
-leon skill status
-```
-
-### `leon float [--new [-- CMD]]`
-
-Float the block selected by `-b/--block` (default the focused block). `--new` opens a
-new terminal in the active window of `-s/--session`, running CMD or a login shell.
-`--label L` assigns a label; `--rect x,y,w,h` sets fractions of the whole window
-(default `0.1,0.1,0.8,0.8`), which must fit inside it. A float is shown, focused and
-raised. `--unfloat` returns a float or drawer to the tiles; its terminal keeps running.
-`--new` prints the new block ID; `--json` prints the API result.
-
-### `leon toggle LABEL`
-
-Show/hide a float or drawer by its exact, case-insensitive label within `-s/--session`.
-Labels must be unique there. Hidden terminals keep running.
-`--create` opens a scratch login shell docked to the bottom on first use, in the directory of
-the active window's focused block (the session's current directory); subsequent calls toggle it. A bottom panel already occupying that side makes creation fail (not with `--float`).
-With `--create`: `--float` makes a popup (a float at `--rect`, default `0.1,0.1,0.8,0.8`)
-instead; `-- CMD` runs CMD instead of a shell. It closes when its program exits, giving the
-focus back, unless `--keep-open`. See [lua/keys.md](lua/keys.md#a-popup-on-a-key).
-
-### `leon dock left|right|bottom`
-
-Pin `-b/--block` (default the focused block) to a side of its window. `--size F` is
-a fraction strictly between 0 and 1 (default 0.3). Each side holds at most one panel,
-including hidden panels; an occupied side fails without changes. `leon attach` and
-the app reserve room for visible panels and draw visible floats above the tiles.
+`leon skill` (show, setup, status, remove), `leon float`, `leon toggle` and `leon dock` are in [cli/agents.md](cli/agents.md).

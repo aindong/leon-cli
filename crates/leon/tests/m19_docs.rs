@@ -60,7 +60,8 @@ fn readme_architecture_and_changelog() {
     }
     assert!(arch.contains("no copy mode"), "architecture says why leon attach has no copy mode");
     assert!(doc("docs/changelog-milestones.md").contains("M19"), "the milestones' changelog");
-    assert!(doc("docs/cli.md").contains("the app's own actions"), "docs/cli.md says what leon actions lists");
+    // `leon actions` moved to docs/cli/automation.md (file-size limit)
+    assert!(doc("docs/cli/automation.md").contains("the app's own actions"), "docs/cli says what leon actions lists");
 }
 
 #[test]
