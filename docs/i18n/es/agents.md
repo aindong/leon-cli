@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/agents.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/agents.md commit=a525beb0ae17 -->
 > Esta es una traducción. La [página en inglés](../../agents.md) es la referencia; puede estar más actualizada.
 
 # Los agentes manejan leon

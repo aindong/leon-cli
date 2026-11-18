@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/remote-hosts.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/remote-hosts.md commit=a525beb0ae17 -->
 > Esta es una traducción. La [página en inglés](../../remote-hosts.md) es la referencia; puede estar más actualizada.
 
 # Hosts remotos

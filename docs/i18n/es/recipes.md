@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/recipes.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/recipes.md commit=a525beb0ae17 -->
 > Esta es una traducción. La [página en inglés](../../recipes.md) es la referencia; puede estar más actualizada.
 
 # Proyectos y worktrees de git
