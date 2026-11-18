@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 17] = [
+pub const KEYS: [&str; 19] = [
     "theme",
     "font.family",
     "font.size",
@@ -28,6 +28,8 @@ pub const KEYS: [&str; 17] = [
     "serve_tailscale_port",
     "serve_tailscale_tags",
     "serve_web",
+    "serve_web_cert",
+    "serve_web_key",
 ];
 
 /// How far the app fades the panes without the focus toward the window's background, unless the
@@ -98,6 +100,9 @@ pub struct Settings {
     pub serve_tailscale_tags: Vec<String>,
     /// With `serve_tailscale` on, the tailnet listener also serves the web page (docs/web.md).
     pub serve_web: bool,
+    /// The certificate and key `tailscale cert` wrote, for HTTPS; both empty: plain HTTP.
+    pub serve_web_cert: String,
+    pub serve_web_key: String,
 }
 
 /// tmux's `repeat-time` default, in milliseconds, for a config that doesn't set `repeat_time`.
@@ -124,6 +129,8 @@ impl Default for Settings {
             serve_tailscale_port: TAILNET_PORT,
             serve_tailscale_tags: vec![],
             serve_web: false,
+            serve_web_cert: String::new(),
+            serve_web_key: String::new(),
         }
     }
 }
@@ -147,6 +154,8 @@ impl Settings {
             "serve_tailscale_port": self.serve_tailscale_port,
             "serve_tailscale_tags": self.serve_tailscale_tags,
             "serve_web": self.serve_web,
+            "serve_web_cert": self.serve_web_cert,
+            "serve_web_key": self.serve_web_key,
         })
     }
 
@@ -224,6 +233,22 @@ impl Settings {
             },
             "serve_tailscale_tags" => self.serve_tailscale_tags = tags(v)?,
             "serve_web" => self.serve_web = flag()?,
+            "serve_web_cert" | "serve_web_key" => {
+                let path = match v.as_str() {
+                    Some(p)
+                        if p.len() <= 4096
+                            && !p.contains('\0')
+                            && (p.is_empty() || p.starts_with('/') || p.starts_with("~/")) =>
+                    {
+                        p
+                    }
+                    _ => return Err(format!("{key} must be a file's path, from / or ~/ (\"\" for none)")),
+                };
+                match key {
+                    "serve_web_cert" => self.serve_web_cert = path.to_string(),
+                    _ => self.serve_web_key = path.to_string(),
+                }
+            }
             _ if key.starts_with("notifications.") => {
                 return Err(format!("unknown setting {key:?}; the notification kinds are done, blocked and error"))
             }

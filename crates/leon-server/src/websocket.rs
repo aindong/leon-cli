@@ -5,8 +5,7 @@
 use std::sync::Arc;
 
 use base64::Engine;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpStream;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 
 use crate::serve::{Shared, MAX_LINE};
@@ -142,8 +141,11 @@ enum Ctl {
 /// upgrade's head. As on the socket, a client that goes away lets the call being answered finish:
 /// the reader ends the API's input, `serve::connection` returns after that call, and the writer
 /// drains what it wrote (to the client while it reads, else nowhere) so it never blocks on the pipe.
-pub(crate) async fn bridge(stream: TcpStream, rest: Vec<u8>, shared: &Arc<Shared>) {
-    let (mut tcp_r, mut tcp_w) = stream.into_split();
+pub(crate) async fn bridge<S>(stream: S, rest: Vec<u8>, shared: &Arc<Shared>)
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let (mut tcp_r, mut tcp_w) = tokio::io::split(stream);
     let (ours, theirs) = tokio::io::duplex(PIPE);
     let (api_r, api_w) = tokio::io::split(theirs);
     let (our_r, mut our_w) = tokio::io::split(ours);

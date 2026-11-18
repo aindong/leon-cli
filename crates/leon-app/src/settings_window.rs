@@ -109,9 +109,11 @@ pub struct SettingsWindow {
     /// The hint pattern field: what is typed, the pattern it replaces (None: a new one), and why
     /// the last Add was refused.
     pattern: patterns::TextField,
-    /// Tailscale's port and tag fields.
+    /// Tailscale's port and tag fields, and the web page's certificate and key files.
     port: patterns::TextField,
     tag: patterns::TextField,
+    web_cert: patterns::TextField,
+    web_key: patterns::TextField,
     /// The keymap's bindings, once the server has sent them.
     shortcuts: Vec<ShortcutRow>,
     /// `leon skill status`, once read (Err: why it couldn't be).
@@ -218,6 +220,8 @@ impl SettingsWindow {
             pattern: patterns::TextField::new(cx),
             port: patterns::TextField::new(cx),
             tag: patterns::TextField::new(cx),
+            web_cert: patterns::TextField::new(cx),
+            web_key: patterns::TextField::new(cx),
             shortcuts: Vec::new(),
             agents: None,
             server_info: None,

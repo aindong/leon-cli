@@ -108,6 +108,8 @@ pub(super) const ENTRIES: [Entry; 16] = [
             "serve_tailscale_port",
             "serve_tailscale_tags",
             "serve_web",
+            "serve_web_cert",
+            "serve_web_key",
         ],
     ),
 ];

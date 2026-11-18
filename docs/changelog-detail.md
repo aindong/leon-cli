@@ -8,6 +8,15 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### HTTPS for the browser page
+
+#### Added
+- `serve_web_cert` and `serve_web_key`: the files `tailscale cert` wrote. The page is then served
+  over HTTPS on the same port and plain HTTP only redirects; leon reloads renewed files and never
+  makes a certificate itself ([web.md](web.md#https)).
+- `server.status`'s `tailnet.web_error` says what is wrong with the files and the command to run;
+  `server.settings` gains both settings. API `1.14.0`.
+
 ### leon in the browser
 
 #### Added

@@ -39,6 +39,7 @@ since every program in every session ends.
 | `serve_tailscale_port` | a port, 1 to 65535 | `7297` |
 | `serve_tailscale_tags` | a list of tags such as `"tag:ci"`, at most 16 | `{}` |
 | `serve_web` | `true` or `false` ([web.md](../web.md)) | `false` |
+| `serve_web_cert`, `serve_web_key` | a file's path, from `/` or `~/` ([web.md](../web.md#https)) | `""` (plain HTTP) |
 
 `theme` names a theme `leon theme list` shows (built in or imported); an unknown name is an error.
 
@@ -77,7 +78,8 @@ Reduce Transparency and full screen are opaque, as is `leon.set("translucency", 
 `serve_tailscale` makes the server also listen on this machine's Tailscale addresses, on
 `serve_tailscale_port`, for your own other machines only (and tagged ones with a tag in
 `serve_tailscale_tags`); [cli/hosts.md](../cli/hosts.md#serve-over-tailscale) has the rest.
-`serve_web` also serves a view-only web page there, to the same machines ([web.md](../web.md)).
+`serve_web` also serves a view-only web page there, to the same machines ([web.md](../web.md)),
+over HTTPS when `serve_web_cert` and `serve_web_key` name the files `tailscale cert` wrote.
 
 `repeat_time` is how long a repeatable binding's keys work without the prefix ([keys.md](keys.md#repeat-keys)).
 
