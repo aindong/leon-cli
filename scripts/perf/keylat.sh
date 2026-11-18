@@ -5,7 +5,8 @@
 # nothing (idle: the session's shell), one pane looping `cat` of the 100 MB flood file, or eight
 # panes of agent.py busy, the app with LEON_FRAME_LOG,
 # and winframes posting N keys to the app's pid. --delay makes echo.py wait MS before each echo:
-# both clocks must rise by it (the check that they measure the echo).
+# both clocks must rise by it (the check that they measure the echo). PERF_FRONT=1 brings the app to
+# the front first (System Events), so what draws only in the active window draws: a cursor shader.
 source "$(dirname "$0")/lib.sh"
 loads="idle flood1 busy8" keys=200 delay=0
 while [ $# -gt 0 ]; do
@@ -35,6 +36,8 @@ for load in $loads; do
     *) echo "unknown load $load" >&2; exit 2 ;;
   esac
   perf_app "$RUN/$load-frames.log"
+  [ "${PERF_FRONT:-0}" = 1 ] &&
+    osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $APP_PID) to true" >/dev/null
   sleep 2 # past start-up, and past GPUI's "present every frame for 1 s after input"
   "$WINFRAMES" "$APP_PID" keys "$keys" 50 >"$RUN/$load-winframes.txt"
   perf_stop "$APP_PID"
