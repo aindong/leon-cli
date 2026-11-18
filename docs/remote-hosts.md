@@ -14,10 +14,10 @@ like a local one, with the host's name in its header. New Session, New Tab and t
 the machine of the focused pane, and the command palette has a New Session action for each machine.
 
 To add a host from the app, choose Add Host… in the command palette or in Settings › Remote Hosts.
-When Tailscale runs on this Mac, it first lists the machines on your tailnet, and picking one adds
-it as `leon hosts add --tailscale` would. Otherwise, or when you pick "Another host by its ssh
-address…", it asks for a label (such as `devbox`) and then for the `ssh://` address that reaches the
-host. The app saves the host to the same list `leon hosts` reads and starts connecting to it.
+When the Tailscale client is installed on this Mac, it first lists the machines on your tailnet, or
+says why it can't, and picking one adds it as `leon hosts add --tailscale` would. Otherwise, or
+when you pick "Another host by its ssh address…", it asks for a label (such as `devbox`) and then
+for the `ssh://` address that reaches the host. The app saves the host to the same list `leon hosts` reads and starts connecting to it.
 
 The app's ssh never asks for a password. A host that needs one says
 `needs login: run leon hosts check devbox in a terminal`; do that once (accept the host key, unlock
