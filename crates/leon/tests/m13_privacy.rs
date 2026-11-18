@@ -127,3 +127,28 @@ fn claude_md_states_the_rule() {
     assert!(rules.contains("scripts/demo-shots.sh"), "CLAUDE.md says how screenshots are made");
     assert!(rules.contains("m13_privacy"), "and which test holds them to it");
 }
+
+/// `.agent/` (worker notes, red runs) and every other path the repo's `.gitignore` files cover stay
+/// out of the public repo: a `git add -f` once published three such files, one holding a home path.
+#[test]
+fn no_ignored_file_is_tracked() {
+    let root = root();
+    // a worktree's `.git` file points at the main checkout, which a local Docker run doesn't mount
+    let link = std::fs::read_to_string(root.join(".git")).ok();
+    if link.is_some_and(|l| !Path::new(l.trim().trim_start_matches("gitdir: ")).exists()) {
+        eprintln!("the worktree's repo is not here: the tracked-ignored check is skipped");
+        return;
+    }
+    let git = |args: &[&str]| {
+        let out = Command::new("git").arg("-C").arg(&root).args(args).output().expect("git runs");
+        assert!(out.status.success(), "git {args:?} failed: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    // the repo's own ignore rules, not a developer's global excludesFile or info/exclude
+    let ignored = git(&["ls-files", "-ci", "--exclude-per-directory=.gitignore"]);
+    let agent = git(&["ls-files", "--", ".agent"]);
+    let mut tracked: Vec<&str> = ignored.lines().chain(agent.lines()).collect();
+    tracked.sort();
+    tracked.dedup();
+    assert!(tracked.is_empty(), "git-ignored files are tracked (git rm them):\n{}", tracked.join("\n"));
+}
