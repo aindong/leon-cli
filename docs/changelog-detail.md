@@ -7,6 +7,11 @@ feature here on 2026-11-18 shipped in 0.1.0.
 
 ## Since 0.1.0: the detail
 
+### Cursor shaders
+
+#### Added
+- `cursor_shader`, `cursor_shader_duration` ([cursor-shaders.md](cursor-shaders.md)); API 1.13.0.
+
 ### Contributing and translations
 
 #### Added
