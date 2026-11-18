@@ -12,8 +12,7 @@ use app::*;
 use gpui::{Modifiers, TestAppContext};
 
 fn click(cx: &mut gpui::VisualTestContext, sel: &'static str) {
-    assert!(drawn(cx, sel), "{sel} is drawn");
-    let b = cx.debug_bounds(sel).unwrap();
+    let b = at(cx, sel).unwrap_or_else(|| panic!("{sel} is drawn"));
     cx.simulate_click(gpui::point(b.origin.x + b.size.width / 2., b.origin.y + b.size.height / 2.), Modifiers::none());
     cx.run_until_parked();
 }

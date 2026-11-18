@@ -44,13 +44,33 @@ fn images() -> Vec<PathBuf> {
     all
 }
 
+/// Every file under docs/i18n/ (none before the first translation lands).
+fn translations() -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).into_iter().flatten() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                walk(&p, out)
+            } else {
+                out.push(p)
+            }
+        }
+    }
+    let mut out = vec![];
+    walk(&root().join("docs/i18n"), &mut out);
+    out
+}
+
 #[test]
 fn image_names_readme_and_image_bytes_name_no_user_or_machine() {
     let names = private_names();
     assert!(!names.is_empty(), "found the login and hostname to look for");
-    // the README and the pages split out of it (file-size limit)
-    let pages = ["README.md", "docs/install.md", "docs/shortcuts.md", "docs/remote-hosts.md"]
-        .map(|p| (p, std::fs::read_to_string(root().join(p)).unwrap()));
+    // the README and the pages split out of it (file-size limit), and every translation
+    let mut pages: Vec<(String, String)> =
+        ["README.md", "docs/install.md", "docs/shortcuts.md", "docs/remote-hosts.md"]
+            .map(|p| (p.to_string(), std::fs::read_to_string(root().join(p)).unwrap()))
+            .into();
+    pages.extend(translations().into_iter().map(|p| (p.display().to_string(), std::fs::read_to_string(&p).unwrap())));
     for name in &names {
         for (page, text) in &pages {
             assert!(!mentions(text, name), "{page} mentions {name:?}");
@@ -106,4 +126,29 @@ fn claude_md_states_the_rule() {
     let rules = std::fs::read_to_string(root().join("CLAUDE.md")).unwrap();
     assert!(rules.contains("scripts/demo-shots.sh"), "CLAUDE.md says how screenshots are made");
     assert!(rules.contains("m13_privacy"), "and which test holds them to it");
+}
+
+/// `.agent/` (worker notes, red runs) and every other path the repo's `.gitignore` files cover stay
+/// out of the public repo: a `git add -f` once published three such files, one holding a home path.
+#[test]
+fn no_ignored_file_is_tracked() {
+    let root = root();
+    // a worktree's `.git` file points at the main checkout, which a local Docker run doesn't mount
+    let link = std::fs::read_to_string(root.join(".git")).ok();
+    if link.is_some_and(|l| !Path::new(l.trim().trim_start_matches("gitdir: ")).exists()) {
+        eprintln!("the worktree's repo is not here: the tracked-ignored check is skipped");
+        return;
+    }
+    let git = |args: &[&str]| {
+        let out = Command::new("git").arg("-C").arg(&root).args(args).output().expect("git runs");
+        assert!(out.status.success(), "git {args:?} failed: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    // the repo's own ignore rules, not a developer's global excludesFile or info/exclude
+    let ignored = git(&["ls-files", "-ci", "--exclude-per-directory=.gitignore"]);
+    let agent = git(&["ls-files", "--", ".agent"]);
+    let mut tracked: Vec<&str> = ignored.lines().chain(agent.lines()).collect();
+    tracked.sort();
+    tracked.dedup();
+    assert!(tracked.is_empty(), "git-ignored files are tracked (git rm them):\n{}", tracked.join("\n"));
 }

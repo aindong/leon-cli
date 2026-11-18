@@ -25,6 +25,9 @@ A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first (its decis
   release is a PR from `dev` to `main`, then a tag `vX.Y.Z` on `main`, which publishes it
   (`docs/releases.md`); after changing a release script, run `scripts/release-dry-run.sh`.
   `latest.json`'s fields are a contract, and the release tests need `minisign` and `jq`.
+- Translations live only in `docs/i18n/<lang>/` (`docs/i18n/README.md` has the conventions); the doc
+  tests skip that folder and `scripts/i18n-check.sh` checks it. CI skips translation and community-file
+  changes and runs only the doc tests on Linux for English docs (`scripts/ci-changes.sh`).
 - Terminal tests run a real shell in a PTY; wait for screen text with a timeout, never fixed sleeps.
 - Tests that start a server set both `LEON_RUNTIME_DIR` and `LEON_STATE_DIR` to temp dirs (use
   `tests/support::Env`), or they restore and overwrite the real `~/.local/state/leon` sessions.
@@ -38,6 +41,8 @@ A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first (its decis
   (temp HOME, neutral prompt and titles, private LEON_* dirs, a fake devbox). No image name, README
   text or picture may show the user's login or hostname; `cargo test -p leon --test m13_privacy`
   checks names, bytes and OCR'd text, and a look at each picture covers the rest.
+- Never `git add -f` an ignored path (`.agent/` above all): test evidence goes in the PR body, not
+  the repo. `m13_privacy` fails on any tracked file that `.gitignore` covers.
 - The app icon is built, never drawn: `brand/icon/leon-original-280.png` is the art, and
   `node brand/build-assets.cjs` makes the master and every picture of it, the README banner's icon
   included (`brand/README.md` has the steps). Don't edit the master by hand or run an image

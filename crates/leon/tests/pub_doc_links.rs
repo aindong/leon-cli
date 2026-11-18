@@ -1,9 +1,13 @@
 //! Publishing: every local link in the README, changelog, brand/README.md and docs/ points at a
 //! file or folder git tracks or would add (not an ignored one). Untracked notes stay on disk in a work tree, so "exists" isn't
-//! enough; without git (a source tarball) the check falls back to it.
+//! enough; without git (a source tarball) the check falls back to it. Translations (docs/i18n/) are
+//! scripts/i18n-check.sh's: these tests neither read them nor follow links into them, since the
+//! README links each language before its translation lands.
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+
+const I18N: &str = "docs/i18n";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -63,7 +67,8 @@ fn kept_docs_link_only_to_tracked_files() {
     let docs: Vec<PathBuf> = docs
         .into_iter()
         .filter(|p| {
-            p.starts_with("docs") || ["README.md", "CHANGELOG.md", "brand/README.md"].contains(&p.to_str().unwrap())
+            (p.starts_with("docs") && !p.starts_with(I18N))
+                || ["README.md", "CHANGELOG.md", "brand/README.md"].contains(&p.to_str().unwrap())
         })
         .collect();
     assert!(docs.len() > 15 || tracked.is_none(), "found the docs: {docs:?}");
@@ -71,6 +76,9 @@ fn kept_docs_link_only_to_tracked_files() {
         let text = std::fs::read_to_string(root().join(&doc)).unwrap();
         for target in targets(&text) {
             let path = resolve(doc.parent().unwrap(), target);
+            if path.starts_with(I18N) {
+                continue;
+            }
             assert!(published(&path), "{}: links to {target}, which git doesn't track", doc.display());
         }
     }
@@ -108,7 +116,8 @@ fn kept_docs_anchors_name_a_heading() {
     let docs: Vec<PathBuf> = docs
         .into_iter()
         .filter(|p| {
-            p.starts_with("docs") || ["README.md", "CHANGELOG.md", "brand/README.md"].contains(&p.to_str().unwrap())
+            (p.starts_with("docs") && !p.starts_with(I18N))
+                || ["README.md", "CHANGELOG.md", "brand/README.md"].contains(&p.to_str().unwrap())
         })
         .collect();
     let mut checked = 0;
@@ -120,6 +129,9 @@ fn kept_docs_anchors_name_a_heading() {
                 continue;
             }
             let target = if file.is_empty() { doc.clone() } else { resolve(doc.parent().unwrap(), file) };
+            if target.starts_with(I18N) {
+                continue;
+            }
             let heads = anchors(&std::fs::read_to_string(root().join(&target)).unwrap());
             assert!(
                 heads.contains(anchor),

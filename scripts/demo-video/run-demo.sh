@@ -62,7 +62,7 @@ g() {
   guest "$@"
 }
 # k combo KEYS | k key NAME | k type TEXT | k click X Y (points): keys and clicks in the VM. Every
-# press shows a keycap: with no voice-over, the keycaps and captions tell the story
+# press shows a keycap: the keycaps and captions tell the story (the voice-over, if any, adds to them)
 k() {
   case "$1" in
     combo | key) cue "\"type\": \"key\", \"combo\": $(jstr "$2"), \"show\": true" ;;

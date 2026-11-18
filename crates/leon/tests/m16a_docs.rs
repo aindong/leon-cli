@@ -16,7 +16,8 @@ fn remote_use_is_documented() {
     );
     assert!(readme.contains("leon hosts add"));
     // the hosts commands moved to docs/cli/hosts.md (file-size limit)
-    let cli = doc("docs/cli.md") + &doc("docs/cli/hosts.md");
+    // `leon server proxy` moved to docs/cli/server.md (file-size limit)
+    let cli = doc("docs/cli.md") + &doc("docs/cli/hosts.md") + &doc("docs/cli/server.md");
     for s in ["`leon hosts add", "`leon hosts check", "`leon server proxy`", "-H, --host"] {
         assert!(cli.contains(s), "docs/cli.md: {s}");
     }

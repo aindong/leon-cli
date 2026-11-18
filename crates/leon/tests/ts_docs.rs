@@ -10,7 +10,8 @@ fn doc(path: &str) -> String {
 #[test]
 fn tailscale_is_documented() {
     let cli = doc("docs/cli.md");
-    assert!(cli.len() < 20_000, "docs/cli.md stays under 20 KB: {}", cli.len());
+    // a translation runs up to 1.5x the English bytes and must stay under the 20 KB file limit
+    assert!(cli.len() <= 12_500, "docs/cli.md stays at most 12,500 bytes: {}", cli.len());
     assert!(cli.contains("cli/hosts.md"), "docs/cli.md links the hosts page");
     let hosts = doc("docs/cli/hosts.md");
     for s in ["### `leon hosts add", "--tailscale", "LEON_TAILSCALE", "Tailscale SSH", "status --json"] {
