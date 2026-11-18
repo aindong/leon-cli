@@ -1,7 +1,7 @@
 """compose.py: a raw take + its cue file -> the finished video.
 
-  compose.py main   RAW CUE OUT.mp4 [--cut=A:B] [--frames=F0:F1] [--workers=N] [--blur]
-  compose.py square RAW CUE OUT.mp4 [--frames=F0:F1] [--workers=N]
+  compose.py main   RAW CUE OUT.mp4 [--cut=A:B] [--frames=F0:F1] [--workers=N] [--blur] [--vo=DIR]
+  compose.py square RAW CUE OUT.mp4 [--frames=F0:F1] [--workers=N] [--vo=DIR]
   compose.py stills MODE RAW CUE OUTDIR [--cut=A:B] T...
 
 main: 16:9 1920x1080 at 60 fps: a cold open (COLD seconds of the 50-tab overview, cut straight to the
@@ -10,11 +10,13 @@ out), an end card; eased zooms onto the cue's zoom beats, a drawn pointer glidin
 with a ripple, keycaps for each shortcut, burned-in captions, the take inset on a brand gradient
 with rounded corners and a shadow. Writes OUT.srt beside it. square: 1080x1080, the 30-second cut
 (SQUARE_CUT below), each piece framed on its focus region, dissolving into the next. Both get a
-silent stereo track (no voice-over, no music). --frames renders only those output frames (for checking a
+silent stereo track, or with --vo=DIR (or LEON_DEMO_VO) a voice-over from DIR's clips: main-NN.mp3,
+one a scene (VO_SCENES), and square.mp3; mono voice in both channels, AAC 48 kHz, -16 LUFS. --frames renders only those output frames (for checking a
 stretch); --blur turns on motion blur for the camera's moves (off by default: it ghosts terminal
 text); --workers splits the frames over N processes (default 4). stills writes single frames at
 output times T, as PNGs, to check a look.
 """
+import json
 import math
 import os
 import subprocess
@@ -75,6 +77,87 @@ def pieces(mode, cut, duration, cue=()):
     d = next((r["lead"] for r in cue if r["type"] == "take"), 1.5) - 1.5
     out = [("take", s + d, e + d, r, (c, sm)) for s, e, r, c, sm in SQUARE_CUT]
     return out + [("card", "end", 30.0 - sum(e - s for s, e, *_ in SQUARE_CUT))]
+
+
+# the voice-over's scenes, one clip a scene (main-NN.mp3, NN the index): each starts VO_LEAD after
+# its scene's start: a mark's, or "cold" (the cold open), "take" (the take's first frame, the empty
+# state, after the cold open), "end" (the end card); so a line doesn't land on a cut
+VO_SCENES = ["cold", "take", "2 build-up", "3 agent runs its tests", "4 activity", "5 speed", "6 switch",
+             "7 settings", "8 leon do", "9 tailscale", "10 attach", "10 banner", "11 quit", "12 overview", "end"]
+VO_LEAD = 0.3
+
+
+def vo_windows(mode, cut, duration, cue):
+    """each voice-over scene as (start, end) on the output's clock; square: one, up to its end card"""
+    ps = pieces(mode, cut, duration, cue)
+    lens = [p[2] if p[0] == "card" else p[2] - p[1] for p in ps]
+    total = sum(lens)
+    if mode != "main":
+        return [(0.0, total - lens[-1])]
+    a, b = cut if cut else (duration, duration)
+    marks = {r["name"]: r["vt"] for r in cue if r["type"] == "mark"}
+
+    def out(vt):  # video time -> output time: after the cold open, less the cut where it's past it
+        return lens[0] + (min(vt, a) if vt < b else vt - (b - a))
+    at = {"cold": 0.0, "take": lens[0], "end": total - lens[-1]}
+    starts = [at[m] if m in at else out(marks[m]) for m in VO_SCENES]
+    return list(zip(starts, starts[1:] + [total]))
+
+
+def place(windows, lengths):
+    """{scene: clip seconds} -> [(scene, start, end)]: each clip VO_LEAD into its scene, ending before
+    the next scene's clip would start (the last one: before its window ends); one that doesn't fit
+    stops the render rather than talk over the next line"""
+    placed = []
+    for i in sorted(lengths):
+        start = windows[i][0] + VO_LEAD
+        limit = windows[i + 1][0] + VO_LEAD if i + 1 < len(windows) else windows[i][1]
+        if start + lengths[i] > limit:
+            sys.exit(f"compose: voice-over clip {i} runs {start + lengths[i] - limit:.2f} s past its scene")
+        placed.append((i, start, start + lengths[i]))
+    return placed
+
+
+def vo_clips(mode, vo_dir):
+    """{scene: path} of the voice-over clips in vo_dir (none without one)"""
+    if not vo_dir:
+        return {}
+    names = [f"main-{i:02}.mp3" for i in range(len(VO_SCENES))] if mode == "main" else ["square.mp3"]
+    return {i: Path(vo_dir) / n for i, n in enumerate(names) if (Path(vo_dir) / n).exists()}
+
+
+LOUDNORM = "loudnorm=I=-16:TP=-1.5:LRA=11"
+
+
+def voice_track(placed, clips, total, wav):
+    """the clips mixed at their places into a wav of the video's length, the mono voice the same in
+    both channels (short fades at each clip's edges, no clicks); returns the loudnorm filter for
+    it, measured (two-pass, linear) on the stereo, as players measure it"""
+    ins, chains = [], []
+    for k, (i, s, e) in enumerate(placed):
+        ins += ["-i", str(clips[i])]
+        chains.append(f"[{k}:a]aformat=sample_rates=48000:channel_layouts=mono,afade=t=in:d=0.01,"
+                      f"afade=t=out:st={max(0.0, e - s - 0.04):.3f}:d=0.04,adelay={round(s * 1000)}:all=1[v{k}]")
+    mix = "".join(f"[v{k}]" for k in range(len(placed))) + f"amix=inputs={len(placed)}:normalize=0,apad,atrim=0:{total:.3f},pan=stereo|c0=c0|c1=c0"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", *ins, "-filter_complex", ";".join(chains + [mix]),
+                    "-c:a", "pcm_s16le", str(wav)], check=True)
+    err = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(wav), "-af", LOUDNORM + ":print_format=json",
+                          "-f", "null", "-"], capture_output=True, text=True, check=True).stderr
+    m = json.loads(err[err.rindex("{"):err.rindex("}") + 1])
+    return (f"{LOUDNORM}:measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}"
+            f":measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true,aresample=48000")
+
+
+def audio_args(track, norm=None):
+    """ffmpeg's audio input and filter for the finished video: the voice track, or silence"""
+    if track is None:
+        return ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"], []
+    return ["-i", str(track)], ["-af", norm, "-ar", "48000"]
+
+
+def seconds(path):
+    return float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                                 str(path)], capture_output=True, text=True, check=True).stdout)
 
 
 def frame_plan(ps):
@@ -217,8 +300,7 @@ def stills(mode, raw, cue_path, outdir, times, cut=None):
     L = MAIN if mode == "main" else SQUARE
     cue = load_cue(cue_path)
     R = Renderer(L, cue)
-    duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                                     raw], capture_output=True, text=True, check=True).stdout)
+    duration = seconds(raw)
     ps = pieces(mode, cut, duration, cue)
     plan = frame_plan(ps)
     Path(outdir).mkdir(exist_ok=True)
@@ -244,9 +326,10 @@ def main():
     frames = next((tuple(map(int, o.split("=")[1].split(":"))) for o in opts if o.startswith("--frames=")), None)
     blur = "--blur" in opts
     workers = int(next((o.split("=")[1] for o in opts if o.startswith("--workers=")), "4"))
-    duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                                     raw], capture_output=True, text=True, check=True).stdout)
-    n = len(frame_plan(pieces(mode, cut, duration, load_cue(cue_path))))
+    vo_dir = next((o.split("=", 1)[1] for o in opts if o.startswith("--vo=")), os.environ.get("LEON_DEMO_VO"))
+    duration = seconds(raw)
+    cue = load_cue(cue_path)
+    n = len(frame_plan(pieces(mode, cut, duration, cue)))
     f0, f1 = frames if frames else (0, n)
     out = Path(out)
     tmp = out.with_suffix(".parts")
@@ -258,13 +341,22 @@ def main():
         parts = list(pool.map(render_chunk, jobs))
     lst = tmp / "parts.txt"
     lst.write_text("".join(f"file '{p.name}'\n" for p in parts))
-    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst),
-                    "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-map", "0:v", "-map", "1:a",
-                    "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart",
-                    str(out)], check=True)
-    for p in parts:
+    clips = {} if frames else vo_clips(mode, vo_dir)  # a stretch rendered for a look stays silent
+    track, norm = None, None
+    if clips:
+        windows = vo_windows(mode, cut, duration, cue)
+        placed = place(windows, {i: seconds(p) for i, p in clips.items()})
+        for i, s, e in placed:
+            w = windows[i]
+            print(f"vo: {clips[i].name} {s:7.2f}-{e:7.2f} in scene {w[0]:7.2f}-{w[1]:7.2f}")
+        track = tmp / "voice.wav"
+        norm = voice_track(placed, clips, n / FPS, track)
+    ain, af = audio_args(track, norm)
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), *ain,
+                    "-map", "0:v", "-map", "1:a", *af, "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-shortest",
+                    "-movflags", "+faststart", str(out)], check=True)
+    for p in parts + [lst] + ([track] if track else []):
         p.unlink()
-    lst.unlink()
     tmp.rmdir()
     if not frames:
         srt(mode, cue_path, cut, duration, out.with_suffix(".srt"))

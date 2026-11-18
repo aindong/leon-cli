@@ -126,8 +126,16 @@ reopen's windowed second with `cut.py --print`, and renders, at `nice -n 10` wit
   shows as much of the screen as it can;
 - `renders/leon-demo-square-30s.mp4`: 1:1, 1080×1080, 60 fps: the 30-second cut
   (`SQUARE_CUT` in `compose.py`), its pieces dissolving into each other;
-- an `.srt` beside each, and a silent stereo track in each (there is no voice-over: the captions
-  and the keycaps, one for every key pressed, tell the story; each caption stays up at least 2 s).
+- an `.srt` beside each, and a silent stereo track in each (the captions and the keycaps, one for
+  every key pressed, tell the story; each caption stays up at least 2 s).
+
+**A voice-over** is optional: `LEON_DEMO_VO=DIR run-demo.sh render` (or `compose.py … --vo=DIR`)
+takes `DIR/main-NN.mp3`, one clip a scene (`VO_SCENES` in `compose.py`: `NN` is its index, 00 the
+cold open, 14 the end card), and `DIR/square.mp3`. Each clip starts 0.3 s into its scene and must
+end before the next scene's clip starts (the square's before its end card), or the render stops
+and names it; the render prints each clip's place. The mix: the voice the same in both channels,
+short fades at each clip's edges, two-pass `loudnorm` to −16 LUFS with peaks under −1.5 dBTP, AAC
+48 kHz; no music. Without the folder the track is silent, as before. The clips stay out of git.
 
 H.264 High, CRF 18 capped at 12 Mb/s, 2 s GOPs, `+faststart`: X and LinkedIn take it as it is.
 On a 12-core Mac with other work running, the main cut takes 2 to 3 minutes, the square 1.
