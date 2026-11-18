@@ -50,6 +50,7 @@ dpkg -i target/linux/$(dpkg --print-architecture)/leon_*.deb
 or unpack the tarball anywhere and put its `leon` on your `PATH`:
 
 ```sh
+mkdir -p ~/.local/bin
 tar xzf target/linux/*/leon-*-"$(uname -m)"-linux.tar.gz -C ~/.local
 ln -s ~/.local/leon-*-linux/leon ~/.local/bin/leon
 ```

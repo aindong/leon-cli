@@ -31,8 +31,9 @@ each agent, why it was picked and each file it wrote. With neither found it writ
 
 Setup is safe to run again. It edits settings files in place, keeping your keys and their order,
 backs a file up once to `<file>.leon-backup`, and refuses a file that isn't the JSON shape it
-expects. It won't replace a `SKILL.md` it didn't write unless you pass `--force` (the old one is
-kept as `SKILL.md.leon-backup`).
+expects. It won't replace a `SKILL.md` it didn't write unless you pass `--force`. Each forced
+replace keeps the old file under a new name and never overwrites an earlier backup:
+`SKILL.md.leon-backup` the first time, then `SKILL.md.leon-backup.2`, `SKILL.md.leon-backup.3` and so on.
 
 ```sh
 leon skill show                    # read the guide the agent reads
