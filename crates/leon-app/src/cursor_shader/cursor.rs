@@ -116,11 +116,11 @@ impl Cursor {
         let rect = [x * s, (y + h) * s, w * s, h * s];
         let (c, style) = (color(d.rgb), d.style as i32);
         let u = &self.u;
-        let shown = u.cursor_visible == 1;
+        let first = self.block.as_deref() != Some(d.block.as_str());
+        let shown = u.cursor_visible == 1 && !first;
         if shown && rect == u.current_cursor && c == u.current_cursor_color && style == u.current_cursor_style {
             return false;
         }
-        let first = self.block.as_deref() != Some(d.block.as_str());
         // the same cell, style and colour drawn somewhere else: the pane moved (a split or float
         // sliding), not the cursor
         let slid = d.cell == self.cell && style == u.current_cursor_style && c == u.current_cursor_color;
@@ -134,6 +134,8 @@ impl Cursor {
         self.block = Some(d.block.clone());
         self.cell = d.cell;
         if jump {
+            // a trail never carries on into another pane or along a slide: one clear frame ends it
+            self.until = self.until.map(|_| now);
             return false;
         }
         self.u.cursor_change_time = self.secs(now);
