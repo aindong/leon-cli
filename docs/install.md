@@ -62,3 +62,5 @@ macOS, a tarball and a `.deb` for Linux on arm64 and x86_64, and `SHA256SUMS`. I
 needs Docker for the Linux packages. `leon --version` names the release and the commit it was
 built from. A pushed tag does the same on GitHub, signs every file and publishes the release:
 [releases.md](releases.md).
+
+A throwaway line for the CI proof.
