@@ -195,7 +195,7 @@ where
                     Some(Ctl::Close(code)) => {
                         let f = frame(0x8, &code.to_be_bytes());
                         if open {
-                            let _ = tcp_w.write_all(&f).await;
+                            let _ = send(&mut tcp_w, &f).await;
                         }
                         open = false;
                         continue;
@@ -204,7 +204,7 @@ where
                 n = lines.read_until(b'\n', &mut line) => {
                     if !matches!(n, Ok(n) if n > 0) {
                         if open {
-                            let _ = tcp_w.write_all(&frame(0x8, &1000u16.to_be_bytes())).await; // the API side ended
+                            let _ = send(&mut tcp_w, &frame(0x8, &1000u16.to_be_bytes())).await; // the API side ended
                         }
                         return;
                     }
@@ -214,7 +214,7 @@ where
                     f
                 }
             };
-            if open && tcp_w.write_all(&out).await.is_err() {
+            if open && send(&mut tcp_w, &out).await.is_err() {
                 open = false;
             }
         }
@@ -223,6 +223,13 @@ where
         _ = async { tokio::join!(crate::serve::connection(api_r, api_w, shared), outbound) } => {}
         _ = inbound => {}
     }
+}
+
+/// Write a frame and flush it: over TLS a write can leave the records in rustls's buffer until
+/// the next one, and the last reply of a burst would wait for a frame that may never come.
+async fn send(w: &mut (impl AsyncWrite + Unpin), frame: &[u8]) -> std::io::Result<()> {
+    w.write_all(frame).await?;
+    w.flush().await
 }
 
 #[cfg(test)]

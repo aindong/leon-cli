@@ -26,8 +26,9 @@ fn assert_plain_refused(s: &Serving) {
     let page = String::from_utf8_lossy(&page);
     assert!(!page.contains("leon-token"), "no token over plain HTTP: {page}");
     assert!(page.is_empty() || page.starts_with("HTTP/1.1 308"), "a redirect or nothing: {page}");
-    let ws = Ws::open(s.port, Some(&format!("https://127.0.0.1:{}", s.port)), Some("x"));
-    assert!(ws.is_err(), "no plain WebSocket");
+    let token = "0".repeat(64); // the right shape: refused for being plain, not for the token
+    let ws = Ws::open(s.port, Some(&format!("https://127.0.0.1:{}", s.port)), Some(&token));
+    assert_eq!(ws.err().map(|r| r.status), Some(308), "no plain WebSocket: only the redirect");
 }
 
 #[test]

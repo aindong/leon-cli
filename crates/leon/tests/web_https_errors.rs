@@ -41,7 +41,7 @@ fn missing_files_say_the_command() {
     let dir = tempfile::tempdir().unwrap();
     let (cert, key) = (dir.path().join("web.crt"), dir.path().join("web.key"));
     let (s, t) = broken(Fake::new(), &cert, &key);
-    let cmd = format!("tailscale cert --cert-file {} --key-file {}", cert.display(), key.display());
+    let cmd = format!("tailscale cert --cert-file '{}' --key-file '{}'", cert.display(), key.display());
     assert_says(&t, &[cert.to_str().unwrap(), &cmd]);
     assert_no_page(&s, &ca);
 }

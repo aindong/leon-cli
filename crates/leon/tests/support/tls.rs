@@ -32,6 +32,8 @@ pub enum When {
     Expired,
     Future,
     For(i64),
+    /// Valid from this many seconds from now.
+    From(i64),
 }
 
 impl Ca {
@@ -51,6 +53,7 @@ impl Ca {
             When::Expired => (p.not_before, p.not_after) = (date_time_ymd(2000, 1, 1), date_time_ymd(2001, 1, 1)),
             When::Future => p.not_before = date_time_ymd(2100, 1, 1),
             When::For(secs) => p.not_after = time::OffsetDateTime::now_utc() + time::Duration::seconds(secs),
+            When::From(secs) => p.not_before = time::OffsetDateTime::now_utc() + time::Duration::seconds(secs),
         }
         let key = KeyPair::generate().unwrap();
         let cert = p.signed_by(&key, &self.issuer).unwrap();

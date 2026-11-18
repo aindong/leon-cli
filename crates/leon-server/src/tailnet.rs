@@ -168,8 +168,9 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
         let web = |dns: Option<String>| Web {
             on: s.serve_web,
             dns: dns.filter(|_| s.serve_web),
-            cert: s.serve_web_cert.clone(),
-            key: s.serve_web_key.clone(),
+            // only while the page is on: a path set with it off changes nothing served
+            cert: if s.serve_web { s.serve_web_cert.clone() } else { String::new() },
+            key: if s.serve_web { s.serve_web_key.clone() } else { String::new() },
         };
         if !on {
             stop(&shared, &mut serving, port, None).await;
@@ -221,8 +222,12 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
         match bind(&shared, &addrs, port, &tags, &owner, web).await {
             Ok((s, at)) => {
                 eprintln!("leon: tailnet: serving on {} for {}", at.join(", "), shown_text(&owner.login, 128));
-                if let Some(site) = &s.site {
-                    show_web(&shared, site);
+                match &s.site {
+                    Some(site) => show_web(&shared, site),
+                    None => {
+                        let mut st = crate::events::lock(&shared.ctx.tailnet.status);
+                        (st.web, st.web_error) = (vec![], None); // serve_web went off with this rebind
+                    }
                 }
                 let mut st = crate::events::lock(&shared.ctx.tailnet.status);
                 (st.state, st.port, st.addresses) = ("serving".into(), port, at);
@@ -279,7 +284,7 @@ fn show_web(shared: &Shared, site: &Site) {
     let (urls, error) = site.status();
     let mut st = crate::events::lock(&shared.ctx.tailnet.status);
     if error.is_some() && st.web_error != error {
-        eprintln!("leon: tailnet: web: {}", error.as_deref().unwrap_or_default());
+        eprintln!("leon: tailnet: web: {}", shown_text(error.as_deref().unwrap_or_default(), 600));
     }
     if st.web.is_empty() && !urls.is_empty() {
         eprintln!("leon: tailnet: the web page is at {}", urls[0]);
@@ -299,7 +304,7 @@ async fn bind(
     web: Web,
 ) -> Result<(Serving, Vec<String>), String> {
     let (alive, ended) = watch::channel(());
-    let (mut listeners, mut at, mut failed) = (Vec::new(), Vec::new(), None);
+    let (mut listeners, mut at, mut bound, mut failed) = (Vec::new(), Vec::new(), Vec::new(), None);
     for ip in addrs {
         debug_assert!(direct::on_tailnet(*ip));
         let addr = SocketAddr::new(*ip, port);
@@ -307,6 +312,7 @@ async fn bind(
             Ok(listener) => {
                 listeners.push(listener);
                 at.push(addr.to_string());
+                bound.push(*ip);
             }
             Err(e) => {
                 let why = format!("can't listen on {addr}: {e}");
@@ -317,7 +323,7 @@ async fn bind(
     }
     // a new token each time serving starts: turning serve_web off and on revokes the old one
     let site = web.on.then(|| {
-        let tls = Tls::new(&web.cert, &web.key, web.dns.as_deref(), addrs);
+        let tls = Tls::new(&web.cert, &web.key, web.dns.as_deref(), &bound);
         Arc::new(Site::new(&at, web.dns.as_deref(), port, crate::web::new_token(), tls))
     });
     let accepts = listeners

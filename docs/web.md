@@ -62,8 +62,8 @@ On a Mac:
 ```text
 mkdir -p ~/.config/leon/certs
 tailscale cert --cert-file ~/.config/leon/certs/web.crt --key-file ~/.config/leon/certs/web.key devbox.example-tailnet.ts.net
-leon config set serve_web_cert '"~/.config/leon/certs/web.crt"'
-leon config set serve_web_key '"~/.config/leon/certs/web.key"'
+leon config set serve_web_cert '~/.config/leon/certs/web.crt'
+leon config set serve_web_key '~/.config/leon/certs/web.key'
 leon server status       # web      https://devbox.example-tailnet.ts.net:7297/
 ```
 
@@ -84,7 +84,8 @@ chmod 600 ~/.config/leon/certs/web.key
   another name, or the key can be read by others, nothing is served over HTTPS, `leon server
   status` says why on a `web` line with the command to run, and a renewal that goes wrong keeps
   the last good certificate while it is still valid.
-- The key must be yours and mode 600, as `tailscale cert` writes it.
+- The key must be yours and mode 600, as `tailscale cert` writes it. Keep both files in a
+  directory only you can write, such as `~/.config/leon/certs`.
 
 ## When it doesn't load
 

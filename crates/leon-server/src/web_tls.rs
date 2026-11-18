@@ -33,6 +33,8 @@ struct State {
     /// The files as last read (`stat`), so an unchanged pair isn't read again.
     seen: Option<[Stat; 2]>,
     good: Option<Good>,
+    /// A certificate loaded before its notBefore: it takes over when that comes.
+    waiting: Option<Good>,
     error: Option<String>,
 }
 
@@ -56,11 +58,16 @@ impl Tls {
     pub(crate) fn new(cert: &str, key: &str, dns: Option<&str>, ips: &[IpAddr]) -> Option<Tls> {
         let files = match (cert.is_empty(), key.is_empty()) {
             (true, true) => return None,
-            (false, false) => Ok((expand(cert), expand(key))),
+            (false, false) => expand(cert).and_then(|c| Ok((c, expand(key)?))),
             (true, false) => Err("serve_web_key is set but serve_web_cert isn't: set both, or neither".into()),
             (false, true) => Err("serve_web_cert is set but serve_web_key isn't: set both, or neither".into()),
         };
         Some(Tls { files, dns: dns.map(str::to_string), ips: ips.to_vec(), state: Mutex::default() })
+    }
+
+    /// The hosts the loaded certificate covers (none without one).
+    pub(crate) fn names(&self) -> Vec<String> {
+        crate::events::lock(&self.state).good.as_ref().map(|g| g.names.clone()).unwrap_or_default()
     }
 
     /// The config new connections use, if a valid certificate is loaded.
@@ -68,35 +75,47 @@ impl Tls {
         crate::events::lock(&self.state).good.as_ref().map(|g| g.config.clone())
     }
 
-    /// Look at the files: reload them if they changed, drop an expired certificate. Returns what is
-    /// served now; the error is new or the same as before.
+    /// Look at the files: reload them if they changed, take up a waiting certificate whose time has
+    /// come, drop an expired one. Returns what is served now; the error is new or the same as before.
+    /// Only the supervisor calls it, once a tick.
     pub(crate) fn refresh(&self) -> Now {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
-        let mut st = crate::events::lock(&self.state);
-        match &self.files {
-            Err(e) => st.error = Some(e.clone()),
-            Ok((cert, key)) => {
-                // looked at before reading, so a change that lands while reading is seen next time
-                let seen = [stat(cert), stat(key)];
-                let changed = st.seen != Some(seen);
-                st.seen = Some(seen);
-                if changed {
-                    match self.load(cert, key, now) {
-                        Ok(g) => (st.good, st.error) = (Some(g), None),
-                        Err(e) => st.error = Some(format!("{e}. {}", self.advice(cert, key))),
-                    }
-                }
-                if let Some(g) = st.good.as_ref().filter(|g| now < g.valid.0 || now >= g.valid.1) {
-                    let when = if now < g.valid.0 { "isn't valid yet" } else { "is no longer valid (expired)" };
-                    let why = format!("the certificate in {} {when}. {}", cert.display(), self.advice(cert, key));
-                    (st.good, st.error) = (None, Some(why));
-                }
+        let (cert, key) = match &self.files {
+            Ok(f) => f,
+            Err(e) => {
+                crate::events::lock(&self.state).error = Some(e.clone());
+                return Now { names: vec![], error: Some(e.clone()) };
             }
+        };
+        // looked at before reading, so a change that lands while reading is seen next time
+        let seen = [stat(cert), stat(key)];
+        let changed = crate::events::lock(&self.state).seen != Some(seen);
+        // read without the lock: TLS accepts go on with the current certificate meanwhile
+        let loaded = changed.then(|| self.load(cert, key));
+        let advice = || self.advice(cert, key);
+        let expired = || format!("the certificate in {} is no longer valid (expired). {}", cert.display(), advice());
+        let mut st = crate::events::lock(&self.state);
+        st.seen = Some(seen);
+        match loaded {
+            None => {}
+            Some(Err(e)) => (st.waiting, st.error) = (None, Some(format!("{e}. {}", advice()))),
+            Some(Ok(g)) if now < g.valid.0 => {
+                let why = format!("the certificate in {} isn't valid yet. {}", cert.display(), advice());
+                (st.waiting, st.error) = (Some(g), Some(why));
+            }
+            Some(Ok(g)) if now > g.valid.1 => (st.waiting, st.error) = (None, Some(expired())),
+            Some(Ok(g)) => (st.good, st.waiting, st.error) = (Some(g), None, None),
+        }
+        if st.waiting.as_ref().is_some_and(|w| now >= w.valid.0) {
+            (st.good, st.error) = (st.waiting.take(), None);
+        }
+        if st.good.as_ref().is_some_and(|g| now > g.valid.1) {
+            (st.good, st.error) = (None, Some(expired())); // notAfter is the last valid second
         }
         Now { names: st.good.as_ref().map(|g| g.names.clone()).unwrap_or_default(), error: st.error.clone() }
     }
 
-    fn load(&self, cert: &Path, key: &Path, now: i64) -> Result<Good, String> {
+    fn load(&self, cert: &Path, key: &Path) -> Result<Good, String> {
         let (chain, _) = read(cert)?;
         let chain: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(&chain)
             .collect::<Result<_, _>>()
@@ -106,17 +125,14 @@ impl Tls {
         // the open file's own owner and mode: a symlink swapped meanwhile can't get past this
         // SAFETY: geteuid has no preconditions.
         if meta.uid() != unsafe { libc::geteuid() } {
-            return Err(format!("{} isn't yours: sudo chown \"$USER\" {0}", key.display()));
+            return Err(format!("{} isn't yours: sudo chown \"$USER\" {}", key.display(), quoted(key)));
         }
         if meta.mode() & 0o077 != 0 {
-            return Err(format!("{} can be read by others: chmod 600 {0}", key.display()));
+            return Err(format!("{} can be read by others: chmod 600 {}", key.display(), quoted(key)));
         }
         let private = PrivateKeyDer::from_pem_slice(&key_pem)
             .map_err(|_| format!("{} isn't a PEM private key", key.display()))?;
         let valid = validity(leaf).ok_or_else(|| format!("can't read the dates in {}", cert.display()))?;
-        if now < valid.0 || now >= valid.1 {
-            return Err(format!("the certificate in {} isn't valid now (expired, or not yet)", cert.display()));
-        }
         let names = self.covered(leaf)?;
         let provider = Arc::new(rustls::crypto::ring::default_provider());
         let mut config = ServerConfig::builder_with_provider(provider)
@@ -152,7 +168,7 @@ impl Tls {
     /// ask, and then the files are root's.
     fn advice(&self, cert: &Path, key: &Path) -> String {
         let name = self.dns.as_deref().unwrap_or("MACHINE.TAILNET.ts.net");
-        let (c, k) = (cert.display(), key.display());
+        let (c, k) = (quoted(cert), quoted(key));
         if cfg!(target_os = "linux") {
             format!(
                 "Make them with: sudo tailscale cert --cert-file {c} --key-file {k} {name} && sudo chown \"$USER\" {c} {k} && chmod 600 {k}"
@@ -163,12 +179,18 @@ impl Tls {
     }
 }
 
-/// `~/x` under `$HOME`; anything else as written.
-fn expand(path: &str) -> PathBuf {
+/// `~/x` under `$HOME`; anything else as written (the setting takes only `/` and `~/`).
+fn expand(path: &str) -> Result<PathBuf, String> {
     match (path.strip_prefix("~/"), std::env::var_os("HOME")) {
-        (Some(rest), Some(home)) => Path::new(&home).join(rest),
-        _ => PathBuf::from(path),
+        (Some(rest), Some(home)) => Ok(Path::new(&home).join(rest)),
+        (Some(_), None) => Err(format!("{path} starts with ~/ but the server has no HOME: give the whole path")),
+        (None, _) => Ok(PathBuf::from(path)),
     }
+}
+
+/// A path as one shell word, for a command to paste.
+fn quoted(p: &Path) -> String {
+    format!("'{}'", p.display().to_string().replace('\'', "'\\''"))
 }
 
 /// Size, inode, and modification and change times to the nanosecond: a file rewritten in place
@@ -182,13 +204,19 @@ fn stat(p: &Path) -> Stat {
 
 /// The whole file (at most `MOST`), and the open file's metadata.
 fn read(p: &Path) -> Result<(Vec<u8>, std::fs::Metadata), String> {
-    let f = std::fs::File::open(p).map_err(|e| match e.kind() {
-        std::io::ErrorKind::PermissionDenied => {
-            format!("leon can't read {}: sudo chown \"$USER\" {0} && chmod 600 {0}", p.display())
-        }
-        _ => format!("can't read {}: {e}", p.display()),
-    })?;
+    use std::os::unix::fs::OpenOptionsExt;
+    // non-blocking, so a FIFO (or a device) at the path can't hold the open; then refused below
+    let f =
+        std::fs::OpenOptions::new().read(true).custom_flags(libc::O_NONBLOCK).open(p).map_err(|e| match e.kind() {
+            std::io::ErrorKind::PermissionDenied => {
+                format!("leon can't read {}: sudo chown \"$USER\" {1} && chmod 600 {1}", p.display(), quoted(p))
+            }
+            _ => format!("can't read {}: {e}", p.display()),
+        })?;
     let meta = f.metadata().map_err(|e| format!("can't read {}: {e}", p.display()))?;
+    if !meta.is_file() {
+        return Err(format!("{} isn't a regular file", p.display()));
+    }
     let mut buf = Vec::new();
     f.take(MOST + 1).read_to_end(&mut buf).map_err(|e| format!("can't read {}: {e}", p.display()))?;
     if buf.len() as u64 > MOST {
@@ -241,20 +269,25 @@ fn time(b: &[u8]) -> Option<(i64, &[u8])> {
     let (digits, rest, year) = match b.first()? {
         0x17 => {
             let (d, rest) = tlv(b, 0x17)?;
-            let yy: i64 = std::str::from_utf8(d.get(..2)?).ok()?.parse().ok()?;
+            let yy = d.get(..2).filter(|y| y.iter().all(u8::is_ascii_digit))?;
+            let yy = (yy[0] - b'0') as i64 * 10 + (yy[1] - b'0') as i64;
             (d.get(2..)?, rest, if yy < 50 { 2000 + yy } else { 1900 + yy })
         }
         0x18 => {
             let (d, rest) = tlv(b, 0x18)?;
-            (d.get(4..)?, rest, std::str::from_utf8(d.get(..4)?).ok()?.parse().ok()?)
+            let y = d.get(..4).filter(|y| y.iter().all(u8::is_ascii_digit))?;
+            (d.get(4..)?, rest, y.iter().fold(0i64, |n, b| n * 10 + (b - b'0') as i64))
         }
         _ => return None,
     };
-    if digits.len() != 11 || digits[10] != b'Z' {
+    if digits.len() != 11 || digits[10] != b'Z' || !digits[..10].iter().all(u8::is_ascii_digit) {
         return None;
     }
-    let n = |i: usize| -> Option<i64> { std::str::from_utf8(&digits[i..i + 2]).ok()?.parse().ok() };
-    let (mo, d, h, mi, s) = (n(0)?, n(2)?, n(4)?, n(6)?, n(8)?);
+    let n = |i: usize| (digits[i] - b'0') as i64 * 10 + (digits[i + 1] - b'0') as i64;
+    let (mo, d, h, mi, s) = (n(0), n(2), n(4), n(6), n(8));
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 || s > 60 {
+        return None;
+    }
     Some((days(year, mo, d) * 86400 + h * 3600 + mi * 60 + s, rest))
 }
 
@@ -287,6 +320,10 @@ mod tests {
         assert_eq!(tlv(&[0x30, 0x84, 0xff, 0xff, 0xff, 0xff], 0x30), None, "a huge length");
         assert_eq!(tlv(&[0x30, 0x85, 0, 0, 0, 0, 1], 0x30), None, "a length of more than 4 bytes");
         assert_eq!(validity(&[0x30, 0x02, 0x30, 0x00]), None, "a certificate with nothing in it");
+        let signed = [0x17, 13, b'+', b'6', b'1', b'1', b'1', b'9', b'0', b'0', b'0', b'0', b'0', b'0', b'Z'];
+        assert_eq!(time(&signed), None, "digits only");
+        let month13 = [0x17, 13, b'2', b'6', b'1', b'3', b'1', b'9', b'0', b'0', b'0', b'0', b'0', b'0', b'Z'];
+        assert_eq!(time(&month13), None, "a month past 12");
     }
 
     #[test]
@@ -294,9 +331,10 @@ mod tests {
         assert!(Tls::new("", "", None, &[]).is_none(), "neither: plain HTTP");
         let one = Tls::new("/a.crt", "", None, &[]).unwrap();
         assert!(one.refresh().error.unwrap().contains("serve_web_key"));
-        assert_eq!(expand("/x"), PathBuf::from("/x"));
+        assert_eq!(expand("/x"), Ok(PathBuf::from("/x")));
         if let Some(home) = std::env::var_os("HOME") {
-            assert_eq!(expand("~/c/x.crt"), Path::new(&home).join("c/x.crt"));
+            assert_eq!(expand("~/c/x.crt"), Ok(Path::new(&home).join("c/x.crt")));
         }
+        assert_eq!(quoted(Path::new("/a b/it's")), "'/a b/it'\\''s'");
     }
 }

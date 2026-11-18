@@ -48,9 +48,15 @@ impl Site {
         let named = dns.map(|d| format!("{d}:{port}"));
         let mut hosts: Vec<String> = named.iter().chain(at).cloned().collect();
         let urls = hosts.iter().map(|h| format!("http://{h}/")).collect();
-        if port == 80 {
-            let bare: Vec<String> = hosts.iter().filter_map(|h| h.strip_suffix(":80").map(str::to_string)).collect();
-            hosts.extend(bare); // browsers leave the default port out of Host and Origin
+        // browsers leave the default port out of Host and Origin: 80 for http, 443 for https
+        let default = match &tls {
+            Some(_) if port == 443 => Some(":443"),
+            None if port == 80 => Some(":80"),
+            _ => None,
+        };
+        if let Some(d) = default {
+            let bare: Vec<String> = hosts.iter().filter_map(|h| h.strip_suffix(d).map(str::to_string)).collect();
+            hosts.extend(bare);
         }
         Site { hosts, token, urls, port, tls }
     }
@@ -60,8 +66,33 @@ impl Site {
     pub(crate) fn status(&self) -> (Vec<String>, Option<String>) {
         let Some(tls) = &self.tls else { return (self.urls.clone(), None) };
         let now = tls.refresh();
-        let host = |n: &String| if n.contains(':') { format!("[{n}]") } else { n.clone() };
-        (now.names.iter().map(|n| format!("https://{}:{}/", host(n), self.port)).collect(), now.error)
+        (now.names.iter().map(|n| format!("https://{}/", self.https_host(n))).collect(), now.error)
+    }
+
+    /// `name` (a DNS name or an address) with the port, as an https URL's host.
+    fn https_host(&self, name: &str) -> String {
+        let name = if name.contains(':') { format!("[{name}]") } else { name.to_string() };
+        if self.port == 443 {
+            name
+        } else {
+            format!("{name}:{}", self.port)
+        }
+    }
+
+    /// Where plain HTTP to `host` goes: the same name over https on this port, or, when the host is
+    /// an address the certificate doesn't cover, the first name it does.
+    fn https_location(&self, host: &str, target: &str) -> String {
+        let name = match host.rsplit_once(':') {
+            Some((n, p)) if !p.contains(']') => n,
+            _ => host,
+        };
+        let name = name.trim_start_matches('[').trim_end_matches(']');
+        let covered = self.tls.as_ref().map(Tls::names).unwrap_or_default();
+        let to = match covered.iter().any(|c| c == name) || covered.is_empty() {
+            true => name.to_string(),
+            false => covered[0].clone(),
+        };
+        format!("https://{}{target}", self.https_host(&to))
     }
 
     /// `host` normalised (lower case, a trailing dot on the name dropped) when it is one of ours.
@@ -154,7 +185,8 @@ fn parse(head: &[u8]) -> Option<Head> {
     let mut lines = text.split("\r\n");
     let mut first = lines.next()?.split(' ');
     let (method, target, version) = (first.next()?, first.next()?, first.next()?);
-    if first.next().is_some() || !version.starts_with("HTTP/1.") || !target.starts_with('/') {
+    let control = target.bytes().any(|b| b < 0x21 || b == 0x7f);
+    if first.next().is_some() || !version.starts_with("HTTP/1.") || !target.starts_with('/') || control {
         return None;
     }
     let mut headers = Vec::new();
@@ -188,7 +220,7 @@ where
     if !secure && site.tls.is_some() {
         // HTTPS is set: plain HTTP never gets the page, its token or the WebSocket, whatever state
         // the certificate is in
-        let to = format!("Location: https://{host}{}\r\n", head.target);
+        let to = format!("Location: {}\r\n", site.https_location(&host, &head.target));
         return reply(&mut stream, 308, Some(&host), "text/plain", "use https", secure, &to).await;
     }
     if head.method != "GET" {
@@ -247,7 +279,8 @@ async fn upgrade<S>(
         "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n",
         crate::websocket::accept_key(key)
     );
-    if stream.write_all(ok.as_bytes()).await.is_ok() {
+    // flushed: over TLS a write can leave the records in rustls's buffer
+    if stream.write_all(ok.as_bytes()).await.is_ok() && stream.flush().await.is_ok() {
         crate::websocket::bridge(stream, rest, shared).await;
     }
 }
@@ -347,6 +380,14 @@ mod tests {
             assert!(s.own(bad).is_none(), "{bad}");
         }
         let s80 = Site::new(&["100.64.0.5:80".to_string()], None, 80, "t".into(), None);
+        let https = |port| {
+            let tls = Tls::new("/x.crt", "/x.key", Some("box.example.ts.net"), &[]);
+            Site::new(&[format!("100.64.0.5:{port}")], Some("box.example.ts.net"), port, "t".into(), tls)
+        };
+        assert_eq!(https(80).https_location("box.example.ts.net", "/?a"), "https://box.example.ts.net:80/?a");
+        assert_eq!(https(443).https_location("box.example.ts.net", "/"), "https://box.example.ts.net/");
+        assert!(https(443).own("box.example.ts.net").is_some(), "https on 443: the bare name");
+        assert!(https(80).own("box.example.ts.net").is_none(), "https on 80: the port stays in Host");
         assert!(s80.own("100.64.0.5").is_some() && s80.own("100.64.0.5:80").is_some());
     }
 
@@ -362,8 +403,13 @@ mod tests {
     #[test]
     fn heads_are_read_strictly() {
         assert!(parse(b"GET / HTTP/1.1\r\nHost: a").is_some());
-        for bad in [&b"GET / HTTP/1.1 x"[..], b"GET http://a/ HTTP/1.1", b"GET / SPDY/3", b"GET / HTTP/1.1\r\nno colon"]
-        {
+        for bad in [
+            &b"GET / HTTP/1.1 x"[..],
+            b"GET http://a/ HTTP/1.1",
+            b"GET / SPDY/3",
+            b"GET / HTTP/1.1\r\nno colon",
+            b"GET /x\nX-Evil:1 HTTP/1.1",
+        ] {
             assert!(parse(bad).is_none(), "{}", String::from_utf8_lossy(bad));
         }
         let many: String = (0..=MOST_HEADERS).map(|i| format!("\r\nX-{i}: y")).collect();
