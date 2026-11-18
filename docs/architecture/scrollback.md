@@ -33,11 +33,9 @@ clients see is in [Protocol and clients](protocol-and-clients.md), "Scrollback i
 - **Clears.** A slice of output ends at a history clear, so the screen showing after it is the one
   it cleared. `ESC c` resets both screens and clears the store; `CSI 3 J` (any leading zeros,
   further parameters ignored, as vte reads it) clears the store when it ran on the primary screen.
-- **Resize.** alacritty re-wraps its own rows; the store's are never re-wrapped. A narrower pane
-  cuts a stored row at its edge in `lines` (`text` keeps it whole); a wider one shows it as it was.
-  Before a re-wrap on the primary screen alacritty's limit is raised, so the re-wrap drops nothing,
-  and what goes past 1,000 rows then moves into the store. On the alternate screen the primary grid
-  re-wraps out of reach, within the cap.
+- **Resize.** alacritty re-wraps its own rows (at most the newest 1,000), within the cap like any
+  push; the store's are never re-wrapped. A narrower pane cuts a stored row at its edge in `lines`
+  (`text` keeps it whole); a wider one shows it as it was.
 - **The cap.** `leon.set("scrollback", N)` (0 to 100,000, default 10,000) caps the store and
   alacritty's rows together. The server applies it to every terminal on a reload and to each new
   one (a restored block's saved text included), and a lower value drops the oldest lines at once;

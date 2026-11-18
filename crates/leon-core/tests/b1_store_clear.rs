@@ -40,3 +40,47 @@ fn a_history_clear_empties_the_store() {
         );
     }
 }
+
+/// A program that prints what it is sent, with `prefix-0..3000` printed and moved into the store.
+fn live_with_a_full_store(prefix: &str) -> Terminal {
+    let spec =
+        Spec { command: vec!["sh".into(), "-c".into(), "stty raw -echo; exec cat".into()], cwd: None, env: vec![] };
+    let t = Terminal::spawn(spec, |_| {}).unwrap();
+    t.write(b"ready\r\n").unwrap();
+    until(&t, "ready", |t| t.text(true).ends_with("ready"));
+    t.write((0..3000).map(|i| format!("{prefix}-{i}\r\n")).collect::<String>().as_bytes()).unwrap();
+    until(&t, "printed", |t| t.text(true).ends_with(&format!("{prefix}-2999")));
+    until(&t, "moved into the store", |t| t.with_term(|t| t.grid().history_size()) <= 1000);
+    assert!(t.lines(0, 0, &DARK).history > 2900, "the store holds the lines");
+    t
+}
+
+fn until(t: &Terminal, what: &str, pred: impl Fn(&Terminal) -> bool) {
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while !pred(t) {
+        assert!(std::time::Instant::now() < end, "never {what}");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn a_clear_empties_a_full_store() {
+    for clear in ["\x1b[3J", "\x1bc"] {
+        let t = live_with_a_full_store("old");
+        t.write(format!("{clear}after\r\n").as_bytes()).unwrap();
+        until(&t, "cleared", |t| t.text(true).ends_with("after"));
+        assert!(t.lines(0, 0, &DARK).history <= 1, "{clear:?}: nothing old is kept");
+        assert!(!t.text(true).contains("old-100\n"), "{clear:?}: the store outlived the clear");
+    }
+}
+
+#[test]
+fn a_clear_on_the_alternate_screen_keeps_a_full_store() {
+    let t = live_with_a_full_store("kept");
+    t.write(b"\x1b[?1049hdrawn\x1b[3J").unwrap();
+    until(&t, "drawn", |t| t.text(true).ends_with("drawn"));
+    t.write(b"\x1b[?1049lback\r\n").unwrap();
+    until(&t, "back", |t| t.text(true).ends_with("back"));
+    let text = t.text(true);
+    assert!((0..3000).all(|i| text.contains(&format!("kept-{i}\n"))), "the alternate screen's clear is its own");
+}

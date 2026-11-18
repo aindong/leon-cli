@@ -20,9 +20,6 @@ use super::{lock, Listener, Terminal, MAX_SCROLLBACK};
 pub const WINDOW: usize = 1000;
 /// Stored rows are allocated this many at a time.
 const GROW: usize = 1024;
-/// alacritty's limit while it re-wraps for a resize, so the re-wrap drops nothing it would push
-/// past `WINDOW`: a row of the widest grid re-wraps to at most this many rows of the narrowest.
-const REFLOW: usize = WINDOW * super::MAX_SIZE.1 as usize;
 
 /// The emulator and the store, under one lock: a reader sees both as one history.
 pub struct Emu {
@@ -251,18 +248,11 @@ impl Store {
         }
     }
 
-    /// Resize `term`, moving into the store what its re-wrap pushes past its window instead of
-    /// letting alacritty drop it. Stored rows aren't re-wrapped. On the alternate screen the
-    /// primary grid is out of reach (alacritty's inactive grid), so its re-wrap keeps `limit`.
+    /// Resize `term`. alacritty re-wraps its own rows, within the cap like any push; stored rows
+    /// aren't re-wrapped.
     pub(super) fn resize(&mut self, term: &mut Term<Listener>, size: impl Dimensions) {
-        let primary = !alt(term);
-        if primary {
-            term.grid_mut().update_history(REFLOW);
-        }
         term.resize(size);
-        if primary {
-            self.take(term, WINDOW.min(self.cap));
-        }
+        self.settle(term);
         self.trim(term);
     }
 }
