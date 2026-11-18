@@ -106,8 +106,11 @@ pub fn wrap(src: &str, mode: Mode) -> Wrapped {
         add(MATTE, &mut |_| None);
     }
     add(&body, &mut |i| Some(i as u32 + 1));
-    let inits_text: String = inits.iter().map(|(_, s)| format!("    {s}\n")).collect();
-    let mut init_line = |i: usize| inits.get(i).map(|(l, _)| *l);
+    // an assignment is the user's line; the conditional directives around it are leon's
+    let init_lines: Vec<(Option<u32>, &str)> =
+        inits.iter().flat_map(|(l, s)| s.lines().map(|t| ((!t.starts_with('#')).then_some(*l), t))).collect();
+    let inits_text: String = init_lines.iter().map(|(_, t)| format!("    {t}\n")).collect();
+    let mut init_line = |i: usize| init_lines.get(i).and_then(|(l, _)| *l);
     match mode {
         Mode::Contract => {
             add("void main() {", &mut |_| None);
@@ -141,7 +144,7 @@ const TYPES: &[&str] = &[
 
 /// `src` with each top-level `TYPE NAME = EXPR;` (not `const`, one name, no array) turned into
 /// `TYPE NAME;` padded to the lines it had, and the assignments `NAME = EXPR;` in order, each with
-/// the user's line it starts on. naga 25 evaluates a global's non-constant initializer in the
+/// the user's line it starts on, inside the `#if` chains it sat in. naga 25 evaluates a global's non-constant initializer in the
 /// entry point but never stores it, so the variable stays zero and the shader draws nothing.
 /// shortcut: a scan of comments, braces, parentheses and `;`, not a GLSL parser; what it doesn't
 /// recognize reaches naga unchanged, which then reports it or draws it as naga would.
@@ -150,13 +153,33 @@ pub fn hoist_globals(src: &str) -> (String, Vec<(u32, String)>) {
     let mut inits = Vec::new();
     let b = src.as_bytes();
     let (mut i, mut start, mut depth) = (0, 0, 0i32);
+    // the top-level `#if…` chains the scan is inside, each as its directives so far
+    let mut conds: Vec<Vec<String>> = Vec::new();
     // a statement's text with comments blanked, for deciding; `src` itself is what is kept
     let mut code = String::new();
     while i < b.len() {
         let rest = &src[i..];
         let line_start = i == 0 || b[i - 1] == b'\n';
         if depth == 0 && line_start && code.trim().is_empty() && rest.trim_start_matches([' ', '\t']).starts_with('#') {
-            let end = rest.find('\n').map_or(b.len(), |n| i + n + 1);
+            // a directive runs to a line that doesn't end in `\`
+            let mut end = i;
+            loop {
+                end = src[end..].find('\n').map_or(b.len(), |n| end + n + 1);
+                if end >= b.len() || !src[..end].trim_end_matches(['\n', '\r']).ends_with('\\') {
+                    break;
+                }
+            }
+            let directive = src[i..end].trim();
+            let word = directive.trim_start_matches('#').trim_start();
+            if word.starts_with("if") {
+                conds.push(vec![directive.to_string()]);
+            } else if word.starts_with("el") {
+                if let Some(c) = conds.last_mut() {
+                    c.push(directive.to_string());
+                }
+            } else if word.starts_with("endif") {
+                conds.pop();
+            }
             out.push_str(&src[start..end]);
             (i, start) = (end, end);
             code.clear();
@@ -193,9 +216,13 @@ pub fn hoist_globals(src: &str) -> (String, Vec<(u32, String)>) {
             let stmt = &src[start..i];
             match hoistable(&code) {
                 Some((ty, name, expr)) => {
-                    let line = src[..start].matches('\n').count() as u32 + 1 + leading_lines(&code);
-                    out.push_str(&format!("{ty} {name};{}", "\n".repeat(stmt.matches('\n').count())));
-                    inits.push((line, format!("{name} = {expr};")));
+                    let lead = leading_lines(&code);
+                    let line = src[..start].matches('\n').count() as u32 + 1 + lead;
+                    let after = stmt.matches('\n').count() as u32 - lead;
+                    out.push_str(&format!("{}{ty} {name};{}", "\n".repeat(lead as usize), "\n".repeat(after as usize)));
+                    let open: String = conds.iter().flatten().map(|d| format!("{d}\n")).collect();
+                    let close = "#endif\n".repeat(conds.len());
+                    inits.push((line, format!("{open}{name} = {expr};\n{close}").trim_end().to_string()));
                 }
                 None => out.push_str(stmt),
             }
