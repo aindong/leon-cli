@@ -1,13 +1,36 @@
 # macOS: the whole gate, app included. Linux (x86_64 and aarch64): the server and CLI in the pinned
 # Rust image, the smoke test and the packages (scripts/linux-test.sh, scripts/package-linux.sh).
+# A change to English docs alone runs only the tests that read them, on Linux (the docs job).
 # Actions are pinned by commit, with their tag beside them.
 name: CI
 
-# A push to a PR branch is one run (pull_request); a merge into dev or main starts its own.
+# A push to a PR branch is one run (pull_request); a merge into dev or main starts its own. A change
+# to nothing but translations, images, brand files and community files starts no run: translations
+# have scripts/i18n-check.sh, and the tests that read images, brand files or the README's links to
+# the community files run in the next run that starts.
+# scripts/ci-changes.sh keeps the same list.
 on:
   push:
     branches: [main, dev]
+    paths-ignore:
+      - "docs/i18n/**"
+      - "docs/images/**"
+      - "brand/**"
+      - "CONTRIBUTING.md"
+      - "CODE_OF_CONDUCT.md"
+      - "SECURITY.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
   pull_request:
+    paths-ignore:
+      - "docs/i18n/**"
+      - "docs/images/**"
+      - "brand/**"
+      - "CONTRIBUTING.md"
+      - "CODE_OF_CONDUCT.md"
+      - "SECURITY.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
 
 # A newer push cancels the PR's older run. A run on main or dev is alone in its group (its run id):
 # a shared group would cancel the one waiting when a third arrives.
@@ -19,7 +42,35 @@ permissions:
   contents: read
 
 jobs:
+  # What the change needs (scripts/ci-changes.sh): English docs alone run only the doc tests, on
+  # Linux; anything else, the whole gate below. Plain git diff rather than a third-party action:
+  # a few lines, and no more code that sees the token. A PR's checkout is its merge commit, whose
+  # first parent is the branch it merges into; a push compares with the commit before it.
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      kind: ${{ steps.kind.outputs.kind }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - id: kind
+        env:
+          BEFORE: ${{ github.event.before }}
+        # a push's previous commit may be missing (a new branch): the diff fails and it says full
+        run: |
+          base=HEAD^1
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            base=$BEFORE
+            git fetch -q --depth=1 origin "$base" || true
+          fi
+          kind=$(scripts/ci-changes.sh "$base") # a failure here fails the run, never skips the jobs
+          echo "kind=$kind" | tee -a "$GITHUB_OUTPUT"
+
   macos:
+    needs: changes
+    if: needs.changes.outputs.kind == 'full'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,6 +98,8 @@ jobs:
         run: cargo test --doc --no-fail-fast
 
   linux:
+    needs: changes
+    if: needs.changes.outputs.kind == 'full'
     strategy:
       fail-fast: false
       matrix:
@@ -64,3 +117,17 @@ jobs:
           path: |
             target/linux/*/*.tar.gz
             target/linux/*/*.deb
+
+  # English docs alone: the tests that read them, in the linux job's pinned image (zsh, minisign
+  # and jq are there), and the translations' check, which reads the history their headers name.
+  docs:
+    needs: changes
+    if: needs.changes.outputs.kind == 'docs'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - run: scripts/i18n-check.sh
+      - run: scripts/linux-doc-tests.sh

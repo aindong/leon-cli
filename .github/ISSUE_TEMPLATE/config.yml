@@ -1,0 +1,6 @@
+# Blank issues stay on: a question or a docs typo shouldn't have to fit a form.
+blank_issues_enabled: true
+contact_links:
+  - name: Security problem
+    url: https://github.com/aindong/leon-cli/security/advisories/new
+    about: Report a vulnerability privately; never in a public issue.

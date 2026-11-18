@@ -25,6 +25,9 @@ A Rust + GPUI terminal multiplexer. Read `docs/architecture.md` first (its decis
   release is a PR from `dev` to `main`, then a tag `vX.Y.Z` on `main`, which publishes it
   (`docs/releases.md`); after changing a release script, run `scripts/release-dry-run.sh`.
   `latest.json`'s fields are a contract, and the release tests need `minisign` and `jq`.
+- Translations live only in `docs/i18n/<lang>/` (`docs/i18n/README.md` has the conventions); the doc
+  tests skip that folder and `scripts/i18n-check.sh` checks it. CI skips translation and community-file
+  changes and runs only the doc tests on Linux for English docs (`scripts/ci-changes.sh`).
 - Terminal tests run a real shell in a PTY; wait for screen text with a timeout, never fixed sleeps.
 - Tests that start a server set both `LEON_RUNTIME_DIR` and `LEON_STATE_DIR` to temp dirs (use
   `tests/support::Env`), or they restore and overwrite the real `~/.local/state/leon` sessions.
