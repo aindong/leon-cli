@@ -45,5 +45,6 @@ button names its action and shortcut on hover. The wheel scrolls a pane back thr
 scrollback; drag to select, option+drag for a rectangle; hold ⌘ over a link to open it with a click.
 Rest the mouse on a link, or right-click it, for a card with its full address, Copy and Open in
 Browser (`link_card` in [lua/settings.md](lua/settings.md#settings) turns it off); it closes on a key,
-a scroll, or the mouse leaving it. A program that asks for the mouse (an editor or `htop`) gets
+a scroll, or the mouse leaving it. Double-click a tab's or a session's name to rename it in
+place; right-click it for Rename and Close (a × on hover closes it too). A program that asks for the mouse (an editor or `htop`) gets
 clicks, right-clicks too, and the wheel; hold shift to select anyway.

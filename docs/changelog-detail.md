@@ -8,6 +8,19 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### Closing and renaming tabs and sessions
+
+#### Added
+- In Leon.app's command palette: Close Tab (⌥⌘W), Close Session (⌥⇧⌘W), Rename Tab… and Rename
+  Session…. A close asks first when a program other than a shell is in front in that tab or
+  session, naming it, as quitting does; only shells close at once.
+- A × on hover on each sidebar tab row and session, top style's session rows, and titlebar tabs
+  (whose × used to close without asking), by the same rule.
+- A right-click on a sidebar row or a titlebar tab opens a menu: Rename Tab… and Close Tab, or New
+  Tab, Rename Session… and Close Session, by mouse or with the arrow keys and Enter.
+- A double-click on a tab's or a session's name renames it in place: type the new name, Enter or a
+  click elsewhere sets it, Escape cancels. An empty name gives the tab its program's title again.
+
 ### The link card
 
 #### Added
