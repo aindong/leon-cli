@@ -16,10 +16,11 @@ fn a_sidebar_tab_row_and_session_label(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
     let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
-    let before = ws.read_with(cx, |ws, _| ws.tab_titles())[0].clone();
     let p = center(at(cx, "row-0-0").expect("the tab row"));
     double_click(cx, p);
-    assert_eq!(renaming(&ws, cx).as_deref(), Some(before.as_str()), "the field holds the name");
+    // the name as it is now: a shell can set its title just after it starts
+    let name = ws.read_with(cx, |ws, _| ws.tab_titles())[0].clone();
+    assert_eq!(renaming(&ws, cx).as_deref(), Some(name.as_str()), "the field holds the name");
     assert!(drawn(cx, "rename-field"), "and is drawn");
     cx.simulate_keystrokes("a p i x backspace");
     assert_eq!(renaming(&ws, cx).as_deref(), Some("api"), "typing replaced the name; backspace edits");
