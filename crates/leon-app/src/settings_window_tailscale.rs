@@ -78,6 +78,7 @@ impl SettingsWindow {
             .children(refused)
             .child(self.port_control(t, cx))
             .child(self.tags_control(t, cx))
+            .child(self.toggle(t, "serve_web", "Also serve them a view-only web page", cx))
     }
 
     /// Why the last port typed, and the last tag, were refused.
