@@ -18,7 +18,9 @@ fn translucency_is_documented() {
     assert!(minor >= 8, "a new field on server.settings is a minor bump");
     assert!(include_str!("../../../docs/api.md").contains("translucency"), "docs/api.md is regenerated");
     assert!(include_str!("../../../docs/integrators.md").contains(leon_server::API_VERSION), "docs/integrators.md");
-    assert!(include_str!("../../../README.md").contains("translucency"), "the README says it can be set");
+    // the README's "Know what needs you" moved to docs/shortcuts.md (README size)
+    let app = include_str!("../../../docs/shortcuts.md");
+    assert!(app.contains("translucency"), "docs/shortcuts.md says it can be set");
     let gpui = include_str!("../../../docs/architecture/gpui.md");
     assert!(
         gpui.contains("accessibilityDisplayShouldReduceTransparency"),

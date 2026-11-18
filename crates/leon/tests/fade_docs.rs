@@ -18,8 +18,9 @@ fn the_fade_is_documented() {
     let api = include_str!("../../../docs/api.md");
     assert!(api.contains("fade_inactive_panes"), "docs/api.md is regenerated");
     assert!(include_str!("../../../docs/integrators.md").contains(leon_server::API_VERSION), "docs/integrators.md");
-    let readme = include_str!("../../../README.md");
-    assert!(readme.contains("fade_inactive_panes"), "the README says the fade can be set or turned off");
+    // the README's "Know what needs you" moved to docs/shortcuts.md (README size)
+    let app = include_str!("../../../docs/shortcuts.md");
+    assert!(app.contains("fade_inactive_panes"), "docs/shortcuts.md says the fade can be set or turned off");
     let arch = include_str!("../../../docs/architecture/attention.md");
     assert!(arch.contains("fade_inactive_panes"), "the architecture says how the app fades panes");
 }

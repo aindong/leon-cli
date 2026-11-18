@@ -66,7 +66,8 @@ folder. On Linux, with the file for your machine downloaded:
 
 ```sh
 dpkg -i leon_*.deb                               # Debian or Ubuntu, as root
-tar xzf leon-*-linux.tar.gz -C ~/.local          # anywhere else: unpack it,
+mkdir -p ~/.local/bin                            # anywhere else: make the folder,
+tar xzf leon-*-linux.tar.gz -C ~/.local          # unpack it,
 ln -s ~/.local/leon-*-linux/leon ~/.local/bin/   # and put its leon on your PATH
 ```
 
@@ -187,38 +188,9 @@ what it created. See [docs/agents.md](docs/agents.md).
 
 ## Know what needs you
 
-Programs report what they're doing (working, blocked, done), and the app shows it in two places.
-The tab's row gets a symbol, and the pane's header gets the symbol with the program's own words.
-
-![The leon app: sessions in the sidebar with their tabs as rows, a tab split in three, and an agent's progress on its row and pane header](docs/images/app-status.png)
-
-With more than one pane in a tab, the panes you aren't in are faded, so your eye stays on
-the focused one. What you are waiting for is never faded: a status symbol keeps its
-colour, and a pane that is blocked, has failed, or finished since you last looked stays at full
-strength. `leon.set("fade_inactive_panes", N)` sets it from 0 (off) to 0.8 (default 0.35).
-
-The window is translucent, tinted by the theme, with text readable over any desktop;
-`leon.set("translucency", 0)` makes it opaque.
-
-![The leon window over a plain blue-to-violet desktop, which shows through its sidebar and title bar](docs/images/app-translucent.png)
-
-Each tab, sidebar row and pane header has an icon for the program in it: an agent, an editor,
-tests, a server, a monitor, ssh or a shell.
-
-![Tabs in the title bar, each with its program's icon: a shell, an agent, an editor, tests, a server, a monitor and ssh](docs/images/app-icons.png)
-
-⌘K switches to any session, tab or block on any host, the most recent first, and ⌘⇧A lists what
-needs you: blocked first (with what it is waiting for), then errors, finished runs you haven't
-looked at, and work in progress. The toolbar button for it shows how many blocks are blocked, and so
-does the Dock. Leon.app also sends a notification when a block blocks or fails, or when a run of 30 s
-or more ends while you're in another app; clicking it takes you to the pane. A tool that can't print
-OSC 7501 reports for its own block with `leon notify`:
-
-```text
-leon notify --state blocked --title "Deploy" --body "approve the rollout?"
-```
-
-![The Activity list: two blocked agents with questions, a failed deploy, a finished review, builds in progress, the blocked count](docs/images/app-activity.png)
+Programs report whether they are working, blocked or done, and the app shows it on their tabs and
+panes, in the Activity list (⌘⇧A), on the Dock and in notifications.
+[docs/shortcuts.md](docs/shortcuts.md#know-what-needs-you) has the details and the settings.
 
 ## App shortcuts
 

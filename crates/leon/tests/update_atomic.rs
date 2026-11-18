@@ -9,7 +9,7 @@ mod update_kit;
 use std::process::{Child, Stdio};
 
 use serde_json::json;
-use update_kit::{name, run, spawn_until_paused, until, Install, Mode, Release, Server, VERSION};
+use update_kit::{name, run, spawn, spawn_until_paused, until, Install, Mode, Release, Server, VERSION};
 
 fn install(kind: &str) -> Install {
     match kind {
@@ -39,7 +39,8 @@ fn killed_in_the_middle_of_the_download(kind: &str) {
     let (srv, leon) = (rel.serve(), install(kind));
     let before = leon.state();
     srv.set(&name(kind), Mode::Stall);
-    let child = leon.cmd(&rel, &srv).arg("self-update").stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+    // the kit's spawn: the leon just copied can be "busy" while another test's child is forking
+    let child = spawn(leon.cmd(&rel, &srv).arg("self-update").stdout(Stdio::null()).stderr(Stdio::null()));
     // the download itself, not just the directory: bytes of the archive have reached the disk
     let partial = leon.root.parent().unwrap().join(".leon-update/download");
     until("part of the file to be on disk", 30, || partial.metadata().is_ok_and(|m| m.is_file() && m.len() > 0));

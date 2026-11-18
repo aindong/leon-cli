@@ -85,6 +85,20 @@ pub fn drawn(cx: &mut VisualTestContext, sel: &str) -> bool {
     view::drawn().contains(sel)
 }
 
+/// The bounds of the element drawn with debug selector `sel`, if it is drawn. GPUI notes an
+/// element's bounds only in the frame that paints it, and a frame that reuses a cached view (the
+/// sidebar's sections) paints none of its elements; two frames take turns, so the last one may
+/// never have had them: for those, draw a frame of every view first (as m10b's `at`).
+pub fn at(cx: &mut VisualTestContext, sel: &str) -> Option<gpui::Bounds<gpui::Pixels>> {
+    if !drawn(cx, sel) {
+        return None;
+    }
+    if view::drawn_cached(sel) {
+        cx.update(|window, _| window.refresh());
+    }
+    cx.debug_bounds(Box::leak(sel.to_string().into_boxed_str()))
+}
+
 /// Run an app action by name, as a key or the palette would.
 pub fn act(ws: &Entity<Workspace>, cx: &mut VisualTestContext, name: &str, args: Option<serde_json::Value>) {
     cx.update(|window, cx| ws.update(cx, |ws, cx| ws.run_action(name, args.as_ref(), "test", window, cx)));
