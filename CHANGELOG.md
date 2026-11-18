@@ -30,8 +30,25 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-19
+
+A security fix. `leon --version` prints `leon 0.1.1 (<commit>)`; the socket API is still `1.12.0`.
+
+### Security
+
+- With `serve_tailscale` on, the tailnet listener now serves only leon's API and closes any other
+  connection, such as a web request, unread. If you turned `serve_tailscale` on, update:
+  `leon self-update`, or Install in the app.
+
+### Added
+
 - **Contributing and translations.** A contributor guide, translations of the README and guides in
   `docs/i18n/`, and CI that skips docs-only changes ([detail](docs/changelog-detail.md#contributing-and-translations)).
+
+### Changed
+
+- Docs: the automation, server and agent commands moved from docs/cli.md to pages of their own
+  under `docs/cli/`, and the English in the guides is clearer.
 
 ## [0.1.0] - 2026-11-18
 
