@@ -11,7 +11,15 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 ### Cursor shaders
 
 #### Added
-- `cursor_shader`, `cursor_shader_duration` ([cursor-shaders.md](cursor-shaders.md)); API 1.13.0.
+- `leon.set("cursor_shader", PATH)` names a Shadertoy-style cursor shader file; Leon.app draws it
+  over its window while the cursor's move animates, for `cursor_shader_duration` seconds (0.1 to
+  5, default 1), on a layer of its own that draws nothing while idle. macOS only;
+  [cursor-shaders.md](cursor-shaders.md) has the uniforms and what works.
+- `leon config check` translates the file and prints the shader's own line on an error; the app
+  shows the same in its notice and reloads the shader when the file is saved. The Settings
+  window has it under Appearance.
+- `server.settings` reports both: new result fields on a stable method, so `api_version` goes
+  from `1.12.0` to `1.13.0`.
 
 ### Contributing and translations
 
