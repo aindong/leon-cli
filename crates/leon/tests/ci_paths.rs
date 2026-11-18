@@ -65,6 +65,37 @@ fn the_change_decides_the_jobs() {
 }
 
 #[test]
+fn code_moved_into_the_docs_still_runs_everything() {
+    let d = tempfile::tempdir().unwrap();
+    git(d.path(), &["init", "-q"]);
+    std::fs::create_dir_all(d.path().join("crates/leon/src")).unwrap();
+    let lines: String = (1..50).map(|i| format!("line {i}\n")).collect();
+    std::fs::write(d.path().join("crates/leon/src/notes.md"), lines).unwrap();
+    git(d.path(), &["add", "-A"]);
+    git(d.path(), &["commit", "-qm", "first"]);
+    std::fs::create_dir_all(d.path().join("docs/i18n")).unwrap();
+    git(d.path(), &["mv", "crates/leon/src/notes.md", "docs/i18n/notes.md"]);
+    git(d.path(), &["commit", "-qm", "move"]);
+    let o = Command::new("bash")
+        .arg(help_walk::repo().join("scripts/ci-changes.sh"))
+        .arg("HEAD^1")
+        .current_dir(d.path())
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "full", "a rename is both its paths");
+}
+
+/// CI runs these scripts directly: without the executable bit the step would fail.
+#[test]
+fn the_scripts_ci_runs_are_executable() {
+    use std::os::unix::fs::PermissionsExt;
+    for s in ["ci-changes.sh", "linux-doc-tests.sh", "i18n-check.sh", "i18n-status.sh"] {
+        let mode = std::fs::metadata(help_walk::repo().join("scripts").join(s)).unwrap().permissions().mode();
+        assert!(mode & 0o111 != 0, "scripts/{s} is executable");
+    }
+}
+
+#[test]
 fn an_unreadable_diff_runs_everything() {
     let d = tempfile::tempdir().unwrap();
     git(d.path(), &["init", "-q"]);
@@ -130,6 +161,9 @@ fn the_full_jobs_wait_for_the_verdict_and_docs_alone_run_the_doc_tests_on_linux(
     let changes = job(&ci, "changes");
     assert!(changes.contains("scripts/ci-changes.sh"), "{changes}");
     assert!(changes.contains("kind: ${{ steps.kind.outputs.kind }}"), "{changes}");
+    // assigned first, so a failing script fails the step rather than leaving kind empty
+    assert!(changes.contains("kind=$(scripts/ci-changes.sh \"$base\")"), "{changes}");
+    assert!(!changes.contains("echo \"kind=$("), "{changes}");
     for id in ["macos", "linux"] {
         let j = job(&ci, id);
         assert!(j.contains("    needs: changes\n"), "{id} waits for changes: {j}");

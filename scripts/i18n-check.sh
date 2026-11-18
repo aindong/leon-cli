@@ -52,6 +52,10 @@ while IFS= read -r f; do
     note=$(sed -n 2p "$f")
     [[ $note == '> '*']('* ]] ||
         fail "$f" "line 2 must be a '> ' note in the page's language with a link to the English page"
+    case $source in docs/i18n/*)
+        fail "$f" "its source must be the English page, not $source"
+        continue ;;
+    esac
     if [ ! -f "$source" ]; then
         fail "$f" "its source $source doesn't exist"
         continue

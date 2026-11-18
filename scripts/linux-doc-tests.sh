@@ -11,7 +11,8 @@ cd "$(dirname "$0")/.."
 tests() {
     for f in crates/*/tests/*.rs; do
         case $f in crates/leon-app/*) continue ;; esac
-        if grep -v '^[[:space:]]*//' "$f" | grep -qE 'docs/|README\.md|CHANGELOG\.md|CLAUDE\.md'; then
+        # not grep -q: stopping at the first match would end the first grep with SIGPIPE under pipefail
+        if grep -v '^[[:space:]]*//' "$f" | grep -E 'docs/|README\.md|CHANGELOG\.md|CLAUDE\.md' >/dev/null; then
             echo "$f"
         fi
     done

@@ -26,7 +26,8 @@ The languages so far, with their folder names: `zh-CN` (简体中文), `ja` (日
 
 ## Adding or updating a translation
 
-1. Start from `dev`, and note the commit you translate from: `git rev-parse --short=12 HEAD`.
+1. Start from `dev`, and note the commit you translate from, its first 12 characters:
+   `git rev-parse HEAD | cut -c1-12`.
 2. Copy the English page to `docs/i18n/<lang>/<same file name>.md` (or, to update, compare the
    English page with the commit in the translation's header: `git diff <commit> -- docs/install.md`).
 3. Make the first two lines the header, exactly this shape:
