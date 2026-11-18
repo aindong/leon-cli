@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/recipes.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/recipes.md commit=a525beb0ae17 -->
 > 이 문서는 번역본입니다. 기준은 [영어 문서](../../recipes.md)이며, 영어 문서가 더 최신일 수 있습니다.
 
 # 프로젝트와 git worktree

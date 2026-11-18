@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/agents.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/agents.md commit=a525beb0ae17 -->
 > 이 문서는 번역본입니다. 기준은 [영어 문서](../../agents.md)이며, 영어 문서가 더 최신일 수 있습니다.
 
 # 에이전트가 leon을 다룹니다

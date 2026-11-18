@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/lua.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/lua.md commit=a525beb0ae17 -->
 > 이 문서는 번역본입니다. 기준은 [영어 문서](../../lua.md)이며, 영어 문서가 더 최신일 수 있습니다.
 
 # Lua: 설정과 스크립트
