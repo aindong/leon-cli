@@ -70,7 +70,7 @@ impl Workspace {
         }
         self.poll_hosts();
         let replied = self.poll_terms();
-        self.card_found(cx);
+        self.card_poll(cx);
         // a pushed screen redraws its pane's grid alone; the root only for a pane scrolled back,
         // whose "↓ N new lines" it counts
         let scrolled = self.poll_grids(cx);

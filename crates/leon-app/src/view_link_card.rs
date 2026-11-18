@@ -7,7 +7,7 @@
 
 use gpui::{ClipboardItem, Entity, MouseMoveEvent, Subscription};
 use leon_core::program_status::strip_hidden;
-use leon_core::search::{decoded, Link, Pos};
+use leon_core::search::{clean_uri, decoded, Link, Pos};
 
 use super::*;
 use crate::popover::{self, Item, Popover, PopoverEvent};
@@ -26,11 +26,22 @@ pub(super) struct CardUi {
     /// The cell the mouse rests on, and a count each new rest bumps (an older wait drops out).
     rest: Option<(String, Pos)>,
     rests: u64,
-    /// A link a lookup found, for the card to open on: (pane, the cell asked, link, for the keyboard).
-    found: Option<(String, Pos, Link, bool)>,
+    found: Option<Found>,
     open: Option<Card>,
     /// How many lookups the card made.
     asks: usize,
+}
+
+/// A link a lookup found, for the card to open on.
+struct Found {
+    pane: String,
+    /// The cell asked about, the card's row.
+    pos: Pos,
+    link: Link,
+    /// For the keyboard (a right-click).
+    focus: bool,
+    /// `rests` when asked: a newer rest, key or modifier since makes the answer stale.
+    rests: u64,
 }
 
 struct Card {
@@ -88,10 +99,22 @@ impl Workspace {
         self.term.card.asks
     }
 
-    /// The mouse moved over pane `id`: resting on a new cell with no key or button held starts
-    /// the wait for its card; a key held stops it.
-    pub(super) fn card_rest(&mut self, id: &str, ev: &MouseMoveEvent, cx: &mut Context<Self>) {
-        let pos = self.pos_at(id, ev.position);
+    /// The mouse moved over pane `id`: off the open hover card's link it closes (the pane's own
+    /// move, since a float or drawer blocks the mouse from the root's), then the rest.
+    pub(super) fn card_move(&mut self, id: &str, ev: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let off = |c: &Card| {
+            c.pane != id || self.grid_pos(id, ev.position).is_none_or(|p| !(c.link.start..=c.link.end).contains(&p))
+        };
+        if self.term.card.open.as_ref().is_some_and(|c| !c.focused && off(c)) {
+            self.close_card(window, cx);
+        }
+        self.card_rest(id, ev, cx);
+    }
+
+    /// Resting on a new cell with no key or button held, and no program taking the mouse, starts
+    /// the wait for its card; anything else stops it.
+    fn card_rest(&mut self, id: &str, ev: &MouseMoveEvent, cx: &mut Context<Self>) {
+        let pos = self.pos_at(id, ev.position).filter(|_| !self.reports(id, &ev.modifiers));
         let card = &mut self.term.card;
         let Some(pos) = pos.filter(|_| !card.off && !ev.modifiers.modified() && ev.pressed_button.is_none()) else {
             return self.card_cancel();
@@ -110,7 +133,8 @@ impl Workspace {
         .detach();
     }
 
-    /// A key was pressed with the mouse resting: no card for this rest.
+    /// A key, a scroll, a modifier or a move that starts no rest: no card for the last rest, and
+    /// any answer on its way is stale.
     pub(super) fn card_cancel(&mut self) {
         self.term.card.rest = None;
         self.term.card.rests += 1;
@@ -149,28 +173,41 @@ impl Workspace {
     /// answer comes with a later poll (`card_found`).
     fn ask_card(&mut self, id: String, pos: Pos, focus: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.term.card.asks += 1;
-        let pane = id.clone();
+        let (pane, rests) = (id.clone(), self.term.card.rests);
         self.term_call_latest("link_card", &id, "link_at", json!(pos), move |ws, got| {
             let link = got.ok().and_then(|v| serde_json::from_value::<Option<Link>>(v).ok()).flatten();
-            ws.term.card.found = link.map(|l| (pane, pos, l, focus));
+            // a host's answer gets This Mac's checks: a clean address, over the cell asked about
+            let link = link.filter(|l| clean_uri(&l.uri) && (l.start..=l.end).contains(&pos));
+            ws.term.card.found = link.map(|link| Found { pane, pos, link, focus, rests });
         });
         self.open_card(window, cx);
     }
 
-    /// The poll applied a host's answer: open its card, through the window's handle.
-    pub(super) fn card_found(&mut self, cx: &mut Context<Self>) {
-        if self.term.card.found.is_some() {
+    /// Each poll: a host's answer opens its card, and a card whose pane left the screen (closed,
+    /// another tab) closes; both through the window's handle, which the poll doesn't have.
+    pub(super) fn card_poll(&mut self, cx: &mut Context<Self>) {
+        let shown = |pane: &String| self.shown().is_some_and(|(_, ids)| ids.contains(pane));
+        let gone = self.term.card.open.as_ref().is_some_and(|c| !shown(&c.pane));
+        if self.term.card.found.is_some() || gone {
             let (handle, this) = (self.glass.window, cx.entity().downgrade());
             cx.defer(move |cx| {
-                let _ = handle.update(cx, |_, window, cx| this.update(cx, |ws, cx| ws.open_card(window, cx)));
+                let _ = handle.update(cx, |_, window, cx| {
+                    this.update(cx, |ws, cx| {
+                        if gone {
+                            ws.close_card(window, cx);
+                        }
+                        ws.open_card(window, cx)
+                    })
+                });
             });
         }
     }
 
     fn open_card(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((pane, pos, link, focus)) = self.term.card.found.take() else { return };
-        // a hover's answer that came after the mouse moved on, or after another card opened, is dropped
-        if !focus && (self.term.card.open.is_some() || self.term.card.rest.as_ref() != Some(&(pane.clone(), pos))) {
+        let Some(Found { pane, pos, link, focus, rests }) = self.term.card.found.take() else { return };
+        // an answer that came after the mouse moved on or a key, or a hover's after another card
+        // opened, is dropped
+        if rests != self.term.card.rests || (!focus && self.term.card.open.is_some()) {
             return;
         }
         let Some(anchor) = self.card_anchor(&pane, pos, &link) else { return };
@@ -189,7 +226,7 @@ impl Workspace {
     /// began on a row above).
     fn card_anchor(&self, id: &str, pos: Pos, link: &Link) -> Option<gpui::Bounds<Pixels>> {
         let p = self.term.painted.borrow().get(id).copied()?;
-        let row = pos.line.checked_sub(self.composed(id).top)?;
+        let row = pos.line.checked_sub(self.composed(id).top).filter(|r| *r < p.size.0)?;
         let col = if link.start.line == pos.line { link.start.col } else { 0 };
         let origin = p.origin + gpui::point(p.cell.0 * col as f32, p.cell.1 * row as f32);
         Some(gpui::Bounds { origin, size: gpui::size(p.cell.0, p.cell.1) })

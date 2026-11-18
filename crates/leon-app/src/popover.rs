@@ -48,7 +48,7 @@ pub struct Popover {
     highlighted: Option<usize>,
     theme: Theme,
     focus: FocusHandle,
-    /// It chose or was dismissed: it ends once (the blur of its leaving the window comes after).
+    /// It chose or was dismissed: its owner hears one `Chose` or `Dismissed`, whatever follows.
     ended: bool,
     _blur: Subscription,
 }
@@ -70,7 +70,7 @@ impl Popover {
         Popover { anchor, lines, items, highlighted: None, theme, focus, ended: false, _blur: blur }
     }
 
-    /// Take the focus, for the keyboard: the first item is highlighted.
+    /// Take the focus, for the keyboard: the first item is highlighted unless one already is.
     pub fn focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.highlighted = self.highlighted.or((!self.items.is_empty()).then_some(0));
         window.focus(&self.focus);
@@ -117,10 +117,11 @@ impl Popover {
     fn key_down(&mut self, ev: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
         let n = self.items.len();
-        let step = |by: usize, h: Option<usize>| h.map_or(if by == 1 { 0 } else { n - 1 }, |h| (h + by) % n);
         match ev.keystroke.key.as_str() {
             "down" | "up" if n > 0 => {
-                self.highlighted = Some(step(if ev.keystroke.key == "down" { 1 } else { n - 1 }, self.highlighted));
+                // from nothing highlighted, Down starts at the top and Up at the bottom
+                let (by, from) = if ev.keystroke.key == "down" { (1, n - 1) } else { (n - 1, 0) };
+                self.highlighted = Some((self.highlighted.unwrap_or(from) + by) % n);
                 cx.notify();
             }
             "enter" => match self.highlighted {
@@ -162,8 +163,7 @@ impl Render for Popover {
                 .py(px(3.))
                 .rounded(px(4.))
                 .when(on, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
-                // the highlight follows the mouse by notifying this view only, not by a hover style,
-                // which would refresh the whole window (ADR R3)
+                // one highlight for the mouse and the keyboard: state the mouse sets, not a hover style
                 .on_mouse_move(cx.listener(move |p, _, _, cx| {
                     if p.highlighted != Some(i) {
                         p.highlighted = Some(i);

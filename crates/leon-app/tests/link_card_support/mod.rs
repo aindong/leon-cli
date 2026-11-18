@@ -16,8 +16,8 @@ use leon_app::view::Workspace;
 pub const WEB: &str = "https://example.com/page";
 pub const LINKS: &str = "stty -echo; printf 'go https://example.com/page here\\nfile:///etc/hosts\\n'; sleep 100";
 
-/// A tab showing `LINKS`: (block, the middle of the web link, a cell on its row off the link,
-/// the middle of the file link), with links opened into the returned list instead of a browser.
+/// A tab showing `LINKS`: its block, a cell on the web link, a cell on its row off the link, a cell
+/// on the file link, and the links it opened (into a list instead of a browser).
 pub struct Links {
     pub id: String,
     pub web: Point<Pixels>,
@@ -67,7 +67,7 @@ pub fn asks(ws: &Entity<Workspace>, cx: &mut VisualTestContext) -> usize {
     ws.read_with(cx, |ws, _| ws.link_card_asks())
 }
 
-/// Move onto the card's item `id` and click it.
+/// Move onto the element drawn as `sel` (a card's item) and click it.
 pub fn click_item(cx: &mut VisualTestContext, sel: &'static str) {
     let b = at(cx, sel).unwrap_or_else(|| panic!("{sel} drawn"));
     cx.simulate_mouse_move(b.center(), None::<MouseButton>, Modifiers::none());

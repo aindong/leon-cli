@@ -59,7 +59,7 @@ impl Workspace {
 
     /// Whether a press on pane `id` goes to its program: it asked for the mouse, shift isn't
     /// held, and the view shows the live screen.
-    fn reports(&self, id: &str, m: &Modifiers) -> bool {
+    pub(super) fn reports(&self, id: &str, m: &Modifiers) -> bool {
         self.live(id).view.mouse.is_some() && !m.shift && self.view_top(id).is_none()
     }
 
@@ -122,7 +122,6 @@ impl Workspace {
     pub(super) fn mouse_move(&mut self, id: &str, ev: &MouseMoveEvent, cx: &mut Context<Self>) {
         self.term.mouse_at = Some(ev.position);
         self.hover(id, ev.position, ev.modifiers.platform, cx);
-        self.card_rest(id, ev, cx);
         let pressed = ev.pressed_button.and_then(button);
         let hovering = pressed.is_none() && self.live(id).view.mouse == Some(leon_core::mouse::Report::Motion);
         let pv = self.term.panes.entry(id.to_string()).or_default();

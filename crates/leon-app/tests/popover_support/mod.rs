@@ -35,13 +35,23 @@ pub fn open_at(
     anchor: Bounds<Pixels>,
     focused: bool,
 ) -> (Entity<Host>, &mut VisualTestContext) {
+    open_with(cx, anchor, focused, items())
+}
+
+/// `open_at` with these items.
+pub fn open_with(
+    cx: &mut TestAppContext,
+    anchor: Bounds<Pixels>,
+    focused: bool,
+    items: Vec<Item>,
+) -> (Entity<Host>, &mut VisualTestContext) {
     let (host, cx) =
         cx.add_window_view(|_, cx| Host { popover: None, events: Vec::new(), focus: cx.focus_handle(), _sub: None });
     cx.simulate_resize(size(px(800.), px(600.)));
     // GPUI reports focus changes only in the active window (`Window::draw`'s focus event)
     cx.update(|window, _| window.activate_window());
     host.update_in(cx, |host, window, cx| {
-        let p = cx.new(|cx| Popover::new(anchor, vec!["a line of text".into()], items(), DARK, window, cx));
+        let p = cx.new(|cx| Popover::new(anchor, vec!["a line of text".into()], items, DARK, window, cx));
         host._sub = Some(cx.subscribe(&p, |host: &mut Host, _, ev: &PopoverEvent, cx| {
             host.events.push(ev.clone());
             if *ev == PopoverEvent::Dismissed {

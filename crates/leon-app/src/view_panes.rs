@@ -228,11 +228,14 @@ impl Workspace {
             cx.listener(move |ws, ev: &MouseUpEvent, _, cx| ws.mouse_up(&out, ev, cx)),
         );
         let (moved, wheel) = (id.to_string(), id.to_string());
-        d.on_mouse_move(cx.listener(move |ws, ev: &MouseMoveEvent, _, cx| ws.mouse_move(&moved, ev, cx)))
-            .on_scroll_wheel(cx.listener(move |ws, ev: &gpui::ScrollWheelEvent, w, cx| {
-                ws.close_hover_card(w, cx);
-                ws.wheel(&wheel, ev, cx)
-            }))
+        d.on_mouse_move(cx.listener(move |ws, ev: &MouseMoveEvent, w, cx| {
+            ws.card_move(&moved, ev, w, cx);
+            ws.mouse_move(&moved, ev, cx)
+        }))
+        .on_scroll_wheel(cx.listener(move |ws, ev: &gpui::ScrollWheelEvent, w, cx| {
+            ws.close_hover_card(w, cx);
+            ws.wheel(&wheel, ev, cx)
+        }))
     }
 
     /// The pane area's size (w, h): the window less the sidebar and the titlebar row.
@@ -404,7 +407,7 @@ impl Render for Workspace {
             .children(preview)
             // last, so it paints over the panes: GPUI paints children in order
             .children(self.render_overlay(cx).filter(|_| !self.stopped))
-            .children(self.render_card(cx))
+            .children(self.render_card(cx).filter(|_| !self.stopped))
             .child(self.frame_mark())
     }
 }
