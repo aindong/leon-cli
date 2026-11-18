@@ -3,7 +3,7 @@
 
 # leon
 
-[English](../../../README.md) · 简体中文 · 日本語 · 한국어 · Español · [Português (Brasil)](../pt-BR/README.md)
+[English](../../../README.md) · [简体中文](../zh-CN/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · Español · [Português (Brasil)](../pt-BR/README.md)
 
 <p align="center"><img src="../../images/banner.png" alt="leon: mantén tu trabajo a la vista. El icono de la app, un león, junto a un boceto de paneles con un agente trabajando, pruebas terminadas y una revisión bloqueada." width="100%"></p>
 

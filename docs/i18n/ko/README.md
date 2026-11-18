@@ -3,7 +3,7 @@
 
 # leon
 
-[English](../../../README.md) · [简体中文](../zh-CN/README.md) · [日本語](../ja/README.md) · 한국어
+[English](../../../README.md) · [简体中文](../zh-CN/README.md) · [日本語](../ja/README.md) · 한국어 · [Español](../es/README.md) · [Português (Brasil)](../pt-BR/README.md)
 
 <p align="center"><img src="../../images/banner.png" alt="leon: 작업을 늘 눈앞에. 사자 앱 아이콘 옆에 페인 스케치가 있고, 에이전트가 작업 중이며 테스트는 완료되었고 리뷰 하나가 응답 대기 중입니다." width="100%"></p>
 

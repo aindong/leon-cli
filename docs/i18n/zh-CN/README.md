@@ -3,7 +3,7 @@
 
 # leon
 
-[English](../../../README.md) · 简体中文 · [日本語](../ja/README.md) · [한국어](../ko/README.md)
+[English](../../../README.md) · 简体中文 · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Español](../es/README.md) · [Português (Brasil)](../pt-BR/README.md)
 
 <p align="center"><img src="../../images/banner.png" alt="leon：让你的工作始终在视野中。狮子图标旁是一幅窗格草图：一个智能体在工作，测试已完成，一次评审处于阻塞。" width="100%"></p>
 

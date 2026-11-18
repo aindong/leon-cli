@@ -3,7 +3,7 @@
 
 # leon
 
-[English](../../../README.md) · [简体中文](../zh-CN/README.md) · 日本語 · [한국어](../ko/README.md)
+[English](../../../README.md) · [简体中文](../zh-CN/README.md) · 日本語 · [한국어](../ko/README.md) · [Español](../es/README.md) · [Português (Brasil)](../pt-BR/README.md)
 
 <p align="center"><img src="../../images/banner.png" alt="leon: 作業をいつも目の届くところに。ライオンのアプリアイコンと、作業中のエージェント、完了したテスト、対応待ちのレビューが並ぶペインのスケッチ。" width="100%"></p>
 
