@@ -84,7 +84,7 @@ class Renderer:
         b.alpha_composite(self.shadow, (L.vx - self.spad, L.vy - self.spad))
         self.base = b.convert("RGB")
         self.cursor = pointer(int(46 * L.W / 1920) if L.W == 1920 else 40)
-        # no voice-over: the captions tell the story, so they read on a phone (a still 390 px wide)
+        # the captions tell the story (a voice-over is optional), so they read on a phone (a still 390 px wide)
         self.cap_font = font(56 if L.W == 1920 else 40, 640)
         self.small_font = font(38 if L.W == 1920 else 30, 520)
         self.badges = {}
