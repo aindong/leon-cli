@@ -67,8 +67,10 @@ pub struct Last {
     pub state: Status,
     pub kind: Option<Kind>,
     pub at: Instant,
-    /// The program in front of the terminal then, when known: the report holds only while it is.
-    front: Option<String>,
+    /// The terminal's foreground process group then, when known: the report holds only while it is
+    /// still in front. A group, not a name: a program that execs keeps its group, and one that
+    /// quits back to its shell gives way to the shell's.
+    front: Option<i32>,
 }
 
 #[derive(Debug, Default)]
@@ -128,7 +130,7 @@ impl State {
                 b.terminal.hold_for_person();
             }
         }
-        let front = self.block(id).ok().and_then(|(_, b)| b.terminal.reported_foreground());
+        let front = self.block(id).ok().and_then(|(_, b)| b.terminal.foreground_group());
         let last = Last { state: record.state, kind: record.kind, at: Instant::now(), front };
         self.agents.last.insert(id.to_string(), last);
         let Some(w) = self.agents.workers.get(id) else { return };
@@ -157,7 +159,7 @@ impl State {
     /// that quit back to its shell said nothing about the shell.
     pub fn agent_state(&self, id: &str) -> Option<&Last> {
         let last = self.agents.last.get(id)?;
-        let front = self.block(id).ok()?.1.terminal.reported_foreground();
+        let front = self.block(id).ok()?.1.terminal.foreground_group();
         (last.front.is_none() || last.front == front).then_some(last)
     }
 
