@@ -30,6 +30,9 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **Contributing and translations.** A contributor guide, translations of the README and guides in
+  `docs/i18n/`, and CI that skips docs-only changes ([detail](docs/changelog-detail.md#contributing-and-translations)).
+
 ## [0.1.0] - 2026-11-18
 
 The first release of leon, a terminal multiplexer for people who run several terminal programs

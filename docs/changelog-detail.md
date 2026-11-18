@@ -7,6 +7,17 @@ feature here on 2026-11-18 shipped in 0.1.0.
 
 ## Since 0.1.0: the detail
 
+### Contributing and translations
+
+#### Added
+- CONTRIBUTING.md, a Code of Conduct, SECURITY.md, issue forms and a pull request template.
+- Translations in `docs/i18n/<lang>/`, with `scripts/i18n-check.sh` and `scripts/i18n-status.sh`
+  ([docs/i18n/README.md](i18n/README.md)); the README links each language.
+
+#### Changed
+- CI: translations, images and community files alone start no run; English docs alone run only the
+  doc tests, on Linux.
+
 ### Popups
 
 #### Added

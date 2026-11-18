@@ -1,0 +1,62 @@
+name: Bug report
+description: Something in leon doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A security problem goes through private reporting instead (SECURITY.md), never a public issue.
+        Please leave out anything private (logins, host names, home paths, tokens) from the output you paste.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. leon new demo
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: leon version
+      description: The output of `leon --version`.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 15.2 on Apple Silicon / Ubuntu 24.04 x86_64
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Leon.app
+        - the leon command
+        - leon attach
+        - Lua config or scripts
+        - an agent (leon skill)
+        - remote hosts / Tailscale
+        - installing or updating
+  - type: textarea
+    id: status
+    attributes:
+      label: leon server status
+      description: The output of `leon server status`.
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Logs, a screenshot, your config (trimmed), the terminal you used.
