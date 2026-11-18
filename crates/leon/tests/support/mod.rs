@@ -7,6 +7,7 @@ pub mod host;
 pub mod localapi;
 pub mod remote;
 pub mod tailscale;
+pub mod web;
 
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;

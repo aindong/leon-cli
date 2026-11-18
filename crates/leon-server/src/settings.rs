@@ -42,6 +42,8 @@ pub struct Effective {
     pub serve_tailscale_port: u16,
     /// Tagged machines it lets in too, by tag (`tag:ci`).
     pub serve_tailscale_tags: Vec<String>,
+    /// With serve_tailscale on, the tailnet listener also serves the web page.
+    pub serve_web: bool,
 }
 
 /// A theme name for each OS appearance (the same one for both unless init.lua gives two).

@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.12.0**. Every method is marked:
+API version **1.13.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -259,6 +259,7 @@ same facts for the server you run.
 | `login` | string \| null |  | The Tailscale login it lets in: the one this machine was signed in as when serving started. |
 | `reason` | string \| null |  | Why it isn't serving. |
 | `last_refusal` | `Refusal` \| null |  | The last connection turned away. |
+| `web` | [string] | yes | The web page's URLs while serving with `serve_web` on (the MagicDNS name first), else empty. |
 
 **`Refusal`:**
 
@@ -396,12 +397,20 @@ same facts for the server you run.
                 "type": "null"
               }
             ]
+          },
+          "web": {
+            "description": "The web page's URLs while serving with `serve_web` on (the MagicDNS name first), else empty.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
           "state",
           "port",
-          "addresses"
+          "addresses",
+          "web"
         ]
       },
       "Refusal": {
@@ -479,7 +488,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.12.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.13.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -591,6 +600,7 @@ same facts for the server you run.
 | `serve_tailscale` | boolean | yes | The server also listens on this machine's Tailscale addresses, letting in only your own machines (`server.status`'s `tailnet` says how it went). |
 | `serve_tailscale_port` | integer (uint16) | yes | The port it listens on there. |
 | `serve_tailscale_tags` | [string] | yes | Tagged machines it lets in too, by tag (`tag:ci`). |
+| `serve_web` | boolean | yes | With serve_tailscale on, the tailnet listener also serves the web page. |
 
 **`ThemeChoice`:** A theme name for each OS appearance (the same one for both unless init.lua gives two).
 
@@ -711,6 +721,10 @@ same facts for the server you run.
             "items": {
               "type": "string"
             }
+          },
+          "serve_web": {
+            "description": "With serve_tailscale on, the tailnet listener also serves the web page.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -726,7 +740,8 @@ same facts for the server you run.
           "translucency",
           "serve_tailscale",
           "serve_tailscale_port",
-          "serve_tailscale_tags"
+          "serve_tailscale_tags",
+          "serve_web"
         ]
       },
       "ThemeChoice": {

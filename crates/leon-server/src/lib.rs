@@ -16,6 +16,8 @@ pub mod screens;
 pub mod serve;
 pub mod settings;
 pub mod tailnet;
+mod web;
+mod websocket;
 
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -8,6 +8,11 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### leon in the browser
+
+#### Added
+- `serve_web`: a view-only page over the tailnet ([web.md](web.md)); API `1.13.0`.
+
 ### Contributing and translations
 
 #### Added
