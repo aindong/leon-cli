@@ -52,3 +52,34 @@ fn close_refuses_to_lose_uncommitted_or_unpushed_work() {
     o.ok_inside(&s, &boss, &["agent", "close", &w]);
     assert!(!path.exists(), "pushed: removed");
 }
+
+#[test]
+fn a_worktree_deleted_by_hand_still_guards_its_branchs_commits() {
+    let o = Orch::new();
+    let repo = o.repo();
+    let (s, boss) = o.env.session();
+    let agent = o.script("idle-agent", "exec sleep 300");
+    let w = o.ok_inside(
+        &s,
+        &boss,
+        &[
+            "agent",
+            "start",
+            "-c",
+            repo.to_str().unwrap(),
+            "--worktree",
+            "--branch",
+            "gone",
+            agent.to_str().unwrap(),
+            "t",
+        ],
+    );
+    let path = repo.parent().unwrap().join("proj-worktrees/gone");
+    git(&path, &["commit", "-q", "--allow-empty", "-m", "only on the gone branch"]);
+    std::fs::remove_dir_all(&path).unwrap();
+    let out = o.run_inside(&s, &boss, &["agent", "close", &w]);
+    let err = String::from_utf8_lossy(&out.stderr).to_string();
+    assert_eq!(out.status.code(), Some(1), "{err}");
+    assert!(err.contains("only on the gone branch"), "names the commit: {err}");
+    assert!(!git(&repo, &["branch", "--list", "gone"]).trim().is_empty(), "the branch stays");
+}

@@ -36,29 +36,36 @@ pub fn create(dir: &Path, branch: &str) -> Result<Value, Fail> {
     Ok(json!({ "path": p, "branch": branch, "repo": top }))
 }
 
-/// What removing worktree `tree` would lose: uncommitted changes (untracked files too), and
-/// commits on its HEAD or branch that no other branch and no remote holds.
+/// What removing worktree `tree` and its branch would lose: uncommitted changes (untracked files
+/// too; ignored ones, such as build output, go without asking, as with `git worktree remove`), and
+/// commits on its HEAD or its branch that no other branch and no remote holds. The branch is
+/// checked from the repository, so a worktree directory already gone still guards its commits.
 pub fn would_lose(tree: &Value) -> Result<Vec<String>, Fail> {
-    let (path, branch) = (Path::new(tree["path"].as_str().unwrap_or("")), tree["branch"].as_str().unwrap_or(""));
-    if !path.is_dir() {
-        return Ok(vec![]); // gone already: nothing in it to lose
+    let field = |k: &str| tree[k].as_str().unwrap_or("").to_string();
+    let (path, branch, repo) = (PathBuf::from(field("path")), field("branch"), PathBuf::from(field("repo")));
+    let fail = |e: String| Fail::Other(format!("{}: {e}", repo.display()));
+    let mut lost = vec![];
+    let mut heads = vec![];
+    if path.is_dir() {
+        let status = git(&path, &["status", "--porcelain"]).map_err(fail)?;
+        lost.extend(status.lines().map(|l| format!("uncommitted: {}", l.trim())));
+        heads.push(git(&path, &["rev-parse", "HEAD"]).map_err(fail)?.trim().to_string());
     }
-    let fail = |e: String| Fail::Other(format!("{}: {e}", path.display()));
-    let mut lost: Vec<String> = git(path, &["status", "--porcelain"])
-        .map_err(fail)?
-        .lines()
-        .map(|l| format!("uncommitted: {}", l.trim()))
-        .collect();
     let own = format!("refs/heads/{branch}");
-    let refs = git(path, &["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"]).map_err(fail)?;
-    let others: Vec<&str> = refs.lines().filter(|r| *r != own).collect();
-    let mut args = vec!["rev-list", "--oneline", "HEAD"];
+    let refs = git(&repo, &["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"]).map_err(fail)?;
     if refs.lines().any(|r| r == own) {
-        args.push(&own);
+        heads.push(own.clone());
     }
-    args.push("--not");
-    args.extend(&others);
-    lost.extend(git(path, &args).map_err(fail)?.lines().map(|l| format!("not on any other branch or remote: {l}")));
+    if heads.is_empty() {
+        return Ok(lost);
+    }
+    let mut args = vec!["rev-list".to_string(), "--oneline".into()];
+    args.extend(heads);
+    args.push("--not".into());
+    args.extend(refs.lines().filter(|r| *r != own).map(String::from));
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let only = git(&repo, &args).map_err(fail)?;
+    lost.extend(only.lines().map(|l| format!("not on any other branch or remote: {l}")));
     Ok(lost)
 }
 
