@@ -96,7 +96,7 @@ pub struct Settings {
     pub serve_tailscale_port: u16,
     /// Tagged machines let in besides yours: tags such as `tag:ci`.
     pub serve_tailscale_tags: Vec<String>,
-    /// With `serve_tailscale` on, the tailnet listener also serves the web page (docs/cli/web.md).
+    /// With `serve_tailscale` on, the tailnet listener also serves the web page (docs/web.md).
     pub serve_web: bool,
 }
 

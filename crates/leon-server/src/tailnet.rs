@@ -2,11 +2,11 @@
 //! also listens on this machine's Tailscale addresses, and lets a connection in only once the
 //! local tailscaled says it comes from another of the owner's untagged machines (or a tag the
 //! config lists). Nothing is read from a connection before that; a refusal closes it unanswered.
-//! A let-in connection is served by the same code as the Unix socket, or, with `serve_web` on and
-//! when it starts like HTTP, by the web page (`web.rs`).
+//! A let-in connection that starts with `{` is served by the same code as the Unix socket; one that
+//! starts like HTTP by the web page (`web.rs`) with `serve_web` on; anything else is closed.
 
 use std::net::{IpAddr, SocketAddr};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
 use leon_hosts::{direct, localapi, shown_text};
@@ -77,8 +77,6 @@ pub struct Tailnet {
     /// were last logged: each once a `WINDOW` at most.
     strays: Mutex<Option<Instant>>,
     busy: Mutex<Option<Instant>>,
-    /// The token the web page holds: one per server run, made when the page is first served.
-    token: OnceLock<String>,
 }
 
 impl Tailnet {
@@ -187,7 +185,7 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
                 match owner.check(&me) {
                     Err(e) => Err(e),
                     Ok(()) if addrs.is_empty() => Err("this machine has no Tailscale address to serve on".into()),
-                    Ok(()) => Ok((addrs, owner, (serve_web, me.dns.clone()))),
+                    Ok(()) => Ok((addrs, owner, (serve_web, me.dns.clone().filter(|_| serve_web)))),
                 }
             }
         };
@@ -277,10 +275,8 @@ async fn bind(
             }
         }
     }
-    let site = web.0.then(|| {
-        let token = shared.ctx.tailnet.token.get_or_init(crate::web::new_token).clone();
-        Arc::new(Site::new(&at, web.1.as_deref(), port, token))
-    });
+    // a new token each time serving starts: turning serve_web off and on revokes the old one
+    let site = web.0.then(|| Arc::new(Site::new(&at, web.1.as_deref(), port, crate::web::new_token())));
     let urls = site.as_ref().map(|s| s.urls.clone()).unwrap_or_default();
     let accepts = listeners
         .into_iter()

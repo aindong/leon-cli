@@ -1,4 +1,4 @@
-// leon in the browser, view only (docs/cli/web.md): the sessions, the chosen session's tabs, and
+// leon in the browser, view only (docs/web.md): the sessions, the chosen session's tabs, and
 // the chosen tab's panes, live. It is one more client of the socket API, like the app: a copy of
 // the model refetched after each batch of events, and block.watch screens for the panes shown.
 
@@ -13,18 +13,40 @@ const chosen = { session: null, window: null };
 const panes = new Map(); // block id → { el, grid, title }
 let watched = "";
 let refetch = null;
+let burst = null; // when the events waiting for a refetch began
 
 const conn = new Conn(`ws://${location.host}/ws?token=${encodeURIComponent(token)}`, {
   onEvent: () => {
+    // one refetch per burst of events, and at least one every half second while they keep coming
     clearTimeout(refetch);
-    refetch = setTimeout(refresh, 50); // one refetch per burst of events
+    burst ??= Date.now();
+    refetch = setTimeout(() => {
+      burst = null;
+      refresh().catch(failed);
+    }, Date.now() - burst > 500 ? 0 : 50);
   },
   onScreen: (s) => panes.get(s.block_id)?.grid.apply(s),
   onClose: () => {
     note("Disconnected from the server. Reconnecting…");
-    setTimeout(() => location.reload(), 3000); // a new page: a server restarted meanwhile has a new token
+    reconnect(2000);
   },
 });
+
+/** Reload once the server answers again: a new page, since serving again means a new token. */
+function reconnect(wait) {
+  setTimeout(async () => {
+    try {
+      if ((await fetch("/", { cache: "no-store" })).ok) return location.reload();
+    } catch {
+      // still away
+    }
+    reconnect(Math.min(wait * 2, 30000));
+  }, wait);
+}
+
+function failed(e) {
+  note(`Can't reach the server: ${e.message || e}`);
+}
 
 function note(text) {
   $("note").textContent = text;
@@ -32,9 +54,16 @@ function note(text) {
 }
 
 function fromHash() {
-  const [session, window] = decodeURIComponent(location.hash.slice(1)).split("/");
-  chosen.session = session || null;
-  chosen.window = window || null;
+  const decode = (part) => {
+    try {
+      return decodeURIComponent(part || "") || null;
+    } catch {
+      return null; // a hand-edited hash: choose the default
+    }
+  };
+  const [session, window] = location.hash.slice(1).split("/");
+  chosen.session = decode(session);
+  chosen.window = decode(window);
 }
 
 async function start() {
@@ -73,7 +102,7 @@ function choose(session, window) {
   chosen.session = session;
   chosen.window = window;
   history.replaceState(null, "", `#${encodeURIComponent(session)}${window ? "/" + encodeURIComponent(window) : ""}`);
-  refresh();
+  refresh().catch(failed);
 }
 
 function render() {
@@ -138,6 +167,8 @@ function pane(id) {
     panes.set(id, p);
   }
   p.title.textContent = paneName(model.blocks.get(id));
+  p.el.className = "pane"; // a pane moves between a split, a float and a zoom: start clean
+  p.el.style.cssText = "";
   return p;
 }
 
@@ -188,13 +219,15 @@ function renderPanes(win) {
   const key = shown.sort().join(" ");
   if (key !== watched) {
     watched = key;
-    conn.call("block.watch", { block_ids: shown });
+    conn.call("block.watch", { block_ids: shown }).catch(() => {
+      watched = ""; // a block went away meanwhile: the next render asks again
+    });
   }
 }
 
 window.addEventListener("hashchange", () => {
   fromHash();
-  refresh();
+  refresh().catch(failed);
 });
 
-start().catch((e) => note(`Can't reach the server: ${e.message || e}`));
+start().catch(failed);

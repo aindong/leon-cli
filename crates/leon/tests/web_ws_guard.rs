@@ -28,7 +28,8 @@ fn a_missing_or_wrong_token_is_refused() {
     let s = Serving::start(WEB);
     let token = web::token(s.port);
     let own = format!("http://127.0.0.1:{}", s.port);
-    let wrong = format!("{}0", &token[..token.len() - 1]);
+    let last = if token.ends_with('0') { '1' } else { '0' };
+    let wrong = format!("{}{last}", &token[..token.len() - 1]);
     for t in [None, Some(""), Some("x"), Some(&*wrong)] {
         match Ws::open(s.port, Some(&own), t) {
             Ok(_) => panic!("token {t:?} was let in"),

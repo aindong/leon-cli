@@ -8,7 +8,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use leon_core::theme;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -109,8 +108,8 @@ impl Head {
     }
 }
 
-/// Read the head (at most `MOST_HEAD` bytes, `HEAD_TIME`); Err: close at once. The bytes after it
-/// come back too (a WebSocket client may send its first frame right away).
+/// Read the head (at most about `MOST_HEAD` bytes; the caller gives it `HEAD_TIME`); Err: close at
+/// once. The bytes read after it come back too, for the WebSocket that may follow.
 async fn read_head(stream: &mut TcpStream) -> Result<(Option<Head>, Vec<u8>), ()> {
     let mut buf = Vec::new();
     let end = loop {
@@ -141,7 +140,8 @@ fn parse(head: &[u8]) -> Option<Head> {
     let mut headers = Vec::new();
     for l in lines {
         let (k, v) = l.split_once(':')?;
-        if headers.len() >= MOST_HEADERS || k.is_empty() || k.contains(' ') {
+        let token = |b: u8| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b);
+        if headers.len() >= MOST_HEADERS || k.is_empty() || !k.bytes().all(token) {
             return None;
         }
         headers.push((k.to_string(), v.trim().to_string()));
@@ -191,7 +191,9 @@ async fn upgrade(
     head: &Head,
     query: &str,
 ) {
-    if head.one("Origin") != Some(&format!("http://{host}")) {
+    // the Origin's host, normalised as the Host was: a trailing dot on the name is the same page
+    let origin = head.one("Origin").and_then(|o| o.strip_prefix("http://")).and_then(|h| site.own(h));
+    if origin.as_deref() != Some(host) {
         return reply(&mut stream, 403, Some(host), "text/plain", "not from this page").await;
     }
     let token = query.split('&').find_map(|kv| kv.strip_prefix("token=")).unwrap_or("");
@@ -230,9 +232,11 @@ async fn reply(stream: &mut TcpStream, status: u16, host: Option<&str>, kind: &s
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
-        _ => "Misdirected Request",
+        421 => "Misdirected Request",
+        _ => "Error",
     };
-    let ws = host.map(|h| format!(" ws://{h}")).unwrap_or_default();
+    // `'self'` covers the WebSocket too; an IPv6 literal isn't a CSP source, so it relies on that
+    let ws = host.filter(|h| !h.starts_with('[')).map(|h| format!(" ws://{h}")).unwrap_or_default();
     let head = format!(
         "HTTP/1.1 {status} {reason}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\
          Cache-Control: no-store\r\nContent-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; \
@@ -247,10 +251,10 @@ async fn reply(stream: &mut TcpStream, status: u16, host: Option<&str>, kind: &s
     let _ = stream.shutdown().await;
 }
 
-/// leon-dark as CSS variables: the theme `block.watch` resolves screens with unless asked
-/// otherwise, so the page and the screens agree.
+/// The theme `block.watch` resolves screens with unless asked otherwise, as CSS variables, so the
+/// page and the screens agree.
 fn theme_css() -> String {
-    let t = theme::DARK;
+    let t = crate::screens::Palette::theme(None);
     let vars = [
         ("bg", t.bg),
         ("fg", t.fg),

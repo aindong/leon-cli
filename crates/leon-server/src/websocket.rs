@@ -74,7 +74,7 @@ impl Decoder {
                 return Some(Got::Close(1002));
             }
             let so_far = self.msg.as_ref().map_or(0, Vec::len) as u64;
-            if !control && so_far + len > MOST as u64 {
+            if !control && len > MOST as u64 - so_far {
                 return Some(Got::Close(1009)); // before a byte of it is kept
             }
             let len = len as usize;
@@ -132,71 +132,94 @@ fn frame(op: u8, data: &[u8]) -> Vec<u8> {
     f
 }
 
+/// What the reader asks the writer to send.
+enum Ctl {
+    Pong(Vec<u8>),
+    Close(u16),
+}
+
 /// Serve the API over an upgraded connection until either side ends. `rest`: bytes read past the
-/// upgrade's head.
+/// upgrade's head. As on the socket, a client that goes away lets the call being answered finish:
+/// the reader ends the API's input, `serve::connection` returns after that call, and the writer
+/// drains what it wrote (to the client while it reads, else nowhere) so it never blocks on the pipe.
 pub(crate) async fn bridge(stream: TcpStream, rest: Vec<u8>, shared: &Arc<Shared>) {
     let (mut tcp_r, mut tcp_w) = stream.into_split();
     let (ours, theirs) = tokio::io::duplex(PIPE);
     let (api_r, api_w) = tokio::io::split(theirs);
     let (our_r, mut our_w) = tokio::io::split(ours);
-    let (ctl, mut ctls) = mpsc::channel::<Vec<u8>>(4);
-    let inbound = async {
+    let (ctl, mut ctls) = mpsc::channel::<Ctl>(4);
+    let inbound = async move {
         let mut d = Decoder { buf: rest, ..Decoder::default() };
         let mut chunk = vec![0u8; 16 << 10];
-        loop {
+        'read: loop {
             while let Some(got) = d.next() {
                 match got {
                     Got::Text(mut line) => {
                         line.push(b'\n');
                         if our_w.write_all(&line).await.is_err() {
-                            return;
+                            break 'read;
                         }
                     }
                     Got::Ping(p) => {
-                        let _ = ctl.send(frame(0xA, &p)).await;
+                        let _ = ctl.send(Ctl::Pong(p)).await;
                     }
                     Got::Close(code) => {
-                        let _ = ctl.send(frame(0x8, &code.to_be_bytes())).await;
-                        return std::future::pending().await; // the close goes out, then all ends
+                        let _ = ctl.send(Ctl::Close(code)).await;
+                        break 'read;
                     }
                 }
             }
             match tcp_r.read(&mut chunk).await {
-                Ok(0) | Err(_) => return,
+                Ok(0) | Err(_) => break,
                 Ok(n) => d.buf.extend_from_slice(&chunk[..n]),
             }
         }
+        drop((our_w, ctl)); // the API's input ends here
+        std::future::pending::<()>().await // ended by the other two
     };
     let outbound = async {
         let mut lines = BufReader::new(our_r);
         let mut line = Vec::new();
+        let (mut open, mut ctls_open) = (true, true); // `open`: still writing to the client
         loop {
-            tokio::select! {
+            let out = tokio::select! {
                 biased;
-                c = ctls.recv() => {
-                    let Some(c) = c else { return };
-                    let close = c[0] == 0x88;
-                    if tcp_w.write_all(&c).await.is_err() || close {
-                        return;
+                c = ctls.recv(), if ctls_open => match c {
+                    None => {
+                        ctls_open = false;
+                        continue;
                     }
-                }
+                    Some(Ctl::Pong(p)) => frame(0xA, &p),
+                    Some(Ctl::Close(code)) => {
+                        let f = frame(0x8, &code.to_be_bytes());
+                        if open {
+                            let _ = tcp_w.write_all(&f).await;
+                        }
+                        open = false;
+                        continue;
+                    }
+                },
                 n = lines.read_until(b'\n', &mut line) => {
                     if !matches!(n, Ok(n) if n > 0) {
-                        return; // the API side ended
-                    }
-                    line.pop_if(|b| *b == b'\n');
-                    if tcp_w.write_all(&frame(0x1, &line)).await.is_err() {
+                        if open {
+                            let _ = tcp_w.write_all(&frame(0x8, &1000u16.to_be_bytes())).await; // the API side ended
+                        }
                         return;
                     }
+                    line.pop_if(|b| *b == b'\n');
+                    let f = frame(0x1, &line);
                     line.clear();
+                    f
                 }
+            };
+            if open && tcp_w.write_all(&out).await.is_err() {
+                open = false;
             }
         }
     };
     tokio::select! {
-        _ = crate::serve::connection(api_r, api_w, shared) => {}
+        _ = async { tokio::join!(crate::serve::connection(api_r, api_w, shared), outbound) } => {}
         _ = inbound => {}
-        _ = outbound => {}
     }
 }
 
@@ -250,6 +273,11 @@ mod tests {
         let mut head = vec![0x81u8, 0x80 | 127];
         head.extend_from_slice(&(1u64 << 62).to_be_bytes()); // no mask, no payload: never waited for
         assert_eq!(decode(head), Some(Got::Close(1009)));
+        let mut d = Decoder::default();
+        d.buf.extend(client(false, 0x1, b"{"));
+        d.buf.extend([0x80, 0x80 | 127]);
+        d.buf.extend(u64::MAX.to_be_bytes()); // with the part before it, past u64: no overflow
+        assert_eq!(d.next(), Some(Got::Close(1009)));
     }
 
     #[test]

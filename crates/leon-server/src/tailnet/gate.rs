@@ -12,7 +12,8 @@ pub(super) const WINDOW: Duration = Duration::from_secs(60);
 const MOST_ADDRS: usize = 4096;
 /// Connections waiting for a decision, in all and from one address.
 const PENDING: usize = 32;
-const PENDING_PER: usize = 4;
+// a browser opens up to 6 connections to load one page, each decided on its own
+const PENDING_PER: usize = 8;
 
 /// What a decision means for an address's refusal count.
 #[derive(Clone, Copy, PartialEq, Debug)]

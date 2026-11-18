@@ -37,7 +37,7 @@ short name (`http://devbox:7297/`) is refused on purpose; see below.
   could try to reach the server through your machine. It is stopped three ways:
   - every request must name this server (its MagicDNS name or address) as its Host;
   - the WebSocket the page uses must come from the page's own Origin;
-  - it must carry a token that only the page holds (a fresh one each time the server starts),
+  - it must carry a token that only the page holds (a fresh one each time serving starts),
     which another site can't read.
 
   Pages also carry a strict Content-Security-Policy, can't be framed, and load nothing from
@@ -51,7 +51,7 @@ The page is plain HTTP. Tailscale's WireGuard already encrypts and authenticates
 nothing crosses the network in the clear. But browsers treat an `http://` page as not secure,
 and some features need a secure page:
 
-- the clipboard API (copy and paste buttons; ⌘C and ⌘V still work);
+- the clipboard API (copy and paste buttons; selecting text and ⌘C still work);
 - browser notifications.
 
 HTTPS needs a certificate for the machine's name. leon doesn't ask Tailscale for one, because
@@ -62,6 +62,6 @@ that creates a certificate (and publishes the name in public certificate logs).
 - `leon server status` shows no `web` line: `serve_tailscale` or `serve_web` is off, or Tailscale
   isn't running or signed in (the `tailnet` line says why).
 - The page says "Disconnected": the server stopped or restarted, or serving stopped; the page
-  reloads itself and picks up the new token.
+  reloads itself once the server answers again, and picks up the new token.
 - Nothing loads at all: the caller isn't one of your machines (the server log has a `refused`
   line naming the reason), or your tailnet policy blocks the port.

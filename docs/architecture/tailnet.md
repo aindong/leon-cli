@@ -44,8 +44,8 @@ of [the architecture](../architecture.md); the ssh path it sits beside is in [Ho
 - **Limits.** A caller outside the tailnet ranges is closed before any whois and leaves no
   entry. An address with 5 refusals in a minute is closed unasked for the rest of that minute
   (logged once); the count remembers 4096 addresses, and when full a new address is refused
-  unasked. At most 32 connections (4 per address) wait for a decision; more are refused. A failure
-  of tailscaled's own doesn't count against the caller.
+  unasked. At most 32 connections (8 per address: a browser loads a page over 6) wait for a
+  decision; more are refused. A failure of tailscaled's own doesn't count against the caller.
 - **The same protocol.** A connection let in goes to `serve::connection`, the code the Unix socket
   uses (the stream halves are generic), when its first byte is `{`; a capital letter is HTTP, for
   [the web client](web.md) with `serve_web` on, and anything else is closed unanswered. The 1 MiB

@@ -92,7 +92,10 @@ export class Grid {
     const box = this.el.parentElement;
     if (!box || !this.cols || !this.lines) return;
     const r = cellRatio();
-    const size = Math.max(4, Math.min(box.clientWidth / (this.cols * r), box.clientHeight / (this.lines * LINE)));
+    const pad = getComputedStyle(box);
+    const w = box.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+    const h = box.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
+    const size = Math.max(4, Math.min(w / (this.cols * r), h / (this.lines * LINE)));
     this.el.style.setProperty("--fs", `${size}px`);
     this.el.style.setProperty("--cw", `${size * r}px`);
     this.el.style.setProperty("--lh", `${size * LINE}px`);

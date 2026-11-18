@@ -18,8 +18,10 @@ leon's page in a browser, served over the tailnet listener to the owner's own ma
   NDJSON use; each line it writes goes back as one text message. Methods, events, `block.watch`
   screens, the 1 MiB line cap and backpressure are the socket's own. No method is web-only.
 - **HTTP, a small subset** (`web.rs`): `GET` only (else 405), a head of at most 8 KiB read within
-  5 s and 64 headers (else closed), one request per connection (`Connection: close`), paths `/`,
-  `/app.js`, `/conn.js`, `/grid.js`, `/app.css`, `/theme.css` and `/ws` (else 404). The assets are
+  5 s (else closed) and 64 headers with token names (else 400), one request per connection
+  (`Connection: close`), paths `/`, `/app.js`, `/conn.js`, `/grid.js`, `/app.css`, `/theme.css`,
+  `/icon.svg` and `/ws` (else 404). A browser loads a page over up to 6 connections, each admitted
+  on its own, so the listener lets 8 per address wait for a decision. The assets are
   plain JS modules and CSS in `crates/leon-server/web/`, built in with `include_str!`: no build
   step, no node, no framework (a few hundred lines don't pay for one), nothing from a CDN.
   `/theme.css` is leon-dark's colours, the palette `block.watch` resolves screens with by default.
@@ -28,10 +30,11 @@ leon's page in a browser, served over the tailnet listener to the owner's own ma
   status's `Self.DNSName` with the port (case-insensitive, its trailing dot dropped; on port 80
   the port-less forms too). Not the short name: it resolves through search domains a LAN can
   influence. A rebinding page has its own name in `Host`, so it gets 421 and never sees the token.
-- **Origin.** The upgrade's `Origin` must be `http://` + its checked `Host`; missing, `null` or
-  another is 403.
+- **Origin.** The upgrade's `Origin` must be `http://` + its checked `Host`, normalised the same
+  way; missing, `null` or another is 403.
 - **A token in the page, not a cookie.** `GET /` returns the page with a 256-bit token from
-  `/dev/urandom` (one per server run) in `<meta name="leon-token">`, `Cache-Control: no-store`;
+  `/dev/urandom` (a new one each time serving starts, so turning `serve_web` off and on revokes
+  it) in `<meta name="leon-token">`, `Cache-Control: no-store`;
   the page opens `/ws?token=…`, and a missing or wrong token is 403 (compared in constant time,
   never logged). Another site can't read the page (no CORS headers) or frame it. A
   `SameSite=Strict` cookie was the other choice: cookies ignore ports, and the "site" of an IP host
@@ -61,7 +64,8 @@ leon's page in a browser, served over the tailnet listener to the owner's own ma
   split tree, a zoomed pane, visible floats; not drawers yet), a refetch of `session.list`,
   `session.view` and `session.list_blocks` 50 ms after a burst of `session.attach_all` events,
   and `block.watch` for the panes shown. It never resizes a terminal: it scales the font to fit.
-  On a closed connection it reloads, which fetches the token a restarted server made.
+  On a closed connection it asks for `/` with a backoff up to 30 s and reloads once it answers,
+  which fetches the new token.
 
 ## Threat model
 
