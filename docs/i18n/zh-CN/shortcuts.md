@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/shortcuts.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/shortcuts.md commit=a525beb0ae17 -->
 > 本页是译文，以[英文原文](../../shortcuts.md)为准，英文版可能更新。
 
 # 应用快捷键

@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/install.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/install.md commit=a525beb0ae17 -->
 > 本页是译文，以[英文原文](../../install.md)为准，英文版可能更新。
 
 # 从源码构建 leon

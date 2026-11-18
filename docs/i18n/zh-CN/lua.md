@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/lua.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/lua.md commit=a525beb0ae17 -->
 > 本页是译文，以[英文原文](../../lua.md)为准，英文版可能更新。
 
 # Lua：配置与脚本

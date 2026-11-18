@@ -1,4 +1,4 @@
-<!-- i18n: source=docs/remote-hosts.md commit=28ab3cd4a46d -->
+<!-- i18n: source=docs/remote-hosts.md commit=a525beb0ae17 -->
 > 本页是译文，以[英文原文](../../remote-hosts.md)为准，英文版可能更新。
 
 # 远程主机
