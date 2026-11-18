@@ -11,6 +11,8 @@ Leon.app's keys, from the [README](../README.md#app-shortcuts). [lua/keys.md](lu
 | ⌘⌥←, ⌘⌥→, ⌘⌥↑, ⌘⌥↓ | Focus the pane that way |
 | ⌘⇧↩ | Zoom the pane (again to undo) |
 | ⌘W | Close the pane |
+| ⌘⌥W | Close the tab (asks first when a program other than a shell runs in it) |
+| ⌘⌥⇧W | Close the session (asks first the same way) |
 | ⌘⌥F, ⌘⌥⇧F | Float the pane above the others, put it back in the tiles (drag its header to move it, an edge to resize it) |
 | ⌘J | Show or hide the scratch drawer: a shell at the bottom, opened in the focused pane's directory, that keeps running while hidden |
 | ⌘⌃←, ⌘⌃→, ⌘⌃↓ | Dock the pane as a drawer on the left, right or bottom (drag its edge to resize it) |

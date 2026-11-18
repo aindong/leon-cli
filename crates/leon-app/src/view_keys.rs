@@ -11,6 +11,10 @@ impl Workspace {
             return; // nothing to type into: the notice's buttons and ⌘Q are what's left
         }
         self.close_hover_card(window, cx);
+        if self.term.rows.renaming.is_some() {
+            self.rename_key(ev, cx);
+            return cx.stop_propagation();
+        }
         let ks = &match (self.native_key)() {
             Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
             None => ev.keystroke.clone(),
@@ -128,6 +132,9 @@ impl Workspace {
             "client.host.add" => self.ask_host(args, cx),
             "client.theme.change" => self.theme_action(args, cx),
             "client.tab.new" => self.new_tab(&NewTab, window, cx),
+            "client.tab.close" | "session.close" | "client.tab.rename" | "session.rename" => {
+                self.row_action(name, window, cx)
+            }
             "client.tab.next" => self.step_tab(1, cx),
             "client.tab.previous" => self.step_tab(-1, cx),
             "client.tab.goto" => {

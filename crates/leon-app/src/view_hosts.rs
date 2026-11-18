@@ -19,6 +19,11 @@ pub(super) enum Ask {
     HostEndpoint {
         label: String,
     },
+    /// A new name for a tab or a session (view_rows.rs); `name` is the one it has.
+    Rename {
+        row: super::sidebar::rows::RowRef,
+        name: String,
+    },
 }
 
 /// A machine as the sidebar shows it.
@@ -372,6 +377,10 @@ impl Workspace {
             Ask::HostEndpoint { label } => {
                 ("ssh://[user@]host[:port]…", format!("How ssh reaches {label}: ssh://me@devbox.example.com"))
             }
+            Ask::Rename { name, .. } => {
+                let hint = "↩ sets it; empty, it shows its program's title again".to_string();
+                return Some((format!("Rename “{name}” to…"), refused.clone().unwrap_or(hint)));
+            }
         };
         Some((prompt.to_string(), refused.clone().unwrap_or(hint)))
     }
@@ -382,6 +391,10 @@ impl Workspace {
         let Some(p) = self.palette.as_mut() else { return };
         let Some((ask, refused)) = p.ask.as_mut() else { return };
         let typed = p.query.trim().to_string();
+        if let Ask::Rename { row, .. } = ask.clone() {
+            self.palette = None;
+            return self.rename_row(row, typed, cx);
+        }
         let mut list = match leon_hosts::hosts::load() {
             Ok(l) => l,
             Err(e) => {
@@ -390,7 +403,7 @@ impl Workspace {
             }
         };
         match ask.clone() {
-            Ask::Tailnet => {} // a row is picked like an action (palette_key)
+            Ask::Tailnet | Ask::Rename { .. } => {} // a row is picked like an action (palette_key)
             // one in the window but no longer in the file (removed from the CLI) is taken too
             Ask::HostLabel if self.hosts.index_of(&typed).is_some() => {
                 *refused = Some(format!("{} {typed:?} already", leon_hosts::hosts::TAKEN));
