@@ -4,7 +4,7 @@ use super::*;
 
 /// The reader thread's share of a terminal.
 pub(super) struct Reading {
-    pub(super) term: Arc<Mutex<Term<Listener>>>,
+    pub(super) term: Arc<Mutex<Emu>>,
     pub(super) tracker: Arc<Mutex<Tracker>>,
     pub(super) seen: Arc<Mutex<Seen>>,
     pub(super) writer: Writer,
@@ -100,10 +100,9 @@ impl Reading {
                 }
             }
             let fed = {
-                let mut term = lock(&self.term);
-                lock(&self.tracker).feed(&batch, |bytes| {
-                    super::view::feed(&mut term, &mut parser, &mut escapes, bytes, &self.scrolled)
-                })
+                let mut emu = lock(&self.term);
+                lock(&self.tracker)
+                    .feed(&batch, |bytes| super::view::feed(&mut emu, &mut parser, &mut escapes, bytes, &self.scrolled))
             };
             self.x10.store(escapes.x10(), Ordering::SeqCst);
             self.output.fetch_add(batch.len() as u64, Ordering::SeqCst);

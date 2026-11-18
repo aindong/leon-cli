@@ -5,39 +5,72 @@
 use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::index::{Column, Line};
 
+use super::history::PUSHES;
 use super::*;
 use crate::mouse;
 use crate::screen::{self, Frame, Lines, Row};
 use crate::search::{self, Found, Kind, Link, Pos, Query, Selected};
 use crate::theme::Theme;
 
-/// Output is counted this many bytes at a time: a byte pushes at most one line into the
-/// scrollback (short of `CSI n S`), so a slice rarely pushes the whole scrollback's worth, and
-/// finding the newest history row again takes at most a slice's pushes.
+/// Output is counted this many bytes at a time at most (`piece`), and finding the newest history
+/// row again takes at most a piece's pushes.
 const SLICE: usize = 4096;
-/// What the count moves by when a slice's pushes can't be known: past anything a client keeps,
+/// What the count moves by when a piece's pushes can't be known: past anything a client keeps,
 /// so no old number lands on a new line.
-const GAP: usize = SCROLLBACK + MAX_SIZE.0 as usize;
+const GAP: usize = MAX_SCROLLBACK + MAX_SIZE.0 as usize;
 /// The most rows one `lines` call returns.
 pub const MAX_LINES: usize = 1000;
 
-/// Feed output to the emulator, adding the lines it pushed into the scrollback to `scrolled`.
-pub(super) fn feed(
-    term: &mut Term<Listener>,
-    parser: &mut Processor,
-    escapes: &mut Escapes,
-    bytes: &[u8],
-    scrolled: &AtomicUsize,
-) {
-    for slice in bytes.chunks(SLICE) {
+/// Feed output to the emulator, adding the lines it pushed into the scrollback to `scrolled`,
+/// and moving history past alacritty's window into the store (terminal_history.rs).
+pub(super) fn feed(emu: &mut Emu, parser: &mut Processor, escapes: &mut Escapes, bytes: &[u8], scrolled: &AtomicUsize) {
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        let Emu { term, store } = &mut *emu;
+        let primary = !term.mode().contains(TermMode::ALT_SCREEN);
+        store.make_room(term);
+        let before = term.grid().history_size();
+        // what alacritty's window has room for, keeping `PUSHES` for a return from the alternate
+        // screen; there the primary grid is out of sight, and was left with that room
+        let room = if primary { WINDOW - PUSHES - before } else { PUSHES };
+        let (piece, more) = rest.split_at(piece(rest, term.columns(), room));
+        rest = more;
         // a history clear with nothing pinned can't be seen afterwards
-        let clears = escapes.feed(slice);
-        let guess = memchr::memchr_iter(b'\n', slice).count();
-        let pushed = counting(term, guess, |t| parser.advance(t, slice));
-        let pushed = if clears { GAP + term.grid().history_size() } else { pushed };
+        let clears = escapes.feed(piece);
+        let guess = memchr::memchr_iter(b'\n', piece).count();
+        let mut pushed = counting(term, guess, |t| parser.advance(t, piece));
+        let ended_primary = !term.mode().contains(TermMode::ALT_SCREEN);
+        // `ESC c` resets both screens; `CSI 3 J` clears only the one showing
+        if escapes.take_reset() || clears && primary && ended_primary {
+            store.clear();
+        }
+        // pushed past alacritty's window before they were moved (a flood of `CSI n S`): a gap
+        // between the store and alacritty's rows, so the store's numbers can't stay
+        let dropped = primary && ended_primary && pushed < GAP && before + pushed > WINDOW;
+        store.trim(term);
+        let history = emu.history();
+        if clears || dropped {
+            pushed = GAP + history;
+        }
         // never below the history, so the oldest kept line has a number
-        let n = (scrolled.load(Ordering::SeqCst) + pushed).max(term.grid().history_size());
+        let n = (scrolled.load(Ordering::SeqCst) + pushed).max(history);
         scrolled.store(n, Ordering::SeqCst);
+    }
+}
+
+/// How many bytes of `bytes` the next piece takes: at most `SLICE`, and few enough that it can't
+/// push more than `room` rows, so alacritty drops none before it is moved into the store. A row is
+/// pushed by a line feed (LF, VT, FF, `ESC D`, `ESC E`) or by text wrapping past the last column;
+/// only `CSI n S` and a delete-line at the top push more, which `feed` notices.
+fn piece(bytes: &[u8], cols: usize, room: usize) -> usize {
+    let half = room.saturating_sub(1) / 2;
+    let most = bytes.len().min(SLICE).min(cols * half);
+    let bytes = &bytes[..most];
+    let escapes = memchr::memchr_iter(0x1b, bytes).filter(|&i| matches!(bytes.get(i + 1), None | Some(b'D' | b'E')));
+    // past half the room the piece ends, so wraps (at most one a `cols` bytes) have the rest
+    match escapes.clone().nth(half) {
+        Some(at) => at,
+        None => memchr::memchr3_iter(b'\n', 0x0b, 0x0c, bytes).nth(half - escapes.count()).unwrap_or(most).max(1),
     }
 }
 
@@ -49,6 +82,8 @@ pub(super) fn feed(
 #[derive(Debug, Default)]
 pub struct Escapes {
     x10: bool,
+    /// An `ESC c` was seen since `take_reset`.
+    reset: bool,
     state: Scan,
     params: Vec<u8>,
 }
@@ -70,6 +105,11 @@ impl Escapes {
     /// Whether the program has X10 mouse reporting (`?9`) on.
     pub fn x10(&self) -> bool {
         self.x10
+    }
+
+    /// Whether an `ESC c` (a reset of both screens) was seen since the last call.
+    pub fn take_reset(&mut self) -> bool {
+        std::mem::take(&mut self.reset)
     }
 
     /// Follow `bytes`; true when a history clear ended in them.
@@ -101,7 +141,7 @@ impl Escapes {
             (_, 0x1b) => Scan::Esc,
             (Scan::Esc, b'[') => Scan::Csi,
             (Scan::Esc, b'c') => {
-                (self.x10, cleared) = (false, true); // RIS
+                (self.x10, cleared, self.reset) = (false, true, true); // RIS
                 Scan::Text
             }
             (Scan::Csi, b'3') => Scan::Three,
@@ -156,11 +196,11 @@ fn counting(term: &mut Term<Listener>, guess: usize, f: impl FnOnce(&mut Term<Li
         return if primary { GAP } else { 0 };
     }
     let g = term.grid_mut();
-    let (overflowed, after) = (g.display_offset() >= SCROLLBACK, g.history_size());
+    let (overflowed, after) = (g.display_offset() >= WINDOW, g.history_size());
     g.scroll_display(Scroll::Bottom);
     match anchor {
         _ if !primary || overflowed => GAP + after, // a switch hid what was pushed, or it overflowed
-        None if after < SCROLLBACK => after,        // filled from empty
+        None if after < WINDOW => after,            // filled from empty
         None => GAP,
         Some(a) => {
             let g = term.grid();
@@ -181,10 +221,12 @@ impl Terminal {
     /// The screen a client paints, with its line numbering and mouse modes.
     pub fn frame(&self, theme: &Theme) -> Frame {
         // only the copy under the lock: the parse thread waits for that, not for the spans
-        let (shot, scrolled, x10) =
-            self.with_term(|term| (screen::Shot::of(term), self.scrolled(), self.x10.load(Ordering::SeqCst)));
+        let (shot, scrolled, history, x10) = {
+            let emu = lock(&self.term);
+            (screen::Shot::of(&emu.term), self.scrolled(), emu.history(), self.x10.load(Ordering::SeqCst))
+        };
         let mut f = screen::build(&shot, theme);
-        f.view.scrolled = scrolled;
+        (f.view.scrolled, f.view.history) = (scrolled, history);
         f.view.mouse = mouse::report(shot.mode, x10);
         f
     }
@@ -192,17 +234,30 @@ impl Terminal {
     /// Rows `from..from + count` by absolute number (at most `MAX_LINES`), history and screen;
     /// lines not kept are left out.
     pub fn lines(&self, from: usize, count: usize, theme: &Theme) -> Lines {
-        self.with_term(|term| {
-            let scrolled = self.scrolled();
-            let start = (from as i128 - scrolled as i128).clamp(i32::MIN as i128, i32::MAX as i128) as i32;
-            let rows = screen::grid_rows(term, theme, start, count.min(MAX_LINES));
-            let rows = rows.into_iter().map(|(l, spans, backgrounds)| Row {
-                line: (scrolled as i64 + l as i64) as usize,
-                spans,
-                backgrounds,
-            });
-            Lines { scrolled, history: term.grid().history_size(), rows: rows.collect() }
-        })
+        let emu = lock(&self.term);
+        let (scrolled, history, stored) = (self.scrolled(), emu.history(), emu.stored());
+        let end = from.saturating_add(count.min(MAX_LINES));
+        // the store's rows come first, then alacritty's history and screen
+        let first = scrolled.saturating_sub(history);
+        let mut rows: Vec<Row> = (from.max(first)..end.min(first + stored))
+            .map(|line| {
+                let cells = emu.store.cells(line - first);
+                let cols = emu.columns();
+                let (mut spans, backgrounds) = screen::row_spans(cells.iter().take(cols), emu.colors(), theme);
+                // a stored row isn't re-wrapped: what a narrower pane can't show is cut
+                spans.retain(|s| s.col + s.cells <= cols);
+                Row { line, spans, backgrounds }
+            })
+            .collect();
+        let from = from.max(first + stored);
+        let start = (from as i128 - scrolled as i128).clamp(i32::MIN as i128, i32::MAX as i128) as i32;
+        let grid = screen::grid_rows(&emu.term, theme, start, end.saturating_sub(from));
+        rows.extend(grid.into_iter().map(|(l, spans, backgrounds)| Row {
+            line: (scrolled as i64 + l as i64) as usize,
+            spans,
+            backgrounds,
+        }));
+        Lines { scrolled, history, rows }
     }
 
     pub fn find(&self, q: &Query) -> Result<Found, String> {
@@ -210,7 +265,7 @@ impl Terminal {
     }
 
     pub fn selection(&self, kind: Kind, anchor: Pos, head: Pos, text: bool) -> Option<Selected> {
-        search::select(&mut lock(&self.term), self.scrolled(), kind, anchor, head, text)
+        search::select(&mut lock(&self.term).term, self.scrolled(), kind, anchor, head, text)
     }
 
     pub fn link_at(&self, at: Pos) -> Option<Link> {
