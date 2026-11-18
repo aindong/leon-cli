@@ -1,4 +1,4 @@
-# Translations
+# Translations (CI proof 1)
 
 leon's README and its everyday guides are translated here, one folder per language. The English
 pages are the reference: a translation may lag behind them, and when the two disagree, the English
