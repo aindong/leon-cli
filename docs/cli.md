@@ -201,6 +201,7 @@ sends one only while the app is in the background, and only when the block repor
 ([the OSC 7501 format](agents.md#the-osc-7501-format)).
 
 - `--state working|blocked|done|error`: the state (default `done`).
+- `--kind permission|question|auth`: what a `blocked` program waits for (with `--state blocked`).
 - `--title T`, `--body B`: one line each (at most 192 and 2048 bytes). Text OSC 7501 would drop
   (controls, line breaks, invisible characters) is refused (exit 1), and nothing is recorded.
 
@@ -273,4 +274,4 @@ Updates leon to the newest release; `--check` only reports (exit 10): [updates.m
 
 ## Agents
 
-`leon skill` (show, setup, status, remove), `leon float`, `leon toggle` and `leon dock` are in [cli/agents.md](cli/agents.md).
+`leon skill` (show, setup, status, remove), `leon agent`, `leon inbox`, `leon float`, `leon toggle` and `leon dock` are in [cli/agents.md](cli/agents.md).

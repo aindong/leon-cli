@@ -8,6 +8,8 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
+use leon_core::process_tree::process;
+
 use super::Agent;
 use crate::client::Client;
 
@@ -36,33 +38,42 @@ fn command(agent: Agent, input: &Value) -> Option<Vec<String>> {
 }
 
 pub fn record(agent: Agent) {
-    let var = |n| std::env::var(n).ok().filter(|v| !v.is_empty());
-    let Some(block) = var("LEON_BLOCK") else { return };
-    let Some(command) = stdin_json().and_then(|v| command(agent, &v)) else { return };
+    let Some(command) =
+        std::env::var_os("LEON_BLOCK").and_then(|_| stdin_json(MAX_INPUT)).and_then(|v| command(agent, &v))
+    else {
+        return;
+    };
     if !interactive() || (agent == Agent::Claude && print_mode()) {
         return;
     }
-    let socket = var("LEON_SERVER").map_or_else(leon_core::paths::socket_path, PathBuf::from);
-    let Ok(mut c) = Client::connect(&socket) else { return };
-    if c.set_timeout(Some(SERVER_WAIT)).is_err() {
-        return;
-    }
-    let Some(session) = crate::commands::own_session(&mut c) else { return };
+    let Some((mut c, session, block)) = own_block() else { return };
     let args = json!({ "command": command });
     let params =
         json!({ "session_id": session, "block_id": block, "method": "dev.leon.terminal.set_resume", "args": args });
     let _ = c.call("block.method", params);
 }
 
+/// A client of the server this terminal belongs to, with the session and block it is in; None
+/// outside leon or when the server doesn't answer within `SERVER_WAIT`. Never starts a server.
+pub(super) fn own_block() -> Option<(Client, String, String)> {
+    let var = |n| std::env::var(n).ok().filter(|v| !v.is_empty());
+    let block = var("LEON_BLOCK")?;
+    let socket = var("LEON_SERVER").map_or_else(leon_core::paths::socket_path, PathBuf::from);
+    let mut c = Client::connect(&socket).ok()?;
+    c.set_timeout(Some(SERVER_WAIT)).ok()?;
+    let session = crate::commands::own_session(&mut c)?;
+    Some((c, session, block))
+}
+
 /// The hook's stdin as JSON, read on a thread so an agent that never closes it can't hold us.
-fn stdin_json() -> Option<Value> {
+pub(super) fn stdin_json(max: u64) -> Option<Value> {
     if std::io::stdin().is_terminal() {
         return None;
     }
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let mut bytes = Vec::new();
-        let read = std::io::stdin().take(MAX_INPUT).read_to_end(&mut bytes);
+        let read = std::io::stdin().take(max).read_to_end(&mut bytes);
         let _ = tx.send(read.ok().map(|_| bytes));
     });
     serde_json::from_slice(&rx.recv_timeout(STDIN_WAIT).ok()??).ok()
@@ -72,7 +83,7 @@ fn stdin_json() -> Option<Value> {
 /// is the foreground process group of its terminal. Claude Code runs a hook's shell in a session of
 /// its own, under the interactive `claude`; an agent started by another agent's tool (`claude -p`
 /// from a Bash tool) has no terminal, so it can't replace the interactive session's command.
-fn interactive() -> bool {
+pub(super) fn interactive() -> bool {
     // SAFETY: getpid has no preconditions.
     let mut pid = unsafe { libc::getpid() };
     for _ in 0..3 {
@@ -88,7 +99,7 @@ fn interactive() -> bool {
 /// Whether this is Claude Code's print mode (`claude -p`, `--print`): a one-shot run, with nothing
 /// to resume. Read from the argv of the hook, its parent and its grandparent (the agent, under the
 /// hook's shell), not from a program name: an npm install runs as `node …/claude -p`.
-fn print_mode() -> bool {
+pub(super) fn print_mode() -> bool {
     // SAFETY: getpid has no preconditions.
     let mut pid = unsafe { libc::getpid() };
     for _ in 0..3 {
@@ -109,39 +120,6 @@ fn print_flag(argv: &[String]) -> bool {
     let short =
         |a: &str| a.strip_prefix('-').is_some_and(|f| f.contains('p') && f.chars().all(|c| c.is_ascii_alphabetic()));
     argv.iter().skip(1).take_while(|a| *a != "--").any(|a| short(a) || a == "--print" || a.starts_with("--print="))
-}
-
-struct Process {
-    ppid: i32,
-    pgid: i32,
-    /// The foreground process group of its terminal; 0 or less without one.
-    tpgid: i32,
-}
-
-#[cfg(target_os = "macos")]
-fn process(pid: i32) -> Option<Process> {
-    let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
-    // SAFETY: proc_pidinfo writes at most `size` bytes into our zeroed struct.
-    let info = unsafe {
-        let mut info: libc::proc_bsdinfo = std::mem::zeroed();
-        let ptr = &mut info as *mut libc::proc_bsdinfo as *mut libc::c_void;
-        (libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 0, ptr, size) == size).then_some(info)?
-    };
-    Some(Process { ppid: info.pbi_ppid as i32, pgid: info.pbi_pgid as i32, tpgid: info.e_tpgid as i32 })
-}
-
-#[cfg(target_os = "linux")]
-fn process(pid: i32) -> Option<Process> {
-    // `pid (comm) state ppid pgrp session tty_nr tpgid …`; comm may hold spaces and parens.
-    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    let f: Vec<i32> =
-        stat[stat.rfind(')')? + 2..].split(' ').skip(1).take(5).map(|n| n.parse().ok()).collect::<Option<_>>()?;
-    Some(Process { ppid: f[0], pgid: f[1], tpgid: f[4] })
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn process(_pid: i32) -> Option<Process> {
-    None
 }
 
 /// A process's argv: `KERN_PROCARGS2` is argc, the exec path, NUL padding, then the arguments.

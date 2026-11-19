@@ -188,3 +188,6 @@ machines are in [Hosts](hosts.md). Part of [the architecture](../architecture.md
   program sets a new one; the title is cleaned again on load, since it goes on screen. Versions 1
   to 3 still load without titles; an older leon refuses version 4 as "saved by a newer leon" and
   moves the file aside.
+- **Agent links.** Version 5 adds each worker block's link to its orchestrator (`worker`) and each
+  orchestrator's unread reports (`inbox`), at most 1024 reports in all, so the file stays far
+  below its size limit; reports with control characters are dropped on load.

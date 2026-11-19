@@ -3296,7 +3296,7 @@ checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
 
 [[package]]
 name = "leon"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "alacritty_terminal",
  "clap",
@@ -3320,7 +3320,7 @@ dependencies = [
 
 [[package]]
 name = "leon-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "alacritty_terminal",
  "block2",
@@ -3341,7 +3341,7 @@ dependencies = [
 
 [[package]]
 name = "leon-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "alacritty_terminal",
  "base64",
@@ -3361,7 +3361,7 @@ dependencies = [
 
 [[package]]
 name = "leon-hosts"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "leon-core",
  "libc",
@@ -3372,7 +3372,7 @@ dependencies = [
 
 [[package]]
 name = "leon-lua"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "leon-core",
  "libc",
@@ -3383,7 +3383,7 @@ dependencies = [
 
 [[package]]
 name = "leon-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "leon-core",
  "leon-hosts",
@@ -3398,7 +3398,7 @@ dependencies = [
 
 [[package]]
 name = "leon-update"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "flate2",
  "libc",

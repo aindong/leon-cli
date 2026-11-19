@@ -21,7 +21,40 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   leaves the link and the card, on any key, and on scroll.
 - `leon.set("link_card", false)` turns the card off (a toggle in Settings, Terminal).
   `server.settings` reports `link_card`, a new result field on a stable method, so `api_version`
-  goes from `1.12.0` to `1.13.0`.
+  goes from `1.13.0` to `1.14.0`.
+
+### Agents orchestrating agents
+
+#### Added
+- `leon agent start AGENT TASK` starts an agent (`claude`, `codex`, or any program that takes a
+  prompt as its last argument) in a new tab, or a pane with `--split DIR`, with the task (text,
+  `--file`, or `-` for stdin) and a paragraph on how to report as its first prompt; the caller's
+  block is its parent. Workers can start workers of their own. `leon agent ls` lists your workers,
+  `leon agent tell W TEXT` types an answer once a worker's turn has ended, and `leon inbox` reads
+  their reports ([agents.md](agents.md#orchestrate-other-agents)).
+- `leon skill setup` installs status hooks beside the session-start one: a prompt sets the block
+  `working`, a permission prompt `blocked`/`permission` with what it asks, Claude Code's questions
+  `blocked`/`question`, the end of a turn `done` with its last message, Codex's interrupt `idle`.
+  Run `leon skill setup` again to get them; every agent pane then shows its state.
+- leon types "You have N leon messages. Run leon inbox to read them." into an orchestrator's
+  prompt once the program in front of its pane reports its turn ended and nobody typed there for
+  3 s: one notice for every report that came meanwhile, never into a shell.
+- `leon notify --kind permission|question|auth`; `leon skill show orchestration`.
+- `leon agent start --worktree [--branch NAME]` gives a worker a git worktree and branch of its own
+  beside the checkout, and `leon agent close W [--force]` closes it and removes both, refusing while
+  they hold work that isn't committed and pushed (ignored files and a lock count too).
+- API (experimental): `agent.link`, `agent.list`, `agent.inbox`, with a worker's `worktree`;
+  `dev.leon.terminal.report_status` takes `kind`. `api_version` goes from `1.12.0` to `1.13.0`.
+
+#### Changed
+- A block whose program reports `blocked`/`permission` is held for a person: until a person's
+  keys reach it, no program running inside a leon terminal can type into it, change its status from
+  outside it, or run config actions or reloads (error `permission_pending`). The app, and
+  `leon attach` in a terminal app, type into it as before.
+- The state file is version 5: it keeps each worker's link and worktree, and up to 1024 unread
+  reports.
+- The guide says when not to use leon, documents `-H`, what to do on exit 4, and looking before
+  repeating a `send`.
 
 ### Contributing and translations
 

@@ -32,6 +32,8 @@ pub use foreground::owned_process_name;
 #[path = "terminal_process.rs"]
 mod process;
 use process::{reap, wait_exit, Registered, Started};
+#[path = "terminal_input.rs"]
+mod input;
 #[path = "terminal_reading.rs"]
 mod reading;
 #[path = "terminal_start.rs"]
@@ -202,6 +204,10 @@ pub struct Terminal {
     scrolled: Arc<AtomicUsize>,
     /// The program set X10 mouse mode (`?9`), which alacritty doesn't track.
     x10: Arc<AtomicBool>,
+    /// When input was last queued (`write`): leon's typed notices wait for a quiet pane.
+    last_input: Mutex<Option<std::time::Instant>>,
+    /// Its program reported a permission prompt, and no person typed here since (`hold_for_person`).
+    held: AtomicBool,
 }
 
 impl std::fmt::Debug for Terminal {
@@ -354,6 +360,8 @@ impl Terminal {
             resume: Mutex::default(),
             scrolled,
             x10,
+            last_input: Mutex::new(None),
+            held: AtomicBool::new(false),
         })
     }
 
@@ -364,28 +372,6 @@ impl Terminal {
     /// How many bytes of output the emulator has parsed.
     pub fn output_bytes(&self) -> u64 {
         self.output.load(Ordering::SeqCst)
-    }
-
-    /// Queue input for the program; never blocks.
-    pub fn write(&self, data: &[u8]) -> io::Result<()> {
-        self.writer.input(data.to_vec())
-    }
-
-    /// Whether the program asked for bracketed paste (a line editor does while it reads a line).
-    pub fn bracketed_paste(&self) -> bool {
-        lock(&self.term).mode().contains(TermMode::BRACKETED_PASTE)
-    }
-
-    /// Paste `text` the way the program asked for it now (`keys::paste_bytes`).
-    pub fn paste(&self, text: &str) -> io::Result<()> {
-        self.write(&crate::keys::paste_bytes(text, self.bracketed_paste()))
-    }
-
-    /// Press one key given in binding syntax (`enter`, `ctrl+c`, `up`).
-    pub fn key(&self, key: &str) -> Result<(), String> {
-        let app_cursor = lock(&self.term).mode().contains(TermMode::APP_CURSOR);
-        let bytes = crate::keys::encode(key, app_cursor)?;
-        self.write(&bytes).map_err(|e| e.to_string())
     }
 
     /// Scrollback and screen as text, oldest line first. `trim` drops trailing spaces and blank lines.
