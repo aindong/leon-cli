@@ -15,7 +15,8 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   translation, with search, a language switcher and light and dark; What's new, a page for each
   release from its changelog section; and a demo page for the videos in the `media` pre-release.
 - `.github/workflows/site.yml` deploys it from the latest release's tag after each release, or by
-  hand; `website/build.sh` builds it, and CI builds it strictly on every change
+  hand; `website/build.sh` builds it, and CI builds it strictly on every change but one to
+  translations, images or `brand/` alone (they start no run)
   ([releases.md](releases.md#the-website)).
 
 ### HTTPS for the browser page

@@ -35,11 +35,10 @@ FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 # strips these where the site would not, so the build refuses them in a page's HTML (where code is
 # escaped text, so the docs' examples pass): a script or frame tag, an on* handler in a tag, or a
 # script URL in an attribute
-UNSAFE = re.compile(
-    r"<(?:script|iframe|object|embed|frame)\b|<[a-z][^>]*\son[a-z]+\s*=|"
-    r"<[a-z][^>]*=\s*[\"']?\s*(?:javascript|vbscript|data:text/html)",
-    re.I,
-)
+UNSAFE = re.compile(r"<(?:script|iframe|object|embed|frame)\b|<[a-z][^>]*\son[a-z]+\s*=", re.I)
+# an attribute's value in a tag, which a browser reads after decoding its character references
+ATTR = re.compile(r"""<[a-z][^>]*>""", re.I)
+VALUE = re.compile(r"""=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""")
 # the files in docs/ the site serves: pages and pictures
 SERVED = (".md", ".png", ".gif", ".jpg", ".jpeg", ".webp")
 
@@ -262,10 +261,25 @@ def on_page_markdown(markdown, page, config, files):
     return rewrite(markdown, state["context"].get(uri, uri), uri, state["staged"], state["root"], ref, state["urls"])
 
 
+def script_url(html):
+    """The first attribute value in `html`'s tags that a browser would run as a script URL."""
+    import html as entities
+
+    for tag in ATTR.findall(html):
+        for m in VALUE.finditer(tag):
+            value = entities.unescape(m[1] or m[2] or m[3] or "")
+            # browsers drop whitespace and control characters in a URL's scheme
+            scheme = re.sub(r"[\x00-\x20]", "", value).lower()
+            if scheme.startswith(("javascript:", "vbscript:", "data:text/html")):
+                return value
+    return None
+
+
 def on_page_content(html, page, config, files):
-    bad = UNSAFE.search(html)
+    bad = UNSAFE.search(html) or script_url(html)
     if bad:
-        raise PluginError(f"{page.file.src_uri}: {bad[0][:60]!r} would run on the website; leave scripts and handlers out of the docs")
+        bad = bad if isinstance(bad, str) else bad[0]
+        raise PluginError(f"{page.file.src_uri}: {bad[:60]!r} would run on the website; leave scripts and handlers out of the docs")
     return html
 
 
