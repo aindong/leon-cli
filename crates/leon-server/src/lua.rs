@@ -23,6 +23,7 @@ use serde_json::{json, Value};
 use tokio::runtime::Handle;
 use tokio::sync::{oneshot, RwLock};
 
+use crate::focus_guard;
 use crate::methods::NoParams;
 use crate::{Ctx, Later, Registry};
 
@@ -49,8 +50,8 @@ pub struct Loaded {
 
 pub type Shared = Arc<RwLock<Loaded>>;
 
-/// A job, and whether it runs for a person's own focus move (focus_guard.rs).
-type Jobs = mpsc::Sender<(bool, Job)>;
+/// A job, and who it runs for, when a request asked for it (focus_guard.rs).
+type Jobs = mpsc::Sender<(Option<focus_guard::Caller>, Job)>;
 
 enum Job {
     Action { name: String, args: Value, ctx: CallCtx, deadline: Instant, reply: oneshot::Sender<Result<Value, String>> },
@@ -99,10 +100,13 @@ async fn load(ctx: &Arc<Ctx>, path: PathBuf) -> Result<(leon_lua::Config, Option
         match Runtime::load(&path, Box::new(host)) {
             Ok((rt, cfg)) => {
                 let _ = loaded.send(Ok(cfg));
-                for (moves, job) in queue {
+                for (caller, job) in queue {
                     // A panicking job drops its reply (the caller gets "gone"); the thread lives on.
                     let job = std::panic::AssertUnwindSafe(|| run(&rt, job));
-                    let _ = crate::focus_guard::within(moves, || std::panic::catch_unwind(job));
+                    let _ = match caller {
+                        Some(c) => focus_guard::within(c, || std::panic::catch_unwind(job)),
+                        None => std::panic::catch_unwind(job),
+                    };
                 }
             }
             Err(e) => drop(loaded.send(Err(e.to_string()))),
@@ -207,7 +211,7 @@ async fn ask<T: Send + 'static>(
 ) -> Result<T, ApiError> {
     let (tx, rx) = oneshot::channel();
     let gone = || ApiError::new(503, "unavailable", "the config's Lua state is gone; run `leon config reload`");
-    jobs.ok_or_else(gone)?.send((crate::focus_guard::person_moves(), job(tx))).map_err(|_| gone())?;
+    jobs.ok_or_else(gone)?.send((focus_guard::caller(), job(tx))).map_err(|_| gone())?;
     match tokio::time::timeout_at((deadline + Duration::from_secs(1)).into(), rx).await {
         Ok(Ok(Ok(v))) => Ok(v),
         Ok(Ok(Err(msg))) if msg == leon_lua::TIMED_OUT => Err(timed_out(what)),

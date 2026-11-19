@@ -83,27 +83,29 @@ pub fn process(_pid: i32) -> Option<Process> {
     None
 }
 
-/// The process groups of every process in session `sid` (getsid), each once: what lives on of a
-/// terminal whose program, the session's leader, is gone. Empty when none does, or on a system
-/// with no way to list processes.
-pub fn session_groups(sid: i32) -> Vec<i32> {
-    let mut groups: Vec<i32> = all_pids()
-        .into_iter()
-        // SAFETY: getsid and getpgid have no preconditions; -1 for a pid that is gone.
-        .filter(|&p| p > 0 && unsafe { libc::getsid(p) } == sid)
-        .map(|p| unsafe { libc::getpgid(p) })
-        .filter(|&g| g > 0)
-        .collect();
-    groups.sort_unstable();
-    groups.dedup();
-    groups
+/// Whether `pid` runs in a session that one of `ended` led and whose leader is gone: what lives on
+/// of a closed terminal (a job, whatever process group it moves to). Linux and macOS don't hand
+/// out a pid still in use as a session or group id, so a live process with that pid leads a new
+/// session, not this one. (A closed terminal's program that outlives the close is still the
+/// server's child: `inside` finds it by its parent.)
+pub fn in_ended_session(pid: i32, ended: &[i32]) -> bool {
+    // SAFETY: getsid has no preconditions; -1 for a pid that is gone.
+    let session = unsafe { libc::getsid(pid) };
+    session > 0 && ended.contains(&session) && !lives(session)
 }
 
-/// Whether any process is left in process group `pgid`.
-pub fn group_lives(pgid: i32) -> bool {
-    // SAFETY: signal 0 only checks that the group exists; EPERM means it lives but isn't ours.
-    let sent = unsafe { libc::kill(-pgid, 0) } == 0;
+/// Whether process `pid` exists.
+fn lives(pid: i32) -> bool {
+    // SAFETY: signal 0 only checks; EPERM means it lives but isn't ours.
+    let sent = unsafe { libc::kill(pid, 0) } == 0;
     sent || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+/// The sessions any process is in (getsid of each), or None on a system with no way to list them.
+pub fn live_sessions() -> Option<std::collections::HashSet<i32>> {
+    let pids = all_pids();
+    // SAFETY: getsid has no preconditions; -1 for a pid that is gone.
+    (!pids.is_empty()).then(|| pids.into_iter().map(|p| unsafe { libc::getsid(p) }).filter(|&s| s > 0).collect())
 }
 
 #[cfg(target_os = "macos")]
@@ -116,7 +118,11 @@ fn all_pids() -> Vec<i32> {
     let mut pids = vec![0i32; n as usize + 64];
     let bytes = (pids.len() * std::mem::size_of::<i32>()) as libc::c_int;
     let got = unsafe { libc::proc_listallpids(pids.as_mut_ptr() as *mut libc::c_void, bytes) };
-    pids.truncate(got.max(0) as usize);
+    // a full buffer may have missed some: no list, rather than one short of a live session
+    if got <= 0 || got as usize >= pids.len() {
+        return vec![];
+    }
+    pids.truncate(got as usize);
     pids
 }
 
@@ -132,12 +138,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn our_own_session_lists_our_group() {
-        // SAFETY: getsid(0) and getpgid(0) ask about this process.
-        let (sid, pgid) = unsafe { (libc::getsid(0), libc::getpgid(0)) };
-        let groups = session_groups(sid);
-        assert!(groups.contains(&pgid), "session {sid}: {groups:?} has our group {pgid}");
-        assert!(group_lives(pgid));
+    fn our_own_session_is_live_and_not_ended() {
+        // SAFETY: getsid(0) asks about this process.
+        let sid = unsafe { libc::getsid(0) };
+        assert!(live_sessions().is_some_and(|l| l.contains(&sid)), "session {sid}");
+        // its leader lives (or it is ours), so it hasn't ended
+        assert!(!in_ended_session(std::process::id() as i32, &[sid]) || !lives(sid));
+        assert!(!in_ended_session(std::process::id() as i32, &[]));
     }
 
     #[test]

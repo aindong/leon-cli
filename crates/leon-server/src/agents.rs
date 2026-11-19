@@ -237,52 +237,47 @@ pub enum Peer {
 }
 
 /// Whether `peer` is a person: another machine, or a local client outside every leon terminal
-/// (`roots`: `Gone::roots`).
-fn is_person(peer: Peer, roots: &[i32]) -> bool {
+/// (`programs`, the terminals' programs now) and outside what lives on of a closed one (`Gone`).
+fn is_person(peer: Peer, programs: &[i32], ended: &[i32]) -> bool {
+    use leon_core::process_tree::{in_ended_session, inside};
     match peer {
         Peer::Remote => true,
         Peer::Unknown => false,
-        Peer::Process(p) => leon_core::process_tree::inside(p, roots) == Some(false),
+        Peer::Process(p) => inside(p, programs) == Some(false) && !in_ended_session(p, ended),
     }
 }
 
-/// The sessions of terminals that have closed, kept while a process in them lives. A terminal's
-/// program leads its own session, and `inside` knows its processes by it; once the terminal closes,
-/// a job that outlives it (a process group of its own that ignored the hangup) would count as
-/// outside every leon terminal, and so as a person.
+/// Every terminal program this server ran. Each led its own session, which a job keeps after the
+/// terminal closes, whatever process group it moves to; `in_ended_session` counts such a job as
+/// inside. Noted on every release of the state lock, so a pane that lives a moment counts too.
 #[derive(Default)]
 pub struct Gone(std::sync::Mutex<GoneState>);
 
 #[derive(Default)]
 struct GoneState {
-    /// The programs seen at the last look.
-    live: Vec<i32>,
-    /// A closed program's session, and the process groups left in it then.
-    sessions: Vec<(i32, Vec<i32>)>,
+    sessions: std::collections::HashSet<i32>,
+    /// How many were left at the last prune.
+    kept: usize,
 }
 
-/// The most closed sessions remembered at once.
-const MOST_GONE: usize = 1024;
+/// Past this many (and twice as many as the last prune kept), sessions nothing lives in any more
+/// are forgotten. One that something still lives in is never dropped.
+const MOST_GONE: usize = 4096;
 
 impl Gone {
-    /// `programs` and the sessions of closed programs something of which still runs: the roots
-    /// `inside` takes. A program gone since the last look has its session's groups listed (a scan
-    /// of the processes, only then); a session is forgotten once every group of it has exited.
-    pub fn roots(&self, programs: &[i32]) -> Vec<i32> {
-        use leon_core::process_tree::{group_lives, session_groups};
+    pub fn note(&self, programs: impl IntoIterator<Item = i32>) {
         let mut g = crate::events::lock(&self.0);
-        let closed: Vec<i32> = g.live.iter().copied().filter(|p| !programs.contains(p)).collect();
-        for sid in closed {
-            let groups = session_groups(sid);
-            if !groups.is_empty() {
-                g.sessions.push((sid, groups));
+        g.sessions.extend(programs.into_iter().filter(|&p| p > 0));
+        if g.sessions.len() > MOST_GONE.max(2 * g.kept) {
+            if let Some(live) = leon_core::process_tree::live_sessions() {
+                g.sessions.retain(|s| live.contains(s));
             }
+            g.kept = g.sessions.len();
         }
-        g.live = programs.to_vec();
-        g.sessions.retain(|(_, groups)| groups.iter().any(|&x| group_lives(x)));
-        let over = g.sessions.len().saturating_sub(MOST_GONE);
-        g.sessions.drain(..over);
-        programs.iter().copied().chain(g.sessions.iter().map(|(sid, _)| *sid)).collect()
+    }
+
+    pub fn sessions(&self) -> Vec<i32> {
+        crate::events::lock(&self.0).sessions.iter().copied().collect()
     }
 }
 
@@ -316,13 +311,11 @@ fn typing(method: &str, params: &Value) -> bool {
 /// terminal (the app, `leon attach` or a shell in a terminal app) or on another machine; a local
 /// client whose process can't be told is taken to be inside. Ok says whether the caller is a person.
 pub fn guard(ctx: &Ctx, peer: Peer, method: &str, params: &Value) -> Result<bool, ApiError> {
-    // the terminals' programs, and the sessions of closed ones a process of which still runs
-    let roots = {
-        let programs: Vec<i32> =
-            ctx.state().sessions.iter().flat_map(|s| &s.blocks).map(|b| b.terminal.pid()).collect();
-        ctx.gone.roots(&programs)
-    };
-    let person = is_person(peer, &roots);
+    // the terminals' programs, and the server itself: what a config's Lua runs (`leon.exec`)
+    let mut programs: Vec<i32> =
+        ctx.state().sessions.iter().flat_map(|s| &s.blocks).map(|b| b.terminal.pid()).collect();
+    programs.push(std::process::id() as i32);
+    let person = is_person(peer, &programs, &ctx.gone.sessions());
     // nor move the focus onto such a block, where a person's next keys would answer it
     let steered = crate::focus_guard::onto_held(&ctx.state(), method, params);
     if let Some(id) = steered.filter(|_| !person) {
@@ -339,14 +332,20 @@ pub fn guard(ctx: &Ctx, peer: Peer, method: &str, params: &Value) -> Result<bool
     let status = method == "block.method" && params["method"] == "dev.leon.terminal.report_status";
     let target = if status { params["block_id"].as_str().map(String::from) } else { input_target(ctx, method, params) };
     let held = {
-        let st = ctx.state();
+        let mut st = ctx.state();
         let blocks = || st.sessions.iter().flat_map(|s| &s.blocks);
         let held = match (&target, lua) {
             (Some(id), _) => st.block(id).ok().map(|(_, b)| b.terminal.clone()).filter(|t| t.held_for_person()),
             (None, true) => blocks().map(|b| b.terminal.clone()).find(|t| t.held_for_person()),
             (None, false) => None,
         };
-        let Some(held) = held else { return Ok(person) };
+        let Some(held) = held else {
+            // where a person types is theirs: a prompt raised there keeps their keys (held_keys.rs)
+            if let Some(id) = target.as_deref().filter(|_| person && !status && typing(method, params)) {
+                st.person_typed_at(id);
+            }
+            return Ok(person);
+        };
         held
     };
     use leon_core::process_tree::inside;

@@ -87,6 +87,7 @@ pub struct Ctx {
 pub struct StateGuard<'a> {
     state: MutexGuard<'a, State>,
     subscribers: &'a Mutex<Vec<Weak<Subscriber>>>,
+    gone: &'a agents::Gone,
 }
 
 impl Deref for StateGuard<'_> {
@@ -104,6 +105,7 @@ impl DerefMut for StateGuard<'_> {
 
 impl Drop for StateGuard<'_> {
     fn drop(&mut self) {
+        self.gone.note(self.state.sessions.iter().flat_map(|s| &s.blocks).map(|b| b.terminal.pid()));
         self.state.keep_keys_off_held(focus_guard::person_moves());
         let events = self.state.take_events();
         if events.is_empty() {
@@ -187,7 +189,10 @@ impl Ctx {
 
     /// The model. A handler that panicked mid-update leaves it usable, so a poisoned lock is taken anyway.
     pub fn state(&self) -> StateGuard<'_> {
-        StateGuard { state: events::lock(&self.state), subscribers: &self.subscribers }
+        let mut state = events::lock(&self.state);
+        // a prompt raised since the last change (a status report) is acted on before anyone reads
+        state.keep_keys_off_held(focus_guard::person_moves());
+        StateGuard { state, subscribers: &self.subscribers, gone: &self.gone }
     }
 
     /// Look at each terminal's program in front; a change is a `foreground_changed` event. Off
@@ -228,9 +233,26 @@ impl Ctx {
 
     /// Run a method. The checks run now; await the result.
     pub fn call(self: &Arc<Self>, method: &str, params: serde_json::Value) -> Later<serde_json::Value> {
-        // a call in-process (the app) is the person's; where a close leaves the keys is a side effect
-        let moves = focus_guard::asked().unwrap_or(true) && !matches!(method, "block.close" | "session.close_window");
-        let later = focus_guard::within(moves, || self.registry.call(self, method, params));
-        Box::pin(focus_guard::scope(moves, later))
+        // in-process for a program's request (its Lua, or a method's own call): the guard judges it
+        // as the program's own; otherwise in-process is the app's, a person's
+        let person = focus_guard::caller().is_none_or(|c| c.person);
+        if !person {
+            if let Err(e) = agents::guard(self, agents::Peer::Unknown, method, &params) {
+                return Box::pin(std::future::ready(Err(e)));
+            }
+        }
+        self.call_as(person, method, params)
+    }
+
+    /// Run a method for a person or a program, as the guard (serve.rs) told.
+    pub(crate) fn call_as(
+        self: &Arc<Self>,
+        person: bool,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Later<serde_json::Value> {
+        let c = focus_guard::Caller::of(person, method);
+        let later = focus_guard::within(c, || self.registry.call(self, method, params));
+        Box::pin(focus_guard::scope(c, later))
     }
 }

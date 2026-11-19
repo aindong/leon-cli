@@ -151,10 +151,15 @@ of [the architecture](../architecture.md).
   (an orphaned job keeps it, and so does a job left running after its pane closed). Where a
   person's next keys land is a rule on the state, not a list of requests, since a pane exiting
   moves them with no request at all: after every change, under the state lock, a session whose
-  keys moved onto a held block by anything but a person's own focus move (a request of theirs
-  that isn't a close) has them moved to the block that had them, the nearest pane that isn't
-  held, or the nearest tab whose keys aren't on one (`held_keys.rs`; `focus_guard.rs` tells
-  it who asked, through to the Lua thread). The
+  keys moved onto a held block by anything but a person's own focus move, or whose keys a program
+  put on a block that then became held, has them moved to the block that had them, the nearest
+  pane that isn't held, or the nearest tab whose keys aren't on one (`held_keys.rs`;
+  `focus_guard.rs` tells it who asked, through to the Lua thread, and in-process calls made for
+  a program's request go through the guard as the program's own). A closed pane's session counts
+  as inside while its leader is gone and anything lives in it: every terminal program is noted
+  when it starts and when the state lock is released, and Linux and macOS don't hand out a pid
+  still in use as a session or group id. The server is a root too, so a closed pane's program
+  that outlives the close and what Lua runs (`leon.exec`) are inside. The
   peer's pid comes from the socket (`SO_PEERCRED`, `LOCAL_PEEREPID`); a client the check can't
   place counts as inside. Agents run in leon terminals; the app, a `leon attach` in a terminal
   app and another machine don't. A program that moves itself to a new session (`setsid`) gets
