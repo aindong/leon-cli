@@ -41,7 +41,8 @@ fn output_under_a_scrolled_pane_has_its_new_history_rows_fetched(cx: &mut TestAp
     let moved = shows(cx, |cx| {
         cx.run_until_parked();
         t.text(true).ends_with("3100")
-            && ws.read_with(cx, |ws, _| ws.new_lines(&id)) == Some(pushed()).filter(|&n| n > 0)
+            && pushed() > 0
+            && ws.read_with(cx, |ws, _| ws.new_lines(&id)) == Some(pushed())
             && ws.read_with(cx, |ws, _| ws.fetches()) > fetches
     });
     cx.run_until_parked();
