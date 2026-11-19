@@ -47,9 +47,12 @@ ssh_vm() {
 }
 # stop only a VM this run booted; and whatever happens, no recorder or wiggle left running in it
 booted= rec= wig=
+locked=
 cleanup() {
   [ -z "$rec$wig" ] || kill $rec $wig 2>/dev/null || true
-  ssh_vm 'pkill -INT screencapture; pkill -f "[k]eypost wiggle"; bash clips/guest.sh stop' 2>/dev/null || true
+  if [ -n "$locked" ]; then
+    ssh_vm 'pkill -INT screencapture; pkill -f "[k]eypost wiggle"; bash clips/guest.sh stop; rmdir ~/clips.lock' 2>/dev/null || true
+  fi
   [ -z "$booted" ] || "$run" stop
 }
 trap cleanup EXIT
@@ -60,6 +63,9 @@ if [ "$(tart list | awk -v vm="$vm" '$2 == vm { print $NF }')" != running ]; the
 fi
 tart ip "$vm" --wait 120 >"$work/.ip"
 for _ in $(seq 60); do ssh_vm true 2>/dev/null && break; sleep 2; done
+# one run at a time in the VM: two would share its scenes, its recording and its app
+ssh_vm 'mkdir ~/clips.lock' 2>/dev/null || { echo "demo-clips: another run is recording in the VM (~/clips.lock there)" >&2; exit 1; }
+locked=1
 DEMO_APP=$app "$run" push
 COPYFILE_DISABLE=1 tar -C "$repo/scripts/demo-clips" -cf - . | ssh_vm 'rm -rf ~/clips && mkdir ~/clips && tar -xf - -C ~/clips'
 

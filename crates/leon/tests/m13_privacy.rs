@@ -37,9 +37,9 @@ fn mentions(text: &str, name: &str) -> bool {
         .any(|(i, _)| !word(text[..i].chars().next_back()) && !word(text[i + name.len()..].chars().next()))
 }
 
-/// Every file under `dir`, in its folders too.
+/// Every file under `dir`, in its folders too; a folder it can't read fails the test, never skips.
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-    for e in std::fs::read_dir(dir).into_iter().flatten() {
+    for e in std::fs::read_dir(dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display())) {
         let p = e.unwrap().path();
         if p.is_dir() {
             walk(&p, out)
@@ -60,7 +60,10 @@ fn images() -> Vec<PathBuf> {
 /// Every file under docs/i18n/ (none before the first translation lands).
 fn translations() -> Vec<PathBuf> {
     let mut out = vec![];
-    walk(&root().join("docs/i18n"), &mut out);
+    let dir = root().join("docs/i18n");
+    if dir.exists() {
+        walk(&dir, &mut out);
+    }
     out
 }
 
@@ -96,10 +99,9 @@ fn no_screenshot_shows_the_user_or_machine() {
     let mut pngs: Vec<PathBuf> = images().into_iter().filter(|p| p.extension().is_some_and(|e| e == "png")).collect();
     // a recording's every distinct frame (mpdecimate drops repeats), when ffmpeg is here to split it
     let frames = tempfile::tempdir().unwrap();
-    for gif in images().into_iter().filter(|p| p.extension().is_some_and(|e| e == "gif")) {
-        // by its path: two releases' clips can share a name
-        let rel = gif.strip_prefix(root().join("docs/images")).unwrap().with_extension("");
-        let name = rel.to_string_lossy().replace('/', "_");
+    for (n, gif) in images().into_iter().filter(|p| p.extension().is_some_and(|e| e == "gif")).enumerate() {
+        // numbered, as two releases' clips can share a name
+        let name = format!("{n:03}-{}", gif.file_stem().unwrap().to_string_lossy());
         let pattern = frames.path().join(format!("{name}-%04d.png"));
         let split = Command::new("ffmpeg")
             .args(["-loglevel", "error", "-i"])

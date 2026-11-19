@@ -18,7 +18,13 @@ export PATH=$clips/bin:$kit/bin:$HOME/python/bin:$app/Contents/MacOS:/usr/bin:/b
 export SHELL=/bin/zsh ZDOTDIR=$d/zsh # the panes' zsh reads this prompt, not ~/.zshrc
 WINDOW='{"x": 160, "y": 65, "w": 900, "h": 680}' # demo-clips.sh crops to it (2x: pixels); clear of macOS's banners, top right
 app_pid() { pgrep -fx "$app/Contents/MacOS/leon" || true; }
-k() { keypost "$@"; }
+# k ARGS: keypost ARGS, only while this app is in front (a dialog that comes up takes nothing)
+k() {
+  local front
+  front=$(lsappinfo info -only pid "$(lsappinfo front)" | tr -dc 0-9)
+  [ "$front" = "$(app_pid)" ] || { echo "guest: leon isn't in front (pid ${front:-none}); nothing sent" >&2; exit 1; }
+  keypost "$@"
+}
 pause() { sleep "$1"; }
 quit() {
   local p; p=$(app_pid)

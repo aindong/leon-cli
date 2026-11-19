@@ -43,7 +43,8 @@ fn the_clips_come_from_the_neutral_demo_in_the_vm() {
         "PROMPT='\\$ '",      // the neutral prompt
         "d=$HOME/leon-clips", // leon dirs of its own, never the take's
         "export LEON_RUNTIME_DIR=$d/run",
-        "k() { keypost \"$@\"; }", // keys and clicks posted inside the VM
+        "[ \"$front\" = \"$(app_pid)\" ] ||", // keys and clicks only while leon is in front,
+        "  keypost \"$@\"",                   // posted inside the VM
     ] {
         assert!(guest.contains(must), "guest.sh: {must}");
     }
