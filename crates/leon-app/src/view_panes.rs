@@ -256,7 +256,7 @@ impl Workspace {
     /// has seen its done and error: clear them (docs/agents.md, "Lifetime"). Not while they stay on it, so a
     /// finish in the pane they are looking at still shows until they come back. After a frame
     /// (`drew_frame`), for what that frame `showed`: a hidden window draws nothing, so a pane it
-    /// moves to unseen has seen nothing. The poll tells the server.
+    /// moves to unseen has seen nothing.
     pub(super) fn note_focus(&mut self, showed: Shown) {
         let now = showed.target.as_ref().map(|(_, id)| (id.clone(), showed.active));
         let arrived = match (&self.seen_focus, &now) {
@@ -267,8 +267,7 @@ impl Workspace {
         self.seen_focus = now;
         if let Some((sid, id)) = showed.target.filter(|_| arrived) {
             let event = json!({ "session_id": sid, "block_id": id, "event": { "type": "focus" } });
-            self.focus_event = Some((showed.app, event));
-            (self.wake)();
+            showed.app.send_then("block.event", event, drop); // queued: a pane already gone is fine
         }
     }
 
@@ -301,14 +300,14 @@ impl Workspace {
         self.drop_unshown_thumbs();
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
+        self.end_hidden_rename();
         if self.term.find.as_ref().is_some_and(|f| !shown.contains(&f.block)) {
             self.term.find = None; // its pane left the screen
         }
         for id in &shown {
             self.sync_pane(id);
         }
-        // a window drawing nothing (hidden, covered) asks the server again once it draws (`next_poll`)
-        if self.find_due() && self.undrawn < 2 {
+        if self.find_due() {
             self.run_find();
         }
         let rows = self.rows();
@@ -332,14 +331,14 @@ impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         drawing(cx);
         self.renders += 1;
-        // after the frame: undrawn redraws back to none, the pane it showed noted as seen, and the
-        // poll woken if that is news or something timed is due sooner (ADR R5, frame bookkeeping)
+        // after the frame: the pane it showed noted as seen, the clocks that pause without frames
+        // going on, and the cursor shader fed where the grids now sit (ADR R5, frame bookkeeping)
         let showed = Shown {
             target: self.target().map(|(sid, id, _)| (sid, id)),
             active: window.is_window_active(),
             app: self.app.clone(),
         };
-        cx.defer_in(window, move |ws, _, cx| ws.drew_frame(showed, cx));
+        cx.defer_in(window, move |ws, window, cx| ws.drew_frame(showed, window, cx));
         self.ask_frame(window); // the next step of whatever moves (R6)
         let stats = self.stats.clone();
         if stats.borrow().enabled {
@@ -349,8 +348,9 @@ impl Render for Workspace {
         let preview = self.render_preview(window, cx).filter(|_| !self.stopped);
         // the overview takes the sidebar's and the panes' place, in the same root as they are, so
         // the menu's actions and the window's listeners still reach the workspace
-        let main: Vec<gpui::AnyElement> = if self.overview_shown() && !self.stopped {
-            vec![self.render_overview(window, cx)]
+        let overview = self.overlay(OverlayKind::Overview, self.overview_shown() && !self.stopped);
+        let main: Vec<gpui::AnyElement> = if let Some(overview) = overview {
+            vec![overview]
         } else {
             let body = match body_shown {
                 _ if self.stopped => self.render_stopped(cx).into_any_element(),
@@ -403,13 +403,16 @@ impl Render for Workspace {
             .text_color(rgb(self.theme.text))
             .children(main)
             .children(self.render_stale(window))
-            .children(self.render_update(cx).filter(|_| !self.stopped))
+            .children(self.overlay(OverlayKind::Notice, self.notice_drawn().is_some() && !self.stopped))
             .children(preview)
             // last, so it paints over the panes: GPUI paints children in order
-            .children(self.render_overlay(cx).filter(|_| !self.stopped))
+            .children(self.overlay(OverlayKind::Palette, self.palette_drawn().is_some() && !self.stopped))
+            .children(self.render_marked().filter(|_| !self.stopped))
+            .children(self.render_hint().filter(|_| !self.stopped))
             .children(self.render_card(cx).filter(|_| !self.stopped))
             .children(self.render_row_menu(cx).filter(|_| !self.stopped))
             .child(self.frame_mark())
+            .when(!self.stopped, |d| d.child(self.input_canvas(cx)))
     }
 }
 

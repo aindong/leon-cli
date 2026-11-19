@@ -34,7 +34,7 @@ fn loaded(ws: &Entity<Workspace>, cx: &mut VisualTestContext) {
 }
 
 fn feeds(ws: &Entity<Workspace>, cx: &mut VisualTestContext, id: &str) -> bool {
-    ws.read_with(cx, |ws, _| ws.grid_drew(id).is_some_and(|g| g.feeds))
+    ws.read_with(cx, |ws, _| ws.cursor_feeder()).as_deref() == Some(id)
 }
 
 fn come_back(cx: &mut VisualTestContext) {
@@ -115,7 +115,7 @@ fn a_tile_under_a_float_doesnt_feed_and_the_float_does(cx: &mut TestAppContext) 
     assert!(shows(cx, |cx| feeds(&ws, cx, &b)), "a focused float feeds");
     s.app.call("session.focus_block", json!({ "session_id": sid, "block_id": a })).unwrap();
     assert!(
-        shows(cx, |cx| ws.read_with(cx, |ws, _| ws.grid_drew(&a).is_some_and(|g| g.active && !g.feeds))),
+        shows(cx, |cx| ws.read_with(cx, |ws, _| ws.grid_drew(&a).is_some_and(|g| g.active)) && !feeds(&ws, cx, &a)),
         "the focused tile under a shown float doesn't: the overlay would draw over the float"
     );
     s.app.stop();

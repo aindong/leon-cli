@@ -1,0 +1,5 @@
+measurement,commit,p50_ms,p99_ms,load,machine,source
+M10 after the review fixes,,0.330,0.799,,"Apple M6 (12 cores), macOS 27, release build",performance.md#m10-the-attached-app
+M11,,0.319,0.651,12 to 18,"Apple M6 (12 cores), macOS 27, release build",performance.md#m11-scrollback-selection-and-find
+M16b on the socket,,0.121,0.279,7 to 12,"Apple M6 (12 cores), macOS 27, release build",performance.md#m16b-hosts-through-a-link
+M16b through a link,,0.137,0.243,7 to 12,"Apple M6 (12 cores), macOS 27, release build",performance.md#m16b-hosts-through-a-link

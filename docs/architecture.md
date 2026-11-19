@@ -4,6 +4,42 @@ leon is a terminal multiplexer: a long-lived server owns sessions, windows (tabs
 layouts and terminal panes ("blocks"); clients (the macOS app, the `leon` CLI, Lua scripts,
 agents) drive it through one self-describing API.
 
+## The big picture
+
+One server owns every terminal; everything else is a client of its API. Programs keep running when
+a client goes away.
+
+```mermaid
+flowchart LR
+  subgraph clients["clients on this Mac"]
+    direction TB
+    app["Leon.app"]
+    attach["leon attach"]
+    cli["the leon CLI, leon do scripts"]
+    agent["agents in panes, through the skill"]
+  end
+  clients -->|"the socket API"| server["leon server: owns the PTYs,<br/>sessions, windows and blocks"]
+  web["the web page, in a browser<br/>on another of your machines"] -->|"the tailnet listener"| server
+  clients -->|"a Link: ssh, or tailnet://"| host["the leon server on a host"]
+```
+
+What the server holds: sessions, each with windows (the app's tabs); a window's tiles are a layout
+of splits, and floats and drawers sit over and beside them. Every pane is a block.
+
+```mermaid
+flowchart TD
+  server["server"] --> session["session"]
+  session --> window["window (a tab)"]
+  window --> layout["layout: a tree of splits"]
+  layout --> tile1["block"]
+  layout --> tile2["block"]
+  window --> float["floats, over the tiles"]
+  window --> drawer["drawers, docked left, right or bottom"]
+  float --> fb["block"]
+  drawer --> db["block"]
+  tile1 --> pty["a terminal: its PTY, screen and history"]
+```
+
 ## Crates (one Cargo workspace)
 
 | Crate | Job |
@@ -66,6 +102,8 @@ The decisions, in nine parts:
   the socket path, terminal emulation, Lua (config, runtime, bounds), the app, the screen transport,
   scrollback, selection, find, links and mouse reporting, `leon attach`, the app keymap and look,
   and the agent skill.
+- [Scrollback](architecture/scrollback.md): alacritty's rows and leon's store behind them: when
+  rows move, why none is lost or renumbered, styles, clears, resize and the cap.
 - [Switching and attention](architecture/attention.md): the session switcher, Activity, the
   badges, notifications, the fade of the panes without the focus, the translucent window, and
   `leon notify`.

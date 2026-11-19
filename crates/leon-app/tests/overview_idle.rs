@@ -39,7 +39,7 @@ fn settle(ws: &gpui::Entity<leon_app::view::Workspace>, cx: &mut VisualTestConte
         cx.executor().advance_clock(Duration::from_millis(50));
         cx.run_until_parked();
         std::thread::sleep(Duration::from_millis(30));
-        let now = Some(ws.read_with(cx, |ws, _| (ws.thumb_refreshes(), ws.signature())));
+        let now = Some(ws.read_with(cx, |ws, _| (ws.thumb_refreshes(), ws.renders())));
         (still, last) = if now == last { (still + 1, last) } else { (0, now) };
     }
 }
@@ -59,13 +59,13 @@ fn an_idle_overview_changes_nothing(cx: &mut TestAppContext) {
     act(&ws, cx, "client.overview.toggle");
     assert!(ticks(cx, |cx| all_filled(&ws, cx)), "every card gets its screen");
     settle(&ws, cx);
-    let first = ws.read_with(cx, |ws, _| (ws.signature(), ws.thumb_refreshes()));
+    let first = ws.read_with(cx, |ws, _| (ws.renders(), ws.thumb_refreshes()));
     let mut later = Vec::new();
     for _ in 0..10 {
         cx.executor().advance_clock(Duration::from_millis(100));
         std::thread::sleep(Duration::from_millis(30));
         cx.run_until_parked();
-        later.push(ws.read_with(cx, |ws, _| (ws.signature(), ws.thumb_refreshes())));
+        later.push(ws.read_with(cx, |ws, _| (ws.renders(), ws.thumb_refreshes())));
     }
     s.app.stop();
     assert!(later.iter().all(|l| *l == first), "the overview moved while nothing changed: {first:?} then {later:?}");

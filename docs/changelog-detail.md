@@ -8,6 +8,73 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### Leon.app doesn't wait on its own server
+
+#### Changed
+- The window's calls to This Mac's server (a key, a paste, a split and the directory it opens in,
+  a copy, a cmd-click, End All Sessions) go through one ordered queue off the window's thread, as
+  a host's calls already did: a stuck server no longer freezes the window for the 5 s call timeout.
+  Lua key bindings, config actions and a config reload still run on a connection of their own,
+  and the first session is still made before the window shows.
+- The window's copy of each machine's model changes only on its own thread, and only the views a
+  change touches are told to draw again ([How leon uses GPUI](architecture/gpui.md), R4).
+- A config reload reaches the window through the server's `keymap_changed` event, at once,
+  instead of the app asking for the keymap every second.
+
+### Input methods and the emoji picker
+
+#### Added
+- A pane takes text from an input method (Japanese, Chinese and others), the emoji picker
+  (⌃⌘Space) and Option's dead keys (⌥E, then E: é): what is being composed shows underlined at
+  the cursor and only the chosen text reaches the program. A held letter still repeats.
+- The palette, find bar and rename field take typed keys only, not composed text. While text is
+  being composed, every key goes to the input method first, ⌘ shortcuts too: Escape ends the
+  composition.
+
+### Overlays give the keys back
+
+#### Changed
+- The palette (and its switcher, theme list and Add Host prompt), the find bar, the overview and
+  the inline rename field each take the window's focus and their own keys while open. Escape, a
+  pick, the palette's, switcher's or overview's key again, or what they belong to going out of
+  sight closes them, and the focus goes to the overlay still open (the find bar under the
+  palette), else the pane. A key the find bar doesn't take (⌘D) still runs its binding.
+- A click outside the palette closes it, as one outside the rename field already set the name.
+
+### Diagrams and benchmark charts
+
+#### Added
+- Mermaid diagrams, which GitHub and the website both draw: the big picture and the object model
+  ([architecture.md](architecture.md)), an orchestrator and its worker and the permission hold
+  ([agents.md](agents.md)), links to a host ([remote-hosts.md](remote-hosts.md)), the tailnet
+  listener's admission ([architecture/tailnet.md](architecture/tailnet.md)), the web page's checks
+  ([web.md](web.md)), scrollback's store ([architecture/scrollback.md](architecture/scrollback.md)),
+  the release run ([releases.md](releases.md)) and the update check ([updates.md](updates.md)).
+  The website serves its own copy of Mermaid, pinned and checked against a recorded hash.
+- Charts of leon's benchmarks, drawn from data files in `docs/perf/` by
+  `scripts/perf-charts.py`, which a test runs so a chart never drifts from its data; a Performance
+  section on the website opens with them ([performance.md](performance.md)). The app's own
+  measurements moved to [performance-app.md](performance-app.md).
+
+### What's new in the app
+
+#### Added
+- Leon.app's first launch of a new version shows "Updated to leon X.Y.Z." once in the update
+  notice, with What's New (and Open What's New in the palette), which opens the website's page for
+  that version. `updates.json` keeps the version that last ran; a first install shows nothing
+  ([updates.md](updates.md#in-leonapp)).
+
+### The website
+
+#### Added
+- <https://aindong.github.io/leon-cli/>: the landing page, the README and every doc and
+  translation, with search, a language switcher and light and dark; What's new, a page for each
+  release from its changelog section; and a demo page for the videos in the `media` pre-release.
+- `.github/workflows/site.yml` deploys it from the latest release's tag after each release, or by
+  hand; `website/build.sh` builds it, and CI builds it strictly on every change but one to
+  translations, images or `brand/` alone (they start no run)
+  ([releases.md](releases.md#the-website)).
+
 ### Drive leon from the browser
 
 #### Added
@@ -101,12 +168,37 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 #### Changed
 - A block whose program reports `blocked`/`permission` is held for a person: until a person's
   keys reach it, no program running inside a leon terminal can type into it, change its status from
-  outside it, or run config actions or reloads (error `permission_pending`). The app, and
-  `leon attach` in a terminal app, type into it as before.
+  outside it, focus it, or run config actions or reloads (error `permission_pending`). The app, and
+  `leon attach` in a terminal app, type into it as before. The keys never land on it as a side
+  effect, such as a pane closing or exiting, or a program moving panes: only a person's own
+  focus move puts them there.
 - The state file is version 5: it keeps each worker's link and worktree, and up to 1024 unread
   reports.
 - The guide says when not to use leon, documents `-H`, what to do on exit 4, and looking before
   repeating a `send`.
+
+### Scrollback that costs what its text costs
+
+#### Changed
+- When output pauses, a pane's history moves out of alacritty, which keeps every row at the pane's
+  full width, into leon's own store of each row's text and runs of style: 10,000 lines of 70
+  characters at 80 columns cost about 2.2 MB instead of 19.7 MB, and a wide pane no more than a
+  narrow one. Rows aren't copied as they scroll, only when output pauses (or once a second), so
+  `cat` is as fast as before. Line numbers, styles, `capture`, restore after a restart and `leon
+  attach` are unchanged ([architecture/scrollback.md](architecture/scrollback.md)).
+- Stored lines aren't re-wrapped when a pane is resized: a narrower pane cuts them at its edge
+  (their whole text stays in `capture`).
+- A pane made taller or wider fills its new rows from history as before, whether the history is
+  still alacritty's or already stored.
+- Find, selection, copy and links in the app reach the stored lines too, with the same results as
+  when alacritty held them all.
+
+#### Added
+- `leon.set("scrollback", N)` (0 to 100000, default 10000) and `leon config set scrollback N`: the
+  lines of history each pane keeps ([lua/settings.md](lua/settings.md)). A change applies to
+  running panes at once, and a lower value drops their oldest lines.
+- `server.settings` reports `scrollback`: a new result field on a stable method, so `api_version`
+  goes from `1.17.0` to `1.18.0`.
 
 ### Contributing and translations
 

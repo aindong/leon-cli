@@ -5,6 +5,7 @@ mod agents;
 mod blocks;
 pub mod contract;
 pub mod events;
+mod focus_guard;
 mod layout;
 pub mod lua;
 pub mod methods;
@@ -75,6 +76,10 @@ pub struct Ctx {
     /// Each window's geometry as a client last drew it (`client.geometry`): the most recent report
     /// wins when several apps are attached. Runtime only, never saved.
     geometry: Mutex<std::collections::HashMap<String, leon_core::overlays::Geometry>>,
+    /// Closed terminals' sessions, for the permission guard (agents.rs).
+    pub(crate) gone: agents::Gone,
+    /// The `scrollback` setting: lines of history a terminal keeps (lua.rs sets it on a reload).
+    scrollback: std::sync::atomic::AtomicUsize,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -82,6 +87,7 @@ pub struct Ctx {
 pub struct StateGuard<'a> {
     state: MutexGuard<'a, State>,
     subscribers: &'a Mutex<Vec<Weak<Subscriber>>>,
+    gone: &'a agents::Gone,
 }
 
 impl Deref for StateGuard<'_> {
@@ -99,6 +105,8 @@ impl DerefMut for StateGuard<'_> {
 
 impl Drop for StateGuard<'_> {
     fn drop(&mut self) {
+        self.gone.note(self.state.sessions.iter().flat_map(|s| &s.blocks).map(|b| b.terminal.pid()));
+        self.state.keep_keys_off_held(focus_guard::person_moves());
         let events = self.state.take_events();
         if events.is_empty() {
             return;
@@ -131,6 +139,8 @@ impl Ctx {
             tailnet: tailnet::Tailnet::default(),
             pane_env: Vec::new(),
             geometry: Mutex::default(),
+            gone: agents::Gone::default(),
+            scrollback: leon_core::terminal::SCROLLBACK.into(),
         }
     }
 
@@ -179,7 +189,10 @@ impl Ctx {
 
     /// The model. A handler that panicked mid-update leaves it usable, so a poisoned lock is taken anyway.
     pub fn state(&self) -> StateGuard<'_> {
-        StateGuard { state: events::lock(&self.state), subscribers: &self.subscribers }
+        let mut state = events::lock(&self.state);
+        // a prompt raised since the last change (a status report) is acted on before anyone reads
+        state.keep_keys_off_held(focus_guard::person_moves());
+        StateGuard { state, subscribers: &self.subscribers, gone: &self.gone }
     }
 
     /// Look at each terminal's program in front; a change is a `foreground_changed` event. Off
@@ -220,6 +233,26 @@ impl Ctx {
 
     /// Run a method. The checks run now; await the result.
     pub fn call(self: &Arc<Self>, method: &str, params: serde_json::Value) -> Later<serde_json::Value> {
-        self.registry.call(self, method, params)
+        // in-process for a program's request (its Lua, or a method's own call): the guard judges it
+        // as the program's own; otherwise in-process is the app's, a person's
+        let person = focus_guard::caller().is_none_or(|c| c.person);
+        if person {
+            agents::person_typing(self, method, &params);
+        } else if let Err(e) = agents::guard(self, agents::Peer::Unknown, method, &params) {
+            return Box::pin(std::future::ready(Err(e)));
+        }
+        self.call_as(person, method, params)
+    }
+
+    /// Run a method for a person or a program, as the guard (serve.rs) told.
+    pub(crate) fn call_as(
+        self: &Arc<Self>,
+        person: bool,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Later<serde_json::Value> {
+        let c = focus_guard::Caller::of(person, method);
+        let later = focus_guard::within(c, || self.registry.call(self, method, params));
+        Box::pin(focus_guard::scope(c, later))
     }
 }

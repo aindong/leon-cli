@@ -140,6 +140,24 @@ leon agent tell tests "Use the fixture in tests/data."   # once its turn ended
 leon block close "$id"
 ```
 
+A worker's turn, from start to the orchestrator reading its report:
+
+```mermaid
+sequenceDiagram
+  participant O as orchestrator
+  participant S as leon server
+  participant W as worker
+  O->>S: leon agent start --label tests claude "task"
+  S->>W: a new tab, the task and how to report as its first prompt
+  W->>S: hooks: working
+  W->>S: hooks: done, with its last message
+  S->>S: the report goes into the orchestrator's inbox
+  Note over S,O: once the orchestrator's turn has ended and its pane had no input for 3 s
+  S->>O: types: You have 1 leon message. Run leon inbox to read it.
+  O->>S: leon inbox
+  S-->>O: the worker's report, now marked read
+```
+
 - **Start.** `leon agent start AGENT TASK` runs `AGENT [ARGS…] PROMPT` in a new tab (`--split DIR`
   for a pane) with the task and a paragraph on how to report as its first prompt. A Claude Code
   worker whose hooks leon finds (the project's `.claude/settings.json` or `settings.local.json`, or
@@ -203,23 +221,51 @@ When an agent's block reports `blocked` with kind `permission`, leon holds it fo
 person's keys reach that pane, no program running inside a leon terminal can type into it
 (`leon send`, `send-key`, `agent tell`, `api call` of `block.event`, `dev.leon.terminal.write` or
 `client.key`, a `leon attach` started in a pane, a socket client of its own), change its status
-from outside it, or run a config action or reload (`leon do ACTION`, `client.action`,
-`server.config_reload`). Each gets error `permission_pending`. Only the block's own program (its
+from outside it, run a config action or reload (`leon do ACTION`, `client.action`,
+`server.config_reload`), or focus it (`leon focus`, `session.focus_block`, `focus_window`,
+`zoom_block`, `dock_block`, swapping it with the focused pane). Each gets error
+`permission_pending`. Only the block's own program (its
 hooks) may change its status meanwhile, and that doesn't end the hold: a person typing does. So an
 agent can't approve its own or another agent's prompt, even by writing a report to the terminal
 or starting a job that outlives it.
 
+Your keys land on such a pane only when you move them there, and stay on one only where you put
+them or typed. Any focus move of yours does it: a click, a direction or next-pane key, a tab, the
+Activity list, `leon focus` from a shell outside leon, or a key binding you press. Anything else
+that would leave your keys on it moves them instead to the pane that had them, the nearest pane
+that isn't held, or the nearest tab whose keys aren't on one: a pane closing or exiting (your own
+Ctrl-C in the pane beside it, or your close, included), a pane moved or swapped (by you or a
+program), a program inside leon moving the focus or running a key binding, or a prompt raised in
+a pane a program put your keys on. A key binding a program runs (`client.key`) can't type into
+such a pane either. The pane stays marked in its tab and in the Activity list, so you see where
+the prompt is.
+
+```mermaid
+flowchart TD
+  held["a block reports blocked, kind permission"] --> who{"who sends keys or a status?"}
+  who -->|"a program inside a leon terminal: leon send,<br/>agent tell, leon do, a socket client of its own"| refused["refused: permission_pending"]
+  who -->|"the block's own program, through its hooks"| status["its status may change;<br/>the hold stays"]
+  who -->|"a person: the app's keys, leon attach in a terminal app,<br/>leon send from a shell outside leon, another machine"| answered["the keys reach the pane,<br/>and the hold ends"]
+  held --> find["the app's Activity list and the notification<br/>take the person to that pane"]
+```
+
 A person answers where they are: the app's keys reach the pane (the Activity list and the
 notification take them there), and so do `leon attach` in a terminal app and `leon send` from a
 shell outside leon. leon tells where a client runs from its process: the peer of the socket, its
-parents up to pid 1, and its session, which a job keeps after its parent exits. A client it can't
-place counts as inside.
+parents up to pid 1, and its session, which a job keeps after its parent exits, and after its
+pane closes, whatever process group it moves to. What the server itself runs counts as inside
+too: a pane's program after its pane closed, and what your config's Lua runs (`leon.exec`), so a
+key binding of yours that runs `leon` to type into such a pane is refused; have it call
+`leon.call` instead. A client it can't place counts as inside.
 
 This keeps agents from answering. It is not a sandbox:
 
 - a program running as you outside leon counts as the person, and so does a request from another
   machine (`-H`, or a client reaching this server over Tailscale, even from a pane here);
-- a program that moves itself to a new session (`setsid`) and drops its terminal gets past it;
+- a program that moves itself to a new session (`setsid`) and drops its terminal gets past it,
+  and so does one your config's Lua starts that leaves the server's processes (a double fork);
+- when every pane left in a session waits on such a prompt, your keys stay on one of them: a tab
+  always has somewhere for them to go;
 - a dialog with no hook, such as Claude Code's question whether to trust a new folder, isn't
   held: start workers in folders the agent already trusts;
 - `agent.link` and `agent.inbox` don't check who asks, as `leon send` doesn't for other blocks.

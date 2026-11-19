@@ -1,0 +1,10 @@
+{#- The site's own links and the Install button where Material puts its repo widget, which would ask
+    api.github.com for the stars and the latest version on every page: in the header on a wide
+    screen, at the top of the drawer on a phone. The same words as the landing page's bar. -#}
+<nav class="leon-links" aria-label="Site">
+  <a href="{{ config.extra.homepage | url }}">Home</a>
+  <a href="{{ 'whats-new/' | url }}">What's new</a>
+  <a href="{{ 'demo/' | url }}">Demo</a>
+  <a href="{{ config.repo_url }}">GitHub</a>
+  <a class="leon-install" href="{{ 'install/' | url }}">Install leon</a>
+</nav>

@@ -39,9 +39,9 @@ impl Workspace {
         self.session_id.clone()
     }
 
-    /// How many times the poll has run, and how many of those asked for a redraw.
-    pub fn polls(&self) -> (u64, u64) {
-        self.polls
+    /// How many connection attempts machine `i` started (tests).
+    pub fn host_attempts(&self, i: usize) -> u32 {
+        self.hosts.machines().get(i).map_or(0, |m| m.attempts())
     }
 
     /// How many times the window rendered.
@@ -68,18 +68,49 @@ impl Workspace {
         self.target().map(|(_, id, _)| id)
     }
 
-    /// The selected session's active window, as the app last heard it from the server.
+    /// The selected session's active window: the tab the user picked while that call is on its
+    /// way (`Asked`), else as the app last heard it from the server.
     pub fn active_window(&self) -> Option<leon_core::Window> {
         let m = self.app.model();
         let s = m.session(self.session_id.as_deref()?)?;
-        s.windows.get(s.active).cloned()
+        s.windows.get(self.active_of(s)).cloned()
     }
 
     /// The selected session's windows in tab order, and which is active.
     pub fn windows(&self) -> Option<(Vec<leon_core::Window>, usize)> {
         let m = self.app.model();
         let s = m.session(self.session_id.as_deref()?)?;
-        Some((s.windows.clone(), s.active))
+        Some((s.windows.clone(), self.active_of(s)))
+    }
+
+    /// Session `s`'s active tab: the one the user picked while that call is on its way.
+    pub(super) fn active_of(&self, s: &crate::remote::Session) -> usize {
+        let asked = self.asked.tab.as_ref().filter(|(sid, _)| *sid == s.id);
+        asked.and_then(|(_, wid)| s.windows.iter().position(|w| w.id == *wid)).unwrap_or(s.active)
+    }
+
+    /// Focus `block` (or only tab `window`) of the selected session on the server, drawing and
+    /// acting on it at once: the call queues, and until its reply (after the refetch that brings
+    /// the change) the window shows what was asked (ADR R8).
+    pub(super) fn ask_focus(&mut self, window: Option<String>, block: Option<&str>, cx: &mut Context<Self>) {
+        let Some(sid) = self.session_id.clone() else { return };
+        let window = window.or_else(|| self.app.model().block(block?).map(|(_, b)| b.window_id.clone()));
+        let tab = window.clone().map(|w| (sid.clone(), w));
+        let asked = Asked { tab, pane: block.map(|b| (sid.clone(), b.into())), seq: self.asked.seq + 1 };
+        let (method, params) = match (block, window) {
+            (Some(b), _) => ("session.focus_block", json!({ "session_id": sid, "block_id": b })),
+            (None, Some(w)) => ("session.focus_window", json!({ "session_id": sid, "window_id": w })),
+            (None, None) => return,
+        };
+        let seq = asked.seq;
+        self.asked = asked;
+        self.act_then(method, params, move |ws| {
+            // the model has it now, or the server said no; a newer pick waits for its own reply
+            if ws.asked.seq == seq {
+                (ws.asked.tab, ws.asked.pane) = (None, None);
+            }
+        });
+        self.called(cx);
     }
 
     /// The text of a block's screen as the app last received it (None before any screen came).
@@ -101,10 +132,13 @@ impl Workspace {
     /// (session id, target block id, whether it is zoomed) of the selected session's active window.
     pub(super) fn target(&self) -> Option<(String, String, bool)> {
         let sid = self.session_id.clone()?;
-        let m = self.app.model();
-        let s = m.session(&sid)?;
-        let w = s.windows.get(s.active)?;
-        Some((sid, target(w)?.to_string(), w.zoomed.is_some()))
+        let w = self.active_window()?;
+        // a pane the user picked while that call is on its way, if it is still in the tab
+        let shown =
+            |id: &String| w.layout.as_ref().is_some_and(|t| t.contains(id)) || self.overlay_ids(&w).contains(id);
+        let asked = self.asked.pane.as_ref().filter(|(s, id)| *s == sid && shown(id)).map(|(_, id)| id.clone());
+        let id = asked.or_else(|| target(&w).map(String::from))?;
+        Some((sid, id, w.zoomed.is_some()))
     }
 
     /// Keep the selection on a live session: one that ended (closed here, its shell exited, or
@@ -124,4 +158,15 @@ impl Workspace {
 /// Where the app keeps its settings: `$LEON_STATE_DIR/app.json` (next to the server's sessions).
 pub fn settings_path() -> Option<PathBuf> {
     leon_core::paths::state_dir().map(|d| d.join("app.json"))
+}
+
+/// A tab and pane the user picked whose call is still on its way (`ask_focus`).
+#[derive(Default, Clone, PartialEq)]
+pub(super) struct Asked {
+    /// (session, window)
+    tab: Option<(String, String)>,
+    /// (session, block)
+    pane: Option<(String, String)>,
+    /// Which pick it is: only its own reply clears it.
+    seq: u64,
 }

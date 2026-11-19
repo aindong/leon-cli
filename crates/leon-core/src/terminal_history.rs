@@ -1,0 +1,372 @@
+//! leon's store of history (docs/architecture/scrollback.md). alacritty keeps every history row at
+//! the pane's full width, 24 bytes a cell; so when output pauses its history moves here as each
+//! row's text and runs of style, about what the text costs. The store's rows are numbered just
+//! above alacritty's oldest, so a line keeps its number as it moves.
+
+use std::collections::VecDeque;
+use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
+
+use alacritty_terminal::grid::{Dimensions, GridCell, Row};
+use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::term::cell::{Cell, CellExtra, Flags};
+use alacritty_terminal::term::{Term, TermMode};
+use alacritty_terminal::vte::ansi::{Color, NamedColor};
+
+use super::{lock, Listener, Terminal, MAX_SCROLLBACK};
+
+/// The history rows alacritty keeps once output pauses (`settle`): its storage then holds the
+/// screen plus at most these (it allocates history 1,000 rows at a time).
+pub const WINDOW: usize = 1000;
+/// Stored rows are allocated this many at a time.
+const GROW: usize = 1024;
+
+/// The emulator and the store, under one lock: a reader sees both as one history.
+pub struct Emu {
+    pub(super) term: Term<Listener>,
+    pub(super) store: Store,
+}
+
+impl Deref for Emu {
+    type Target = Term<Listener>;
+    fn deref(&self) -> &Term<Listener> {
+        &self.term
+    }
+}
+
+impl DerefMut for Emu {
+    fn deref_mut(&mut self) -> &mut Term<Listener> {
+        &mut self.term
+    }
+}
+
+impl Emu {
+    /// The lines of history kept, the store's and alacritty's; none on the alternate screen,
+    /// whose own grid has no history.
+    pub fn history(&self) -> usize {
+        if alt(&self.term) {
+            0
+        } else {
+            self.store.rows.len() + self.term.grid().history_size()
+        }
+    }
+
+    /// Stored lines (oldest first), shown above alacritty's history; none on the alternate screen.
+    pub(super) fn stored(&self) -> usize {
+        if alt(&self.term) {
+            0
+        } else {
+            self.store.rows.len()
+        }
+    }
+}
+
+fn alt(term: &Term<Listener>) -> bool {
+    term.mode().contains(TermMode::ALT_SCREEN)
+}
+
+impl Terminal {
+    /// Keep at most `lines` of history (at most `MAX_SCROLLBACK`): new output is capped at once,
+    /// and what is kept past it now goes.
+    pub fn set_scrollback(&self, lines: usize) {
+        {
+            let mut emu = lock(&self.term);
+            let Emu { term, store } = &mut *emu;
+            store.cap = lines.min(MAX_SCROLLBACK);
+            store.settle(term);
+            store.trim(term);
+        }
+        self.generation.send_modify(|g| *g += 1);
+    }
+}
+
+/// A run of cells with one style: the store keeps a row as its characters and these.
+#[derive(Clone, Copy)]
+struct Run {
+    cells: u16,
+    flags: Flags,
+    fg: Color,
+    bg: Color,
+}
+
+/// One row: a character per cell up to its last one that shows (a character, or a blank with a
+/// colour or a line), its runs (none for a row all in the default style), and the few cells with
+/// combining marks, an underline colour or an OSC 8 link (alacritty's `CellExtra`, shared with
+/// the cells it came from).
+struct Stored {
+    text: Box<str>,
+    runs: Option<Box<[Run]>>,
+    extras: Box<[(u16, Arc<CellExtra>)]>,
+}
+
+const PLAIN: Run = Run {
+    cells: 0,
+    flags: Flags::empty(),
+    fg: Color::Named(NamedColor::Foreground),
+    bg: Color::Named(NamedColor::Background),
+};
+
+pub struct Store {
+    rows: VecDeque<Stored>,
+    /// The most lines of history kept, the store's and alacritty's (`scrollback`).
+    pub(super) cap: usize,
+}
+
+impl Store {
+    pub(super) fn new(cap: usize) -> Store {
+        Store { rows: VecDeque::new(), cap }
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.rows = VecDeque::new();
+    }
+
+    fn push(&mut self, row: &Row<Cell>) {
+        // alacritty's text ends at the last character (`LineLength`); a coloured blank after it
+        // still draws, and a blank in a link still links
+        let len = row.into_iter().rposition(|c| c.c != ' ' || c.extra.is_some() || !c.is_empty()).map_or(0, |i| i + 1);
+        let mut text = String::with_capacity(len);
+        let (mut runs, mut extras): (Vec<Run>, Vec<_>) = (Vec::new(), Vec::new());
+        for col in 0..len {
+            let c = &row[Column(col)];
+            text.push(c.c);
+            match runs.last_mut() {
+                Some(r) if (r.fg, r.bg, r.flags) == (c.fg, c.bg, c.flags) => r.cells += 1,
+                _ => runs.push(Run { cells: 1, flags: c.flags, fg: c.fg, bg: c.bg }),
+            }
+            if let Some(e) = &c.extra {
+                extras.push((col as u16, e.clone()));
+            }
+        }
+        // grown a block at a time, not doubled: the store is most of a pane's history
+        if self.rows.len() == self.rows.capacity() {
+            self.rows.reserve_exact(GROW);
+        }
+        let plain = runs.iter().all(|r| (r.flags, r.fg, r.bg) == (PLAIN.flags, PLAIN.fg, PLAIN.bg));
+        let runs = (!plain).then(|| runs.into());
+        self.rows.push_back(Stored { text: text.into(), runs, extras: extras.into() });
+    }
+
+    /// Stored row `i`'s cells as alacritty had them, trailing blanks left out.
+    pub(super) fn cells(&self, i: usize) -> Vec<Cell> {
+        let Some(row) = self.rows.get(i) else { return Vec::new() };
+        let mut chars = row.text.chars();
+        let mut out = Vec::with_capacity(row.text.len());
+        let plain = [Run { cells: u16::MAX, ..PLAIN }];
+        for r in row.runs.as_deref().unwrap_or(&plain) {
+            for c in chars.by_ref().take(r.cells.into()) {
+                out.push(Cell { c, fg: r.fg, bg: r.bg, flags: r.flags, extra: None });
+            }
+        }
+        for (col, e) in row.extras.iter() {
+            out[usize::from(*col)].extra = Some(e.clone());
+        }
+        out
+    }
+
+    /// Whether stored row `i` wrapped: its line goes on in the next row.
+    /// A row from a wider pane whose wrap is past `cols` doesn't wrap here: a scratch `cols` wide
+    /// cuts it there.
+    pub(super) fn wrapped(&self, i: usize, cols: usize) -> bool {
+        if self.rows.get(i).is_none_or(|r| r.text.chars().count() > cols) {
+            return false;
+        }
+        self.wraps(i)
+    }
+
+    /// Whether stored row `i` ended in a wrap at the width it was written at.
+    fn wraps(&self, i: usize) -> bool {
+        // a wrapped row's last cell has WRAPLINE, so its runs aren't the plain ones
+        let last = self.rows.get(i).and_then(|r| r.runs.as_deref()?.last());
+        last.is_some_and(|r| r.flags.contains(Flags::WRAPLINE))
+    }
+
+    /// Stored rows `from..to`, one line, as alacritty's rows `cols` wide: joined and wrapped again
+    /// as alacritty's reflow wraps (WRAPLINE on each full row, a wide character that doesn't fit
+    /// goes on to the next row with a leading spacer in its place), whatever width they were
+    /// stored at. Rows stored at this width come back as they were. None for a line that goes on
+    /// in alacritty's rows and doesn't fill its last row here: joining it there would put blanks
+    /// inside it.
+    fn line_rows(&self, from: usize, to: usize, cols: usize) -> Option<Vec<Row<Cell>>> {
+        let mut rows: Vec<Row<Cell>> = vec![Row::new(cols)];
+        let mut col = 0;
+        // a row's leading spacer goes where it joins the next; the last row's line goes on in
+        // alacritty's rows, as it stands
+        let joined = |i: usize, c: &Cell| i + 1 < to && c.flags.contains(Flags::LEADING_WIDE_CHAR_SPACER);
+        let cells = (from..to).flat_map(|i| self.cells(i).into_iter().filter(move |c| !joined(i, c)));
+        for mut cell in cells {
+            cell.flags.remove(Flags::WRAPLINE);
+            if col == cols || (col + 1 == cols && cell.flags.contains(Flags::WIDE_CHAR)) {
+                let row = rows.last_mut().expect("a row");
+                if col < cols {
+                    row[Column(col)].flags.insert(Flags::LEADING_WIDE_CHAR_SPACER);
+                }
+                row[Column(cols - 1)].flags.insert(Flags::WRAPLINE);
+                rows.push(Row::new(cols));
+                col = 0;
+            }
+            rows.last_mut().expect("a row")[Column(col)] = cell;
+            col += 1;
+        }
+        if self.wraps(to - 1) {
+            if col < cols {
+                return None;
+            }
+            rows.last_mut().expect("a row")[Column(cols - 1)].flags.insert(Flags::WRAPLINE);
+        }
+        Some(rows)
+    }
+
+    /// Every stored row's text, as alacritty's `bounds_to_string` gives a whole row: no newline
+    /// after a wrapped row, a tab's blanks skipped. shortcut: tab stops are the default 8
+    /// columns (alacritty doesn't expose a program's own, set with HTS); read them if one matters.
+    pub(super) fn text(&self) -> String {
+        let mut text = String::new();
+        for i in 0..self.rows.len() {
+            let cells = self.cells(i);
+            // `LineLength` for a row: through a wrapped row's last cell, else its last character
+            let shown = |c: &Cell| c.c != ' ' || c.zerowidth().is_some_and(|z| !z.is_empty());
+            let len = match cells.last() {
+                Some(c) if c.flags.contains(Flags::WRAPLINE) => cells.len(),
+                _ => cells.iter().rposition(shown).map_or(0, |i| i + 1),
+            };
+            let mut tab = false;
+            for (col, cell) in cells[..len].iter().enumerate() {
+                if tab && col % 8 != 0 && cell.c == ' ' {
+                    continue;
+                }
+                tab = cell.c == '\t';
+                if !cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+                    text.push(cell.c);
+                    text.extend(cell.zerowidth().into_iter().flatten());
+                }
+            }
+            if len == 0 || !cells[len - 1].flags.contains(Flags::WRAPLINE) {
+                text.push('\n');
+            }
+        }
+        text
+    }
+
+    /// alacritty's history limit: the cap, so any row it drops is one the cap drops too (the
+    /// store is older still, and `trim` empties it then).
+    pub(super) fn limit(&self) -> usize {
+        self.cap.max(1)
+    }
+
+    /// When output pauses, on the primary screen: once alacritty holds more than its window, all
+    /// of its history moves here, which frees the storage it grew for it. While output streams it
+    /// keeps every row at full width, as alacritty alone does, and none is copied.
+    pub(super) fn settle(&mut self, term: &mut Term<Listener>) {
+        if !alt(term) && term.grid().history_size() > WINDOW {
+            self.take(term, 0);
+        }
+    }
+
+    /// Move alacritty's oldest rows here until it keeps `keep`, then put its limit back. Rows the
+    /// cap would drop at once aren't copied.
+    fn take(&mut self, term: &mut Term<Listener>, keep: usize) {
+        let limit = self.limit();
+        let g = term.grid_mut();
+        let h = g.history_size();
+        if h > keep {
+            let room = self.cap - keep;
+            if h - keep >= room {
+                self.clear();
+            }
+            let skip = (h - keep).saturating_sub(room);
+            for n in (keep + 1..=h - skip).rev() {
+                self.push(&g[Line(-(n as i32))]);
+            }
+            g.update_history(keep);
+        }
+        g.update_history(limit);
+    }
+
+    /// After a piece: no more than `cap` lines kept, the store's oldest going first.
+    pub(super) fn trim(&mut self, term: &mut Term<Listener>) {
+        let shown = if alt(term) { 0 } else { term.grid().history_size() };
+        let keep = self.cap.saturating_sub(shown);
+        if self.rows.len() > keep {
+            self.rows.drain(..self.rows.len() - keep);
+            // a lowered cap: give back what the rows took
+            if self.rows.capacity() > self.rows.len() + 2 * GROW {
+                self.rows.shrink_to(self.rows.len() + GROW);
+            }
+        }
+        // the limit follows the cap (raised too), and drops what alacritty holds past it (all of
+        // it at a cap of 0, though the limit stays 1 for `counting`)
+        if !alt(term) {
+            let g = term.grid_mut();
+            g.update_history(self.cap);
+            g.update_history(self.limit());
+        }
+    }
+
+    /// Resize `term`. alacritty re-wraps its own rows, within the cap like any push; stored rows
+    /// aren't re-wrapped. A taller or wider pane fills from history as alacritty alone fills it
+    /// (`lend`).
+    pub(super) fn resize(&mut self, term: &mut Term<Listener>, size: impl Dimensions) {
+        self.lend(term, size.screen_lines(), size.columns());
+        term.resize(size);
+        self.settle(term);
+        self.trim(term);
+    }
+
+    /// Before a resize to `lines` x `cols`: alacritty fills new rows, and rows its reflow joins on a
+    /// widening, from its own history only. When it holds too few, the store's newest lines go back
+    /// to it first: whole lines, at least the rows added and, on a widening, `lines` lines (each is
+    /// at least a row at the new width), at most the cap.
+    fn lend(&mut self, term: &mut Term<Listener>, lines: usize, cols: usize) {
+        let (shown, now) = (term.screen_lines(), term.columns());
+        let (added, widens) = (lines.saturating_sub(shown), cols > now);
+        let want = if widens { lines } else { 0 };
+        if alt(term) || self.rows.is_empty() || held_enough(term, added, want) {
+            return;
+        }
+        let held = term.grid().history_size();
+        self.take(term, 0);
+        // whole lines, newest first, until they hold enough
+        let (mut first, mut lent, mut count, mut starts) = (self.rows.len(), Vec::new(), 0, 0);
+        while first > 0 && (count < added || starts < want) {
+            let mut from = first - 1;
+            while from > 0 && self.wraps(from - 1) {
+                from -= 1;
+            }
+            let Some(rows) = self.line_rows(from, first, now).filter(|r| count + r.len() <= self.limit()) else {
+                break;
+            };
+            (first, count, starts) = (from, count + rows.len(), starts + 1);
+            lent.push(rows);
+        }
+        if count == 0 {
+            // no whole line to lend: alacritty gets back the rows it held, as they were
+            let len = self.rows.len();
+            lent = (len - held.min(len)..len).rev().map_while(|i| self.line_rows(i, i + 1, now)).collect();
+            (first, count) = (len - lent.len(), lent.iter().map(Vec::len).sum());
+            if count == 0 {
+                return;
+            }
+        }
+        // alacritty makes history rows by scrolling: the screen goes back as it was
+        let g = term.grid_mut();
+        let screen: Vec<Row<Cell>> = (0..shown).map(|l| g[Line(l as i32)].clone()).collect();
+        g.scroll_up::<Color>(&(Line(0)..Line(shown as i32)), count);
+        for (l, row) in screen.into_iter().enumerate() {
+            g[Line(l as i32)] = row;
+        }
+        for (l, row) in lent.into_iter().rev().flatten().enumerate() {
+            g[Line(l as i32 - count as i32)] = row;
+        }
+        self.rows.truncate(first);
+    }
+}
+
+/// Whether alacritty's history holds `rows` rows and `lines` whole lines (the oldest row's line
+/// may begin in the store): then a resize needs nothing from the store, as while output streams.
+fn held_enough(term: &Term<Listener>, rows: usize, lines: usize) -> bool {
+    let g = term.grid();
+    let (held, last) = (g.history_size(), Column(g.columns() - 1));
+    let starts = (1..held).filter(|&n| !g[Line(-(n as i32) - 1)][last].flags.contains(Flags::WRAPLINE));
+    held >= rows && (lines == 0 || starts.take(lines).count() == lines)
+}

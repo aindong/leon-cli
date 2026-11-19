@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# overview.sh: how long the app's overview (⌘⇧\) takes to open with many tabs (docs/performance.md).
+# overview.sh: how long the app's overview (⌘⇧\) takes to open with many tabs (docs/performance-app.md).
 #   scripts/perf/overview.sh [--runs N] [--tabs N]
 # TABS tabs (default 50) in 10 sessions, each a shell that printed a screenful, then the release
 # app with its frame log, and ⌘⇧\ through System Events (the terminal running this needs

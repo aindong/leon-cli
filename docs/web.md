@@ -70,6 +70,24 @@ short name (`http://devbox:7297/`) is refused on purpose; see below.
 - **What a page can do** is what a caller over the tailnet can do: the page speaks the same API as
   the socket, and drives your sessions as the app does.
 
+A connection from the browser, step by step:
+
+```mermaid
+flowchart TD
+  browser["a browser on another of your machines"] --> listener["the tailnet listener:<br/>only your own machines get in"]
+  listener --> first{"the first byte"}
+  first -->|"a TLS handshake, with HTTPS set"| https["HTTPS"]
+  first -->|"a capital letter"| http["HTTP: a redirect to HTTPS when it is set"]
+  first -->|"a brace: leon's own clients"| api["the socket's API"]
+  first -->|"anything else"| closed["closed, unanswered"]
+  https & http --> host{"does Host name this server?"}
+  host -->|no| e421["421"]
+  host -->|"yes: GET /"| page["the page, with this run's token"]
+  host -->|"yes: /ws"| ws{"the page's own Origin,<br/>and its token?"}
+  ws -->|no| e403["403"]
+  ws -->|yes| socket["a WebSocket carrying the socket's API"]
+```
+
 ## HTTPS
 
 Without a certificate the page is plain HTTP. Tailscale's WireGuard already encrypts and

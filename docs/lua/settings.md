@@ -11,7 +11,7 @@ them in place; a running app follows them on a reload. A bad value is a skipped 
 
 The Settings window has a control for every setting in the table below, in sections: General
 (`resume`, `check_for_updates`), Appearance (`theme`, `translucency`, `fade_inactive_panes`,
-`font`, `cursor_shader`), Terminal (`copy_on_select`, `link_card`, `repeat_time`, `hint_patterns`) and Notifications. Its search
+`font`, `cursor_shader`), Terminal (`copy_on_select`, `link_card`, `repeat_time`, `hint_patterns`, `scrollback`) and Notifications. Its search
 field finds a setting by its label or by its name here (`fade_inactive_panes`). A setting init.lua
 sets by code, not with a literal value, shows read-only there, with the line to change. Two more
 sections are read-only: Shortcuts lists every key the app binds, with Edit in init.lua to change
@@ -43,6 +43,7 @@ since every program in every session ends.
 | `cursor_shader_duration` | seconds the cursor shader draws after the cursor changes, 0.1 to 5 | `1` |
 | `serve_web` | `true` or `false` ([web.md](../web.md)) | `false` |
 | `serve_web_cert`, `serve_web_key` | a file's path, from `/` or `~/` ([web.md](../web.md#https)) | `""` (plain HTTP) |
+| `scrollback` | lines of history a pane keeps, 0 to 100000 | `10000` |
 
 `theme` names a theme `leon theme list` shows (built in or imported); an unknown name is an error.
 
@@ -94,6 +95,14 @@ leon.set("cursor_shader_duration", 0.5)
 ```
 
 `repeat_time` is how long a repeatable binding's keys work without the prefix ([keys.md](keys.md#repeat-keys)).
+
+`scrollback` is how many lines of history each pane keeps. A change applies to running panes at
+once; a lower value drops their oldest lines. A line costs about what its text does (the newest
+1,000 more, at the pane's full width), so 100,000 lines of 70 characters are about 20 MB a pane.
+
+```lua
+leon.set("scrollback", 50000)
+```
 
 `hint_patterns` adds regular expressions (Rust syntax) to what the app's hints label. Hints
 (`client.hints`, ⌘⇧H) put a short label on every URL, path, git hash, UUID, `0x` number, IPv4

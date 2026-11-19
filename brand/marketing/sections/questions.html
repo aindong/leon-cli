@@ -1,0 +1,23 @@
+  <section class="questions" id="questions" aria-labelledby="questions-h">
+    <div class="wrap">
+      <div class="grid">
+        <div class="c5 stack">
+          <h2 id="questions-h">Questions</h2>
+          <p class="muted">Each answer has its page in the docs.</p>
+          <a class="link" href="performance/">See the performance numbers</a>
+          <figure class="bars" role="img" aria-label="Memory per agent pane: about 33 MiB before leon's history store, 3 MiB with it">
+            <p class="small muted">Memory per agent pane, 14 agents over 5 minutes</p>
+            <div class="bar-row"><span>Before the history store</span><b style="--w: 100%"></b><span>33 MiB</span></div>
+            <div class="bar-row now"><span>leon now</span><b style="--w: 9%"></b><span>3 MiB</span></div>
+          </figure>
+        </div>
+        <div class="c6r faq">
+          <div class="faq-item"><h3>What does leon cost?</h3><p>Nothing. It is free software under the MIT license.</p></div>
+          <div class="faq-item"><h3>Does it run on Linux?</h3><p>The command and its server do. Leon.app needs macOS 11 or later.</p></div>
+          <div class="faq-item"><h3>What happens to leon when I quit the app?</h3><p>Your programs keep running, and the app opens on them again. If the server stops, the layout returns with fresh shells.</p></div>
+          <div class="faq-item"><h3>Is leon fast with many agents?</h3><p><code>cat</code> runs at about 117 MB/s, near the macOS limit, and an agent pane's history now costs a tenth of what it did.</p></div>
+          <div class="faq-item"><h3>Why does macOS warn me about Leon.app?</h3><p>It is not notarized yet. Run <code>xattr -dr com.apple.quarantine /Applications/Leon.app</code> once first.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
