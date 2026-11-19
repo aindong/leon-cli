@@ -1,0 +1,164 @@
+# leon's website: the landing page at the root, the README and docs/ as pages, What's new from
+# CHANGELOG.md and the demo page. website/hooks.py adds the files that live outside docs/ at build time
+# (nothing is copied into git) and points links into the source at GitHub. Build: website/build.sh.
+site_name: leon
+site_description: A terminal multiplexer for people who run several terminal programs and coding agents at once.
+site_url: https://aindong.github.io/leon-cli/
+repo_url: https://github.com/aindong/leon-cli
+repo_name: aindong/leon-cli
+edit_uri: ""
+copyright: leon is free software under the MIT license.
+docs_dir: ../docs # hooks.py sets it to LEON_SITE_ROOT's docs/ (this checkout's by default)
+site_dir: ../target/site
+strict: true
+
+# what .gitignore keeps out of the public repo, and what is not a page
+exclude_docs: |
+  /spec.md
+  /spec/
+  /research/
+  /audit-*.md
+  /api-snapshot.json
+
+validation:
+  omitted_files: info
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+hooks:
+  - hooks.py
+
+theme:
+  name: material
+  custom_dir: overrides
+  logo: assets/logo-mark.svg
+  favicon: assets/logo-mark.svg
+  font: false # Instrument Sans from brand/fonts, in leon.css
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Dark
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Light
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+
+extra_css:
+  - assets/leon.css
+
+extra:
+  generator: false
+  homepage: . # the landing page, at the site's root
+  # the language switcher: each language's home; hooks.py turns a link into the page's own
+  # translation where there is one
+  alternate:
+    - name: English
+      link: overview/
+      lang: en
+    - name: 简体中文
+      link: i18n/zh-CN/
+      lang: zh-CN
+    - name: 日本語
+      link: i18n/ja/
+      lang: ja
+    - name: 한국어
+      link: i18n/ko/
+      lang: ko
+    - name: Español
+      link: i18n/es/
+      lang: es
+    - name: Português (Brasil)
+      link: i18n/pt-BR/
+      lang: pt-BR
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      # GitHub's anchors: lower case, Unicode kept, so links written for GitHub land here too
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
+nav:
+  - Overview: overview.md
+  - Get started:
+      - install.md
+      - shortcuts.md
+      - recipes.md
+      - updates.md
+  - Guides:
+      - agents.md
+      - remote-hosts.md
+      - web.md
+      - cursor-shaders.md
+  - CLI:
+      - cli.md
+      - cli/sessions.md
+      - cli/layout.md
+      - cli/automation.md
+      - cli/agents.md
+      - cli/hosts.md
+      - cli/server.md
+      - cli/settings.md
+  - Lua:
+      - lua.md
+      - lua/settings.md
+      - lua/keys.md
+      - lua/actions.md
+      - lua/scripts.md
+  - API:
+      - api.md
+      - integrators.md
+  - What's new:
+      - whats-new/index.md # hooks.py adds a page per release after it
+      - changelog-detail.md
+      - changelog-milestones.md
+      - changelog-0.1.0.md
+  - Demo: demo.md
+  - Project:
+      - architecture.md
+      - Decisions:
+          - architecture/protocol-and-clients.md
+          - architecture/state-and-hosts.md
+          - architecture/hosts.md
+          - architecture/tailnet.md
+          - architecture/web.md
+          - architecture/attention.md
+          - architecture/floats.md
+          - architecture/keys-copy-hints.md
+          - architecture/cursor-shaders.md
+          - architecture/gpui.md
+      - roadmap.md
+      - performance.md
+      - performance-cat.md
+      - performance-memory.md
+      - releases.md
+      - Translations: i18n/README.md

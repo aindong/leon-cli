@@ -12,7 +12,7 @@ Keep your work in view.
 
 ## 50-word pitch
 
-leon is a native macOS terminal for people running many things at once. Keep shells, tests, and coding agents in split panes, tabs, and sessions. Drive the same workspace from the keyboard, CLI, or Lua. See which programs are working, blocked, or done, when they report their status to leon.
+leon is a terminal multiplexer for people running many things at once. Keep shells, tests, and coding agents in split panes, tabs, and sessions that keep running when the app quits. Drive them from the native macOS app, the CLI on macOS and Linux, or Lua. See which programs are working, blocked, or done.
 
 ## 150-word description
 
@@ -28,5 +28,5 @@ Use leon for the work you already do: a shell, a build, a server, and an agent, 
 
 - The demo graphics illustrate a workflow; they are not app screenshots or benchmark results.
 - Status is program-reported, not inferred from every process automatically.
-- Install from a repository checkout with `scripts/install.sh`; no Homebrew formula or remote installer is claimed.
+- Install with Homebrew (`brew install --cask aindong/leon/leon` for the app, `brew install aindong/leon/leon` for the CLI alone) or from a release; `scripts/install.sh` builds from a checkout. Leon.app needs macOS 11+ and is not notarized yet; the CLI runs on macOS and Linux.
 - Running jobs survive quitting the app (it detaches; the server keeps them). Do not claim they survive the server stopping or a reboot: saved layouts restore with fresh shells, not resumed processes.

@@ -30,6 +30,8 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **A website.** <https://aindong.github.io/leon-cli/> has the docs, a What's new page for each
+  release and a demo, built from the latest release ([detail](docs/changelog-detail.md#the-website)).
 - **Scrollback that costs what its text costs.** A pane keeps its 10,000 lines in about a ninth of
   the memory; `leon.set("scrollback", N)` sets how many, reported by `server.settings` (`api_version`
   `1.18.0`) ([detail](docs/changelog-detail.md#scrollback-that-costs-what-its-text-costs)).

@@ -6,7 +6,8 @@
 # Prints one word:
 #   none  only translations, images, brand files and community files (ci.yml's paths-ignore
 #         usually stops the run before this job starts)
-#   docs  English Markdown outside the code too: the doc tests, on Linux
+#   docs  English Markdown outside the code, or the website's files: the doc tests, on Linux
+#         (the website's own job runs on docs and full alike)
 #   full  anything else, and whenever the diff can't be read: the whole gate
 # A rename counts as both paths, so code moved into docs/ still runs the gate.
 set -euo pipefail
@@ -26,7 +27,7 @@ while IFS= read -r f; do
   done
   case $f in
     crates/* | scripts/* | .github/* | examples/*) echo full; exit 0 ;;
-    *.md) kind=docs ;;
+    *.md | website/*) kind=docs ;;
     *) echo full; exit 0 ;;
   esac
 done <<<"$files"

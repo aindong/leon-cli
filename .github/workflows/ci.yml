@@ -1,6 +1,7 @@
 # macOS: the whole gate, app included. Linux (x86_64 and aarch64): the server and CLI in the pinned
 # Rust image, the smoke test and the packages (scripts/linux-test.sh, scripts/package-linux.sh).
-# A change to English docs alone runs only the tests that read them, on Linux (the docs job).
+# A change to English docs alone, or to the website (website/), runs only the tests that read the
+# docs, on Linux (the docs job), and the website's build (the site job, which every change runs).
 # Actions are pinned by commit, with their tag beside them.
 name: CI
 
@@ -131,3 +132,19 @@ jobs:
           fetch-depth: 0
       - run: scripts/i18n-check.sh
       - run: scripts/linux-doc-tests.sh
+
+  # The website (website/), as site.yml deploys it: built strictly, so a broken link or anchor fails
+  # here rather than at a release, and its tests. On any change but translations and brand files
+  # alone, docs or code, since both can break a link; a minute on Linux. The history, for the test
+  # that builds the latest release's tag.
+  site:
+    needs: changes
+    if: needs.changes.outputs.kind != 'none'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - run: website/build.sh
+      - run: target/site-venv/bin/python website/test_site.py
