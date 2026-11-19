@@ -8,6 +8,14 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### What's new in the app
+
+#### Added
+- Leon.app's first launch of a new version shows "Updated to leon X.Y.Z." once in the update
+  notice, with What's New (and Open What's New in the palette), which opens the website's page for
+  that version. `updates.json` keeps the version that last ran; a first install shows nothing
+  ([updates.md](updates.md#in-leonapp)).
+
 ### The website
 
 #### Added

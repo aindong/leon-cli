@@ -1,0 +1,5 @@
+#!/bin/sh
+# links: a page of text with a link in it, as a program prints one
+printf '\033]2;Release checklist\007'
+printf '\n  Review the changes before tagging:\n\n  https://example.com/leon/compare/v0.1.1...dev\n\n'
+exec sleep 100000

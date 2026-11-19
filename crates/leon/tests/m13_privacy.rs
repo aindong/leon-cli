@@ -37,27 +37,33 @@ fn mentions(text: &str, name: &str) -> bool {
         .any(|(i, _)| !word(text[..i].chars().next_back()) && !word(text[i + name.len()..].chars().next()))
 }
 
+/// Every file under `dir`, in its folders too; a folder it can't read fails the test, never skips.
+fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+    for e in std::fs::read_dir(dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display())) {
+        let p = e.unwrap().path();
+        if p.is_dir() {
+            walk(&p, out)
+        } else {
+            out.push(p)
+        }
+    }
+}
+
+/// Every picture under docs/images, a release's clips in docs/images/whats-new/<version>/ too.
 fn images() -> Vec<PathBuf> {
-    let mut all: Vec<PathBuf> =
-        std::fs::read_dir(root().join("docs/images")).unwrap().map(|e| e.unwrap().path()).collect();
+    let mut all = vec![];
+    walk(&root().join("docs/images"), &mut all);
     all.sort();
     all
 }
 
 /// Every file under docs/i18n/ (none before the first translation lands).
 fn translations() -> Vec<PathBuf> {
-    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-        for e in std::fs::read_dir(dir).into_iter().flatten() {
-            let p = e.unwrap().path();
-            if p.is_dir() {
-                walk(&p, out)
-            } else {
-                out.push(p)
-            }
-        }
-    }
     let mut out = vec![];
-    walk(&root().join("docs/i18n"), &mut out);
+    let dir = root().join("docs/i18n");
+    if dir.exists() {
+        walk(&dir, &mut out);
+    }
     out
 }
 
@@ -76,7 +82,7 @@ fn image_names_readme_and_image_bytes_name_no_user_or_machine() {
             assert!(!mentions(text, name), "{page} mentions {name:?}");
         }
         for img in images() {
-            let file = img.file_name().unwrap().to_string_lossy().to_string();
+            let file = img.strip_prefix(root().join("docs/images")).unwrap().display().to_string();
             assert!(!mentions(&file, name), "{file} is named after {name:?}");
             let bytes = String::from_utf8_lossy(&std::fs::read(&img).unwrap()).to_string();
             assert!(!mentions(&bytes, name), "{file} holds {name:?} in its bytes (a text chunk?)");
@@ -93,8 +99,9 @@ fn no_screenshot_shows_the_user_or_machine() {
     let mut pngs: Vec<PathBuf> = images().into_iter().filter(|p| p.extension().is_some_and(|e| e == "png")).collect();
     // a recording's every distinct frame (mpdecimate drops repeats), when ffmpeg is here to split it
     let frames = tempfile::tempdir().unwrap();
-    for gif in images().into_iter().filter(|p| p.extension().is_some_and(|e| e == "gif")) {
-        let name = gif.file_stem().unwrap().to_string_lossy().to_string();
+    for (n, gif) in images().into_iter().filter(|p| p.extension().is_some_and(|e| e == "gif")).enumerate() {
+        // numbered, as two releases' clips can share a name
+        let name = format!("{n:03}-{}", gif.file_stem().unwrap().to_string_lossy());
         let pattern = frames.path().join(format!("{name}-%04d.png"));
         let split = Command::new("ffmpeg")
             .args(["-loglevel", "error", "-i"])
