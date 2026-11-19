@@ -56,6 +56,9 @@ pub struct Effective {
     pub serve_web_cert: String,
     /// Its private key file.
     pub serve_web_key: String,
+    /// Lines of history each terminal keeps, from 0 to 100000; a change applies to running
+    /// terminals at once, and a lower value drops their oldest lines.
+    pub scrollback: usize,
 }
 
 /// A theme name for each OS appearance (the same one for both unless init.lua gives two).

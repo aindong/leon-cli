@@ -109,6 +109,27 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 - The guide says when not to use leon, documents `-H`, what to do on exit 4, and looking before
   repeating a `send`.
 
+### Scrollback that costs what its text costs
+
+#### Changed
+- When output pauses, a pane's history moves out of alacritty, which keeps every row at the pane's
+  full width, into leon's own store of each row's text and runs of style: 10,000 lines of 70
+  characters at 80 columns cost about 2.2 MB instead of 19.7 MB, and a wide pane no more than a
+  narrow one. Rows aren't copied as they scroll, only when output pauses (or once a second), so
+  `cat` is as fast as before. Line numbers, styles, `capture`, restore after a restart and `leon
+  attach` are unchanged ([architecture/scrollback.md](architecture/scrollback.md)).
+- Stored lines aren't re-wrapped when a pane is resized: a narrower pane cuts them at its edge
+  (their whole text stays in `capture`).
+- Find, selection, copy and links in the app reach the stored lines too, with the same results as
+  when alacritty held them all.
+
+#### Added
+- `leon.set("scrollback", N)` (0 to 100000, default 10000) and `leon config set scrollback N`: the
+  lines of history each pane keeps ([lua/settings.md](lua/settings.md)). A change applies to
+  running panes at once, and a lower value drops their oldest lines.
+- `server.settings` reports `scrollback`: a new result field on a stable method, so `api_version`
+  goes from `1.17.0` to `1.18.0`.
+
 ### Contributing and translations
 
 #### Added

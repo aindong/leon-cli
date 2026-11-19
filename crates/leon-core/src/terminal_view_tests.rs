@@ -1,10 +1,10 @@
 use super::*;
 
-fn emulator() -> Term<Listener> {
+fn emulator() -> Emu {
     let writer = Writer { tx: mpsc::channel().0, queued_replies: Arc::default() };
     let listener = Listener { writer, seen: Arc::default() };
     let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
-    Term::new(config, &Size { rows: ROWS, cols: COLS }, listener)
+    Emu { term: Term::new(config, &Size { rows: ROWS, cols: COLS }, listener), store: Store::new(SCROLLBACK) }
 }
 
 /// A full history, then `CSI 3` ending a 4 KiB slice, and `J` and more lines in the next.

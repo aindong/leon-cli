@@ -4,13 +4,14 @@
 
 use std::path::{Path, PathBuf};
 
+use leon_core::terminal::{MAX_SCROLLBACK, SCROLLBACK};
 use leon_core::theme::{self, Theme};
 use serde_json::{json, Value};
 
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 22] = [
+pub const KEYS: [&str; 23] = [
     "theme",
     "font.family",
     "font.size",
@@ -33,6 +34,7 @@ pub const KEYS: [&str; 22] = [
     "serve_web",
     "serve_web_cert",
     "serve_web_key",
+    "scrollback",
 ];
 
 /// How far the app fades the panes without the focus toward the window's background, unless the
@@ -121,6 +123,8 @@ pub struct Settings {
     /// The certificate and key `tailscale cert` wrote, for HTTPS; both empty: plain HTTP.
     pub serve_web_cert: String,
     pub serve_web_key: String,
+    /// Lines of history each terminal keeps, 0 to `MAX_SCROLLBACK`.
+    pub scrollback: usize,
 }
 
 /// tmux's `repeat-time` default, in milliseconds, for a config that doesn't set `repeat_time`.
@@ -152,6 +156,7 @@ impl Default for Settings {
             serve_web: false,
             serve_web_cert: String::new(),
             serve_web_key: String::new(),
+            scrollback: SCROLLBACK,
         }
     }
 }
@@ -180,6 +185,7 @@ impl Settings {
             "serve_web": self.serve_web,
             "serve_web_cert": self.serve_web_cert,
             "serve_web_key": self.serve_web_key,
+            "scrollback": self.scrollback,
         })
     }
 
@@ -291,6 +297,12 @@ impl Settings {
                     _ => self.serve_web_key = path.to_string(),
                 }
             }
+            "scrollback" => match v.as_f64() {
+                Some(n) if n.fract() == 0. && (0. ..=MAX_SCROLLBACK as f64).contains(&n) => {
+                    self.scrollback = n as usize
+                }
+                _ => return Err(format!("scrollback is whole lines of history, 0 to {MAX_SCROLLBACK}")),
+            },
             _ if key.starts_with("notifications.") => {
                 return Err(format!("unknown setting {key:?}; the notification kinds are done, blocked and error"))
             }
