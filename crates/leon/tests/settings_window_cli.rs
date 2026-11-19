@@ -13,10 +13,11 @@ fn the_docs_describe_the_window() {
     let shortcuts = include_str!("../../../docs/shortcuts.md");
     let row = shortcuts.lines().find(|l| l.starts_with("| ⌘, |")).expect("the ⌘, row");
     assert!(row.contains("every setting in sections, with search"), "{row}");
-    let changelog = include_str!("../../../CHANGELOG.md");
+    // 0.1.0's section moved to the archive when 0.1.1 came out
+    let changelog = include_str!("../../../docs/changelog-archive.md");
     let release = &changelog[changelog.find("## [0.1.0]").unwrap()..];
     let next = release[3..].find("\n## ").map_or(release.len(), |i| i + 3);
-    assert!(release[..next].contains("#a-settings-window-with-sections)"), "CHANGELOG.md [0.1.0]");
+    assert!(release[..next].contains("#a-settings-window-with-sections)"), "the changelog's [0.1.0]");
     let detail = include_str!("../../../docs/changelog-detail.md");
     assert!(detail.contains("### A Settings window with sections"), "its detail");
 }

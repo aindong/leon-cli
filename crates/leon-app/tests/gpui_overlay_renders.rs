@@ -1,5 +1,5 @@
 //! Motion PR 3 (ADR R3): an overlay's fade re-renders only what draws it: the palette's no grid and
-//! no section; the find bar's only its pane's header.
+//! no section (past the focus moving in and out); the find bar's only its pane's header.
 mod layout_support;
 
 use std::collections::HashMap;
@@ -44,11 +44,16 @@ fn a_fade_renders_only_what_draws_it(cx: &mut TestAppContext) {
     let (grid2, sections2) = counts(cx);
     s.app.stop();
     assert!(n >= 2 && m >= 1, "the palette faded in ({n} frames) and out ({m})");
-    assert_eq!(after, before, "the palette's fade rendered no grid and no section");
+    // the palette takes the focus and gives it back (GPUI phase 6): each focus change refreshes
+    // the window once (GPUI drops every cache for that frame, ADR R3); the fade's own frames
+    // render no grid and no section
+    let refreshed = |c: u64| c + 2;
+    let sections: HashMap<String, u64> = before.1.iter().map(|(k, v)| (k.clone(), refreshed(*v))).collect();
+    assert_eq!(after, (refreshed(before.0), sections), "the palette's fade rendered no grid and no section");
     let header = format!("header-{a}");
     let moved: Vec<_> =
         sections2.iter().filter(|(k, v)| sections0.get(*k) != Some(v)).map(|(k, _)| k.clone()).collect();
     assert!(k >= 2, "the find bar faded in ({k} frames)");
     assert_eq!(moved, vec![header], "only its pane's header rendered as it faded");
-    assert_eq!(grid2, after.0, "and no grid");
+    assert_eq!(grid2, after.0 + 1, "and no grid, past the focus moving to the bar");
 }

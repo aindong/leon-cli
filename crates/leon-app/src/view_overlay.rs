@@ -44,17 +44,23 @@ impl Workspace {
         PaletteView { rows, selected, note: self.switcher_note(), ask, none, query, prompt }
     }
 
-    /// The palette (open, or fading out) and a pending sequence's hint, each as it looks now.
-    pub(super) fn render_overlay(&self, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
-        let palette = self.palette_drawn().map(|(p, look, live)| self.render_palette(p, look, live, cx));
-        let hint = self.hint_drawn().map(|(h, look)| {
-            let hint = presence::faded(look, 8., render_hint(h.clone(), &self.theme));
-            div().absolute().bottom(px(16.)).right(px(16.)).child(hint)
-        });
-        if palette.is_none() && hint.is_none() {
-            return None;
-        }
-        Some(div().absolute().size_full().children(palette).children(hint).into_any_element())
+    /// The palette (open, or fading out) as it looks now: its view's drawing (view_overlays.rs).
+    pub(super) fn render_palette_overlay(&self, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        let (p, look, live) = self.palette_drawn()?;
+        Some(div().absolute().size_full().child(self.render_palette(p, look, live, cx)).into_any_element())
+    }
+
+    /// A pending sequence's hint (open, or fading out) as it looks now.
+    pub(super) fn render_hint(&self) -> Option<gpui::AnyElement> {
+        let (h, look) = self.hint_drawn()?;
+        let hint = presence::faded(look, 8., render_hint(h.clone(), &self.theme));
+        Some(
+            div()
+                .absolute()
+                .size_full()
+                .child(div().absolute().bottom(px(16.)).right(px(16.)).child(hint))
+                .into_any_element(),
+        )
     }
 
     /// `p` drawn at `look`; a going palette (`live` false) takes no clicks.
@@ -65,6 +71,7 @@ impl Workspace {
             let (i, name, args) = (*i, item.name.clone(), item.args.clone());
             let row = div()
                 .id(SharedString::from(format!("palette-{i}")))
+                .debug_selector(move || sel(format!("palette-row-{i}")))
                 .flex()
                 .items_center()
                 .justify_between()
@@ -122,7 +129,23 @@ impl Workspace {
             .border_color(rgb(t.border))
             .rounded(px(10.))
             .shadow_lg()
-            .when(live, |d| d.occlude()) // a going palette lets clicks through
+            // a going palette lets clicks through; a live one takes the focus and its keys, and a
+            // press outside it closes it
+            .when(live, |d| {
+                d.occlude()
+                    .track_focus(&self.overlays.palette_focus)
+                    .key_context("Palette")
+                    .on_key_down(cx.listener(Self::palette_key_down))
+                    .on_mouse_down_out(cx.listener(|ws, _, _, cx| {
+                        ws.palette = None;
+                        // the press goes on to what it landed on: its palette toggle (the
+                        // toolbar's button) must not open the palette again
+                        ws.overlays.palette_closed = true;
+                        let this = cx.entity().downgrade();
+                        cx.defer(move |cx| drop(this.update(cx, |ws, _| ws.overlays.palette_closed = false)));
+                        cx.notify();
+                    }))
+            })
             .child(
                 div()
                     .flex()

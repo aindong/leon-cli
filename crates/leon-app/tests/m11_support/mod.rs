@@ -22,6 +22,9 @@ pub fn tab_running(s: &Setup, ws: &Entity<Workspace>, cx: &mut VisualTestContext
         target.as_ref() == Some(&id) && text.contains(ready)
     });
     assert!(shown, "the tab never showed {ready:?}");
+    // and the window's fit landed (a queued resize): a reflow after a test reads rows moves them
+    let t = term(&s.app, &id);
+    assert!(shows(cx, |cx| stays(cx, &t, t.size())), "the tab keeps its size");
     id
 }
 

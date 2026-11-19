@@ -28,7 +28,7 @@ fn a_row_is_titled_by_label_then_program_title_then_status_title() {
             Tab(None, "Release notes", vec![record(State::Done)]),
         ],
     )]);
-    let s = &mut m.sessions[0];
+    let s = &mut std::sync::Arc::make_mut(&mut m.sessions)[0];
     for b in &mut s.blocks[1..3] {
         b.title = None; // the program set no title of its own
         b.command = vec!["/usr/local/bin/fake-agent".into()];

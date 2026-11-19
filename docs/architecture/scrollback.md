@@ -49,6 +49,22 @@ A row keeps its line number when it moves, and `history` counts the rows on both
 - **Resize.** alacritty re-wraps its own rows (at most the newest 1,000), within the cap like any
   push; the store's are never re-wrapped. A narrower pane cuts a stored row at its edge in `lines`
   (`text` keeps it whole); a wider one shows it as it was.
+- **A taller or wider pane.** alacritty fills the rows a resize adds, and the rows its reflow
+  joins on a widening, only from its own history, which at rest holds few rows or none. When it
+  holds too few, `Store::lend` moves all of it into the store and then the store's newest lines
+  back to it: whole lines, at least the rows added and, on a widening, the new height in lines
+  (each is at least a row at the new width), at most the cap. It writes them through
+  `Grid::scroll_up` (the screen put back from a copy), and alacritty's grow and reflow do the rest,
+  as alone: what the pane shows doesn't depend on whether output paused. A line goes back wrapped
+  at the pane's width, as alacritty's reflow wraps it; one stored at that width comes back row for
+  row, keeping its numbers, while one stored at another width can take more or fewer rows, which
+  moves the older lines' numbers, as alacritty's own reflow does. A resize's numbers are
+  alacritty's alone, as before (`scrolled` stays at least `history`; a client starts over on a new
+  size). When no whole line can go back (the newest runs on into alacritty's rows from another
+  width and would end in blanks there, or one line is past the cap), alacritty gets back only the
+  rows it held. A resize while the alternate screen shows grows the primary one from alacritty's
+  rows alone, as nothing moves then. `b1_store_grow.rs` compares each case with alacritty keeping
+  the whole history.
 - **The cap.** `leon.set("scrollback", N)` (0 to 100,000, default 10,000) caps the store and
   alacritty's rows together. The server applies it to every terminal on a reload and to each new
   one (a restored block's saved text included), and a lower value drops the oldest lines at once;

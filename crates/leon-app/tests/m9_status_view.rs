@@ -62,20 +62,23 @@ fn status_in_a_background_session_or_hidden_tab_redraws_and_shows(cx: &mut TestA
     cx.run_until_parked();
     assert_eq!(ws.read_with(cx, |ws, _| ws.session_id()).as_deref(), Some(shown.as_str()));
 
-    let before = ws.read_with(cx, |ws, _| ws.signature());
+    // the sidebar draws every session's and tab's status: it renders again
+    let sidebar =
+        |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.section_renders().get("sidebar").copied());
+    let before = sidebar(cx);
     run_until(&term(&s.app, &other_block), DONE, "d-sent");
     let redraws = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.indicators()).0 == vec![None, Some(Indicator::Done)]);
-    assert!(redraws && ws.read_with(cx, |ws, _| ws.signature()) != before, "a background session's status redraws");
+    assert!(redraws && shows(cx, |cx| sidebar(cx) > before), "a background session's status redraws");
     let (sessions, _) = ws.read_with(cx, |ws, _| ws.indicators());
     assert_eq!(sessions, vec![None, Some(Indicator::Done)], "its sidebar row shows it");
 
     // an error in the shown tab keeps the session's row at error, so only the hidden tab's mark moves
     run_until(&focused(&s.app, &ws, cx), r"printf '\033]7501;state=error\007'; echo e-sent", "e-sent");
     shows(cx, |cx| ws.read_with(cx, |ws, _| ws.indicators()).0[0] == Some(Indicator::Error));
-    let before = ws.read_with(cx, |ws, _| ws.signature());
+    let before = sidebar(cx);
     run_until(&term(&s.app, &hidden), DONE, "d-sent");
     let done = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.indicators()).1.get(1) == Some(&Some(Indicator::Done)));
-    assert!(done && ws.read_with(cx, |ws, _| ws.signature()) != before, "a hidden tab's status redraws");
+    assert!(done && shows(cx, |cx| sidebar(cx) > before), "a hidden tab's status redraws");
     let (sessions, tabs) = ws.read_with(cx, |ws, _| ws.indicators());
     assert_eq!((sessions[0], tabs), (Some(Indicator::Error), vec![Some(Indicator::Error), Some(Indicator::Done)]));
     s.app.stop();

@@ -1,0 +1,92 @@
+/* leon's window as live HTML, drawn from docs/images/app-*.png: Coal panes, a lighter sidebar, an
+   Amber bar on the focused pane, and brand/README.md's status colours (Copper working, Sage done,
+   Wheat blocked, Rose error). Also the test run that plays in it, and the clients diagram. */
+.lw { --lw-bg: #1f1c19; --lw-side: #262220; --lw-line: #3a332e; --lw-ink: #e9e2d6; --lw-dim: #9b9086; --lw-focus: #f3a747; --lw-on: #4a2c31;
+  display: flex; flex-direction: column; overflow: hidden; background: var(--lw-bg); color: var(--lw-ink);
+  border: 1px solid #000; border-radius: 12px; font: 400 12px/18px var(--mono);
+  box-shadow: 0 1px 0 rgb(255 255 255 / .06) inset, 0 24px 48px -16px rgb(41 37 33 / .45); }
+.lw-bar { display: flex; align-items: center; gap: 16px; height: 36px; flex: none; padding: 0 14px; background: var(--lw-side); border-bottom: 1px solid var(--lw-line); color: var(--lw-dim); font: 13px var(--font); }
+.lw-dots { display: flex; gap: 7px; }
+.lw-dots i { width: 11px; height: 11px; border-radius: 50%; background: #ed6a5e; }
+.lw-dots i + i { background: #f5bf4f; }
+.lw-dots i + i + i { background: #61c554; }
+.lw-body { display: grid; grid-template-columns: 216px minmax(0, 1fr); flex: 1; min-height: 0; }
+.lw-side { padding: 12px 8px; overflow: hidden; background: var(--lw-side); border-right: 1px solid var(--lw-line); font: 13px/20px var(--font); }
+.lw-group { padding: 10px 8px 4px; color: var(--lw-dim); }
+.lw-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; white-space: nowrap; overflow: hidden; }
+.lw-row.on { background: var(--lw-on); }
+.lw-row b { width: 12px; flex: none; text-align: center; font: 400 12px var(--mono); color: var(--lw-dim); }
+.lw-row kbd { margin-left: auto; padding-left: 8px; color: var(--lw-dim); font: 12px var(--font); }
+.lw-pane { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.lw-pane.focus::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 2px; background: var(--lw-focus); }
+.lw-head { display: flex; flex-wrap: wrap; column-gap: 12px; padding: 7px 14px; color: var(--lw-dim); font: 12px/18px var(--font); white-space: nowrap; }
+.lw-head > :first-child { color: var(--lw-ink); }
+.lw pre { margin: 0; padding: 4px 14px 14px; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lw .w { color: #e78155; } .lw .d { color: #b8c6ac; } .lw .b { color: #e8c77d; } .lw .e { color: #e28e9b; }
+.lw .dim { color: var(--lw-dim); } .lw .ask { color: var(--lw-focus); }
+
+/* the hero's window: a sidebar and the agent at its prompt */
+.lw-hero .lw-body { grid-template-columns: 196px minmax(0, 1fr); }
+
+/* the app's window: the sidebar beside four panes */
+.lw-panes { display: grid; grid-template-columns: 1.15fr 1fr 1fr; grid-template-rows: 1.4fr 1fr; min-height: 0; }
+.lw-panes > * { min-width: 0; }
+.lw-panes > * + * { border-left: 1px solid var(--lw-line); }
+.lw-panes > :nth-child(n+3) { border-top: 1px solid var(--lw-line); }
+.lw-panes > .tall { grid-row: span 2; }
+.lw-panes > .wide { grid-column: span 2; }
+
+/* narrower windows keep only what fits whole */
+@media (max-width: 1279px) {
+  .lw .more, .lw .extra { display: none; }
+  .lw-hero .lw-side { display: none; }
+  .lw-hero .lw-body { grid-template-columns: minmax(0, 1fr); }
+  .lw-panes { grid-template-columns: 1.2fr 1fr; grid-template-rows: minmax(0, 1fr); }
+  .lw-panes > .wide { grid-column: auto; }
+  .lw-panes > :nth-child(n+3) { display: none; }
+}
+@media (max-width: 1023px) { .lw-app .lw-body { grid-template-columns: minmax(0, 1fr); } .lw-app .lw-side { display: none; } }
+@media (max-width: 639px) { .lw-panes { grid-template-columns: minmax(0, 1fr); } .lw-panes > :not(.tall) { display: none; } }
+
+/* a test run that types its command, ticks each suite and ends on a check (window.js plays it) */
+.run { padding: 8px 14px; font: 13px/20px var(--mono); }
+.run-ln { display: flex; gap: 12px; height: 20px; white-space: nowrap; }
+.run .cwd { color: var(--lw-dim); }
+.run .typed { color: var(--lw-ink); font-weight: 500; }
+.run .meter { align-items: center; color: var(--lw-dim); }
+.run .bar { width: 96px; height: 3px; border-radius: 2px; background: var(--lw-line); overflow: hidden; }
+.run .bar i { display: block; height: 100%; width: calc(var(--p, 1) * 100%); background: #e78155; transition: width .2s linear; }
+.run .step::before { content: "✓"; width: 12px; color: var(--lw-dim); }
+.run .step.busy::before { content: "◌"; }
+.run .step span:first-child { width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.run .step span + span, .run .sum span + span { color: var(--lw-dim); }
+.run .ok { color: #b8c6ac; font-weight: 500; }
+.run .gap { height: 20px; }
+.caret { width: 7px; height: 15px; margin-top: 2px; background: var(--lw-focus); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.run [data-out][hidden] { display: flex; visibility: hidden; }
+
+/* the pause control every loop carries */
+.pause { position: absolute; right: 12px; bottom: 12px; z-index: 3; width: 32px; height: 32px; border-radius: 50%; border: 0; cursor: pointer;
+  background: rgb(245 240 231 / .92); color: var(--ink); display: grid; place-items: center; }
+.pause svg { width: 12px; height: 12px; }
+.pause .play, .paused .pause .hold { display: none; }
+.paused .pause .play { display: block; }
+.lw-app { position: relative; }
+
+/* the clients round the server: lines from the middle, a light running out along each in turn */
+.hub { position: relative; aspect-ratio: 628 / 678; border-radius: var(--r); overflow: hidden; border: 1px solid var(--line);
+  background: linear-gradient(165deg, #e6dccd 0%, #d9cbb7 100%); }
+.hub-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hub-lines line { stroke: rgb(101 89 79 / .45); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hub-lines .pulse { stroke: var(--action); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 6 94; stroke-dashoffset: 100;
+  animation: run 3.2s linear infinite; animation-delay: calc(var(--i) * .4s); opacity: 0; }
+@keyframes run { 0% { stroke-dashoffset: 100; opacity: 0; } 4% { opacity: 1; } 30% { stroke-dashoffset: 6; opacity: 1; } 34%, 100% { stroke-dashoffset: 6; opacity: 0; } }
+.paused .hub-lines .pulse { animation-play-state: paused; }
+.hub-ring { position: absolute; left: 50%; top: 50%; aspect-ratio: 1; border-radius: 50%; border: 1px solid rgb(101 89 79 / .22); transform: translate(-50%, -50%); }
+.hub-node { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px;
+  background: #fffdfa; border-radius: 8px; box-shadow: 0 1px 2px rgb(41 37 33 / .12); font-size: 14px; font-weight: 500; white-space: nowrap; }
+.hub-node svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.hub-core { padding: 10px 16px 10px 12px; background: var(--ink); color: var(--bg); font-size: 15px; box-shadow: 0 0 0 8px rgb(41 37 33 / .08), 0 12px 24px -8px rgb(41 37 33 / .5); }
+.hub-core img { width: 22px; height: 22px; }
+@media (max-width: 639px) { .hub-node span { display: none; } .hub-node { padding: 8px; } .hub-core { padding: 12px; } }

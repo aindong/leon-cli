@@ -63,7 +63,8 @@ class Built(unittest.TestCase):
         landing = read(self.out / "index.html")
         self.assertIn("Keep your", landing)
         for link in re.findall(r'href="([^"#:]+)"', landing):
-            self.assertTrue((self.out / link / "index.html").exists(), f"the landing page's {link}")
+            page = self.out / link / "index.html" if link.endswith("/") else self.out / link
+            self.assertTrue(page.exists(), f"the landing page's {link}")
         for name in ("Docs", "What's new", "Demo", "Install", "GitHub"):
             self.assertIn(f">{name}", landing)
         self.assertIn("leon is a terminal multiplexer", self.page("overview"))
@@ -80,6 +81,34 @@ class Built(unittest.TestCase):
         for lang in LANGS:
             self.assertTrue((self.out / "i18n" / lang / "index.html").exists(), lang)
             self.assertTrue((self.out / "i18n" / lang / "install" / "index.html").exists(), lang)
+
+    def test_the_landing_page_is_whole_and_asks_no_other_server(self):
+        landing = read(self.out / "index.html")
+        self.assertNotIn("<!--#include", landing, "every section is in place")
+        for section in ("hero-h", "app-h", "agents-h", "statement", "handoff-h", "cli-h", "questions-h", "close-h"):
+            self.assertIn(f'id="{section}"', landing)
+        # what a visitor's browser loads: the page's own files, never another server's
+        loads = re.findall(r'<(?:link(?![^>]*rel="canonical")|script|img|source|video)\b[^>]*?\s(?:href|src|poster)="([^"]+)"', landing)
+        self.assertGreater(len(loads), 10)
+        for url in loads:
+            self.assertNotRegex(url, r"^(https?:)?//", f"the landing page loads {url}")
+            self.assertTrue((self.out / url).exists(), url)
+        for css in self.out.joinpath("assets").rglob("*.css"):
+            self.assertNotRegex(read(css), r"url\(\s*[\"']?(https?:)?//", css)
+        for font in ("instrument-sans-latin.woff2", "dm-mono-400-latin.woff2", "OFL-DMMono.txt"):
+            self.assertTrue((self.out / "assets" / "fonts" / font).exists(), font)
+
+    def test_the_landing_page_is_small_files_of_its_own(self):
+        # the repo's 20 KB file limit holds for the page's own code, with no file marked to escape it
+        tracked = subprocess.run(
+            ["git", "ls-files", "brand/marketing"], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout.split()
+        code = [ROOT / p for p in tracked if p.endswith((".html", ".css", ".js"))]
+        self.assertGreater(len(code), 5)
+        for path in code:
+            self.assertLess(path.stat().st_size, 20000, path)
+        marks = [line for line in read(ROOT / ".gitattributes").splitlines() if line.startswith("brand/marketing/")]
+        self.assertEqual(marks, ["brand/marketing/*.svg linguist-generated"], "only hero.svg and og.svg, which embed images")
 
     def test_nothing_is_copied_into_git(self):
         tracked = subprocess.run(
@@ -99,8 +128,8 @@ class Built(unittest.TestCase):
         self.assertIn(f'href="{GITHUB}/blob/v9.9.9/CHANGELOG.md"', ja)
 
     def test_whats_new_has_a_page_per_release_newest_first(self):
-        versions = [v for v, _, _ in hooks.releases(read(ROOT / "CHANGELOG.md"))]
-        self.assertIn("0.1.0", versions)
+        versions = [v for v, _, _ in hooks.every_release(ROOT)]
+        self.assertIn("0.1.0", versions)  # from docs/changelog-archive.md
         index = self.page("whats-new")
         at = [index.index(f'href="{v}/"') for v in versions]
         self.assertEqual(at, sorted(at), "newest first, as in CHANGELOG.md")
@@ -108,6 +137,18 @@ class Built(unittest.TestCase):
         for v in versions:
             self.assertIn(f"leon {v}", self.page(f"whats-new/{v}"))
         self.assertIn("serve_tailscale", self.page("whats-new/0.1.1"))
+        # an archived release's links start from docs/ there, and still reach their pages
+        old = self.page("whats-new/0.1.0")
+        self.assertIn('href="../../changelog-milestones/"', old)
+        self.assertIn('href="../../overview/#install"', old)
+
+    def test_an_archived_sections_links_go_back_to_the_root(self):
+        body = "[a](x.md) ![p](images/p.png) [r](../README.md#i) [h](#k) [u](https://e.x/y)\n[d]: x.md\n[w]: https://e.x/\n"
+        self.assertEqual(
+            hooks.rooted(body),
+            "[a](docs/x.md) ![p](docs/images/p.png) [r](README.md#i) [h](#k) [u](https://e.x/y)\n"
+            "[d]: docs/x.md\n[w]: https://e.x/\n",
+        )
 
     def test_a_changelog_anchor_goes_to_the_changelog(self):
         page = hooks.release_page("0.2.0", "2026-12-01", "See [it](#reading-api_version).\n\n[r]: #x")

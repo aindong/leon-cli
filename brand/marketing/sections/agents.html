@@ -1,0 +1,54 @@
+  <section id="agents" aria-labelledby="agents-h">
+    <div class="wrap">
+      <div class="head">
+        <h2 id="agents-h">Coding agents in leon report and delegate. <span class="muted">Claude Code and Codex work in panes beside you.</span></h2>
+        <p><a class="link" href="agents/">Read the agents guide</a></p>
+      </div>
+      <div class="grid cards">
+        <article class="card c4">
+          <h3>Reports working, blocked or done</h3>
+          <p>The state shows on the tab, in the Activity list, on the Dock and in a notification.</p>
+          <div class="panel">
+            <div class="notes" role="img" aria-label="Three notices: rate limiting is blocked on a permission, the README review is done, the flaky test is working">
+              <div class="note"><i class="b-ico">!</i><span><b>Rate limiting is blocked</b>Edit src/routes.rs?</span><span class="open">Open</span></div>
+              <div class="note"><i>✓</i><span><b>README review is done</b>This Mac › site</span><time>2m</time></div>
+              <div class="note"><i>●</i><span><b>Flaky test: working</b>60%, running the tests</span><time>5m</time></div>
+            </div>
+          </div>
+        </article>
+        <article class="card c4">
+          <h3>Opens a pane for your tests</h3>
+          <p>The agent runs them beside itself, waits for the exit and reads the last lines.</p>
+          <div class="panel">
+            <div class="lw lw-card" role="img" aria-label="An agent's commands: leon split opens a tests pane, leon wait waits for it, leon capture reads the result">
+              <pre><span class="dim"># a pane for the tests</span>
+id=$(leon split --label tests \
+  --keep-open -- cargo test)
+
+<span class="dim"># wait, then read the end</span>
+leon wait "$id"
+leon capture -b "$id" --trim | tail -2
+<span class="d">test result: ok. 18 passed; 0 failed</span></pre>
+            </div>
+          </div>
+        </article>
+        <article class="card c4">
+          <h3>Starts agents and hears back</h3>
+          <p>Workers get their own tab or worktree. Their reports land in your inbox.</p>
+          <div class="panel">
+            <div class="lw lw-card" role="img" aria-label="An agent starts two agents with leon agent start; leon types a notice into its prompt when a report arrives">
+              <pre>leon agent start --label tests
+leon agent start --label docs
+<span class="dim">I'll wait for their reports.</span>
+
+<span class="ask">&gt; You have 1 leon message.
+  Run leon inbox to read it.</span>
+
+leon inbox
+<span class="d">tests: 18 tests pass</span></pre>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>

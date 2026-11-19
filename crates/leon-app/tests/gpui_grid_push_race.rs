@@ -1,5 +1,6 @@
 //! A screen pushed while its grid syncs (between `sync_grid`'s frame read and its update-count
-//! read) must still be drawn: the poll has to see that count as not yet drawn.
+//! read) must still be drawn. Since GPUI phase 5 the window's copy of the model moves only when
+//! the main thread commits it, so the race can't happen; this still checks each push is drawn.
 mod grid_support;
 
 use std::sync::Arc;
@@ -27,8 +28,9 @@ fn a_screen_pushed_while_its_grid_syncs_is_drawn(cx: &mut TestAppContext) {
         t.write(format!("{k:04}\n").as_bytes()).unwrap();
         let end = Instant::now() + Duration::from_secs(10);
         loop {
-            // what every workspace notify runs: prepare, then sync_grids
+            // what every workspace notify runs (prepare, then sync_grids), and the wake's commit
             ws.update(cx, |_, cx| cx.notify());
+            cx.run_until_parked();
             let now = ws.read_with(cx, |ws, _| ws.screen(&id)).expect("a screen");
             if !Arc::ptr_eq(&now, &before) {
                 break;
@@ -36,7 +38,7 @@ fn a_screen_pushed_while_its_grid_syncs_is_drawn(cx: &mut TestAppContext) {
             assert!(Instant::now() < end, "no screen push came for {marker}");
         }
         drop(before);
-        // quiet now: only the poll, woken by that push, can bring the grid up to date
+        // quiet now: only the push's model event can bring the grid up to date
         let drew =
             shows(cx, |cx| ws.read_with(cx, |ws, _| ws.grid_drew(&id)).is_some_and(|d| d.text.contains(&marker)));
         if !drew {
