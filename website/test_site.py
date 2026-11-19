@@ -59,7 +59,12 @@ class Built(unittest.TestCase):
         return read(self.out / url / "index.html")
 
     def test_every_doc_is_a_page_and_the_landing_page_is_home(self):
-        self.assertIn("Keep your", read(self.out / "index.html"))
+        landing = read(self.out / "index.html")
+        self.assertIn("Keep your", landing)
+        for link in re.findall(r'href="([^"#:]+)"', landing):
+            self.assertTrue((self.out / link / "index.html").exists(), f"the landing page's {link}")
+        for name in ("Docs", "What's new", "Demo", "Install", "GitHub"):
+            self.assertIn(f">{name}", landing)
         self.assertIn("leon is a terminal multiplexer", self.page("overview"))
         tracked = subprocess.run(
             ["git", "ls-files", "docs"], cwd=ROOT, capture_output=True, text=True, check=True
