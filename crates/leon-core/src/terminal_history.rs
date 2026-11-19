@@ -181,21 +181,17 @@ impl Store {
         last.is_some_and(|r| r.flags.contains(Flags::WRAPLINE))
     }
 
-    /// Stored row `i` as alacritty's rows `cols` wide: the one row, or a row kept whole from a
-    /// wider pane wrapped as alacritty wraps it (a wide character that doesn't fit goes on to the
-    /// next row, a leading spacer in its place).
-    fn grid_rows(&self, i: usize, cols: usize) -> Vec<Row<Cell>> {
-        let mut cells = self.cells(i);
-        let mut rows = vec![Row::new(cols)];
-        if cells.len() <= cols {
-            for (col, cell) in cells.into_iter().enumerate() {
-                rows[0][Column(col)] = cell;
-            }
-            return rows;
-        }
-        // the wrap it had at its own width marks the last row here
-        cells.retain(|c| !c.flags.contains(Flags::LEADING_WIDE_CHAR_SPACER));
+    /// Stored rows `from..to`, one line, as alacritty's rows `cols` wide: joined and wrapped again
+    /// as alacritty's reflow wraps (WRAPLINE on each full row, a wide character that doesn't fit
+    /// goes on to the next row with a leading spacer in its place), whatever width they were
+    /// stored at. Rows stored at this width come back as they were.
+    fn line_rows(&self, from: usize, to: usize, cols: usize) -> Vec<Row<Cell>> {
+        let mut rows: Vec<Row<Cell>> = vec![Row::new(cols)];
         let mut col = 0;
+        // a row's leading spacer goes where it joins the next; the last row's line goes on in
+        // alacritty's rows, as it stands
+        let joined = |i: usize, c: &Cell| i + 1 < to && c.flags.contains(Flags::LEADING_WIDE_CHAR_SPACER);
+        let cells = (from..to).flat_map(|i| self.cells(i).into_iter().filter(move |c| !joined(i, c)));
         for mut cell in cells {
             cell.flags.remove(Flags::WRAPLINE);
             if col == cols || (col + 1 == cols && cell.flags.contains(Flags::WIDE_CHAR)) {
@@ -210,7 +206,8 @@ impl Store {
             rows.last_mut().expect("a row")[Column(col)] = cell;
             col += 1;
         }
-        if self.wraps(i) {
+        // the newest stored line can go on in alacritty's rows
+        if self.wraps(to - 1) {
             rows.last_mut().expect("a row")[Column(cols - 1)].flags.insert(Flags::WRAPLINE);
         }
         rows
@@ -315,8 +312,7 @@ impl Store {
     /// Before a resize to `lines` x `cols`: alacritty fills new rows, and rows its reflow joins on a
     /// widening, from its own history only. When it holds too few, the store's newest lines go back
     /// to it first: whole lines, at least the rows added and, on a widening, `lines` lines (each is
-    /// at least a row at the new width). Moving rows between the two parts of `history` renumbers
-    /// nothing; a row kept whole from a wider pane comes back wrapped, as alacritty wraps it.
+    /// at least a row at the new width), at most the cap.
     fn lend(&mut self, term: &mut Term<Listener>, lines: usize, cols: usize) {
         let (shown, now) = (term.screen_lines(), term.columns());
         let (added, widens) = (lines.saturating_sub(shown), cols > now);
@@ -325,22 +321,19 @@ impl Store {
             return;
         }
         self.take(term, 0);
-        // newest first, until the block starts a line and holds enough
+        // whole lines, newest first, until they hold enough
         let (mut first, mut lent, mut count, mut starts) = (self.rows.len(), Vec::new(), 0, 0);
-        while first > 0 {
-            let rows = self.grid_rows(first - 1, now);
+        while first > 0 && (count < added || starts < want) {
+            let mut from = first - 1;
+            while from > 0 && self.wraps(from - 1) {
+                from -= 1;
+            }
+            let rows = self.line_rows(from, first, now);
             if count + rows.len() > self.limit() {
                 break;
             }
-            first -= 1;
-            count += rows.len();
+            (first, count, starts) = (from, count + rows.len(), starts + 1);
             lent.push(rows);
-            if first == 0 || !self.wraps(first - 1) {
-                starts += 1;
-                if count >= added && starts >= want {
-                    break;
-                }
-            }
         }
         if count == 0 {
             return;

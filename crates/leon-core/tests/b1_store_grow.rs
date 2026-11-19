@@ -25,8 +25,8 @@ impl Dimensions for Size {
     }
 }
 
-/// `short` lines (at most 50 cells, so no width here re-wraps them) in every style a stored row
-/// keeps, then `long` lines of 100 characters, which wrap at 80 and 60 and join at 120.
+/// `short` lines (at most 50 cells, so no width here re-wraps them) in the styles a stored row
+/// keeps (colours, bold, italic, underline, wide characters, marks, links, tabs), then `long` lines of 100 characters, which wrap at 80 and 60 and join at 120.
 fn output(short: usize, long: usize) -> Vec<u8> {
     let mut s = String::new();
     for i in 0..short {
@@ -219,7 +219,7 @@ fn widening_three_times_fills_the_screen_from_lines_three_rows_deep() {
 
 #[test]
 fn a_pane_narrowed_then_grown_fills_its_new_rows() {
-    // 100 characters, kept whole by the store at 120 columns; every third has a wide character
+    // 100 cells, kept whole by the store at 120 columns; every third has a wide character
     // that doesn't fit at 80 and moves on with a leading spacer
     let line = |n: usize| match n % 3 {
         0 => format!("line-{n:04}-{}中{}", "y".repeat(69), "w".repeat(19)),
@@ -252,4 +252,32 @@ fn a_resize_alacritty_can_fill_alone_moves_nothing() {
     reference.resize(Size(100, 120));
     assert_eq!(held(&t), 300, "the widening joined nothing and moved nothing");
     same(&t, &reference, "after both");
+}
+
+#[test]
+fn a_pane_widened_then_grown_shows_the_stores_older_lines_reflowed() {
+    // 119 characters: three rows at 40 columns, two at 80; the widening lends only the newest
+    // lines, so the grow reaches the store's rows still 40 wide
+    let bytes: String = (0..3000).map(|n| format!("line-{n:04}-{}中\r\n", "x".repeat(106))).collect();
+    let (t, mut reference) = sized(bytes.as_bytes(), 24, 40);
+    t.resize(24, 80).unwrap();
+    reference.resize(Size(24, 80));
+    same_screen(&t, &reference, "widened to 24x80");
+    t.resize(100, 80).unwrap();
+    reference.resize(Size(100, 80));
+    same_screen(&t, &reference, "grown to 100x80");
+}
+
+#[test]
+fn lines_lent_back_to_alacritty_keep_their_numbers() {
+    // short lines: a widening joins none of them, so the lines it lends stay in the history
+    let bytes = output(3000, 0);
+    let t = leon(&bytes, 24);
+    assert_eq!(held(&t), 0, "the history is in the store");
+    let (scrolled, before) = (t.scrolled(), rows(&t));
+    t.resize(24, 100).unwrap();
+    assert!(held(&t) >= 24, "the widening lent lines back to alacritty");
+    assert_eq!(t.scrolled(), scrolled, "the screen's top row keeps its number");
+    let json = |r: &[Row]| r.iter().map(|r| serde_json::to_string(r).unwrap()).collect::<Vec<_>>();
+    assert_eq!(json(&rows(&t)), json(&before), "every line keeps its number, text and styles");
 }
