@@ -8,11 +8,18 @@ use gpui::Window;
 
 use super::*;
 
-/// The pane a key went to whose echo is not shown yet, and how many were shown at once (tests).
-#[derive(Default)]
+/// The pane a key went to whose echo is not shown yet, how to show a window at once (`show_now`
+/// in the app; a test window has no NSView, so tests stand in), and how many were (tests).
 pub(super) struct Echo {
     pane: Option<String>,
+    pub(super) show: fn(&Window) -> bool,
     shows: u64,
+}
+
+impl Default for Echo {
+    fn default() -> Self {
+        Echo { pane: None, show: |_| true, shows: 0 }
+    }
 }
 
 impl Workspace {
@@ -22,18 +29,15 @@ impl Workspace {
     }
 
     /// Pushed screens `ids` (This Mac's, already given to their grids): the one a key is waiting
-    /// on is shown at once (the real window only: a test window has no NSView).
+    /// on is shown at once.
     pub(super) fn echo_arrived(&mut self, ids: &[String], window: &Window) {
         if self.echo.pane.as_ref().is_some_and(|p| ids.contains(p)) {
             self.echo.pane = None;
-            self.echo.shows += 1;
-            if self.platform {
-                show_now(window);
-            }
+            self.echo.shows += (self.echo.show)(window) as u64;
         }
     }
 
-    /// How many screens were shown at once for a key's echo.
+    /// How many screens were shown at once for a key's echo (asked, the window on screen).
     pub fn echo_shows(&self) -> u64 {
         self.echo.shows
     }

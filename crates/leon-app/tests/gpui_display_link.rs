@@ -48,6 +48,18 @@ fn run() {
     extern "C-unwind" fn on_screen(_: *mut objc2::runtime::AnyObject, _: Sel) -> usize {
         1 << 1 // NSWindowOcclusionStateVisible
     }
+    extern "C-unwind" fn hidden(_: *mut objc2::runtime::AnyObject, _: Sel) -> usize {
+        0
+    }
+    /// GPUI's window class answers `occlusionState` with `answer` from now on.
+    fn occlusion(answer: extern "C-unwind" fn(*mut objc2::runtime::AnyObject, Sel) -> usize) {
+        let class = AnyClass::get(c"GPUIWindow").expect("GPUI's window class") as *const AnyClass as *mut AnyClass;
+        // SAFETY: the same signature as -[NSWindow occlusionState]; on the main thread
+        unsafe {
+            let imp: Imp = std::mem::transmute(answer);
+            objc2::ffi::class_replaceMethod(class, objc2::sel!(occlusionState), imp, c"Q@:".as_ptr());
+        }
+    }
 
     if std::env::var("LEON_GUI_TESTS").is_ok_and(|v| v == "1") {
         println!("{NAME}: runs (LEON_GUI_TESTS=1)");
@@ -56,13 +68,7 @@ fn run() {
         return;
     }
     Application::new().run(move |cx: &mut App| {
-        let class = AnyClass::get(c"GPUIWindow").expect("GPUI's window class");
-        // SAFETY: same signature as -[NSWindow occlusionState]; main thread, before any window
-        unsafe {
-            let imp: Imp = std::mem::transmute(on_screen as extern "C-unwind" fn(_, _) -> _);
-            let class = class as *const AnyClass as *mut AnyClass;
-            objc2::ffi::class_replaceMethod(class, objc2::sel!(occlusionState), imp, c"Q@:".as_ptr());
-        }
+        occlusion(on_screen); // before the window opens, so GPUI starts its link
         let bounds = Bounds::centered(None, size(px(200.), px(120.)), cx);
         let options =
             WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), focus: false, ..Default::default() };
@@ -80,11 +86,17 @@ fn run() {
             }
             let after = display_links();
             println!("{NAME}: live CVDisplayLinks {before} before, {after} after {asked} immediate shows");
-            let ok = asked == 500 && before >= 1 && after <= before + 1;
+            let mut ok = asked == 500 && before >= 1 && after <= before + 1;
             if !ok {
                 eprintln!(
                     "{NAME}: FAILED: each displayLayer: left a display link behind (GPUI rebuilds it, not reuses it)"
                 );
+            }
+            // a window not on screen is not shown at once: GPUI draws nothing there
+            occlusion(hidden);
+            if handle.update(cx, |_, window, _| show_now(window)).expect("the window") {
+                eprintln!("{NAME}: FAILED: a hidden window was shown at once");
+                ok = false;
             }
             std::process::exit(if ok { 0 } else { 1 });
         })

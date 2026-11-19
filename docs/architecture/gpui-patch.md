@@ -43,7 +43,7 @@ the window is on screen; output with no key behind it (a flood) keeps to the dis
 `crates/leon-app/tests/gpui_display_link.rs` opens a GPUI window on the real platform and shows
 it at once 500 times through `view_echo.rs`, then counts the live `CVDisplayLink`s with `heap`:
 1 before and 1 after with the fix, 109 after on crates.io 0.2.2 (AppKit merges some of the
-requests). It opens a window, so it runs with `LEON_GUI_TESTS=1` (CI's macOS job) and says it
+requests); then, the window reported hidden, it is not shown at once. It opens a window, so it runs with `LEON_GUI_TESTS=1` (CI's macOS job) and says it
 skipped otherwise. `crates/leon/tests/gpui_adr.rs` checks the `[patch]` is this fork at a full
 commit and that the ADR's Built against line names that commit.
 
