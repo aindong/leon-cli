@@ -77,12 +77,14 @@ const target = () => {
   const b = mine && shown.block_ids.includes(mine) && (!zoomed || mine === zoomed) ? mine : zoomed ?? shown.focused_block_id;
   return b ? { s: chosen.session, b } : null;
 };
-const pointer = wire(conn, $("keys"), target, failed);
+// Shift+Escape leaves the pane for the sidebar, where Tab moves between the buttons
+const pointer = wire(conn, $("keys"), target, failed, () => $("sessions").querySelector("button")?.focus());
 const activity = new Activity(conn, $("activity"), $("notify"), (e) => {
   picked.set(e.w, e.b);
   choose(e.s, e.w);
   call("session.focus_block", { session_id: e.s, block_id: e.b });
   call("block.event", { session_id: e.s, block_id: e.b, event: { type: "focus" } }); // clears done/error
+  $("keys").focus({ preventScroll: true }); // typing goes on to the pane
 });
 
 function fromHash() {
@@ -142,6 +144,11 @@ function choose(session, window) {
 function render() {
   const win = model.view?.windows.find((w) => w.window_id === chosen.window) ?? model.view?.windows.find((w) => w.active);
   shown = win ?? null;
+  // the pane the keys go to when this page first shows a tab is the person's from then on
+  if (shown && !picked.has(shown.window_id)) {
+    const first = shown.zoomed_block_id ?? shown.focused_block_id;
+    if (first) picked.set(shown.window_id, first);
+  }
   renderSidebar(win);
   renderPanes(win);
 }
@@ -207,7 +214,8 @@ function renderSidebar(win) {
         tabs.append(t);
       }
       const add = document.createElement("li");
-      add.append(button("+ Tab", false, () => call("session.new_window", { session_id: s.session_id }), "New tab"));
+      const tab = () => call("session.new_window", { session_id: s.session_id }).then((r) => r?.window_id && choose(s.session_id, r.window_id));
+      add.append(button("+ Tab", false, tab, "New tab"));
       add.firstChild.classList.add("add");
       tabs.append(add);
       li.append(tabs);
@@ -230,7 +238,9 @@ function paneName(b) {
 
 function split(id, direction) {
   const s = chosen.session;
-  call("session.new_split", { session_id: s, anchor_id: id, direction, side: "after", layout: { block: {} }, focus: true });
+  const w = shown?.window_id;
+  call("session.new_split", { session_id: s, anchor_id: id, direction, side: "after", layout: { block: {} }, focus: true })
+    .then((r) => r?.block_id && w && picked.set(w, r.block_id)); // the new pane gets the keys, as asked
 }
 
 function pane(id) {

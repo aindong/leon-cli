@@ -31,7 +31,8 @@ short name (`http://devbox:7297/`) is refused on purpose; see below.
   program's own cursor-key mode. Text the keyboard composes (accents, other scripts, an input
   method) is typed as text. On a Mac, Option with a letter types what it composes (`ß`), as in the
   app; elsewhere Alt with a letter is Meta. ⌘ stays the browser's, and so do keys the browser keeps
-  for itself (such as ⌘W or ctrl+W).
+  for itself (such as ⌘W or ctrl+W). Tab goes to the program, so **Shift+Esc** leaves the pane for the
+  sidebar's buttons (Tab moves between them, Enter picks one and goes back to the pane).
 - **Paste** with ⌘V (ctrl+V elsewhere): it reaches the program as a paste, bracketed when the
   program asked for that. **Copy**: drag over text (double-click a word, triple-click a line), then
   ⌘C (ctrl+shift+C elsewhere). Both work over plain HTTP.

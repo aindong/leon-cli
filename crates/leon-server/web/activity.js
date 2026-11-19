@@ -100,10 +100,14 @@ export class Activity {
       where.textContent = e.msg ? `${e.where}: ${e.msg}` : e.where;
       b.append(dot, name, where);
       b.onclick = () => this.go(e);
+      b.dataset.key = `${e.b} ${e.state}`;
       li.append(b);
       return li;
     });
+    // the entry a keyboard was on keeps the focus across the refresh
+    const had = this.list.contains(document.activeElement) ? document.activeElement.dataset.key : null;
     this.list.replaceChildren(...items);
+    if (had) [...this.list.querySelectorAll("button")].find((b) => b.dataset.key === had)?.focus();
     this.list.parentElement.hidden = !items.length;
   }
 

@@ -61,7 +61,7 @@ export class Grid {
     const r = cellRatio();
     const b = this.box();
     let px = size;
-    if (b && this.cols && this.lines) px = Math.max(4, Math.min(size, b.w / (this.cols * r), b.h / (this.lines * LINE)));
+    if (b && this.cols && this.lines) px = Math.max(1, Math.min(size, b.w / (this.cols * r), b.h / (this.lines * LINE)));
     this.px = px;
     this.el.style.setProperty("--fs", `${px}px`);
     this.el.style.setProperty("--cw", `${px * r}px`);

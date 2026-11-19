@@ -8,9 +8,10 @@ import { keyName, MAC } from "./keys.js";
 
 /**
  * Wire the keyboard to `textarea` (kept focused while a pane is), and return `pane(…)`, which wires
- * one pane's mouse. `target()` names the pane that gets the keys: {s, b} or null.
+ * one pane's mouse. `target()` names the pane that gets the keys: {s, b} or null. Shift+Escape
+ * calls `leave()`: the way out of the pane for the keyboard, since Tab goes to the program.
  */
-export function wire(conn, textarea, target, failed) {
+export function wire(conn, textarea, target, failed, leave) {
   const send = (method, params) => conn.call(method, params).catch(failed);
   const event = (t, ev) => t && send("block.event", { session_id: t.s, block_id: t.b, event: ev });
   const write = (data) => {
@@ -18,11 +19,16 @@ export function wire(conn, textarea, target, failed) {
     if (t && data) send("block.method", { session_id: t.s, block_id: t.b, method: "dev.leon.terminal.write", args: { data } });
   };
   let copied = ""; // the selection's text, for the next copy
-  /** The longest paste: one request line is at most 1 MiB, JSON escapes included. */
-  const MOST_PASTE = 256 << 10;
+  let owner = null; // the pane whose selection `copied` is
+  /** The longest paste, JSON-escaped: one request line is at most 1 MiB, with room for the rest. */
+  const MOST_PASTE = (1 << 20) - (4 << 10);
 
   textarea.addEventListener("keydown", (e) => {
-    if (!MAC && e.ctrlKey && e.shiftKey && e.code === "KeyC") {
+    if (e.key === "Escape" && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && leave) {
+      e.preventDefault();
+      return leave();
+    }
+    if (!MAC && e.ctrlKey && e.shiftKey && !e.altKey && e.code === "KeyC") {
       document.execCommand("copy"); // the copy event below; a key press may copy without the clipboard API
       return e.preventDefault();
     }
@@ -44,7 +50,9 @@ export function wire(conn, textarea, target, failed) {
   textarea.addEventListener("paste", (e) => {
     const data = e.clipboardData?.getData("text/plain");
     e.preventDefault();
-    if (data && data.length > MOST_PASTE) return failed(new Error(`That paste is too big for the page (over ${MOST_PASTE >> 10} KB)`));
+    if (data && new TextEncoder().encode(JSON.stringify(data)).length > MOST_PASTE) {
+      return failed(new Error("That paste is too big for the page (over 1 MB once encoded)"));
+    }
     if (data) event(target(), { type: "paste", data });
   });
   document.addEventListener("copy", (e) => {
@@ -63,6 +71,8 @@ export function wire(conn, textarea, target, failed) {
     let last = ""; // the cell last reported, so a move within it isn't sent again
     let sel = null;
     let asking = false;
+    let gen = 0; // bumped when the selection is replaced, cleared or its pane goes: a late answer is dropped
+    const me = {};
     const at = (e) => grid.cellAt(e.clientX, e.clientY);
     const report = (action, e, button) => {
       const c = at(e);
@@ -76,6 +86,7 @@ export function wire(conn, textarea, target, failed) {
       const c = at(e);
       sel.head = { line: c.abs, col: c.col };
       asking = true;
+      const g = gen;
       try {
         const r = await conn.call("block.method", {
           session_id: s,
@@ -83,8 +94,9 @@ export function wire(conn, textarea, target, failed) {
           method: "dev.leon.terminal.selection",
           args: { kind: sel.kind, anchor: sel.anchor, head: sel.head, text },
         });
+        if (g !== gen) return;
         grid.mark(r);
-        if (text) copied = r?.text ?? "";
+        if (text) (copied = r?.text ?? ""), (owner = me);
       } catch (err) {
         failed(err);
       } finally {
@@ -105,6 +117,7 @@ export function wire(conn, textarea, target, failed) {
       const kind = e.detail >= 3 ? "line" : e.detail === 2 ? "word" : "simple";
       sel = { kind, anchor: { line: c.abs, col: c.col }, head: { line: c.abs, col: c.col } };
       drag = "select";
+      gen++;
       copied = "";
       grid.mark(null);
       if (kind !== "simple") reach(e, true);
@@ -121,7 +134,7 @@ export function wire(conn, textarea, target, failed) {
         const c = at(e);
         const moved = c.abs !== sel.anchor.line || c.col !== sel.anchor.col;
         if (moved || sel.kind !== "simple") reach(e, true);
-        else (sel = null), grid.mark(null);
+        else (sel = null), gen++, grid.mark(null);
       }
       drag = null;
     };
@@ -142,7 +155,8 @@ export function wire(conn, textarea, target, failed) {
     return () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
-      if (sel) copied = ""; // its pane is gone
+      gen++;
+      if (owner === me) (copied = ""), (owner = null); // its pane is gone
     };
   };
 }
