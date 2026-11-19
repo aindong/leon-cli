@@ -5,12 +5,3 @@ docs/api.md linguist-generated
 docs/api-snapshot.json linguist-generated
 # the site's pinned dependencies with their hashes, written by uv pip compile (website/requirements.in)
 website/requirements.txt linguist-generated
-# the landing page's copy of the design kit it is built with (tasteskill 2.5.1), kept byte for byte
-brand/marketing/assets/system.* linguist-vendored
-brand/marketing/assets/ui/** linguist-vendored
-brand/marketing/assets/motion/** linguist-vendored
-brand/marketing/assets/backgrounds/** linguist-vendored
-brand/marketing/assets/layout/** linguist-vendored
-brand/marketing/assets/effects/** linguist-vendored
-brand/marketing/assets/moments/** linguist-vendored
-brand/marketing/assets/diagrams/** linguist-vendored

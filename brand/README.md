@@ -71,7 +71,7 @@ The proof shows 16/32/128 px on Parchment and Iron, plus direct reduction versus
 
 - [Hero](marketing/hero.png) / [SVG](marketing/hero.svg): **1600 × 600**.
 - [OG](marketing/og.png) / [SVG](marketing/og.svg): **1200 × 630**; the SVG embeds the app icon.
-- [Landing page](marketing/index.html): a shell and a file per section in [sections](marketing/sections), which the website build puts together. It shows leon's own window as live HTML, in these colours and fonts, and loads every file from the site itself: its styles, scripts, pictures and the agents clip in [assets](marketing/assets) (the design kit it was built with is kept there unchanged), the fonts from [fonts](fonts). [share.jpg](marketing/share.jpg) is a shot of its first screen, for links.
+- [Landing page](marketing/index.html): a shell and a file per section in [sections](marketing/sections), which the website build puts together. It shows leon's own window as live HTML, in these colours and fonts, and is leon's own code throughout: its styles and its one script in [assets](marketing/assets) (css/, js/), its pictures and the agents clip beside them, the fonts from [fonts](fonts); nothing loads from another server. [share.jpg](marketing/share.jpg) is a shot of its first screen, for links.
 - [Copy](marketing/copy.md): unchanged tagline, alternatives, 50-word pitch and 150-word description.
 
 Instrument Sans remains the UI/marketing family, with the local Latin WOFF2 and SIL [OFL licence](fonts/OFL.txt). DM Mono is the website's code face (its own [OFL licence](fonts/OFL-DMMono.txt)); Menlo remains the app's terminal face. The custom wordmark remains vector paths. No app typography or application code changes.

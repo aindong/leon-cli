@@ -38,6 +38,8 @@ async function main() {
   await fs.writeFile(path.join(root, 'icon/leon-1024.svg'), `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="leon Pocket guardian app icon"><title>leon Pocket guardian — raster master wrapper</title><image width="1024" height="1024" href="data:image/png;base64,${master.toString('base64')}"/></svg>\n`);
   const ogPath = path.join(root, 'marketing/og.svg');
   const ogIcon = await framed().resize(672, 672).png(png).toBuffer();
+  // the landing page's statement shows the icon (brand/marketing/sections/statement.html)
+  await framed().resize(560, 560).webp({ quality: 85 }).toFile(path.join(root, 'marketing/assets/img/leon-tile.webp'));
   const ogSource = await fs.readFile(ogPath, 'utf8');
   await fs.writeFile(ogPath, ogSource.replace(/<image id="app-icon"[^>]*\/>/, `<image id="app-icon" x="808" y="125" width="336" height="336" href="data:image/png;base64,${ogIcon.toString('base64')}"/>`));
   // shortcut: the README banner's layout exists only as its PNG, so the icon is redrawn in place; give it a source file before changing the layout

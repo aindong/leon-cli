@@ -1,9 +1,9 @@
-  <section class="section" id="cli" aria-labelledby="cli-h">
+  <section id="cli" aria-labelledby="cli-h">
     <div class="wrap">
       <div class="grid">
-        <div class="span-5 stack-4">
+        <div class="c5 stack cli-text">
           <h2 id="cli-h">A command and an API for every pane</h2>
-          <p class="t-lead">One server holds your sessions. The app, the leon command, Lua, your agents and the browser page all talk to it over the same socket.</p>
+          <p class="lead">One server holds your sessions. The app, the leon command, Lua, your agents and the browser page all talk to it over the same socket.</p>
           <ul class="facts">
             <li><code>leon run</code>, <code>send</code>, <code>capture</code> and <code>wait</code> drive any pane.</li>
             <li>Fixed exit codes and <code>--json</code> for scripts.</li>
@@ -11,8 +11,22 @@
           </ul>
           <a class="link" href="cli/">Read the CLI reference</a>
         </div>
-        <div class="frame frame--split frame--lit span-6 start-7" style="--ratio: 108%">
-          <div class="dg" data-diagram><script type="application/json">{"layout":"hub","alt":"leon's server in the middle, with the app, the leon command, Lua scripts, agents, the browser page and another host around it.","center":{"label":"leon server","icon":"leon"},"spokes":[{"label":"Leon.app","icon":"ui:app-window"},{"label":"leon command","icon":"ui:square-terminal"},{"label":"Lua scripts","icon":"ui:file-code"},{"label":"Agents","icon":"ui:bot"},{"label":"Browser page","icon":"ui:globe"},{"label":"devbox","icon":"ui:server"}]}</script></div>
+        <div class="c6r hub" data-loop role="img" aria-label="leon's server in the middle, with the app, the leon command, Lua scripts, agents, the browser page and another host around it">
+          <span class="hub-ring" style="width: 36%"></span><span class="hub-ring" style="width: 72%"></span><span class="hub-ring" style="width: 108%"></span>
+          <svg class="hub-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <line x1="50" y1="50" x2="32" y2="12"/><line x1="50" y1="50" x2="68" y2="12"/><line x1="50" y1="50" x2="15" y2="50"/>
+            <line x1="50" y1="50" x2="85" y2="50"/><line x1="50" y1="50" x2="32" y2="88"/><line x1="50" y1="50" x2="68" y2="88"/>
+            <line class="pulse" pathLength="100" style="--i: 0" x1="50" y1="50" x2="68" y2="12"/><line class="pulse" pathLength="100" style="--i: 1" x1="50" y1="50" x2="85" y2="50"/>
+            <line class="pulse" pathLength="100" style="--i: 2" x1="50" y1="50" x2="68" y2="88"/><line class="pulse" pathLength="100" style="--i: 3" x1="50" y1="50" x2="32" y2="88"/>
+            <line class="pulse" pathLength="100" style="--i: 4" x1="50" y1="50" x2="15" y2="50"/><line class="pulse" pathLength="100" style="--i: 5" x1="50" y1="50" x2="32" y2="12"/>
+          </svg>
+          <span class="hub-node" style="left: 32%; top: 12%"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/><path d="M8 7.5h.01M8 16.5h.01"/></svg><span>devbox</span></span>
+          <span class="hub-node" style="left: 68%; top: 12%"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></svg><span>Leon.app</span></span>
+          <span class="hub-node" style="left: 15%; top: 50%"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><span>Browser page</span></span>
+          <span class="hub-node hub-core" style="left: 50%; top: 50%"><img src="assets/img/logo-mark.svg" alt="" width="22" height="22"><span>leon server</span></span>
+          <span class="hub-node" style="left: 85%; top: 50%"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 10l3 2.5L7 15M12 15h5"/></svg><span>leon command</span></span>
+          <span class="hub-node" style="left: 32%; top: 88%"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>Agents</span></span>
+          <span class="hub-node" style="left: 68%; top: 88%"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M10 12l-2 2 2 2M14 12l2 2-2 2"/></svg><span>Lua scripts</span></span>
         </div>
       </div>
     </div>
