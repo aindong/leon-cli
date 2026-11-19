@@ -28,13 +28,24 @@ Before the first release, do the one-time setup under [Secrets](#secrets).
 1. Set the version in `Cargo.toml`. Give `CHANGELOG.md` a `## [X.Y.Z]` section and move what is
    under `[Unreleased]` into it: the release notes are that section's text and nothing else, its
    relative links made absolute to the tag on GitHub.
-2. Try it on your Mac: `scripts/release-dry-run.sh` builds the release (`scripts/release.sh`),
+2. Show what it brings. `scripts/demo-clips.sh` records a short clip of each new feature into
+   `target/clips/`, as `NAME.gif` (at most 1.5 MB) and `NAME.mp4`; it needs the Mac unlocked and
+   left alone for a few minutes. Copy the GIFs to `docs/images/whats-new/X.Y.Z/` and put each one
+   under its bullet in the changelog section, as an image linking
+   `docs/images/whats-new/X.Y.Z/NAME.gif` from the repository's root: the release notes make that link absolute to the tag, so the clip shows on the GitHub release and
+   on the website's What's new. When the app changed, run `scripts/demo-gifs.sh` for a new
+   `docs/images/demo-app.gif`, and give the README one line under it, "New in X.Y: …", linking
+   What's new. Then `cargo test -p leon --test m13_privacy`, and look at every frame.
+3. Upload the MP4s to the media release, for the website's demo page
+   ([Demo videos](#demo-videos)): `gh release upload media target/clips/*.mp4 --clobber`. Never add
+   them to the `vX.Y.Z` release.
+4. Try it on your Mac: `scripts/release-dry-run.sh` builds the release (`scripts/release.sh`),
    signs it with a key made for the run, checks it, and then changes a byte to see the check fail.
    It needs Docker for the Linux packages; `--linux none` skips them.
-3. Work lands on `dev`. A release is a pull request from `dev` to `main`: merge it, and wait for
+5. Work lands on `dev`. A release is a pull request from `dev` to `main`: merge it, and wait for
    CI to pass on that commit of `main`. The release workflow builds and packages; it does not run
    the test suite again.
-4. Tag that commit of `main` and push the tag:
+6. Tag that commit of `main` and push the tag:
    `git checkout main && git pull && git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 `.github/workflows/release.yml` then runs:
