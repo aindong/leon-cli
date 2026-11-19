@@ -9,10 +9,11 @@ use gpui::{Entity, EntityInputHandler, InputHandler, UTF16Selection};
 
 use super::*;
 
-/// What the input method is composing on pane `block`.
+/// What the input method is composing on pane `block`, and its selection in it (UTF-16).
 pub(super) struct Marked {
     block: String,
     text: String,
+    selected: Range<usize>,
 }
 
 #[derive(Default)]
@@ -81,21 +82,24 @@ impl InputHandler for PaneInput {
     }
 }
 
-/// The input method sees the marked text as the whole document, with the caret at its end.
+/// The input method sees the marked text as the whole document, with the selection it set.
 impl EntityInputHandler for Workspace {
     fn text_for_range(
         &mut self,
-        _: Range<usize>,
-        _: &mut Option<Range<usize>>,
+        range: Range<usize>,
+        adjusted: &mut Option<Range<usize>>,
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<String> {
-        None
+        let utf16: Vec<u16> = self.ime.marked.as_ref()?.text.encode_utf16().collect();
+        let range = range.start.min(utf16.len())..range.end.min(utf16.len());
+        *adjusted = Some(range.clone());
+        Some(String::from_utf16_lossy(&utf16[range]))
     }
 
     fn selected_text_range(&mut self, _: bool, _: &mut Window, _: &mut Context<Self>) -> Option<UTF16Selection> {
-        let end = self.ime.marked.as_ref().map_or(0, |m| m.text.encode_utf16().count());
-        Some(UTF16Selection { range: end..end, reversed: false })
+        let range = self.ime.marked.as_ref().map_or(0..0, |m| m.selected.clone());
+        Some(UTF16Selection { range, reversed: false })
     }
 
     fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
@@ -122,12 +126,14 @@ impl EntityInputHandler for Workspace {
         &mut self,
         _: Option<Range<usize>>,
         text: &str,
-        _: Option<Range<usize>>,
+        selected: Option<Range<usize>>,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let block = self.target().map(|(_, id, _)| id);
-        self.ime.marked = block.filter(|_| !text.is_empty()).map(|block| Marked { block, text: text.into() });
+        let end = text.encode_utf16().count();
+        let selected = selected.map_or(end..end, |s| s.start.min(end)..s.end.min(end));
+        self.ime.marked = block.filter(|_| !text.is_empty()).map(|block| Marked { block, text: text.into(), selected });
         cx.notify();
     }
 

@@ -33,6 +33,11 @@ fn marked_text_shows_at_the_cursor_and_only_the_commit_is_sent(cx: &mut TestAppC
     let range = cx.update(|window, cx| h.marked_text_range(window, cx));
     let candidates = cx.update(|window, cx| h.bounds_for_range(0..0, window, cx));
     let hold = h.apple_press_and_hold_enabled();
+    // what an input method reads back while it converts: the marked text, and the clause it selected
+    cx.update(|window, cx| h.replace_and_mark_text_in_range(None, "にほん", Some(1..3), window, cx));
+    let mut adjusted = None;
+    let read = cx.update(|window, cx| h.text_for_range(1..3, &mut adjusted, window, cx));
+    let selected = cx.update(|window, cx| h.selected_text_range(false, window, cx)).map(|s| s.range);
     let leaked = t.text(false).contains('に');
     cx.update(|window, cx| h.replace_text_in_range(None, "日本", window, cx));
     cx.run_until_parked();
@@ -56,6 +61,8 @@ fn marked_text_shows_at_the_cursor_and_only_the_commit_is_sent(cx: &mut TestAppC
     assert_eq!(range, Some(0..3), "marked, in UTF-16");
     assert_eq!(candidates, Some(here), "the candidate window at the cursor");
     assert!(!hold, "press-and-hold off: a held key repeats");
+    assert_eq!((read.as_deref(), adjusted), (Some("ほん"), Some(1..3)), "the marked text reads back");
+    assert_eq!(selected, Some(1..3), "with the selection the input method set");
     assert!(!leaked, "the pane got none of the marked text");
     assert!(after_commit.is_none(), "no marked text once committed");
     assert!(printed && !twice, "the commit reached the pane once");
