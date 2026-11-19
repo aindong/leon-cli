@@ -30,6 +30,29 @@ The allocator already returns most of a freed history on its own as the blocks a
 history cost less is a change to how it is stored (a leon-side store for old rows), not to when
 memory is handed back.
 
+## History in leon's store
+
+History now moves out of alacritty into a store of each row's text and style runs when output
+pauses (docs/architecture/scrollback.md). Measured on 2026-11-19, dev at a3edd74 against the
+branch, one after the other on the same machine; it was never quiet (other builds ran), so the
+load is given with each:
+
+- `soak.sh 8`, the server's footprint by minute. dev: 359, 402, 444, 460, 523, 562 MiB at minutes 0
+  to 5 (load 3.1, 3.0, 4.5, 6.1, 14.7, 18.7). Branch: 108, 58, 52, 46, 45, 40 MiB (load 3.1 to
+  3.9), then 36 MiB at minutes 6 to 8. Over minutes 1 to 5: 478 MiB on dev, 48 MiB on the branch.
+  An idle server with one shell is 4.9 MiB on both, so the 14 agent panes (12, and a session of 2
+  made and killed every minute) cost about 33 MiB each on dev and 3 MiB on the branch: 90% less.
+  At minute 0 the agents are still printing their first 10,000 lines, which alacritty holds at
+  full width until they pause.
+- In process, 10,000 lines of 70 characters at 80 columns (`b1_store_memory.rs`, a counting
+  allocator): 19.7 MB in alacritty alone, 2.2 MB with the store (89% less).
+- `cargo bench -p leon --bench speed`, three rounds each, alternating: `cat` of 100 MB at 119.0,
+  115.8 and 92.8 MB/s on dev (load 2.8, 3.1, 5.1) and 127.0, 58.2 and 123.4 MB/s on the branch
+  (load 3.0, 3.1 rising to 6.9 during the run, 9.2); input latency p50 0.023 to 0.035 ms on dev,
+  0.028 to 0.030 ms on the branch; the attached keystroke to screen p50 0.36 to 0.51 ms on dev,
+  0.22 to 0.51 ms on the branch. While output streams nothing is copied, so the parse path is as
+  before; a first version that copied each row as it scrolled ran `cat` at 11 MB/s.
+
 ## Two leaks in GPUI
 
 The app's `leaks` (`MallocStackLogging=1`, release build, agents reporting status) are all
