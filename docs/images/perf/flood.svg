@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="250" viewBox="0 0 720 250" role="img" aria-labelledby="title desc">
+<title id="title">A big cat of text and colour, before and with the fix</title>
+<desc id="desc">flood.sh's cat of 100 MB of text and colour: about 80 MB/s before the flood fix and about 115 MB/s with it, 44% faster.</desc>
+<style>
+  .bg { fill: #fcfcfb; } .t1 { fill: #0b0b0b; } .t2 { fill: #52514e; }
+  .grid { stroke: #e7e6e2; } .axis { stroke: #b9b8b1; } .ref { stroke: #52514e; }
+  .c1 { fill: #2a78d6; stroke: #2a78d6; } .c2 { fill: #eb6834; stroke: #eb6834; } .c0 { fill: #8f8d86; stroke: #8f8d86; }
+  .ring { stroke: #fcfcfb; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .t1 { fill: #f0efec; } .t2 { fill: #c3c2b7; }
+    .grid { stroke: #2f2f2c; } .axis { stroke: #57564f; } .ref { stroke: #c3c2b7; }
+    .c1 { fill: #3987e5; stroke: #3987e5; } .c2 { fill: #d95926; stroke: #d95926; } .c0 { fill: #76756f; stroke: #76756f; }
+    .ring { stroke: #1a1a19; }
+  }
+  text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+</style>
+<rect class="bg" width="720" height="250" rx="8"/>
+<text x="24.0" y="32.0" class="t1" font-size="16" text-anchor="start" font-weight="600">A big cat of text and colour, before and with the fix</text>
+<text x="24.0" y="52.0" class="t2" font-size="12" text-anchor="start">flood.sh: cat of 100 MB of text and colour into one pane, with the app showing it.</text>
+<text x="24.0" y="69.0" class="t2" font-size="12" text-anchor="start">Apple M6, release build, alternating runs.</text>
+<line x1="71.0" y1="110.0" x2="71.0" y2="200.0" class="axis" stroke-width="1"/>
+<text x="71.0" y="216.0" class="t2" font-size="11" text-anchor="middle">0</text>
+<line x1="161.8" y1="110.0" x2="161.8" y2="200.0" class="grid" stroke-width="1"/>
+<text x="161.8" y="216.0" class="t2" font-size="11" text-anchor="middle">20</text>
+<line x1="252.7" y1="110.0" x2="252.7" y2="200.0" class="grid" stroke-width="1"/>
+<text x="252.7" y="216.0" class="t2" font-size="11" text-anchor="middle">40</text>
+<line x1="343.5" y1="110.0" x2="343.5" y2="200.0" class="grid" stroke-width="1"/>
+<text x="343.5" y="216.0" class="t2" font-size="11" text-anchor="middle">60</text>
+<line x1="434.3" y1="110.0" x2="434.3" y2="200.0" class="grid" stroke-width="1"/>
+<text x="434.3" y="216.0" class="t2" font-size="11" text-anchor="middle">80</text>
+<line x1="525.2" y1="110.0" x2="525.2" y2="200.0" class="grid" stroke-width="1"/>
+<text x="525.2" y="216.0" class="t2" font-size="11" text-anchor="middle">100</text>
+<line x1="616.0" y1="110.0" x2="616.0" y2="200.0" class="grid" stroke-width="1"/>
+<text x="616.0" y="216.0" class="t2" font-size="11" text-anchor="middle">120</text>
+<text x="343.5" y="234.0" class="t2" font-size="12" text-anchor="middle">MB/s</text>
+<rect x="24.0" y="95.0" width="10" height="10" rx="2" class="c0"/>
+<text x="39.0" y="104.0" class="t2" font-size="12" text-anchor="start">before the flood fix</text>
+<rect x="197.0" y="95.0" width="10" height="10" rx="2" class="c1"/>
+<text x="212.0" y="104.0" class="t2" font-size="12" text-anchor="start">the flood fix</text>
+<text x="61.0" y="135.0" class="t1" font-size="12" text-anchor="end">run 1</text>
+<path class="c0" d="M71.0 116.0h358.1a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-358.1z"/>
+<text x="438.1" y="127.0" class="t1" font-size="11" text-anchor="start">79.5 MB/s</text>
+<path class="c1" d="M71.0 132.0h520.2a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-520.2z"/>
+<text x="600.2" y="143.0" class="t1" font-size="11" text-anchor="start">115.2 MB/s</text>
+<text x="61.0" y="179.0" class="t1" font-size="12" text-anchor="end">run 2</text>
+<path class="c0" d="M71.0 160.0h359.0a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-359.0z"/>
+<text x="439.0" y="171.0" class="t1" font-size="11" text-anchor="start">79.7 MB/s</text>
+<path class="c1" d="M71.0 176.0h515.7a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-515.7z"/>
+<text x="595.7" y="187.0" class="t1" font-size="11" text-anchor="start">114.2 MB/s</text>
+</svg>

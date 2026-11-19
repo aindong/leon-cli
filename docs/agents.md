@@ -140,6 +140,24 @@ leon agent tell tests "Use the fixture in tests/data."   # once its turn ended
 leon block close "$id"
 ```
 
+A worker's turn, from start to the orchestrator reading its report:
+
+```mermaid
+sequenceDiagram
+  participant O as orchestrator
+  participant S as leon server
+  participant W as worker
+  O->>S: leon agent start --label tests claude "task"
+  S->>W: a new tab, the task and how to report as its first prompt
+  W->>S: hooks: working
+  W->>S: hooks: done, with its last message
+  S->>S: the report goes into the orchestrator's inbox
+  Note over S,O: once the orchestrator's turn has ended and its pane had no input for 3 s
+  S->>O: types: You have 1 leon message. Run leon inbox to read it.
+  O->>S: leon inbox
+  S-->>O: the worker's report, now marked read
+```
+
 - **Start.** `leon agent start AGENT TASK` runs `AGENT [ARGS…] PROMPT` in a new tab (`--split DIR`
   for a pane) with the task and a paragraph on how to report as its first prompt. A Claude Code
   worker whose hooks leon finds (the project's `.claude/settings.json` or `settings.local.json`, or
@@ -221,6 +239,15 @@ program), a program inside leon moving the focus or running a key binding, or a 
 a pane a program put your keys on. A key binding a program runs (`client.key`) can't type into
 such a pane either. The pane stays marked in its tab and in the Activity list, so you see where
 the prompt is.
+
+```mermaid
+flowchart TD
+  held["a block reports blocked, kind permission"] --> who{"who sends keys or a status?"}
+  who -->|"a program inside a leon terminal: leon send,<br/>agent tell, leon do, a socket client of its own"| refused["refused: permission_pending"]
+  who -->|"the block's own program, through its hooks"| status["its status may change;<br/>the hold stays"]
+  who -->|"a person: the app's keys, leon attach in a terminal app,<br/>leon send from a shell outside leon, another machine"| answered["the keys reach the pane,<br/>and the hold ends"]
+  held --> find["the app's Activity list and the notification<br/>take the person to that pane"]
+```
 
 A person answers where they are: the app's keys reach the pane (the Activity list and the
 notification take them there), and so do `leon attach` in a terminal app and `leon send` from a

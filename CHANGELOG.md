@@ -30,8 +30,11 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
-- **A website.** <https://aindong.github.io/leon-cli/> has the docs, a What's new page for each
-  release and a demo, built from the latest release ([detail](docs/changelog-detail.md#the-website)).
+- **Diagrams and benchmark charts in the docs** ([detail](docs/changelog-detail.md#diagrams-and-benchmark-charts)).
+- **A website.** <https://aindong.github.io/leon-cli/>: the docs, What's new per release and a demo
+  ([detail](docs/changelog-detail.md#the-website)).
+- **What's new, in the app.** The first launch of a new version says "Updated to leon X.Y.Z" once,
+  with What's New, which opens that version's page on the website ([detail](docs/changelog-detail.md#whats-new-in-the-app)).
 - **Scrollback that costs what its text costs.** A pane keeps its 10,000 lines in about a ninth of
   the memory; `leon.set("scrollback", N)` sets how many, reported by `server.settings` (`api_version`
   `1.18.0`) ([detail](docs/changelog-detail.md#scrollback-that-costs-what-its-text-costs)).
@@ -41,10 +44,16 @@ fields it doesn't know. The full policy is in
   wrote; leon reads and reloads them; `api_version` goes to `1.17.0` ([detail](docs/changelog-detail.md#https-for-the-browser-page)).
 - **Cursor shaders.** Leon.app draws a Shadertoy-style cursor shader file you name with
   `cursor_shader` over its window, on macOS; `api_version` goes to `1.15.0` ([detail](docs/changelog-detail.md#cursor-shaders)).
+
+  ![A cursor trail](docs/images/whats-new/0.2.0/cursor-shader.gif)
 - **Closing and renaming tabs and sessions.** Close Tab (⌥⌘W), Close Session (⌥⇧⌘W), a × on hover,
   right-click menus and double-click to rename ([detail](docs/changelog-detail.md#closing-and-renaming-tabs-and-sessions)).
+
+  ![Renaming and closing a tab and a session](docs/images/whats-new/0.2.0/tabs.gif)
 - **A link card.** Resting the mouse on a link, or right-clicking it, shows its address with Copy and
   Open in Browser; `link_card` turns it off, and `api_version` is `1.14.0` ([detail](docs/changelog-detail.md#the-link-card)).
+
+  ![A link's card, on hover and on right-click](docs/images/whats-new/0.2.0/link-card.gif)
 - **Agents orchestrating agents.** `leon agent start` runs Claude Code, Codex or any agent in a tab
   or pane, working for you; its hooks report to your `leon inbox`, and leon types a notice into
   your prompt when your turn ends. New experimental methods `agent.link`, `agent.list`,
@@ -52,6 +61,8 @@ fields it doesn't know. The full policy is in
   `leon agent start --worktree` gives a worker its own git worktree, which `leon agent close`
   removes only when that loses no work
   ([detail](docs/changelog-detail.md#agents-orchestrating-agents)).
+
+  ![An agent starts two agents and hears back through its inbox](docs/images/whats-new/0.2.0/agents.gif)
 
 ## [0.1.1] - 2026-11-19
 

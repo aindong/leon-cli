@@ -1,0 +1,12 @@
+#!/bin/sh
+# ci: a line that ticks, in a pane of its own: a still second ends the VM's recorder, and the link
+# card's pane must stay still while the pointer rests on its link
+printf '\033]2;CI\007'
+n=0
+while :; do
+  for c in '|' '/' '-' '\'; do
+    printf '\r  %s waiting for CI (%ds)  ' "$c" $((n / 4))
+    n=$((n + 1))
+    sleep 0.25
+  done
+done

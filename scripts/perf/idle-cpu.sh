@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# idle-cpu.sh: CPU the server and the app use when nothing changes (docs/performance.md).
+# idle-cpu.sh: CPU the server and the app use when nothing changes (docs/performance-app.md).
 #   scripts/perf/idle-cpu.sh [--secs 300]
 # Twelve idle /bin/sh panes in the shown tab, then three states of SECS each: plain; one pane
 # reporting `working` (its status indicator pulses); the app hidden (as ⌘H does). Per state: CPU

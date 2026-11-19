@@ -1,0 +1,22 @@
+#!/usr/bin/perl
+# lead GO: the orchestrator, a scripted agent: once the file GO exists (the recording runs), it
+# starts two workers beside it, ends its turn, and shows what leon types into its prompt as they
+# report
+$| = 1;
+print "\e]2;Release prep\a";
+select(undef, undef, undef, 0.2) until -e $ARGV[0];
+print "\n  > Get the release ready: run the tests and check the docs.\n\n";
+sleep 1;
+print "  ● Starting two agents to work on it:\n";
+system("leon agent start --split right --label tests worker '18 tests pass' >/dev/null");
+print "    leon agent start --label tests\n";
+sleep 1;
+system("leon agent start --split below --label docs worker 'The docs build, no broken links' >/dev/null");
+print "    leon agent start --label docs\n\n  ● I'll wait for their reports.\n\n> ";
+system("leon", "notify", "--state", "done", "--body", "waiting for the tests and docs agents");
+while (my $line = <STDIN>) {
+  print "\n  ● Reports from the agents:\n";
+  open(my $inbox, "-|", "leon", "inbox") or last;
+  print "    $_" while <$inbox>;
+  print "\n> ";
+}

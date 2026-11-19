@@ -45,9 +45,14 @@ Check for Updates still works then. The app looks on its own only once its serve
 setting: attached to a server from before it (API 1.7.0), which would have skipped
 `check_for_updates = false` as unknown, it waits until that server restarts.
 
+The first time a new version opens, however it was installed, the notice says "Updated to leon
+X.Y.Z." once, with **What's New**, which opens that version's page on the website
+(`https://aindong.github.io/leon-cli/whats-new/X.Y.Z/`). The app keeps the version that last ran in
+`updates.json` beside its other update state; a first install says nothing.
+
 The notice's buttons are in the palette too while it shows them (Dismiss the Update Notice, Open
-the Release Notes, Copy the Update Command, Restart to Finish the Update), so the keyboard
-reaches every one.
+the Release Notes, Open What's New, Copy the Update Command, Restart to Finish the Update), so the
+keyboard reaches every one.
 
 The notice says what to do instead of Install when the app can't replace itself:
 
@@ -85,6 +90,21 @@ Every release is described by a signed manifest, `latest.json`. Before leon inst
    An entry with an absolute path, with `..`, or with a link that could leave the directory (one
    with `..` or an absolute target) refuses the whole archive.
 6. **The new leon.** It is run once (`leon --version`) and must report the release's version.
+
+```mermaid
+flowchart TD
+  fetch["latest.json and its .minisig"] --> sig{"signed with a key<br/>built into this leon?"}
+  sig -->|no| refuse["refused: nothing changed"]
+  sig -->|yes| newer{"newer, and for this system?"}
+  newer -->|no| stay["up to date, or refused"]
+  newer -->|yes| download["download the file,<br/>no more than its size"]
+  download --> file{"its sha256 and its own<br/>signature check out?"}
+  file -->|no| refuse
+  file -->|yes| unpack["unpack in .leon-update;<br/>a path that leaves it refuses all"]
+  unpack --> run{"the new leon --version<br/>is the release's?"}
+  run -->|no| refuse
+  run -->|yes| swap["renamed into place, in one step"]
+```
 
 Only then is the new leon renamed into place, in one step: an update that is killed at any point
 leaves a leon that runs, either the old one or the new one. The next `leon self-update` clears
