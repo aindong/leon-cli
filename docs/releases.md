@@ -286,9 +286,9 @@ the repository and write only to Pages.
 
 To build it yourself, `website/build.sh` (it needs `python3`, and installs the pinned, hashed
 `website/requirements.txt` into `target/site-venv`), `website/build.sh serve` to preview it, and
-`target/site-venv/bin/python website/test_site.py` for its tests. CI runs both on a change to the
-docs or to `website/`. A change to `brand/` starts no CI run, so after changing the landing page or
-the font, run them yourself.
+`target/site-venv/bin/python website/test_site.py` for its tests. CI's `site` job runs both on
+every change but one to translations, images or `brand/` alone, which starts no CI run: after
+changing only the landing page or the font, run them yourself.
 
 ### Demo videos
 

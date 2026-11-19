@@ -65,7 +65,7 @@ extra_css:
 
 extra:
   generator: false
-  homepage: ..
+  homepage: . # the landing page, at the site's root
   # the language switcher: each language's home; hooks.py turns a link into the page's own
   # translation where there is one
   alternate:

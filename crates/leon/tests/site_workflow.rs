@@ -143,11 +143,15 @@ fn the_media_release_is_never_latest() {
 }
 
 #[test]
-fn ci_builds_the_site_on_a_docs_change() {
+fn ci_builds_the_site_on_any_change_but_translations_alone() {
     let ci = read(".github/workflows/ci.yml");
-    let docs = job(&ci, "docs");
-    assert!(docs.contains("- run: website/build.sh"), "{docs}");
-    assert!(docs.contains("website/test_site.py"), "{docs}");
+    let site = job(&ci, "site");
+    assert!(site.contains("    needs: changes\n"), "{site}");
+    assert!(site.contains("    if: needs.changes.outputs.kind != 'none'\n"), "docs and code changes both: {site}");
+    assert!(site.contains("    runs-on: ubuntu-24.04\n"), "{site}");
+    assert!(site.contains("- run: website/build.sh"), "{site}");
+    assert!(site.contains("- run: target/site-venv/bin/python website/test_site.py"), "{site}");
+    assert!(site.contains("fetch-depth: 0"), "the tags, for the latest release's build: {site}");
     let release = read(".github/workflows/release.yml");
     assert!(!release.contains("site"), "release.yml doesn't start the site: site.yml follows it");
 }

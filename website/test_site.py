@@ -108,6 +108,17 @@ class Built(unittest.TestCase):
             self.assertIn(f"leon {v}", self.page(f"whats-new/{v}"))
         self.assertIn("serve_tailscale", self.page("whats-new/0.1.1"))
 
+    def test_the_logo_goes_to_the_landing_page_under_the_base_path(self):
+        from urllib.parse import urljoin
+
+        base = "https://aindong.github.io/leon-cli/"
+        logo = r'<a href="([^"]*)"[^>]*class="md-header__button md-logo"'
+        for url in ["overview", "install", "cli/sessions", "i18n/ja"]:
+            href = re.findall(logo, self.page(url))[0]
+            self.assertEqual(urljoin(f"{base}{url}/", href), base, url)
+        href = re.findall(logo, read(self.out / "404.html"))[0]
+        self.assertEqual(urljoin(f"{base}missing/page/", href), base, "404")
+
     def test_the_demo_page_without_media_shows_a_poster_and_no_video(self):
         demo = self.page("demo")
         self.assertNotIn("<video", demo)

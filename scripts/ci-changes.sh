@@ -6,8 +6,8 @@
 # Prints one word:
 #   none  only translations, images, brand files and community files (ci.yml's paths-ignore
 #         usually stops the run before this job starts)
-#   docs  English Markdown outside the code, or the website's files: the doc tests and the
-#         website's build, on Linux
+#   docs  English Markdown outside the code, or the website's files: the doc tests, on Linux
+#         (the website's own job runs on docs and full alike)
 #   full  anything else, and whenever the diff can't be read: the whole gate
 # A rename counts as both paths, so code moved into docs/ still runs the gate.
 set -euo pipefail
