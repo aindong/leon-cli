@@ -146,10 +146,15 @@ of [the architecture](../architecture.md).
   `blocked`/`permission` is held until a person's keys reach it; status changes alone don't end
   that, since any program can write a report to a terminal. Meanwhile the socket loop refuses
   input to it, a status change from outside its own program, config actions or reloads (Lua in
-  the server would type where the loop doesn't look), and moves of the focus onto it (where a
-  person's next keys would land; `focus_guard.rs` lists each method and why) from any client
-  inside a leon terminal: a
-  pane's program, anything under it, or anything in its session (an orphaned job keeps it). The
+  the server would type where the loop doesn't look), and requests that focus it, from any
+  client inside a leon terminal: a pane's program, anything under it, or anything in its session
+  (an orphaned job keeps it, and so does a job left running after its pane closed). Where a
+  person's next keys land is a rule on the state, not a list of requests, since a pane exiting
+  moves them with no request at all: after every change, under the state lock, a session whose
+  keys moved onto a held block by anything but a person's own focus move (a request of theirs
+  that isn't a close) has them moved to the block that had them, the nearest pane that isn't
+  held, or the nearest tab whose keys aren't on one (`held_keys.rs`; `focus_guard.rs` tells
+  it who asked, through to the Lua thread). The
   peer's pid comes from the socket (`SO_PEERCRED`, `LOCAL_PEEREPID`); a client the check can't
   place counts as inside. Agents run in leon terminals; the app, a `leon attach` in a terminal
   app and another machine don't. A program that moves itself to a new session (`setsid`) gets

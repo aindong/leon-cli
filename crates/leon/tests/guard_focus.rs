@@ -1,7 +1,8 @@
-//! The permission guard covers focus moves (docs/architecture/attention.md): a program inside a
-//! leon terminal can't move the focus onto a block held for a permission prompt, where a person's
-//! next keys would answer it, directly or by closing or zooming what has the focus; what keeps the
-//! focus off the prompt goes through; and a person can still focus it.
+//! The permission guard covers focus moves (docs/architecture/attention.md): the keys only land on
+//! a block held for a permission prompt, where a person's next keys would answer it, when a person
+//! moves them there. A program inside a leon terminal that asks for that gets `permission_pending`;
+//! one that does it as a side effect (moving by direction, closing or moving what has the keys) has
+//! the keys moved off again; and a person can still focus it, by any move.
 
 mod support;
 
@@ -52,46 +53,91 @@ fn from_inside(o: &Orch, s: &str, calls: &[(&str, Value)]) -> Vec<(String, bool,
         .collect()
 }
 
-/// W (held) and F (focused) in the first tab, which is active; Z (held) alone in a second tab.
-fn setup(o: &Orch) -> (String, String, String, String, String) {
+/// W (held), F (focused) and X in the first tab, which is active; Z (held) alone in a second tab.
+fn setup(o: &Orch) -> (String, String, String, String, String, String) {
     let w = held(o, &["--label", "worker"]);
     let s = o.env.json(&["ls", "--json"])[0]["session_id"].as_str().unwrap().to_string();
     let f = o.env.ok(&["split", "-b", &w, "--", "sh", "-c", "exec sleep 300"]);
+    // beside W, so the previous pane from X is W
+    let x = o.env.ok(&["split", "-b", &w, "--", "sh", "-c", "exec sleep 300"]);
     let z = held(o, &["-s", &s, "--label", "other"]);
     let v = view(o, &s);
     let tab2 = v["windows"][1]["window_id"].as_str().unwrap().to_string();
     // a person puts the focus back on F in the first tab
     o.env.ok(&["api", "call", "session.focus_block", &json!({ "session_id": s, "block_id": f }).to_string()]);
     assert_eq!(keys_go_to(&view(o, &s)), f);
-    (s, w, f, z, tab2)
+    (s, w, f, z, tab2, x)
+}
+
+fn focus(o: &Orch, s: &str, b: &str) {
+    o.env.ok(&["api", "call", "session.focus_block", &json!({ "session_id": s, "block_id": b }).to_string()]);
+}
+
+#[test]
+fn a_side_effect_never_puts_the_keys_on_a_held_prompt() {
+    let o = Orch::new();
+    let (s, w, f, z, _tab2, x) = setup(&o);
+    let p = |extra: Value| {
+        let mut v = json!({ "session_id": s });
+        v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        v
+    };
+    let moves = [
+        ("session.focus_next_pane", p(json!({ "wrap": true }))),
+        ("session.focus_previous_pane", p(json!({ "wrap": true }))),
+        ("session.focus_direction", p(json!({ "direction": "left", "wrap": true }))),
+        ("session.focus_direction", p(json!({ "direction": "right", "wrap": true }))),
+        ("session.toggle", p(json!({ "label": "worker" }))),
+        // closing what has the keys: they go to X, never to W beside it
+        ("block.close", p(json!({ "block_id": f }))),
+        ("session.move_block", p(json!({ "block_id": x, "anchor_block_id": z }))),
+    ];
+    let got = from_inside(&o, &s, &moves);
+    for ((m, params), (code, why, err)) in moves.iter().zip(&got) {
+        assert!(!*why, "refused, where the rule moves the keys instead: {m} {params} (exit {code}): {err}");
+    }
+    let v = view(&o, &s);
+    assert_eq!(keys_go_to(&v), x, "the keys went to the pane that isn't held: {v}");
+    assert!(![w, z].contains(&keys_go_to(&v)));
+}
+
+#[test]
+fn a_persons_ctrl_c_beside_the_prompt_does_not_hand_them_it() {
+    let o = Orch::new();
+    // W and F alone in their tab, X in another: F's pane closing would hand its keys to W
+    let w = held(&o, &["--label", "worker"]);
+    let s = o.env.json(&["ls", "--json"])[0]["session_id"].as_str().unwrap().to_string();
+    let f = o.env.ok(&["split", "-b", &w, "--", "sh", "-c", "exec sleep 300"]);
+    let x = o.env.ok(&["run", "-s", &s, "--", "sh", "-c", "exec sleep 300"]);
+    focus(&o, &s, &f);
+    // the person's own key, from outside leon: F's program ends and its pane closes
+    o.env.ok(&["send-key", "-b", &f, "ctrl+c"]);
+    let t = std::time::Instant::now();
+    while view(&o, &s).to_string().contains(&f) {
+        assert!(t.elapsed().as_secs() < 10, "F never closed");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let v = view(&o, &s);
+    assert_ne!(keys_go_to(&v), w, "a pane closing handed the keys to the prompt: {v}");
+    assert_eq!(keys_go_to(&v), x);
 }
 
 #[test]
 fn a_program_cannot_steer_the_focus_onto_a_held_prompt() {
     let o = Orch::new();
-    let (s, w, f, z, tab2) = setup(&o);
-    let tab1 = view(&o, &s)["windows"][0]["window_id"].as_str().unwrap().to_string();
+    let (s, w, f, z, tab2, _x) = setup(&o);
     let p = |extra: Value| {
         let mut v = json!({ "session_id": s });
         v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
         v
     };
     let refused = [
-        // direct
         ("session.focus_block", p(json!({ "block_id": w }))),
         ("session.focus_block", p(json!({ "block_id": z }))),
         ("session.focus_window", p(json!({ "window_id": tab2 }))),
         ("session.zoom_block", p(json!({ "block_id": w }))),
         ("session.float_block", p(json!({ "block_id": w }))),
-        // where it lands depends on the layout: refused while the active tab holds a prompt
-        ("session.focus_next_pane", p(json!({ "wrap": true }))),
-        ("session.focus_previous_pane", p(json!({ "wrap": true }))),
-        ("session.focus_direction", p(json!({ "direction": "left", "wrap": true }))),
-        // indirect: closing or moving what has the focus, or the active tab
-        ("block.close", p(json!({ "block_id": f }))),
-        ("session.close_window", p(json!({ "window_id": tab1 }))),
-        ("session.move_block", p(json!({ "block_id": f, "anchor_block_id": z }))),
-        ("session.toggle", p(json!({ "label": "worker" }))),
+        ("session.dock_block", p(json!({ "block_id": w, "side": "bottom" }))),
         // the focus stays with the place: swapping F with W puts the keys on W
         ("session.swap_blocks", p(json!({ "block_id": f, "other_block_id": w }))),
     ];
@@ -107,7 +153,7 @@ fn a_program_cannot_steer_the_focus_onto_a_held_prompt() {
 #[test]
 fn what_keeps_the_focus_off_the_prompt_goes_through() {
     let o = Orch::new();
-    let (s, w, f, _z, _tab2) = setup(&o);
+    let (s, w, f, _z, _tab2, _x) = setup(&o);
     let p = |extra: Value| {
         let mut v = json!({ "session_id": s });
         v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
@@ -134,10 +180,18 @@ fn what_keeps_the_focus_off_the_prompt_goes_through() {
 #[test]
 fn a_person_can_still_focus_the_prompt() {
     let o = Orch::new();
-    let (s, w, _f, z, tab2) = setup(&o);
+    let (s, w, _f, z, tab2, x) = setup(&o);
     // the test runs outside every leon terminal: a person, as the app and leon attach outside leon are
-    o.env.ok(&["api", "call", "session.focus_block", &json!({ "session_id": s, "block_id": w }).to_string()]);
+    focus(&o, &s, &w);
     assert_eq!(keys_go_to(&view(&o, &s)), w);
+    // any move a person makes lands there: the previous pane from X beside it, or a direction
+    let call = |m: &str, p: Value| o.env.ok(&["api", "call", m, &p.to_string()]);
+    focus(&o, &s, &x);
+    call("session.focus_previous_pane", json!({ "session_id": s, "wrap": true }));
+    assert_eq!(keys_go_to(&view(&o, &s)), w);
+    focus(&o, &s, &x);
+    call("session.focus_direction", json!({ "session_id": s, "direction": "left", "wrap": true }));
+    assert_eq!(keys_go_to(&view(&o, &s)), w, "{}", view(&o, &s));
     o.env.ok(&["api", "call", "session.focus_window", &json!({ "session_id": s, "window_id": tab2 }).to_string()]);
     assert_eq!(keys_go_to(&view(&o, &s)), z);
 }

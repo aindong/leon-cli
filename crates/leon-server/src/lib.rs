@@ -102,6 +102,7 @@ impl DerefMut for StateGuard<'_> {
 
 impl Drop for StateGuard<'_> {
     fn drop(&mut self) {
+        self.state.keep_keys_off_held(focus_guard::person_moves());
         let events = self.state.take_events();
         if events.is_empty() {
             return;
@@ -224,6 +225,9 @@ impl Ctx {
 
     /// Run a method. The checks run now; await the result.
     pub fn call(self: &Arc<Self>, method: &str, params: serde_json::Value) -> Later<serde_json::Value> {
-        self.registry.call(self, method, params)
+        // a call in-process (the app) is the person's; where a close leaves the keys is a side effect
+        let moves = focus_guard::asked().unwrap_or(true) && !matches!(method, "block.close" | "session.close_window");
+        let later = focus_guard::within(moves, || self.registry.call(self, method, params));
+        Box::pin(focus_guard::scope(moves, later))
     }
 }

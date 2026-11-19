@@ -44,10 +44,13 @@ pub struct Loaded {
     serve_generation: u64,
     cfg: leon_lua::Config,
     /// None when no config file exists.
-    jobs: Option<mpsc::Sender<Job>>,
+    jobs: Option<Jobs>,
 }
 
 pub type Shared = Arc<RwLock<Loaded>>;
+
+/// A job, and whether it runs for a person's own focus move (focus_guard.rs).
+type Jobs = mpsc::Sender<(bool, Job)>;
 
 enum Job {
     Action { name: String, args: Value, ctx: CallCtx, deadline: Instant, reply: oneshot::Sender<Result<Value, String>> },
@@ -84,7 +87,7 @@ fn config_error(msg: impl Into<String>) -> ApiError {
 }
 
 /// Load `path` on a new Lua thread. A missing file is an empty config with no thread.
-async fn load(ctx: &Arc<Ctx>, path: PathBuf) -> Result<(leon_lua::Config, Option<mpsc::Sender<Job>>), ApiError> {
+async fn load(ctx: &Arc<Ctx>, path: PathBuf) -> Result<(leon_lua::Config, Option<Jobs>), ApiError> {
     if !path.exists() {
         return Ok((leon_lua::Config::default(), None));
     }
@@ -96,9 +99,10 @@ async fn load(ctx: &Arc<Ctx>, path: PathBuf) -> Result<(leon_lua::Config, Option
         match Runtime::load(&path, Box::new(host)) {
             Ok((rt, cfg)) => {
                 let _ = loaded.send(Ok(cfg));
-                for job in queue {
+                for (moves, job) in queue {
                     // A panicking job drops its reply (the caller gets "gone"); the thread lives on.
-                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&rt, job)));
+                    let job = std::panic::AssertUnwindSafe(|| run(&rt, job));
+                    let _ = crate::focus_guard::within(moves, || std::panic::catch_unwind(job));
                 }
             }
             Err(e) => drop(loaded.send(Err(e.to_string()))),
@@ -190,14 +194,14 @@ impl Ctx {
 
 /// Ask the config's Lua thread to run a job; reply by `deadline` (plus a second for the reply).
 async fn ask<T: Send + 'static>(
-    jobs: Option<mpsc::Sender<Job>>,
+    jobs: Option<Jobs>,
     what: &str,
     deadline: Instant,
     job: impl FnOnce(oneshot::Sender<Result<T, String>>) -> Job,
 ) -> Result<T, ApiError> {
     let (tx, rx) = oneshot::channel();
     let gone = || ApiError::new(503, "unavailable", "the config's Lua state is gone; run `leon config reload`");
-    jobs.ok_or_else(gone)?.send(job(tx)).map_err(|_| gone())?;
+    jobs.ok_or_else(gone)?.send((crate::focus_guard::person_moves(), job(tx))).map_err(|_| gone())?;
     match tokio::time::timeout_at((deadline + Duration::from_secs(1)).into(), rx).await {
         Ok(Ok(Ok(v))) => Ok(v),
         Ok(Ok(Err(msg))) if msg == leon_lua::TIMED_OUT => Err(timed_out(what)),

@@ -73,9 +73,9 @@ fn an_agent_in_leon_cannot_answer_a_permission_prompt_but_a_person_can() {
     assert_eq!(o.count(&w, "GOT:"), 0, "nothing reached the pane:\n{}", o.env.capture(&w));
     o.env.ok(&["block", "close", &attached]);
 
-    // a person in a plain terminal answers through `leon attach`
-    o.env.ok(&["session", "rename", &s, "work"]);
-    let h = Host::spawn(&o.env, &attach_then_stty("work"), &[]);
+    // a person in a plain terminal answers through `leon attach`, going to the prompt: closing the
+    // pane above moved the keys off it, as a side effect never leaves them on a held block
+    let h = Host::spawn(&o.env, &attach_then_stty(&w), &[]);
     h.wait_text("ready>");
     h.send(b"approve\r");
     o.env.screen_until(&w, "the person's answer", |t| t.contains("GOT: approve"));

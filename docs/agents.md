@@ -204,13 +204,21 @@ person's keys reach that pane, no program running inside a leon terminal can typ
 (`leon send`, `send-key`, `agent tell`, `api call` of `block.event`, `dev.leon.terminal.write` or
 `client.key`, a `leon attach` started in a pane, a socket client of its own), change its status
 from outside it, run a config action or reload (`leon do ACTION`, `client.action`,
-`server.config_reload`), or move the focus onto it, where your next keys would land
-(`leon focus`, `session.focus_block`, `focus_window`, `zoom_block`, swapping it with the focused
-pane, or, while a session holds such a prompt, moving the focus by direction or closing what has
-it). Each gets error `permission_pending`. Only the block's own program (its
+`server.config_reload`), or focus it (`leon focus`, `session.focus_block`, `focus_window`,
+`zoom_block`, `dock_block`, swapping it with the focused pane). Each gets error
+`permission_pending`. Only the block's own program (its
 hooks) may change its status meanwhile, and that doesn't end the hold: a person typing does. So an
 agent can't approve its own or another agent's prompt, even by writing a report to the terminal
 or starting a job that outlives it.
+
+Your keys land on such a pane only when you move them there. Any move of yours does it: a click,
+a direction or next-pane key, a tab, the Activity list, `leon focus` from a shell outside leon,
+or a key binding you press. Anything else that would put your keys on it as a side effect moves
+them instead to the pane that had them, the nearest pane that isn't held, or the nearest tab
+whose keys aren't on one: a pane closing or exiting (your own Ctrl-C in the pane beside it, or
+your close, included), or a program inside leon moving, swapping, docking or unzooming panes or
+running a key binding. The pane stays marked in its tab and in the Activity list, so you see
+where the prompt is.
 
 A person answers where they are: the app's keys reach the pane (the Activity list and the
 notification take them there), and so do `leon attach` in a terminal app and `leon send` from a
@@ -224,6 +232,8 @@ This keeps agents from answering. It is not a sandbox:
 - a program running as you outside leon counts as the person, and so does a request from another
   machine (`-H`, or a client reaching this server over Tailscale, even from a pane here);
 - a program that moves itself to a new session (`setsid`) and drops its terminal gets past it;
+- when every pane left in a session waits on such a prompt, your keys stay on one of them: a tab
+  always has somewhere for them to go;
 - a dialog with no hook, such as Claude Code's question whether to trust a new folder, isn't
   held: start workers in folders the agent already trusts;
 - `agent.link` and `agent.inbox` don't check who asks, as `leon send` doesn't for other blocks.

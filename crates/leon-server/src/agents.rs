@@ -314,8 +314,8 @@ fn typing(method: &str, params: &Value) -> bool {
 /// (only its own program and what that runs, its hooks, may), or run config actions or reloads
 /// (Lua in the server types where nothing here sees). A person is a client outside every leon
 /// terminal (the app, `leon attach` or a shell in a terminal app) or on another machine; a local
-/// client whose process can't be told is taken to be inside.
-pub fn guard(ctx: &Ctx, peer: Peer, method: &str, params: &Value) -> Result<(), ApiError> {
+/// client whose process can't be told is taken to be inside. Ok says whether the caller is a person.
+pub fn guard(ctx: &Ctx, peer: Peer, method: &str, params: &Value) -> Result<bool, ApiError> {
     // the terminals' programs, and the sessions of closed ones a process of which still runs
     let roots = {
         let programs: Vec<i32> =
@@ -346,7 +346,7 @@ pub fn guard(ctx: &Ctx, peer: Peer, method: &str, params: &Value) -> Result<(), 
             (None, true) => blocks().map(|b| b.terminal.clone()).find(|t| t.held_for_person()),
             (None, false) => None,
         };
-        let Some(held) = held else { return Ok(()) };
+        let Some(held) = held else { return Ok(person) };
         held
     };
     use leon_core::process_tree::inside;
@@ -354,11 +354,11 @@ pub fn guard(ctx: &Ctx, peer: Peer, method: &str, params: &Value) -> Result<(), 
         if target.is_some() && !status && typing(method, params) {
             held.person_typed();
         }
-        return Ok(());
+        return Ok(person);
     }
     // its own hooks report its state; the hold stays until a person types
     if status && matches!(peer, Peer::Process(p) if inside(p, &[held.pid()]) == Some(true)) {
-        return Ok(());
+        return Ok(person);
     }
     let id = target.unwrap_or_else(|| "a block".into());
     Err(ApiError::new(

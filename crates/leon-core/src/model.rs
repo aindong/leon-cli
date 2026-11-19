@@ -101,6 +101,8 @@ pub struct State {
     pub(crate) dirty: Vec<String>,
     /// Which blocks work for which, and their reports (agents.rs).
     pub agents: crate::agents::Agents,
+    /// Each session's key target at the last look, by session (held_keys.rs).
+    pub(crate) keys: HashMap<String, String>,
 }
 
 /// Labels are optional, trimmed, and at most 128 characters.
