@@ -14,7 +14,8 @@ fn the_overview_is_documented() {
     for word in ["client.overview.toggle", "client.overview.session.toggle", "Reduce Motion", "hover"] {
         assert!(arch.contains(word), "docs/architecture/attention.md covers {word:?}");
     }
-    let changelog = include_str!("../../../CHANGELOG.md");
+    // 0.1.0's section moved to the archive when 0.1.1 came out
+    let changelog = include_str!("../../../docs/changelog-archive.md");
     let release = changelog.split("## [0.1.0]").nth(1).unwrap().split("\n## [").next().unwrap();
-    assert!(release.contains("⌘⇧\\"), "CHANGELOG.md's 0.1.0 section has the overview");
+    assert!(release.contains("⌘⇧\\"), "the changelog's 0.1.0 section has the overview");
 }
