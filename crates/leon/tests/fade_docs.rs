@@ -10,7 +10,8 @@ fn the_fade_is_documented() {
     );
     let cli = include_str!("../../../docs/cli/settings.md");
     assert!(cli.contains("fade_inactive_panes"), "docs/cli/settings.md names the key config get/set take");
-    let changelog = include_str!("../../../CHANGELOG.md");
+    // with the earlier releases' sections, which moved to the archive
+    let changelog = concat!(include_str!("../../../CHANGELOG.md"), include_str!("../../../docs/changelog-archive.md"));
     assert!(changelog.contains("fade_inactive_panes"), "CHANGELOG.md has the entry");
     assert!(changelog.contains(leon_server::API_VERSION), "CHANGELOG.md names the API version");
     let minor: u64 = leon_server::API_VERSION.split('.').nth(1).unwrap().parse().unwrap();

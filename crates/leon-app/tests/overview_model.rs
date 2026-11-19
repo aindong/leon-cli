@@ -52,7 +52,7 @@ fn session(id: &str, label: &str, tabs: usize) -> Session {
 }
 
 fn model(sessions: Vec<Session>) -> Model {
-    Model { sessions, ..Default::default() }
+    Model { sessions: std::sync::Arc::new(sessions), ..Default::default() }
 }
 
 #[test]

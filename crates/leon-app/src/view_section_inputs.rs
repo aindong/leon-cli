@@ -112,7 +112,7 @@ impl Workspace {
     pub(super) fn sidebar_input(&self, rows: &[SessionRow]) -> Option<SidebarInput> {
         let list = self.places().sidebar.filter(|_| !self.stopped && !self.overview_shown())?;
         let working = |i: &Option<Indicator>| matches!(i, Some(Indicator::Working { .. }));
-        let now = Instant::now();
+        let now = self.clock_now();
         let activity = match list {
             SidebarList::Activity => self
                 .attention

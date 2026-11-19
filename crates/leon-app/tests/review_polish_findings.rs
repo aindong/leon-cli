@@ -14,7 +14,7 @@ use m13_support::*;
 
 fn agent(records: Vec<Record>) -> Model {
     let mut m = model(vec![("web", vec![Tab(None, "", records)])]);
-    let b = &mut m.sessions[0].blocks[0];
+    let b = &mut std::sync::Arc::make_mut(&mut m.sessions)[0].blocks[0];
     b.title = None; // the program set no OSC 0/2 title
     b.command = vec!["/usr/local/bin/fake-agent".into()];
     m

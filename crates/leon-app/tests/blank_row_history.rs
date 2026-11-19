@@ -30,17 +30,30 @@ fn output_under_a_scrolled_pane_has_its_new_history_rows_fetched(cx: &mut TestAp
     assert!(before.iter().all(|l| !l.is_empty()), "every row is filled before the output: {before:?}");
     assert!(ws.read_with(cx, |ws, _| ws.view_top(&id)).is_some(), "scrolled back");
     let fetches = ws.read_with(cx, |ws, _| ws.fetches());
+    let scrolled = t.scrolled();
     t.write(b"\n").unwrap();
+    // the 100 lines can push fewer rows than that: a pane grown after its history moved to the
+    // store (a pause, scrollback.md) has blank rows under the cursor, as alacritty can't pull
+    // stored rows back down. So the count to see is the core's.
+    let pushed = || t.scrolled() - scrolled;
     // the model is the reader thread's: wait for the app to have drawn what it read, not only for
     // the model to have it, or the view is read before the poll ran (the ADR's one-frame race)
     let moved = shows(cx, |cx| {
         cx.run_until_parked();
-        ws.read_with(cx, |ws, _| ws.new_lines(&id)).is_some_and(|n| n >= 100)
+        t.text(true).ends_with("3100")
+            && pushed() > 0
+            && ws.read_with(cx, |ws, _| ws.new_lines(&id)) == Some(pushed())
             && ws.read_with(cx, |ws, _| ws.fetches()) > fetches
     });
     cx.run_until_parked();
     let after = lines(cx);
+    let (counted, now) = (ws.read_with(cx, |ws, _| ws.new_lines(&id)), ws.read_with(cx, |ws, _| ws.fetches()));
     s.app.stop();
-    assert!(moved, "the new lines were counted and the rows they pushed into history were fetched");
+    assert!(
+        moved,
+        "the new lines were counted and the rows they pushed into history were fetched: \
+         counted {counted:?} of {} pushed, fetches {fetches} -> {now}",
+        pushed()
+    );
     assert_eq!(after, before, "the view held still, every row filled");
 }

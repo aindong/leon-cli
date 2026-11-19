@@ -149,6 +149,7 @@ nav:
       - changelog-detail.md
       - changelog-milestones.md
       - changelog-0.1.0.md
+      - changelog-archive.md
   - Demo: demo.md
   - Performance:
       - performance.md

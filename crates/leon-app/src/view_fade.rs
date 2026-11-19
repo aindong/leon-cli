@@ -49,6 +49,11 @@ impl Workspace {
         self.fade.fades.amount(id).max(self.theme_dip())
     }
 
+    /// GPUI's clock now (the test platform fakes it): what attention and the notices time by.
+    pub(super) fn clock_now(&self) -> Instant {
+        self.fade.clock.now()
+    }
+
     /// The motions' clock: GPUI's, which the test platform fakes, unless a test held it.
     pub(super) fn motion_now(&self) -> Instant {
         self.fade.held.unwrap_or_else(|| self.fade.clock.now())

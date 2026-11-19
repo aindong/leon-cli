@@ -83,7 +83,8 @@ impl Workspace {
     /// screen and its tab.
     pub(in crate::view) fn row_action(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(session) = self.session_id.clone() else { return };
-        let tab = self.app.model().session(&session).and_then(|s| s.windows.get(s.active).map(|w| w.id.clone()));
+        let tab =
+            self.app.model().session(&session).and_then(|s| s.windows.get(self.active_of(s)).map(|w| w.id.clone()));
         let tabbed = name.starts_with("client.tab.");
         let row = RowRef { host: self.host, session, window: tab.filter(|_| tabbed) };
         if tabbed && row.window.is_none() {

@@ -35,7 +35,7 @@ fn a_float_row_named_by_its_program_hides_nothing() {
         overlays: HashMap::from([("w".to_string(), o)]),
         tiled_focus: HashMap::new(),
     };
-    let m = Model { sessions: vec![s], ..Default::default() };
+    let m = Model { sessions: std::sync::Arc::new(vec![s]), ..Default::default() };
     let (_, blocks) = switcher::tabs(&[(1, "devbox", &m)]);
     let text = blocks[0].text();
     assert!(!text.contains('\u{202e}'), "a bidi override reached the switcher: {text:?}");

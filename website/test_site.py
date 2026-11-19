@@ -116,8 +116,8 @@ class Built(unittest.TestCase):
         self.assertIn(f'href="{GITHUB}/blob/v9.9.9/CHANGELOG.md"', ja)
 
     def test_whats_new_has_a_page_per_release_newest_first(self):
-        versions = [v for v, _, _ in hooks.releases(read(ROOT / "CHANGELOG.md"))]
-        self.assertIn("0.1.0", versions)
+        versions = [v for v, _, _ in hooks.every_release(ROOT)]
+        self.assertIn("0.1.0", versions)  # from docs/changelog-archive.md
         index = self.page("whats-new")
         at = [index.index(f'href="{v}/"') for v in versions]
         self.assertEqual(at, sorted(at), "newest first, as in CHANGELOG.md")
@@ -125,6 +125,18 @@ class Built(unittest.TestCase):
         for v in versions:
             self.assertIn(f"leon {v}", self.page(f"whats-new/{v}"))
         self.assertIn("serve_tailscale", self.page("whats-new/0.1.1"))
+        # an archived release's links start from docs/ there, and still reach their pages
+        old = self.page("whats-new/0.1.0")
+        self.assertIn('href="../../changelog-milestones/"', old)
+        self.assertIn('href="../../overview/#install"', old)
+
+    def test_an_archived_sections_links_go_back_to_the_root(self):
+        body = "[a](x.md) ![p](images/p.png) [r](../README.md#i) [h](#k) [u](https://e.x/y)\n[d]: x.md\n[w]: https://e.x/\n"
+        self.assertEqual(
+            hooks.rooted(body),
+            "[a](docs/x.md) ![p](docs/images/p.png) [r](README.md#i) [h](#k) [u](https://e.x/y)\n"
+            "[d]: docs/x.md\n[w]: https://e.x/\n",
+        )
 
     def test_a_changelog_anchor_goes_to_the_changelog(self):
         page = hooks.release_page("0.2.0", "2026-12-01", "See [it](#reading-api_version).\n\n[r]: #x")

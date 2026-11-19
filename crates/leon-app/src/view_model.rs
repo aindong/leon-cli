@@ -1,5 +1,5 @@
 //! What the window draws, read from the model copy: rows for sessions and tabs, titles, status,
-//! the settings, and the signature the poll compares to decide on a redraw.
+//! and the settings.
 
 use super::*;
 use crate::program_kind;
@@ -30,12 +30,12 @@ impl Workspace {
     pub(super) fn rows(&self) -> Vec<SessionRow> {
         let mut out = Vec::new();
         for (host, remote) in self.hosts.remotes() {
-            out.extend(Self::host_rows_of(host, &remote.model()));
+            out.extend(self.host_rows_of(host, &remote.model()));
         }
         out
     }
 
-    fn host_rows_of(host: usize, m: &crate::remote::Model) -> Vec<SessionRow> {
+    fn host_rows_of(&self, host: usize, m: &crate::remote::Model) -> Vec<SessionRow> {
         m.sessions
             .iter()
             .enumerate()
@@ -57,7 +57,7 @@ impl Workspace {
                     title: switcher::session_title(s, i),
                     status: status::aggregate(windows.iter().map(|w| w.status)),
                     windows,
-                    active: s.active,
+                    active: self.active_of(s),
                 }
             })
             .collect()
@@ -180,51 +180,5 @@ impl Workspace {
 
     pub fn font_size(&self) -> f32 {
         self.font_size
-    }
-
-    /// Changes worth redrawing the window: every session's view (its revision moves with layout,
-    /// focus, zoom and labels), statuses, titles and settings. Not the panes' screens: a pushed
-    /// screen redraws its own grid (`poll_grids`).
-    pub fn signature(&self) -> u64 {
-        let mut h = DefaultHasher::new();
-        // with the overview up its thumbnails redraw themselves (`refresh_thumbs`), never the window
-        let shown = self.shown().map(|(_, ids)| ids).filter(|_| !self.overview_shown()).unwrap_or_default();
-        self.overview_shown().hash(&mut h);
-        for (host, remote) in self.hosts.remotes() {
-            let m = remote.model();
-            host.hash(&mut h);
-            for s in &m.sessions {
-                (&s.id, &s.label, s.active, s.revision).hash(&mut h);
-                for w in &s.windows {
-                    (&w.id, &w.label).hash(&mut h);
-                }
-            }
-        }
-        for m in self.hosts.machines() {
-            (&m.label, m.state()).hash(&mut h);
-        }
-        (self.host, &self.settings.collapsed_hosts).hash(&mut h);
-        // status and titles show for every tab and session, shown or not
-        let rows = self.rows();
-        for r in &rows {
-            r.status.hash(&mut h);
-            r.windows.iter().for_each(|w| (w.status, &w.title, w.program).hash(&mut h));
-        }
-        (self.sidebar, self.font_size.to_bits(), self.pending.len(), self.palette.is_some()).hash(&mut h);
-        let st = &self.settings;
-        (st.tab_style, st.pane_headers, st.sidebar_width.to_bits()).hash(&mut h);
-        self.session_id.hash(&mut h);
-        self.find_due().hash(&mut h);
-        self.activity_signature(&mut h);
-        self.updates.generation().hash(&mut h);
-        self.hosts.tailnet_reads().hash(&mut h); // Add Host…'s list and the hosts' tailnet lines
-                                                 // each header draws its own pane's state, which its tab's may hide
-        for id in &shown {
-            let (state, kind) = self.app.model().block(id).map_or((None, None), |(_, b)| {
-                (status::indicator_of(&b.newest_first()), Some(program_kind::kind_of_block(b)))
-            });
-            (state, kind, self.header_caption(id), self.pane_title(id)).hash(&mut h);
-        }
-        h.finish()
     }
 }

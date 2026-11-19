@@ -29,17 +29,21 @@ static A: Counting = Counting;
 const FLOOD: &str = r"m=$(printf 'QUFB%.0s' $(seq 682)); for i in $(seq 256); do printf '\033]7501;state=idle:id=r%s:msg=%s\007' $i $m; done; echo r-sent";
 
 #[gpui::test]
-fn a_poll_does_not_copy_every_record(cx: &mut TestAppContext) {
+fn a_model_change_does_not_copy_every_record(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
     let t = focused(&s.app, &ws, cx);
     run_until(&t, FLOOD, "r-sent");
     assert!(eventually(|| t.program_status().len() == 256), "256 records stored");
     settle(&t);
-    let _ = ws.read_with(cx, |ws, _| ws.signature());
+    // what the window does when the sessions move (GPUI phase 5: no hash of what is drawn)
+    let moved = |cx: &mut gpui::VisualTestContext| {
+        cx.update(|window, cx| ws.update(cx, |ws, cx| ws.sessions_moved(window, cx)))
+    };
+    moved(cx);
     BYTES.with(|b| b.set(0));
-    let _ = ws.read_with(cx, |ws, _| ws.signature());
+    moved(cx);
     let n = BYTES.with(|b| b.get());
-    assert!(n < 256 << 10, "one poll allocated {n} bytes for 256 idle records");
+    assert!(n < 256 << 10, "one model change allocated {n} bytes for 256 idle records");
     s.app.stop();
 }
