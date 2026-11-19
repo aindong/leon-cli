@@ -131,6 +131,12 @@ async fn reload(ctx: &Arc<Ctx>, cur: &mut Loaded) -> Result<Reloaded, ApiError> 
     let serve = |s: &leon_lua::Settings| (s.serve_tailscale, s.serve_tailscale_port, s.serve_tailscale_tags.clone());
     let serve_generation = cur.serve_generation + u64::from(serve(&cfg.settings) != serve(&cur.cfg.settings));
     *cur = Loaded { path: Some(path.clone()), generation: cur.generation + 1, serve_generation, cfg, jobs };
+    let lines = cur.cfg.settings.scrollback;
+    if ctx.scrollback.swap(lines, std::sync::atomic::Ordering::SeqCst) != lines {
+        // under the state lock, as a new block is started: none misses the new cap
+        let st = ctx.state();
+        st.sessions.iter().flat_map(|s| &s.blocks).for_each(|b| b.terminal.set_scrollback(lines));
+    }
     if changed {
         let view = serde_json::to_value(crate::settings::view(&cur.cfg)).expect("json");
         ctx.state().emit_global("settings_changed", view);

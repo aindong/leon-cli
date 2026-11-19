@@ -21,6 +21,7 @@ leon.set("resume", "never")
 leon.set("fade_inactive_panes", 0.4)
 leon.set("check_for_updates", true)
 leon.set("translucency", 0.2)
+leon.set("scrollback", 5000)
 "#;
 
 /// Open the window on `SRC`, show `section`, click `control`, and check `key` went from `before`
@@ -113,6 +114,11 @@ fn copy_on_select(cx: &mut TestAppContext) {
 #[gpui::test]
 fn repeat_time(cx: &mut TestAppContext) {
     one(cx, "section-terminal", "step-up-repeat_time", "repeat_time", json!(700), json!(750));
+}
+
+#[gpui::test]
+fn scrollback(cx: &mut TestAppContext) {
+    one(cx, "section-terminal", "step-up-scrollback", "scrollback", json!(5000), json!(6000));
 }
 
 #[gpui::test]
