@@ -300,6 +300,7 @@ impl Workspace {
         self.drop_unshown_thumbs();
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
+        self.renaming_open(); // a rename whose row went away ends
         if self.term.find.as_ref().is_some_and(|f| !shown.contains(&f.block)) {
             self.term.find = None; // its pane left the screen
         }
@@ -347,8 +348,9 @@ impl Render for Workspace {
         let preview = self.render_preview(window, cx).filter(|_| !self.stopped);
         // the overview takes the sidebar's and the panes' place, in the same root as they are, so
         // the menu's actions and the window's listeners still reach the workspace
-        let main: Vec<gpui::AnyElement> = if self.overview_shown() && !self.stopped {
-            vec![self.render_overview(window, cx)]
+        let overview = self.overlay(OverlayKind::Overview, self.overview_shown() && !self.stopped);
+        let main: Vec<gpui::AnyElement> = if let Some(overview) = overview {
+            vec![overview]
         } else {
             let body = match body_shown {
                 _ if self.stopped => self.render_stopped(cx).into_any_element(),
@@ -401,10 +403,11 @@ impl Render for Workspace {
             .text_color(rgb(self.theme.text))
             .children(main)
             .children(self.render_stale(window))
-            .children(self.render_update(cx).filter(|_| !self.stopped))
+            .children(self.overlay(OverlayKind::Notice, self.notice_drawn().is_some() && !self.stopped))
             .children(preview)
             // last, so it paints over the panes: GPUI paints children in order
-            .children(self.render_overlay(cx).filter(|_| !self.stopped))
+            .children(self.overlay(OverlayKind::Palette, self.palette_drawn().is_some() && !self.stopped))
+            .children(self.render_hint().filter(|_| !self.stopped))
             .children(self.render_card(cx).filter(|_| !self.stopped))
             .children(self.render_row_menu(cx).filter(|_| !self.stopped))
             .child(self.frame_mark())

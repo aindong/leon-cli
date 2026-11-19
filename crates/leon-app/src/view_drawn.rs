@@ -33,6 +33,11 @@ pub fn drawing<V: 'static>(cx: &mut Context<V>) {
     }
 }
 
+/// Forget what view `id` drew: the root didn't draw it this frame (an overlay closed).
+pub(crate) fn forget(id: EntityId) {
+    DRAWN.with(|d| d.borrow_mut().get_mut(&id).map(HashSet::clear));
+}
+
 /// `drawing`, for a view shown cached (`AnyView::cached`).
 pub fn drawing_cached<V: 'static>(cx: &mut Context<V>) {
     drawing(cx);

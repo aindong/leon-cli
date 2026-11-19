@@ -222,6 +222,9 @@ impl Workspace {
         let text = div().when(r.fresh, |d| d.bg(rgb(t.selected))).child(r.text.clone());
         div()
             .debug_selector(|| sel("rename-field".into()))
+            .track_focus(&self.overlays.rename_focus)
+            .key_context("RenameField")
+            .on_key_down(cx.listener(Self::rename_key_down))
             .flex()
             .flex_1()
             .min_w(px(0.))
