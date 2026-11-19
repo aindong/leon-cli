@@ -21,7 +21,7 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   `working`, a permission prompt `blocked`/`permission` with what it asks, Claude Code's questions
   `blocked`/`question`, the end of a turn `done` with its last message, Codex's interrupt `idle`.
   Run `leon skill setup` again to get them; every agent pane then shows its state.
-- leon types "You have N leon messages. Run leon inbox to read them." into an orchestrator's
+- leon types "You have 2 leon messages. Run leon inbox to read them." into an orchestrator's
   prompt once the program in front of its pane reports its turn ended and nobody typed there for
   3 s: one notice for every report that came meanwhile, never into a shell.
 - `leon notify --kind permission|question|auth`; `leon skill show orchestration`.

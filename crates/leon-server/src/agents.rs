@@ -176,8 +176,10 @@ fn team(st: &State, id: &str) -> Team {
 /// The line typed into an orchestrator. No backticks or other shell syntax: typed into a shell by
 /// mistake, it runs nothing.
 pub fn notice(n: usize) -> String {
-    let s = if n == 1 { "" } else { "s" };
-    format!("You have {n} leon message{s}. Run leon inbox to read them.")
+    match n {
+        1 => "You have 1 leon message. Run leon inbox to read it.".into(),
+        n => format!("You have {n} leon messages. Run leon inbox to read them."),
+    }
 }
 
 /// Type `notice` into each owed orchestrator whose program, still in front, last reported its turn

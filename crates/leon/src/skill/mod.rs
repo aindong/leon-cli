@@ -339,6 +339,14 @@ fn hook_text() -> Option<String> {
     ))
 }
 
+/// Whether `program` (`claude`, `codex`) has leon's hooks installed and current, so its turns
+/// report on their own.
+pub fn hooks_installed(program: &str) -> bool {
+    let Some(agent) = Agent::ALL.into_iter().find(|a| a.name() == program) else { return false };
+    let Ok((_, t)) = target(agent, false) else { return false };
+    t.hook.is_some_and(|p| matches!(hooks::read(&p), Ok(Some(v)) if hooks::state(&v, agent) == State::Current))
+}
+
 pub fn run(cli: &Cli, cmd: &SkillCmd) -> Result<(), Fail> {
     match cmd {
         SkillCmd::Show { part } => {

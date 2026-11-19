@@ -80,8 +80,14 @@ close workers you didn't start.
 
 ## If you are the worker
 
-You were started with a task and a paragraph about reporting. Your state (working, waiting on a
-permission prompt, turn ended) reaches your orchestrator through leon's hooks. Also:
+You were started with a task and a paragraph about reporting. With leon's hooks (Claude Code,
+Codex after `leon skill setup`), your state (working, waiting on a permission prompt, turn ended)
+reaches your orchestrator on its own, and so does your last message when your turn ends. So report
+by ending your turn: put the result in a line or two in your last message, or, to ask something,
+make the question your last message; the answer is typed into your prompt. Running a command to
+report would cost the user one more approval for nothing.
+
+Without the hooks, report with `leon notify`:
 
 ```sh
 leon notify --state done --body "Fixed: the parser skipped empty lines. Tests pass."
@@ -89,6 +95,4 @@ leon notify --state blocked --kind question --body "Postgres or SQLite for the t
 leon notify --state error --body "Can't build: the toolchain is missing."
 ```
 
-Report your result in a line or two when you finish, then end your turn. To ask, report the
-question and end your turn: the answer is typed into your prompt. A body is one line, at most 2048
-bytes; put more in a file and name the file.
+then end your turn. A body is one line, at most 2048 bytes; put more in a file and name the file.
