@@ -32,8 +32,14 @@ LINK = re.compile(
 )
 FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 # what would run on the public site: translations come from contributors, and GitHub's preview
-# strips these where the site would not, so the build refuses them outside code
-UNSAFE = re.compile(r"<(?:script|iframe|object|embed)\b|\son[a-z]+\s*=|javascript:", re.I)
+# strips these where the site would not, so the build refuses them in a page's HTML (where code is
+# escaped text, so the docs' examples pass): a script or frame tag, an on* handler in a tag, or a
+# script URL in an attribute
+UNSAFE = re.compile(
+    r"<(?:script|iframe|object|embed|frame)\b|<[a-z][^>]*\son[a-z]+\s*=|"
+    r"<[a-z][^>]*=\s*[\"']?\s*(?:javascript|vbscript|data:text/html)",
+    re.I,
+)
 # the files in docs/ the site serves: pages and pictures
 SERVED = (".md", ".png", ".gif", ".jpg", ".jpeg", ".webp")
 
@@ -82,12 +88,6 @@ def split(text):
             lines.append(line)
     cut(fence is not None)
     return out
-
-
-def prose(text):
-    """`text` without its code: fenced blocks and inline spans."""
-    rest = "\n".join(t for code, t in split(text) if not code)
-    return LINK.sub(lambda m: "" if m["code"] else m[0], rest)
 
 
 def rewrite(text, origin, page, staged, root, ref, urls):
@@ -258,11 +258,15 @@ def demo(media):
 
 def on_page_markdown(markdown, page, config, files):
     uri = page.file.src_uri
-    bad = UNSAFE.search(prose(markdown))
-    if bad:
-        raise PluginError(f"{uri}: {bad[0]!r} would run on the website; leave HTML scripts and handlers out of the docs")
     ref = state["refs"].get(uri, state["ref"])
     return rewrite(markdown, state["context"].get(uri, uri), uri, state["staged"], state["root"], ref, state["urls"])
+
+
+def on_page_content(html, page, config, files):
+    bad = UNSAFE.search(html)
+    if bad:
+        raise PluginError(f"{page.file.src_uri}: {bad[0][:60]!r} would run on the website; leave scripts and handlers out of the docs")
+    return html
 
 
 def on_page_context(context, page, config, nav):
