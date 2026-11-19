@@ -246,6 +246,7 @@ pub struct Workspace {
     _appearance: Subscription,
     _prepare: Subscription,
     _refocus: Subscription,
+    _lost: Subscription,
 }
 
 #[path = "view_activity.rs"]

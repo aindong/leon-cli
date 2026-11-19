@@ -141,11 +141,11 @@ impl Workspace {
         })
     }
 
-    /// A key at an overlay: the hover card closes, the repeat window too, and the native event's
-    /// text is used (`input::retext`), as `key_down` does.
+    /// A key at an overlay: the hover card closes, and the native event's text is used
+    /// (`input::retext`), as `key_down` does. An overlay that takes the key closes the repeat
+    /// window (`took`); one it hands on leaves it to `key_down`.
     fn overlay_keystroke(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) -> Keystroke {
         self.close_hover_card(window, cx);
-        self.repeat = Default::default(); // every key closes the repeat window
         match (self.native_key)() {
             Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
             None => ev.keystroke.clone(),
@@ -156,7 +156,7 @@ impl Workspace {
     pub(super) fn palette_key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let ks = self.overlay_keystroke(ev, window, cx);
         self.palette_key(&ks, keymap::chord(&ks).as_ref(), window, cx);
-        cx.stop_propagation();
+        self.took(cx);
     }
 
     /// The overview's keys: every one is its own.
@@ -166,14 +166,14 @@ impl Workspace {
         }
         let ks = self.overlay_keystroke(ev, window, cx);
         self.overview_key(&ks, keymap::chord(&ks).as_ref(), cx);
-        cx.stop_propagation();
+        self.took(cx);
     }
 
     /// The find bar's keys; the ones `find_key` leaves go on to the workspace (⌘ and ctrl chords).
     pub(super) fn find_key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let ks = self.overlay_keystroke(ev, window, cx);
         if self.find_key(&ks, cx) {
-            cx.stop_propagation();
+            self.took(cx);
         }
     }
 
@@ -181,6 +181,22 @@ impl Workspace {
     pub(super) fn rename_key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let ks = self.overlay_keystroke(ev, window, cx);
         self.rename_key(&ks, cx);
+        self.took(cx);
+    }
+
+    /// An overlay took the key: it goes no further, and the repeat window closes.
+    fn took(&mut self, cx: &mut Context<Self>) {
+        self.repeat = Default::default();
         cx.stop_propagation();
+    }
+
+    /// The frame just drawn has no element with the focus: a rename whose field isn't drawn any
+    /// more (the sidebar hid it, another session's tabs replaced it) ends, changing nothing, and
+    /// the focus moves on. After the frame: GPUI tells this while it draws.
+    pub(super) fn focus_lost(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.overlays.rename_focus.is_focused(window) && self.term.rows.renaming.take().is_some() {
+            cx.notify();
+        }
+        self.sync_focus(window, cx);
     }
 }

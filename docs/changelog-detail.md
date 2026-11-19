@@ -11,10 +11,11 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 ### Leon.app doesn't wait on its own server
 
 #### Changed
-- Every call the window makes to This Mac's server (a key, a paste, a split and the directory it
-  opens in, a copy, a cmd-click, End All Sessions) goes through one ordered queue off the window's
-  thread, as a host's calls already did: a stuck server no longer freezes the window for the 5 s
-  call timeout. The first session is still made before the window shows.
+- The window's calls to This Mac's server (a key, a paste, a split and the directory it opens in,
+  a copy, a cmd-click, End All Sessions) go through one ordered queue off the window's thread, as
+  a host's calls already did: a stuck server no longer freezes the window for the 5 s call timeout.
+  Lua key bindings, config actions and a config reload still run on a connection of their own,
+  and the first session is still made before the window shows.
 - The window's copy of each machine's model changes only on its own thread, and only the views a
   change touches are told to draw again ([How leon uses GPUI](architecture/gpui.md), R4).
 - A config reload reaches the window through the server's `keymap_changed` event, at once,
@@ -24,9 +25,10 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 #### Changed
 - The palette (and its switcher, theme list and Add Host prompt), the find bar, the overview and
-  the inline rename field each take the window's focus and their own keys while open; Escape,
-  their key again, a pick, or the pane they belong to going away gives the focus back to the pane.
-  A key the find bar doesn't take (⌘D) still runs its binding.
+  the inline rename field each take the window's focus and their own keys while open. Escape, a
+  pick, the palette's, switcher's or overview's key again, or what they belong to going out of
+  sight closes them, and the focus goes to the overlay still open (the find bar under the
+  palette), else the pane. A key the find bar doesn't take (⌘D) still runs its binding.
 - A click outside the palette closes it, as one outside the rename field already set the name.
 
 ### Diagrams and benchmark charts

@@ -232,9 +232,11 @@ impl Workspace {
         };
         div()
             .debug_selector(|| sel(format!("find-bar-{id}")))
-            .track_focus(&self.overlays.find_focus)
-            .key_context("FindBar")
-            .on_key_down(cx.listener(Self::find_key_down))
+            .when(live, |d| {
+                d.track_focus(&self.overlays.find_focus)
+                    .key_context("FindBar")
+                    .on_key_down(cx.listener(Self::find_key_down))
+            })
             .flex()
             .flex_none()
             .items_center()

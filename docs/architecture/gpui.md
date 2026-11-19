@@ -212,8 +212,10 @@ on the main thread, list the file here with its reason, and never use it to driv
   focus handle and key context (`Palette`, `Overview`, `FindBar`, `RenameField`; the popover's own) and its own
   `on_key_down` (`view_overlays.rs`), and `sync_focus` gives the focus to the top open one after
   every change, else to the workspace, so `key_down` is the terminal's path (the keymap,
-  sequences, copy mode and hints) (R3, R9). No `InputHandler`, so no input method (R9). Every
-  call to a server queues (R8); what still waits on the main thread is the first
+  sequences, copy mode and hints) (R3, R9). A frame drawn without the focused element (GPUI's
+  `on_focus_lost`) ends a rename whose field it hid. No `InputHandler`, so no input method (R9).
+  A server call queues (R8) or, for a Lua binding, a config action or a reload, runs on a thread
+  of its own; what still waits on the main thread is the first
   `session.create`, before the window draws, and a watch line's write (a socket write, bounded).
 - Already in line: panes paint through `canvas` (R7); std threads only in GPUI-free modules,
   reaching the UI through a wake channel (R8); tests on `TestAppContext` (R10); GPUI from

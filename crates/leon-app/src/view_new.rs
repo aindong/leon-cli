@@ -74,6 +74,8 @@ impl Workspace {
         // a press that changes nothing (blank chrome) focuses the workspace's handle: the top open
         // overlay gets it back
         let refocus = cx.on_focus(&focus, window, |ws, window, cx| ws.sync_focus(window, cx));
+        let lost =
+            cx.on_focus_lost(window, |_, window, cx| cx.defer_in(window, |ws, window, cx| ws.focus_lost(window, cx)));
         let prepare = cx.observe_in(&cx.entity(), window, |ws, _, window, cx| {
             ws.wakes.1 += 1;
             ws.prepare();
@@ -165,6 +167,7 @@ impl Workspace {
             _appearance: appearance,
             _prepare: prepare,
             _refocus: refocus,
+            _lost: lost,
         };
         ws.prepare(); // the first frame comes before any notify
         ws.root_seen = ws.root_input();
