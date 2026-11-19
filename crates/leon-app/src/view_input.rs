@@ -118,33 +118,54 @@ impl EntityInputHandler for Workspace {
         }
     }
 
-    /// Typed text, an input method's commit, the emoji picker's pick: to the pane.
-    fn replace_text_in_range(&mut self, _: Option<Range<usize>>, text: &str, _: &mut Window, cx: &mut Context<Self>) {
-        if self.ime.marked.take().is_some() {
+    /// Typed text, an input method's commit, the emoji picker's pick: to the pane. A range
+    /// replaces that part of the marked text, and the rest of it goes with the commit.
+    fn replace_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let marked = self.ime.marked.take();
+        if marked.is_some() {
             cx.notify();
         } else if std::mem::take(&mut self.ime.stale) {
             return; // the commit of a composition no longer shown
         }
         let Some((sid, id, _)) = self.target() else { return };
-        self.commit(&sid, &id, text, cx);
+        let text = match (marked, range) {
+            (Some(m), Some(r)) => splice(&m.text, r, text),
+            _ => text.to_string(),
+        };
+        self.commit(&sid, &id, &text, cx);
     }
 
+    /// A range replaces that part of the marked text; the selection is within the new text.
     fn replace_and_mark_text_in_range(
         &mut self,
-        _: Option<Range<usize>>,
+        range: Option<Range<usize>>,
         text: &str,
         selected: Option<Range<usize>>,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let Some((_, block, _)) = self.target() else { return };
+        let inserted = text.encode_utf16().count();
+        let old = self.ime.marked.as_ref().filter(|m| m.block == block).map(|m| m.text.as_str());
+        // `at`: where the inserted text starts in the marked text
+        let (text, at) = match (old, range) {
+            (Some(old), Some(r)) => (splice(old, r.clone(), text), r.start.min(old.encode_utf16().count())),
+            _ => (text.to_string(), 0),
+        };
         let end = text.encode_utf16().count();
-        let selected = selected.map_or(end..end, |s| s.start.min(end)..s.end.min(end));
+        let selected = selected.map_or(at + inserted..at + inserted, |s| at + s.start..at + s.end);
+        let selected = selected.start.min(end)..selected.end.min(end);
         if self.view_top(&block).is_some() {
             self.scroll_to(&block, None); // composing goes back to the prompt, as typing does
         }
         self.ime.stale = false;
-        self.ime.marked = (!text.is_empty()).then(|| Marked { block, text: text.into(), selected });
+        self.ime.marked = (!text.is_empty()).then_some(Marked { block, text, selected });
         cx.notify();
     }
 
@@ -268,4 +289,12 @@ impl Workspace {
             .child(m.text.clone());
         Some(text.into_any_element())
     }
+}
+
+/// `old` with its UTF-16 range `r` (clamped to it) replaced by `new`.
+fn splice(old: &str, r: Range<usize>, new: &str) -> String {
+    let u: Vec<u16> = old.encode_utf16().collect();
+    let start = r.start.min(u.len());
+    let end = r.end.clamp(start, u.len());
+    String::from_utf16_lossy(&u[..start]) + new + &String::from_utf16_lossy(&u[end..])
 }
