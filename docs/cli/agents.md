@@ -64,11 +64,28 @@ before the prompt.
 - `--split right|left|above|below`: open it in a pane beside you instead.
 - `--label NAME`: label its block.
 - `-c, --cwd DIR`: its working directory (default: the current directory).
+- `--worktree`: give it a git worktree and branch of its own, made at the checkout's HEAD in
+  `<checkout>-worktrees/<branch>` beside the checkout of `-c DIR` (else the current directory), and
+  run it there. Outside a git checkout, exit 1. Not with `-H`.
+- `--branch NAME`: the worktree's new branch (default `agent/LABEL`, else `agent/AGENT-TIME-PID`).
 
 ### `leon agent ls`
 
 List the agents working for you (`-b`, else `$LEON_BLOCK`): label, the state each last reported,
 agent, age, unread reports and block. `--json` also gives your own parent and state.
+
+### `leon agent close BLOCK`
+
+Close a worker's block and remove the worktree and branch `--worktree` made for it. It first checks
+what that would lose: changes not committed (untracked and ignored files too), commits no other
+branch or remote holds, and a lock on the worktree. With any, it exits 1 listing them and closes
+nothing; after closing it checks again, and if the agent wrote something as it ended, the worktree
+stays and leon prints how to remove it. It only removes a worktree that git lists where leon puts
+its own, on the branch leon made (a renamed branch is left alone). A worker without a worktree just
+closes. A worktree is never removed any other way: closing the block otherwise leaves it. Not with
+`-H`: run it on the machine the worker's server runs on.
+
+- `--force`: remove them anyway; that work is lost.
 
 ### `leon agent tell BLOCK TEXT`
 
@@ -91,6 +108,8 @@ leon agent ls
 leon inbox --peek
 leon agent tell tests "Use the fixture in tests/data." --for 30s
 leon block close "$id"
+w=$(leon agent start --worktree --branch fix-parser --label parser claude "Fix the parser")
+leon agent close "$w"
 ```
 
 ### `leon float [--new [-- CMD]]`

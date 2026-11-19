@@ -29,6 +29,15 @@ pub struct Worker {
     pub started_at: u64,
 }
 
+/// A git worktree and branch made for a worker (`leon agent start --worktree`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Worktree {
+    pub path: String,
+    pub branch: String,
+    /// The checkout it was made from, which removes it.
+    pub repo: String,
+}
+
 /// What a worker told its orchestrator.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Report {
@@ -81,6 +90,9 @@ pub struct Agents {
     pub inboxes: HashMap<String, Inbox>,
     /// By block: what its program last reported for its root record.
     last: HashMap<String, Last>,
+    /// By block: the worktree made for it, kept until the block closes (`leon agent close`
+    /// removes the worktree; any other close leaves it).
+    pub worktrees: HashMap<String, Worktree>,
 }
 
 pub fn now_secs() -> u64 {
@@ -184,7 +196,8 @@ impl State {
     /// closed reports so and leaves its team; an orchestrator that closed loses its inbox and its
     /// workers' links; a closed block's last state goes.
     pub fn prune_agents(&mut self) {
-        if self.agents.workers.is_empty() && self.agents.inboxes.is_empty() && self.agents.last.is_empty() {
+        let a = &self.agents;
+        if a.workers.is_empty() && a.inboxes.is_empty() && a.last.is_empty() && a.worktrees.is_empty() {
             return;
         }
         // each live block, and its program's exit status if it exited
@@ -200,11 +213,15 @@ impl State {
             };
             ended.push((id.clone(), how));
         }
-        let keys = self.agents.inboxes.keys().chain(self.agents.last.keys());
+        let keys = self.agents.inboxes.keys().chain(self.agents.last.keys()).chain(self.agents.worktrees.keys());
         let gone: Vec<String> = keys.filter(|id| !live.contains_key(id.as_str())).cloned().collect();
+        let mut kept = HashMap::new(); // worktrees of closed blocks, for their reports
         for id in gone {
             self.agents.inboxes.remove(&id);
             self.agents.last.remove(&id);
+            if let Some(w) = self.agents.worktrees.remove(&id) {
+                kept.insert(id, w);
+            }
         }
         for (id, how) in ended {
             let w = self.agents.workers.remove(&id).expect("listed above");
@@ -220,12 +237,21 @@ impl State {
                 state: state.into(),
                 kind: None,
                 title: None,
-                body: code.map(|c| format!("exit status {c}")),
+                body: body(code, kept.get(&id)),
                 at: now_secs(),
             };
             self.agents.push(&w.parent, report);
         }
     }
+}
+
+/// A report's body for a worker that ended: its exit status, and the worktree a close left.
+fn body(code: Option<i32>, kept: Option<&Worktree>) -> Option<String> {
+    let code = code.map(|c| format!("exit status {c}"));
+    // neutral: `leon agent close` removes it just after, any other close leaves it
+    let tree = kept.map(|w| format!("its worktree: {} (branch {})", w.path, w.branch));
+    let parts: Vec<String> = code.into_iter().chain(tree).collect();
+    (!parts.is_empty()).then(|| parts.join("; "))
 }
 
 #[cfg(test)]

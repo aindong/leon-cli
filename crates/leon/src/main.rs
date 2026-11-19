@@ -1,6 +1,7 @@
 //! `leon`: the command-line client, and the server when run as `leon server run`.
 
 mod agent;
+mod agent_worktree;
 mod api;
 mod attach;
 mod blocks;

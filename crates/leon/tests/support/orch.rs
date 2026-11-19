@@ -113,3 +113,30 @@ pub fn until<T>(what: &str, secs: u64, mut f: impl FnMut() -> Option<T>) -> T {
         std::thread::sleep(Duration::from_millis(50));
     }
 }
+
+/// Run git in `dir` with a fixed identity; panic on failure; its stdout.
+pub fn git(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .current_dir(dir)
+        .args(["-c", "user.name=test", "-c", "user.email=test@example.invalid", "-c", "init.defaultBranch=main"])
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+    String::from_utf8(out.stdout).unwrap()
+}
+
+impl Orch {
+    /// A git repo with one commit, in its own directory under the test's: (its path).
+    pub fn repo(&self) -> PathBuf {
+        let parent = self.env.dir.path().join("src");
+        std::fs::create_dir_all(&parent).unwrap();
+        let repo = parent.join("proj");
+        std::fs::create_dir(&repo).unwrap();
+        git(&repo, &["init", "-q"]);
+        std::fs::write(repo.join("README"), "hi\n").unwrap();
+        git(&repo, &["add", "README"]);
+        git(&repo, &["commit", "-q", "-m", "first"]);
+        std::fs::canonicalize(repo).unwrap()
+    }
+}

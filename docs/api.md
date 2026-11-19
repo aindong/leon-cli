@@ -5165,8 +5165,17 @@ same facts for the server you run.
 | `block_id` | string | yes | The worker's block. |
 | `parent_id` | string | yes | The block it reports to. |
 | `agent` | string | yes | The agent's program name, e.g. `claude`. |
+| `worktree` | `Worktree` \| null |  | The git worktree made for it, kept with the block until it closes. |
 
 **Output:** none
+
+**`Worktree`:** A git worktree and branch made for a worker (`leon agent start --worktree`).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | yes |  |
+| `branch` | string | yes |  |
+| `repo` | string | yes | The checkout it was made from, which removes it. |
 
 <details><summary>JSON Schemas</summary>
 
@@ -5188,6 +5197,17 @@ same facts for the server you run.
       "agent": {
         "description": "The agent's program name, e.g. `claude`.",
         "type": "string"
+      },
+      "worktree": {
+        "description": "The git worktree made for it, kept with the block until it closes.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Worktree"
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     },
     "additionalProperties": false,
@@ -5195,7 +5215,30 @@ same facts for the server you run.
       "block_id",
       "parent_id",
       "agent"
-    ]
+    ],
+    "$defs": {
+      "Worktree": {
+        "description": "A git worktree and branch made for a worker (`leon agent start --worktree`).",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "repo": {
+            "description": "The checkout it was made from, which removes it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "branch",
+          "repo"
+        ]
+      }
+    }
   },
   "output_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -5224,11 +5267,20 @@ same facts for the server you run.
 | `parent` | string \| null |  | The block this one works for, if any. |
 | `state` | `State` \| null |  | The state this block's own program last reported, and its kind. |
 | `kind` | `Kind` \| null |  |  |
+| `worktree` | `Worktree` \| null |  | The git worktree made for this block, if any. |
 | `workers` | [`WorkerView`] | yes | The blocks that work for this one, oldest first. |
 
 **`State`:** `"idle"` | `"working"` | `"done"` | `"blocked"` | `"error"`.
 
 **`Kind`:** `"permission"` | `"question"` | `"auth"`.
+
+**`Worktree`:** A git worktree and branch made for a worker (`leon agent start --worktree`).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | yes |  |
+| `branch` | string | yes |  |
+| `repo` | string | yes | The checkout it was made from, which removes it. |
 
 **`WorkerView`:**
 
@@ -5241,6 +5293,7 @@ same facts for the server you run.
 | `state` | `State` \| null |  | The state its program last reported (`working`, `blocked`, `done`, `error`, `idle`); null before its first report. |
 | `kind` | `Kind` \| null |  |  |
 | `unread` | integer (uint) | yes | Its reports the orchestrator hasn't read. |
+| `worktree` | `Worktree` \| null |  |  |
 
 <details><summary>JSON Schemas</summary>
 
@@ -5293,6 +5346,17 @@ same facts for the server you run.
           }
         ]
       },
+      "worktree": {
+        "description": "The git worktree made for this block, if any.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Worktree"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "workers": {
         "description": "The blocks that work for this one, oldest first.",
         "type": "array",
@@ -5321,6 +5385,27 @@ same facts for the server you run.
           "permission",
           "question",
           "auth"
+        ]
+      },
+      "Worktree": {
+        "description": "A git worktree and branch made for a worker (`leon agent start --worktree`).",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "repo": {
+            "description": "The checkout it was made from, which removes it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "branch",
+          "repo"
         ]
       },
       "WorkerView": {
@@ -5370,6 +5455,16 @@ same facts for the server you run.
             "type": "integer",
             "format": "uint",
             "minimum": 0
+          },
+          "worktree": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Worktree"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
