@@ -119,9 +119,12 @@ impl Workspace {
             _ if finding => &o.find_focus,
             _ => &self.focus,
         };
+        let wanted = wanted.clone();
+        if wanted != self.focus {
+            self.end_marked(); // the input method's text belongs to the pane
+        }
         let free = self.focus_owner(window, cx).is_none_or(|o| o != "popover");
         if free && !wanted.is_focused(window) {
-            let wanted = wanted.clone();
             window.focus(&wanted);
         }
     }

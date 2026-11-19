@@ -151,6 +151,7 @@ pub struct Workspace {
     asked: state::Asked,
     /// The overlays' focus handles and views (view_overlays.rs).
     overlays: overlays::Overlays,
+    ime: input_view::Ime,
     /// How many times the window rendered, and `prepare` ran (tests: what a frame did, R5).
     renders: u64,
     prepares: u64,
@@ -316,6 +317,9 @@ mod menus;
 #[path = "view_model.rs"]
 mod model;
 use model::{SessionRow, WindowRow};
+#[path = "view_input.rs"]
+mod input_view;
+pub use input_view::PaneInput;
 #[path = "view_links.rs"]
 mod links;
 #[path = "view_new.rs"]

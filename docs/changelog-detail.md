@@ -21,6 +21,14 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 - A config reload reaches the window through the server's `keymap_changed` event, at once,
   instead of the app asking for the keymap every second.
 
+### Input methods and the emoji picker
+
+#### Added
+- A pane takes text from an input method (Japanese, Chinese and others), the emoji picker
+  (⌃⌘Space) and Option's dead keys (⌥E, then E: é): what is being composed shows underlined at
+  the cursor and only the chosen text reaches the program. A held letter still repeats.
+- The palette, find bar and rename field take typed keys only, not composed text.
+
 ### Overlays give the keys back
 
 #### Changed
