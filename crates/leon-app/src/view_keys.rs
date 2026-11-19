@@ -1,6 +1,6 @@
-//! Keys and actions: every keystroke goes through the keymap (defaults under the config's
-//! bindings), the palette when it is open, else the focused pane. Actions run by name, from a key,
-//! the palette or a menu.
+//! Keys and actions: a keystroke no overlay took (view_overlays.rs) goes through the keymap
+//! (defaults under the config's bindings), else to the focused pane. Actions run by name, from a
+//! key, the palette or a menu.
 
 use super::*;
 use crate::palette::{self, Item};
@@ -15,24 +15,10 @@ impl Workspace {
             Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
             None => ev.keystroke.clone(),
         };
-        if self.renaming_open() {
-            self.rename_key(ks, cx);
-            return cx.stop_propagation();
-        }
         let chord = keymap::chord(ks);
         // every key closes the repeat window; only a repeatable one opens it again
         let mut repeat = std::mem::take(&mut self.repeat);
-        if self.palette.is_some() {
-            self.palette_key(ks, chord.as_ref(), window, cx);
-            cx.stop_propagation();
-            return;
-        }
         if self.mode_key(ks, chord.as_ref(), cx) {
-            cx.stop_propagation();
-            return;
-        }
-        let finding = self.term.find.as_ref().is_some_and(|f| Some(&f.block) == self.target_block().as_ref());
-        if finding && self.find_key(ks, cx) {
             cx.stop_propagation();
             return;
         }
@@ -184,6 +170,7 @@ impl Workspace {
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
+                    None if self.overlays.palette_closed => None, // this press closed it
                     None => Some(Palette {
                         query: String::new(),
                         selected: 0,
@@ -319,12 +306,12 @@ impl Workspace {
         .to_string()
     }
 
-    pub(super) fn palette_query(&self) -> String {
+    pub fn palette_query(&self) -> String {
         self.palette.as_ref().map(|p| p.query.clone()).unwrap_or_default()
     }
 
     /// Keys while the palette is open: they edit the query and pick a row, never reach a pane.
-    fn palette_key(
+    pub(super) fn palette_key(
         &mut self,
         ks: &gpui::Keystroke,
         chord: Option<&Chord>,

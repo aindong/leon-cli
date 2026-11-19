@@ -166,6 +166,11 @@ impl Workspace {
         Some((f.current.map_or(0, |i| i + 1), f.matches.len()))
     }
 
+    /// The find bar's query while it is open (tests).
+    pub fn find_query(&self) -> Option<String> {
+        self.term.find.as_ref().map(|f| f.query.clone())
+    }
+
     /// The find bar's count: "n of N", with a + when the server stopped short.
     pub fn find_count(&self) -> Option<String> {
         let f = self.term.find.as_ref()?;
@@ -227,6 +232,11 @@ impl Workspace {
         };
         div()
             .debug_selector(|| sel(format!("find-bar-{id}")))
+            .when(live, |d| {
+                d.track_focus(&self.overlays.find_focus)
+                    .key_context("FindBar")
+                    .on_key_down(cx.listener(Self::find_key_down))
+            })
             .flex()
             .flex_none()
             .items_center()

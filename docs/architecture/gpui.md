@@ -47,7 +47,10 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   display link and 0.2.2 leaks one per call (500 keys left 501 links); frames are GPUI's job. Check: test.
 - **R3. A part of the window that changes on its own clock is its own view**, shown from its
   parent with `AnyView::from(entity).cached(style)`: each pane, the sidebar, the title bar, the
-  status indicator, and each overlay (palette, switcher, find bar, notice, overview). Why: a
+  status indicator. The overlays are views too (the palette with its switcher, the overview, the
+  notice; the find bar and the rename field are parts of the header and sidebar sections), but
+  not cached: they fade and scale on the root's frames, and GPUI renders the root on every frame
+  it draws, so a cache would be redrawn each frame of their motion anyway. Why: a
   notify dirties only that view and its ancestors, and cached siblings reuse their layout and
   paint, so a spinner frame no longer lays out the panes. A view that changes often and the heavy views beside it
   are siblings under a parent that is not itself a re-rendering cached view: a pane's header (with
@@ -118,7 +121,9 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   `block_on` in GPUI code; `gpui_local_never_waits`); review for blocking calls.
 - **R9. GPUI owns actions, menus and focus; leon's keymap owns the terminal's keys.** Menu items,
   ⌘Q and anything GPUI dispatches are `actions!` handled with `on_action` under a `key_context`;
-  each view that takes keys has its own `FocusHandle` (`track_focus`, `window.focus`). The
+  each view that takes keys has its own `FocusHandle` (`track_focus`, `window.focus`) and key
+  context, takes its keys from its own `on_key_down`, and gives the focus back when it closes:
+  the workspace gives the focus to the top open overlay after every change, else to itself. The
   terminal's keys go from `on_key_down` to leon's keymap (the server's Lua keymap, shared with
   `leon attach`). Text that composes (an input method, the emoji picker) goes through an
   `InputHandler` (`window.handle_input`), as Zed's terminal does. Why: GPUI dispatches by the
@@ -203,9 +208,14 @@ on the main thread, list the file here with its reason, and never use it to driv
   timed thing is a task of its own (the storm summary, a host's retry, the Activity list's
   waited times, a find's re-run, a held thumbnail, the update look), and the keymap follows the
   server's `keymap_changed` event (R6, R8). Motions run on GPUI's clock, the spinner on its own
-  `Pulse` (`view_pulse.rs`; R6). Keys for the palette, find and modes are handled by hand inside
-  one `key_down` under one focus handle (R9); no `InputHandler`, so no input method (R9). Every
-  call to a server queues (R8); what still waits on the main thread is the first
+  `Pulse` (`view_pulse.rs`; R6). Each overlay that takes keys has its own
+  focus handle and key context (`Palette`, `Overview`, `FindBar`, `RenameField`; the popover's own) and its own
+  `on_key_down` (`view_overlays.rs`), and `sync_focus` gives the focus to the top open one after
+  every change, else to the workspace, so `key_down` is the terminal's path (the keymap,
+  sequences, copy mode and hints) (R3, R9). A frame drawn without the focused element (GPUI's
+  `on_focus_lost`) ends a rename whose field it hid. No `InputHandler`, so no input method (R9).
+  A server call queues (R8) or, for a Lua binding, a config action or a reload, runs on a thread
+  of its own; what still waits on the main thread is the first
   `session.create`, before the window draws, and a watch line's write (a socket write, bounded).
 - Already in line: panes paint through `canvas` (R7); std threads only in GPUI-free modules,
   reaching the UI through a wake channel (R8); tests on `TestAppContext` (R10); GPUI from
