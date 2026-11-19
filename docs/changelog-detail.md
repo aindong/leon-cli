@@ -8,6 +8,21 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### The link card
+
+#### Added
+- In Leon.app, resting the mouse on a link for about half a second, with no key held, shows a card
+  under it: the full address with hidden characters stripped, what it opens when escapes change it
+  (only what follows the host is decoded), and the host on a line of its own whenever user-info, an
+  escape or a non-ASCII script could disguise it (as punycode) or the address was cut; then Copy and
+  Open in Browser. A right-click on a link opens the same card at once, ready for the arrow keys and
+  Enter. A program that asked for the mouse (vim, htop) gets the click and shows no card. ⌘-click
+  still opens a link at once, and its prompt shows the same lines. The card closes when the mouse
+  leaves the link and the card, on any key, and on scroll.
+- `leon.set("link_card", false)` turns the card off (a toggle in Settings, Terminal).
+  `server.settings` reports `link_card`, a new result field on a stable method, so `api_version`
+  goes from `1.13.0` to `1.14.0`.
+
 ### Agents orchestrating agents
 
 #### Added

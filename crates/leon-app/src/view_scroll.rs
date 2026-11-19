@@ -53,6 +53,7 @@ pub(super) struct TermUi {
     pub(super) hover_at: Option<(String, Pos)>,
     /// Numbers each history fetch, so a reply only fills the pane that asked.
     pub(super) fetches: u64,
+    pub(super) card: super::link_card::CardUi,
 }
 
 #[derive(Debug, Clone, Copy)]

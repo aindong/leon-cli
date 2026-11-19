@@ -10,6 +10,7 @@ impl Workspace {
         if self.stopped {
             return; // nothing to type into: the notice's buttons and ⌘Q are what's left
         }
+        self.close_hover_card(window, cx);
         let ks = &match (self.native_key)() {
             Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
             None => ev.keystroke.clone(),
