@@ -1,0 +1,6 @@
+{#- The brand font, fetched with the page instead of after its CSS, so the text doesn't move when it
+    arrives. -#}
+{% extends "base.html" %}
+{% block extrahead %}
+  <link rel="preload" href="{{ 'assets/fonts/instrument-sans-latin.woff2' | url }}" as="font" type="font/woff2" crossorigin>
+{% endblock %}

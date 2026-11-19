@@ -1,53 +1,255 @@
-/* leon's brand on the docs: brand/marketing/index.html's colours and Instrument Sans (brand/fonts,
-   SIL Open Font License beside it), Menlo for code, light and dark. */
+/* leon's brand on the docs, the same system as the landing page (brand/marketing): Parchment, Iron,
+   Oxide and Sand, Instrument Sans for text and headings, DM Mono for code (brand/fonts, SIL Open Font
+   License beside each), pill buttons and square-ish corners, light and dark. Every text colour passes
+   WCAG AA on the ground it sits on, the code colours too. */
 @font-face {
-  font-family: Instrument;
+  font-family: "Instrument Sans";
   src: url("fonts/instrument-sans-latin.woff2") format("woff2");
   font-weight: 400 700;
   font-display: swap;
 }
+@font-face {
+  font-family: "DM Mono";
+  src: url("fonts/dm-mono-400-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DM Mono";
+  src: url("fonts/dm-mono-500-latin.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
 
+/* Material builds --md-text-font-family and --md-code-font-family from these on body: its own hooks */
 :root {
-  --md-text-font-family: Instrument, system-ui, sans-serif;
-  --md-code-font-family: Menlo, ui-monospace, monospace;
+  --md-text-font: "Instrument Sans";
+  --md-code-font: "DM Mono";
+  --leon-radius: 6px;
+  --leon-tracking: -0.028em;
 }
 
 [data-md-color-scheme="default"] {
+  --leon-line: #D1C5B8;
+  --leon-action: #B64C32;
+  --leon-action-ink: #F5F0E7;
   --md-default-bg-color: #F5F0E7;
   --md-default-fg-color: #292521;
   --md-default-fg-color--light: #65594F;
-  --md-primary-fg-color: #292521;
-  --md-primary-fg-color--light: #463B33;
-  --md-primary-fg-color--dark: #1F1C19;
-  --md-primary-bg-color: #F5F0E7;
-  --md-accent-fg-color: #B64C32;
-  --md-typeset-a-color: #B64C32;
+  --md-default-fg-color--lighter: #A0938680;
+  --md-default-fg-color--lightest: #D1C5B880;
+  --md-primary-fg-color: #F5F0E7;
+  --md-primary-fg-color--light: #EBE3D7;
+  --md-primary-fg-color--dark: #EBE3D7;
+  --md-primary-bg-color: #292521;
+  --md-primary-bg-color--light: #65594F;
+  --md-accent-fg-color: #A0412A;
+  --md-accent-fg-color--transparent: #B64C321A;
+  --md-typeset-a-color: #A0412A;
+  --md-footer-bg-color: #EBE3D7;
+  --md-footer-bg-color--dark: #EBE3D7;
+  --md-footer-fg-color: #292521;
+  --md-footer-fg-color--light: #65594F;
+  --md-footer-fg-color--lighter: #65594F;
   --md-code-bg-color: #EBE3D7;
-  --md-footer-bg-color: #292521;
-  --md-footer-bg-color--dark: #1F1C19;
+  --md-code-fg-color: #292521;
+  --md-code-hl-color: #E8C77D;
+  --md-code-hl-color--light: #E8C77D66;
+  --md-code-hl-keyword-color: #9A3B22;
+  --md-code-hl-string-color: #4F6B2F;
+  --md-code-hl-number-color: #8A4B0F;
+  --md-code-hl-function-color: #7A3F2A;
+  --md-code-hl-constant-color: #8C3A4A;
+  --md-code-hl-special-color: #8C3A4A;
+  --md-code-hl-comment-color: #65594F;
+  --md-code-hl-name-color: #292521;
+  --md-code-hl-operator-color: #5A4E45;
+  --md-code-hl-punctuation-color: #5A4E45;
+  --md-code-hl-generic-color: #7A4A33;
+  --md-code-hl-variable-color: #6B4A12;
 }
 
 [data-md-color-scheme="slate"] {
+  --leon-line: #4A4139;
+  --leon-action: #F5F0E7;
+  --leon-action-ink: #292521;
+  --md-hue: 30;
   --md-default-bg-color: #292521;
+  --md-default-bg-color--light: #292521B3;
   --md-default-fg-color: #F5F0E7;
   --md-default-fg-color--light: #D8CEC2;
-  --md-primary-fg-color: #1F1C19;
+  --md-default-fg-color--lighter: #A0938699;
+  --md-default-fg-color--lightest: #5A504780;
+  --md-primary-fg-color: #292521;
   --md-primary-fg-color--light: #352E28;
   --md-primary-fg-color--dark: #1F1C19;
   --md-primary-bg-color: #F5F0E7;
+  --md-primary-bg-color--light: #D8CEC2;
   --md-accent-fg-color: #E6AA91;
+  --md-accent-fg-color--transparent: #E6AA911A;
   --md-typeset-a-color: #E6AA91;
-  --md-code-bg-color: #352E28;
   --md-footer-bg-color: #1F1C19;
   --md-footer-bg-color--dark: #1F1C19;
+  --md-footer-fg-color: #F5F0E7;
+  --md-footer-fg-color--light: #D8CEC2;
+  --md-footer-fg-color--lighter: #D8CEC2;
+  --md-code-bg-color: #1F1C19;
+  --md-code-fg-color: #F5F0E7;
+  --md-code-hl-color: #E8C77D;
+  --md-code-hl-color--light: #E8C77D33;
+  --md-code-hl-keyword-color: #F0A27E;
+  --md-code-hl-string-color: #B8C6AC;
+  --md-code-hl-number-color: #E8C77D;
+  --md-code-hl-function-color: #E6AA91;
+  --md-code-hl-constant-color: #F3A7B4;
+  --md-code-hl-special-color: #F3A7B4;
+  --md-code-hl-comment-color: #B5A99B;
+  --md-code-hl-name-color: #F5F0E7;
+  --md-code-hl-operator-color: #D8CEC2;
+  --md-code-hl-punctuation-color: #D8CEC2;
+  --md-code-hl-generic-color: #E6AA91;
+  --md-code-hl-variable-color: #E8C77D;
 }
 
-body {
-  font-family: var(--md-text-font-family);
+/* type: the landing page's headings, tight and at 500, never bold-and-big */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  color: var(--md-default-fg-color);
+  font-weight: 500;
+  letter-spacing: var(--leon-tracking);
 }
-
+.md-typeset h1 { font-size: 2.4em; line-height: 1.08; margin-bottom: 0.8em; }
+.md-typeset h2 { font-size: 1.6em; line-height: 1.15; }
+.md-typeset h3 { font-size: 1.25em; letter-spacing: -0.012em; }
+.md-typeset { font-size: 0.85rem; line-height: 1.65; }
 .md-typeset code,
 .md-typeset kbd,
 .md-typeset pre {
-  font-family: var(--md-code-font-family);
+  font-feature-settings: "kern";
+}
+.md-typeset pre > code,
+.md-typeset :not(pre) > code,
+.md-typeset .admonition,
+.md-typeset details,
+.md-typeset table:not([class]) {
+  border-radius: var(--leon-radius);
+}
+.md-typeset table:not([class]) {
+  border: 1px solid var(--leon-line);
+  box-shadow: none;
+}
+
+/* links draw their underline on hover, as on the landing page */
+.md-typeset a {
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.2em;
+  transition: text-decoration-color 150ms cubic-bezier(.2, .8, .2, 1);
+}
+.md-typeset a:hover,
+.md-typeset a:focus-visible {
+  text-decoration-color: currentColor;
+}
+
+/* buttons: the landing page's pills, one filled action */
+.md-typeset .md-button,
+.leon-install {
+  border-radius: 999px;
+  border: 1px solid var(--leon-line);
+  font-weight: 500;
+  transition: transform 150ms cubic-bezier(.2, .8, .2, 1), background-color 150ms;
+}
+.md-typeset .md-button--primary,
+.leon-install {
+  background-color: var(--leon-action);
+  border-color: var(--leon-action);
+  color: var(--leon-action-ink);
+}
+.md-typeset .md-button:hover,
+.leon-install:hover {
+  transform: translateY(-1px);
+}
+.md-typeset .md-button:active,
+.leon-install:active {
+  transform: translateY(0) scale(0.985);
+}
+
+/* the header and tabs: paper like the landing page's bar, a hairline under it, no shadow */
+.md-header,
+.md-header--shadow {
+  box-shadow: 0 1px 0 var(--leon-line);
+}
+.md-header__title {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.md-tabs {
+  border-bottom: 1px solid var(--leon-line);
+}
+.md-tabs__link {
+  font-size: 0.75rem;
+  font-weight: 500;
+  opacity: 1;
+  color: var(--md-default-fg-color--light);
+}
+.md-tabs__item--active .md-tabs__link {
+  color: var(--md-default-fg-color);
+}
+.md-search__form,
+.md-search__form:hover {
+  background-color: var(--md-code-bg-color);
+  border-radius: 999px;
+}
+
+/* the site's own links where Material's repo widget was (overrides/partials/source.html) */
+.md-header__source {
+  width: auto;
+  max-width: none;
+}
+.leon-links {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.leon-links a {
+  padding: 0.4rem 0.5rem;
+  border-radius: 999px;
+}
+.leon-links a:not(.leon-install):hover {
+  background-color: var(--md-code-bg-color);
+}
+.leon-links .leon-install {
+  margin-left: 0.4rem;
+  padding: 0.4rem 0.8rem;
+}
+.md-header .leon-install:hover,
+.md-header .leon-install:focus-visible {
+  color: var(--leon-action-ink);
+}
+
+/* in the drawer on a phone: one link per line, as tall as a finger */
+.md-nav__source .leon-links {
+  flex-wrap: wrap;
+  padding: 0.4rem 0.2rem;
+  background-color: var(--md-code-bg-color);
+  color: var(--md-default-fg-color);
+}
+.md-nav__source .leon-links a {
+  padding: 0.6rem;
+}
+
+/* the footer: the landing page's Sand ground, no shadowed bar */
+.md-footer-meta {
+  background-color: var(--md-footer-bg-color);
+  border-top: 1px solid var(--leon-line);
+}
+
+/* every control shows the keyboard's focus at once */
+:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
 }

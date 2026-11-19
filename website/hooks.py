@@ -168,6 +168,7 @@ def on_files(files, config):
     marketing = tools / "brand/marketing"
     add("index.html", content=landing(marketing))
     add("og.png", abs_src_path=str(marketing / "og.png"))
+    add("share.jpg", abs_src_path=str(marketing / "share.jpg"))
     # the landing page's pictures, styles and scripts; its fonts are brand/fonts (assets/fonts is a link)
     for path in sorted((marketing / "assets").rglob("*")):
         uri = path.relative_to(marketing).as_posix()

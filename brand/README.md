@@ -71,10 +71,10 @@ The proof shows 16/32/128 px on Parchment and Iron, plus direct reduction versus
 
 - [Hero](marketing/hero.png) / [SVG](marketing/hero.svg): **1600 × 600**.
 - [OG](marketing/og.png) / [SVG](marketing/og.svg): **1200 × 630**; the SVG embeds the app icon.
-- [Landing page](marketing/index.html): single HTML with inline CSS, embedded font/icon/favicon, phone layout and dark mode.
+- [Landing page](marketing/index.html): a shell and a file per section in [sections](marketing/sections), which the website build puts together. It shows leon's own window as live HTML, in these colours and fonts, and loads every file from the site itself: its styles, scripts, pictures and the agents clip in [assets](marketing/assets) (the design kit it was built with is kept there unchanged), the fonts from [fonts](fonts). [share.jpg](marketing/share.jpg) is a shot of its first screen, for links.
 - [Copy](marketing/copy.md): unchanged tagline, alternatives, 50-word pitch and 150-word description.
 
-Instrument Sans remains the UI/marketing family, with the local Latin WOFF2 and SIL [OFL licence](fonts/OFL.txt). Menlo remains the terminal/code family with a monospace web fallback. The custom wordmark remains vector paths. No app typography or application code changes.
+Instrument Sans remains the UI/marketing family, with the local Latin WOFF2 and SIL [OFL licence](fonts/OFL.txt). DM Mono is the website's code face (its own [OFL licence](fonts/OFL-DMMono.txt)); Menlo remains the app's terminal face. The custom wordmark remains vector paths. No app typography or application code changes.
 
 The page and hero retain the illustrated workflow and labelled statuses; the OG shows the current icon. A continuous warm rule replaces the old pane-colour strip. Checkout-relative documentation links and OG metadata remain deployment-time concerns.
 
@@ -83,4 +83,4 @@ npm install --prefix /tmp/leon-brand-build sharp playwright
 NODE_PATH=/tmp/leon-brand-build/node_modules node brand/build-assets.cjs
 ```
 
-On macOS with Google Chrome and `iconutil`, the builder reads the original thumbnail and the optical SVG, then makes the master, the wrapper, ten icon slots, ICNS, size proof, page embed, OG embed, both banner PNGs and the icon on the repository README's banner (`docs/images/banner.png`; its layout exists only as that PNG, so the icon is redrawn in place). It never calls an image generator. The page and the OG image show the master's middle 944 px, where the tile fills 87.5% of the frame as their layouts expect; the banner draws the tile alone. Flat logo SVGs and banner layouts are editable sources.
+On macOS with Google Chrome and `iconutil`, the builder reads the original thumbnail and the optical SVG, then makes the master, the wrapper, ten icon slots, ICNS, size proof, OG embed, both banner PNGs and the icon on the repository README's banner (`docs/images/banner.png`; its layout exists only as that PNG, so the icon is redrawn in place). It never calls an image generator. The OG image shows the master's middle 944 px, where the tile fills 87.5% of the frame as its layout expects; the banner draws the tile alone. Flat logo SVGs and banner layouts are editable sources.

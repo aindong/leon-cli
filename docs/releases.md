@@ -288,7 +288,8 @@ signing inside `scripts/release.sh`, between the bundle and the zip.
 <https://aindong.github.io/leon-cli/> shows the latest release: its README, `docs/` and
 `CHANGELOG.md` at that release's tag, built with the `website/` and `brand/` files of the commit
 the workflow runs on, so a fix to the site itself needs no release. It has the landing page
-(`brand/marketing/index.html`), the README as its overview, a page for each doc and translation,
+(`brand/marketing/index.html`, a shell that `website/hooks.py` fills with the files in
+`brand/marketing/sections/`), the README as its overview, a page for each doc and translation,
 What's new (a page for each `## [X.Y.Z]` section of the changelog, the text its GitHub release has)
 and the demo. Links into the source go to GitHub at the release's tag.
 
