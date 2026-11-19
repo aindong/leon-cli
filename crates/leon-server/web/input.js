@@ -34,7 +34,17 @@ export function wire(conn, textarea, target, failed, leave, sticky) {
     if (data) setCtrl(false);
     write(data);
   };
-  const press = (entry) => (entry.ctrl ? setCtrl(!ctrl) : entry.key ? key(entry.key) : text(entry.text));
+  /** Send what the field still holds (a word a phone's keyboard hasn't committed), before a key. */
+  const flush = () => {
+    const held = textarea.value;
+    textarea.value = "";
+    if (held) write(held);
+  };
+  const press = (entry) => {
+    if (entry.ctrl) return setCtrl(!ctrl);
+    flush();
+    entry.key ? key(entry.key) : text(entry.text);
+  };
   let copied = ""; // the selection's text, for the next copy
   let owner = null; // the pane whose selection `copied` is
   /** The longest paste, JSON-escaped: one request line is at most 1 MiB, with room for the rest. */
@@ -56,9 +66,16 @@ export function wire(conn, textarea, target, failed, leave, sticky) {
   });
   // a phone's keyboard names no keys (keyCode 229): Backspace and Enter come as edits of the field
   textarea.addEventListener("beforeinput", (e) => {
-    const k = { deleteContentBackward: "backspace", insertLineBreak: "enter", insertParagraph: "enter" }[e.inputType];
+    const k = {
+      deleteContentBackward: "backspace",
+      deleteWordBackward: "ctrl+w",
+      insertLineBreak: "enter",
+      insertParagraph: "enter",
+    }[e.inputType];
     if (!k || e.isComposing) return;
+    if (k !== "enter" && textarea.value) return; // the field's own text, not yet sent: let it edit that
     e.preventDefault();
+    flush(); // Enter goes after the text it ends
     key(k);
   });
   // text the keyboard composed; whichever of these comes second finds the field empty
@@ -77,6 +94,7 @@ export function wire(conn, textarea, target, failed, leave, sticky) {
     if (data && new TextEncoder().encode(JSON.stringify(data)).length > MOST_PASTE) {
       return failed(new Error("That paste is too big for the page (over 1 MB once encoded)"));
     }
+    setCtrl(false);
     if (data) event(target(), { type: "paste", data });
   });
   document.addEventListener("copy", (e) => {
@@ -183,5 +201,5 @@ export function wire(conn, textarea, target, failed, leave, sticky) {
       if (owner === me) (copied = ""), (owner = null); // its pane is gone
     };
   };
-  return { pane, press };
+  return { pane, press, unstick: () => setCtrl(false) };
 }

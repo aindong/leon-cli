@@ -88,7 +88,10 @@ const leave = () => {
 };
 let showCtrl = () => {};
 const input = wire(conn, $("keys"), target, failed, leave, (on) => showCtrl(on));
-showCtrl = keyRow($("keyrow"), (entry) => input.press(entry));
+showCtrl = keyRow($("keyrow"), (entry) => {
+  input.press(entry);
+  $("keys").focus({ preventScroll: true }); // the keyboard stays up
+});
 
 /** The drawer: on a phone, the sidebar over the pane. */
 function drawer(open) {
@@ -100,7 +103,7 @@ function drawer(open) {
 function layout() {
   document.body.classList.toggle("phone", phone());
   document.body.dataset.view = view;
-  if (!phone()) drawer(false);
+  if (!phone()) drawer(false), input.unstick(); // the row's Ctrl is gone with the row
   setFont(phone() ? phoneFont(font) : font);
 }
 const activity = new Activity(conn, $("activity"), $("notify"), (e) => {
@@ -164,6 +167,7 @@ function choose(session, window) {
   chosen.window = window;
   view = "pane"; // on a phone, what was chosen opens
   drawer(false);
+  input.unstick(); // a Ctrl from the last pane doesn't carry over
   document.body.dataset.view = view;
   history.replaceState(null, "", `#${encodeURIComponent(session)}${window ? "/" + encodeURIComponent(window) : ""}`);
   refresh().catch(failed);
@@ -187,10 +191,12 @@ function renderStrip(win) {
   if (!phone()) return;
   const now = target()?.b;
   $("strip-title").textContent = paneName(model.blocks.get(now)) || (win ? tabName(win) : "");
-  const others = (win?.block_ids ?? []).filter((id) => id !== now);
+  // a zoomed tab shows only its zoomed pane: no other pane to switch to
+  const others = win?.zoomed_block_id ? [] : (win?.block_ids ?? []).filter((id) => id !== now);
   $("chips").replaceChildren(
     ...others.map((id) =>
       button(paneName(model.blocks.get(id)) || "pane", false, () => {
+        input.unstick();
         picked.set(win.window_id, id);
         call("session.focus_block", { session_id: chosen.session, block_id: id });
         render();
@@ -260,7 +266,11 @@ function renderSidebar(win) {
         tabs.append(t);
       }
       const add = document.createElement("li");
-      const tab = () => call("session.new_window", { session_id: s.session_id }).then((r) => r?.window_id && choose(s.session_id, r.window_id));
+      const tab = () => {
+        const before = view;
+        // open it, unless the person went elsewhere (Home) while it was made
+        call("session.new_window", { session_id: s.session_id }).then((r) => r?.window_id && view === before && choose(s.session_id, r.window_id));
+      };
       add.append(button("+ Tab", false, tab, "New tab"));
       add.firstChild.classList.add("add");
       tabs.append(add);
@@ -400,11 +410,14 @@ function renderPanes(win) {
   }
 }
 
-$("new-session").onclick = () =>
-  conn.call("session.create", {}).then((r) => choose(r.session_id, r.window_id), failed);
+$("new-session").onclick = () => {
+  const before = view;
+  conn.call("session.create", {}).then((r) => view === before && choose(r.session_id, r.window_id), failed);
+};
 $("panes").addEventListener("mousedown", () => $("keys").focus({ preventScroll: true }));
 $("home").onclick = () => {
   view = "home";
+  input.unstick();
   layout();
   render();
 };
@@ -414,6 +427,13 @@ narrow.addEventListener("change", () => {
   layout();
   render();
 });
+// the part of the page a phone's keyboard leaves visible, so the key row stays above it (iOS keeps
+// the layout's height when the keyboard opens; Android follows the viewport tag)
+const seen = () => document.documentElement.style.setProperty("--seen", `${visualViewport.height}px`);
+if (window.visualViewport) {
+  visualViewport.addEventListener("resize", seen);
+  seen();
+}
 
 window.addEventListener("hashchange", () => {
   fromHash();

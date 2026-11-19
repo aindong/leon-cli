@@ -65,12 +65,15 @@ Under 700 px wide the page is laid out for a phone:
   and `|`, `~`, `/`, `-`. Ctrl is sticky: it lights up, and the next key from the row or the
   keyboard goes with Ctrl (Ctrl, then `c`, is ctrl+C), then it turns off.
 - **The phone's keyboard** types into the pane; tap the pane to bring it up. Backspace and Enter
-  reach the program as they do from a desktop keyboard.
+  reach the program as they do from a desktop keyboard. While it is up, the page shrinks to the
+  part the keyboard leaves visible, so the key row stays just above it.
 - The font is the server's `font.size`, kept between 11 and 14 px, so about 40 columns fit a
   portrait phone.
 
 This was checked in Chromium's iPhone emulation, with the soft keyboard's Backspace and Enter
-sent as the edit events a phone sends, not on a real phone. If the app shows the same tab, it
+sent as the edit events a phone sends, not on a real phone: emulation shows neither a real
+keyboard taking part of the screen nor Safari's zoom into a small text field (the page's field is
+16 px, which Safari doesn't zoom into). If the app shows the same tab, it
 sets the size, and the phone draws that screen smaller to fit.
 
 ## Who gets in
