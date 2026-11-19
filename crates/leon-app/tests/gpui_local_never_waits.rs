@@ -38,7 +38,7 @@ fn a_this_mac_server_that_never_answers_holds_nothing(cx: &mut TestAppContext) {
     // first, while the queue is clear (a selection's range is answered)
     act(&ws, cx, "pane.select_all");
     let ranged = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.selection_range("block:0").is_some()));
-    assert!(ranged, "the selection's range came back: {:?}", fake.log.lock().unwrap());
+    assert!(ranged, "the selection has its range: {:?}", fake.log.lock().unwrap());
 
     let mut typed = false;
     let key = took(|| typed = cx.update(|window, cx| window.dispatch_keystroke(Keystroke::parse("a").unwrap(), cx)));

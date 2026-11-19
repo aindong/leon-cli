@@ -129,6 +129,7 @@ impl Workspace {
         let hosts = self.poll_hosts();
         self.arm_host_retry(window, cx);
         self.commit_models(window, cx);
+        let made = self.select_made();
         let replied = self.poll_terms();
         self.card_poll(cx);
         if let Some(text) = self.term.clip.take() {
@@ -138,7 +139,7 @@ impl Workspace {
         self.refresh_keymap(cx);
         self.stats.borrow_mut().report(); // the last frames before a quiet spell
         let seen = (self.updates.generation(), self.hosts.tailnet_reads());
-        if replied || hosts || seen != self.wake_seen {
+        if replied || hosts || made || seen != self.wake_seen {
             self.wake_seen = seen;
             self.root_changed(cx);
         }

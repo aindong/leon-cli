@@ -182,20 +182,21 @@ impl Workspace {
         self.ask_range(id);
     }
 
-    /// Have the server's range for pane `id`'s selection put on it. Over a link the range is
-    /// worked out here at once (a copy right after a motion has it), and a word selection takes
-    /// the host's wider answer on a later poll only on the lines the anchor and head are on.
+    /// Have the server's range for pane `id`'s selection put on it. The range is worked out here
+    /// at once (a copy right after a motion has it), then This Mac's answer replaces it on a later
+    /// wake; over a link only a word selection takes the host's wider answer, and only on the
+    /// lines the anchor and head are on.
     pub(super) fn ask_range(&mut self, id: &str) {
         let cols = self.live(id).cols;
         let link = self.app.is_link();
         let Some(s) = self.term.panes.get_mut(id).and_then(|p| p.selection.as_mut()) else { return };
         let asked = (s.kind, s.anchor, s.head);
         let here = local_range(s, cols);
-        if link {
-            s.range = Some(here);
-            if s.kind != Kind::Word {
-                return;
-            }
+        // drawn and copyable at once (a yank may come before any answer); This Mac's answer
+        // replaces it, a host's only widens a word
+        s.range = Some(here);
+        if link && s.kind != Kind::Word {
+            return;
         }
         let args = json!({ "kind": s.kind, "anchor": s.anchor, "head": s.head, "text": false });
         let block = id.to_string();

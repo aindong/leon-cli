@@ -111,8 +111,8 @@ impl Workspace {
         }
     }
 
-    /// On a wake: pick up hosts that connected or gave up, and select a session made over a link
-    /// once its host's model has it. True when a host gained or lost its remote.
+    /// On a wake: pick up hosts that connected or gave up. True when a host gained or lost its
+    /// remote.
     pub(super) fn poll_hosts(&mut self) -> bool {
         let changed = self.hosts.poll();
         if changed {
@@ -121,6 +121,12 @@ impl Workspace {
         if changed && !self.hosts.machines()[self.host].remote().is_some_and(|r| Rc::ptr_eq(r, &self.app)) {
             self.use_host(0); // the selected host went away
         }
+        changed
+    }
+
+    /// After the models' commit: select a session made with New Session once its machine's model
+    /// has it. True when it did.
+    pub(super) fn select_made(&mut self) -> bool {
         let later = lock(&self.select_later).clone();
         if let Some((host, sid)) = later {
             let there = self.hosts.machines().get(host).and_then(Machine::remote);
@@ -128,9 +134,10 @@ impl Workspace {
                 *lock(&self.select_later) = None;
                 self.use_host(host);
                 self.session_id = Some(sid);
+                return true;
             }
         }
-        changed
+        false
     }
 
     /// Create a session on machine `host` (This Mac when unknown) and select it, at once on This
@@ -145,6 +152,7 @@ impl Workspace {
             }
         });
         self.poll_hosts();
+        self.select_made();
         cx.notify();
     }
 
