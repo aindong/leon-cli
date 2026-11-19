@@ -5,7 +5,8 @@
   font-family: Instrument;
   src: url("fonts/instrument-sans-latin.woff2") format("woff2");
   font-weight: 400 700;
-  font-display: swap;
+  /* preloaded (overrides/main.html); a page it misses keeps the fallback rather than moving its text */
+  font-display: optional;
 }
 
 /* Material builds --md-text-font-family from --md-text-font on body: this is its own hook */
