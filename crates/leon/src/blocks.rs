@@ -17,12 +17,22 @@ pub struct NotifyArgs {
     /// The state to report.
     #[arg(long, value_enum, default_value = "done")]
     state: NotifyState,
+    /// What a blocked program waits for: permission, question or auth (with --state blocked).
+    #[arg(long, value_enum)]
+    kind: Option<NotifyKind>,
     /// One line naming what it is about (at most 192 bytes).
     #[arg(long, value_name = "T")]
     title: Option<String>,
     /// One line saying more (at most 2048 bytes).
     #[arg(long, value_name = "B")]
     body: Option<String>,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum NotifyKind {
+    Permission,
+    Question,
+    Auth,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -83,7 +93,10 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
                 c.call("block.event", json!({ "session_id": sid, "block_id": bid, "event": event }))?;
             }
         }
-        Cmd::Notify(NotifyArgs { state, title, body }) => {
+        Cmd::Notify(NotifyArgs { state, kind, title, body }) => {
+            if kind.is_some() && !matches!(state, NotifyState::Blocked) {
+                return Err(Fail::Usage("--kind goes with --state blocked".into()));
+            }
             // never the focused pane: a job outside leon would light up whatever the user looks at
             if block_query(cli, None).is_none() {
                 return Err(Fail::Usage(
@@ -91,8 +104,15 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
                 ));
             }
             let (sid, bid) = pick_block(c, cli, None)?;
-            let state = state.to_possible_value().map(|v| v.get_name().to_string());
-            method(c, &sid, &bid, "report_status", json!({ "state": state, "title": title, "msg": body }))?;
+            let name = |v: Option<clap::builder::PossibleValue>| v.map(|v| v.get_name().to_string());
+            let (state, kind) = (name(state.to_possible_value()), name(kind.and_then(|k| k.to_possible_value())));
+            method(
+                c,
+                &sid,
+                &bid,
+                "report_status",
+                json!({ "state": state, "kind": kind, "title": title, "msg": body }),
+            )?;
         }
         Cmd::Capture { trim } => {
             let (sid, bid) = pick_block(c, cli, None)?;

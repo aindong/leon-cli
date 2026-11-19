@@ -10,7 +10,7 @@ use crate::methods::MethodDoc;
 
 /// The API's semver, apart from the build's version. A change to a stable method needs a bump:
 /// docs/api-snapshot.json won't take the change without one.
-pub const API_VERSION: &str = "1.12.0";
+pub const API_VERSION: &str = "1.13.0";
 
 #[derive(Serialize, JsonSchema, Clone, Copy, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -76,6 +76,9 @@ const STABILITY: &[(&str, Stability)] = &[
     ("session.attach", Stable),
     ("session.attach_all", Stable),
     ("session.resume", Stable),
+    ("agent.link", Experimental),
+    ("agent.list", Experimental),
+    ("agent.inbox", Experimental),
     // The screen transport is still moving with the app (M10, M11).
     ("block.watch", Experimental),
     ("client.action", Experimental),
