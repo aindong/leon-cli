@@ -289,6 +289,27 @@ def flood():
     return hbars("A big cat of text and colour, before and with the fix", sub, desc, "MB/s", "MB/s", groups, [(builds[0], "c0"), (builds[1], "c1")])
 
 
+def gpui_refactor():
+    data = rows("gpui-refactor")
+    loads = list(dict.fromkeys(r["load"] for r in data))
+
+    def median(load, build):
+        v = sorted(num(r, "p50_ms") for r in data if r["load"] == load and r["build"] == build)
+        return f"{v[len(v) // 2]:.1f}"
+
+    groups = [(load, [median(load, "before"), median(load, "after")]) for load in loads]
+    sub = [
+        "keylat.sh in a Tart macOS VM, key to the echo painted in the app, the median p50 of three",
+        "alternating runs per build. The VM's absolute numbers are not the host's; compare the two.",
+    ]
+    desc = (
+        "Key to echo painted before and after GPUI refactor phases 5 to 7, in a VM: the same within the runs' "
+        "spread, idle 26.0 against 28.3 ms, one pane flooding 17.5 against 20.8 ms, eight panes busy 18.0 against 18.0 ms."
+    )
+    series = [("before (2e773bd)", "c0"), ("after (ae96f39)", "c1")]
+    return hbars("Key to echo, before and after the GPUI refactor", sub, desc, "milliseconds", "ms", groups, series, (16.7, "one 60 Hz frame"))
+
+
 CHARTS = {
     "throughput": throughput,
     "keystroke": keystroke,
@@ -298,6 +319,7 @@ CHARTS = {
     "idle-cpu": idle_cpu,
     "frame-build": frame_build,
     "flood": flood,
+    "gpui-refactor": gpui_refactor,
 }
 
 
