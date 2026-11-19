@@ -1,6 +1,6 @@
 # Remote hosts
 
-How leon works with the leon server on another machine, after the [README's](../README.md#work-on-your-devbox) first steps. The commands are in [cli/hosts.md](cli/hosts.md).
+How leon works with the leon server on another machine, after the [README's](../README.md#work-on-your-devbox) first steps. The commands are in [cli/hosts.md](cli/hosts.md); to watch a machine's sessions from a browser over your tailnet, see [leon in the browser](web.md).
 
 A dropped Wi-Fi link is retried for a minute: `leon events` and the app resume without losing or
 repeating an event, and `leon attach` says so, then reconnects and redraws. Keys

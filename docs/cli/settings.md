@@ -34,7 +34,7 @@ Print a setting as init.lua leaves it (its `leon.set` call, else the default), o
 and where each is set without KEY. Needs no server. The keys are `theme`, `font.family`,
 `font.size`, `notifications.done`, `notifications.blocked`, `notifications.error`,
 `copy_on_select`, `link_card`, `repeat_time`, `hint_patterns`, `resume`, `fade_inactive_panes`, `check_for_updates`, `translucency`, `serve_tailscale`,
-`serve_tailscale_port`, `serve_tailscale_tags`, `cursor_shader`, `cursor_shader_duration` and `scrollback` ([docs/lua/settings.md](../lua/settings.md#settings) has what each does). With `--json`
+`serve_tailscale_port`, `serve_tailscale_tags`, `cursor_shader`, `cursor_shader_duration`, `serve_web`, `serve_web_cert`, `serve_web_key` and `scrollback` ([docs/lua/settings.md](../lua/settings.md#settings) has what each does). With `--json`
 the value is JSON.
 
 ### `leon config set KEY VALUE`

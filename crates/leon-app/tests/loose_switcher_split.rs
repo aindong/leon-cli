@@ -28,6 +28,13 @@ fn cmd_enter_joins_a_pane_of_another_session_and_explains_another_machine(cx: &m
 
     cx.simulate_keystrokes("cmd-k");
     cx.simulate_input("rollout");
+    // the switcher lists the app's copy of the model, which hears of the new tab by events
+    let first = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.switcher_rows()).first().cloned();
+    assert!(
+        shows(cx, |cx| first(cx).as_deref() == Some("This Mac › deploys › rollout")),
+        "the app lists the other session's tab first: {:?}",
+        ws.read_with(cx, |ws, _| ws.switcher_rows())
+    );
     cx.simulate_keystrokes("cmd-enter");
     cx.run_until_parked();
     assert!(!ws.read_with(cx, |ws, _| ws.switcher_open()));

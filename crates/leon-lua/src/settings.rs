@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 20] = [
+pub const KEYS: [&str; 23] = [
     "theme",
     "font.family",
     "font.size",
@@ -31,6 +31,9 @@ pub const KEYS: [&str; 20] = [
     "serve_tailscale_tags",
     "cursor_shader",
     "cursor_shader_duration",
+    "serve_web",
+    "serve_web_cert",
+    "serve_web_key",
     "scrollback",
 ];
 
@@ -115,6 +118,11 @@ pub struct Settings {
     pub cursor_shader: String,
     /// Seconds the cursor shader animates after the cursor changes.
     pub cursor_shader_duration: f64,
+    /// With `serve_tailscale` on, the tailnet listener also serves the web page (docs/web.md).
+    pub serve_web: bool,
+    /// The certificate and key `tailscale cert` wrote, for HTTPS; both empty: plain HTTP.
+    pub serve_web_cert: String,
+    pub serve_web_key: String,
     /// Lines of history each terminal keeps, 0 to `MAX_SCROLLBACK`.
     pub scrollback: usize,
 }
@@ -145,6 +153,9 @@ impl Default for Settings {
             serve_tailscale_tags: vec![],
             cursor_shader: String::new(),
             cursor_shader_duration: CURSOR_SHADER_DURATION,
+            serve_web: false,
+            serve_web_cert: String::new(),
+            serve_web_key: String::new(),
             scrollback: SCROLLBACK,
         }
     }
@@ -171,6 +182,9 @@ impl Settings {
             "serve_tailscale_tags": self.serve_tailscale_tags,
             "cursor_shader": self.cursor_shader,
             "cursor_shader_duration": self.cursor_shader_duration,
+            "serve_web": self.serve_web,
+            "serve_web_cert": self.serve_web_cert,
+            "serve_web_key": self.serve_web_key,
             "scrollback": self.scrollback,
         })
     }
@@ -266,6 +280,23 @@ impl Settings {
                     return Err(format!("cursor_shader_duration must be a number of seconds from {lo} to {hi}"));
                 }
             },
+            "serve_web" => self.serve_web = flag()?,
+            "serve_web_cert" | "serve_web_key" => {
+                let path = match v.as_str() {
+                    Some(p)
+                        if p.len() <= 4096
+                            && !p.contains('\0')
+                            && (p.is_empty() || p.starts_with('/') || p.starts_with("~/")) =>
+                    {
+                        p
+                    }
+                    _ => return Err(format!("{key} must be a file's path, from / or ~/ (\"\" for none)")),
+                };
+                match key {
+                    "serve_web_cert" => self.serve_web_cert = path.to_string(),
+                    _ => self.serve_web_key = path.to_string(),
+                }
+            }
             "scrollback" => match v.as_f64() {
                 Some(n) if n.fract() == 0. && (0. ..=MAX_SCROLLBACK as f64).contains(&n) => {
                     self.scrollback = n as usize

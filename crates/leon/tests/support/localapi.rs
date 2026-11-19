@@ -34,6 +34,8 @@ pub struct Fake {
     answers: Arc<Mutex<Answers>>,
     whois_calls: Arc<AtomicUsize>,
     calls: Arc<AtomicUsize>,
+    /// Every path asked for, in order.
+    paths: Arc<Mutex<Vec<String>>>,
 }
 
 /// A status as tailscaled's `status?peers=false` gives it: running, signed in as `login`, with `ips`.
@@ -76,12 +78,13 @@ impl Fake {
             delay: Duration::ZERO,
         }));
         let (whois_calls, all) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
-        let (a, calls, every) = (answers.clone(), whois_calls.clone(), all.clone());
+        let paths = Arc::new(Mutex::new(Vec::new()));
+        let (a, calls, every, asked) = (answers.clone(), whois_calls.clone(), all.clone(), paths.clone());
         std::thread::spawn(move || {
             for conn in listener.incoming() {
                 let Ok(mut conn) = conn else { return };
                 every.fetch_add(1, Ordering::SeqCst);
-                let (a, calls) = (a.clone(), calls.clone());
+                let (a, calls, asked) = (a.clone(), calls.clone(), asked.clone());
                 std::thread::spawn(move || {
                     let mut req = Vec::new();
                     let mut b = [0u8; 1];
@@ -89,6 +92,7 @@ impl Fake {
                         req.push(b[0]);
                     }
                     let path = String::from_utf8_lossy(&req).split(' ').nth(1).unwrap_or("").to_string();
+                    asked.lock().unwrap().push(path.clone());
                     let (body, delay) = {
                         let a = a.lock().unwrap();
                         let body = match path.split('?').next().unwrap_or("") {
@@ -110,7 +114,7 @@ impl Fake {
                 });
             }
         });
-        Fake { dir, answers, whois_calls, calls: all }
+        Fake { dir, answers, whois_calls, calls: all, paths }
     }
 
     pub fn socket(&self) -> PathBuf {
@@ -142,6 +146,11 @@ impl Fake {
 
     pub fn whois_calls(&self) -> usize {
         self.whois_calls.load(Ordering::SeqCst)
+    }
+
+    /// Every path the fake was asked for (query included).
+    pub fn paths(&self) -> Vec<String> {
+        self.paths.lock().unwrap().clone()
     }
 
     /// Connections to the fake, of any kind.
