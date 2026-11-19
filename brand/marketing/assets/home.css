@@ -84,7 +84,8 @@
 /* the clip on the dark band */
 .clip { --ratio: 75.5%; background: #1f1c19; }
 .clip > video.frame__img { object-fit: contain; }
-@media (max-width: 639px) { .clip { --ratio: 110%; } }
+/* a phone: the frame taller, cut round the agent panes in the middle of the clip */
+@media (max-width: 639px) { .clip { --ratio: 140%; } .clip > video.frame__img { object-fit: cover; object-position: 48% 50%; } }
 
 /* the CLI's facts and code */
 .facts { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s-3); }

@@ -84,7 +84,7 @@ class Built(unittest.TestCase):
     def test_the_landing_page_is_whole_and_asks_no_other_server(self):
         landing = read(self.out / "index.html")
         self.assertNotIn("<!--#include", landing, "every section is in place")
-        for section in ("hero-h", "app-h", "agents-h", "handoff-h", "cli-h", "questions-h", "close-h"):
+        for section in ("hero-h", "app-h", "agents-h", "statement-h", "handoff-h", "cli-h", "questions-h", "close-h"):
             self.assertIn(f'id="{section}"', landing)
         # what a visitor's browser loads: the page's own files, never another server's
         loads = re.findall(r'<(?:link(?![^>]*rel="canonical")|script|img|source|video)\b[^>]*?\s(?:href|src|poster)="([^"]+)"', landing)
