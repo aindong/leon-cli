@@ -73,12 +73,13 @@ print "  ● \$result\n";
 system("leon", "notify", "--state", "done", "--body", \$result);
 sleep while 1;
 EOF
-# lead: the orchestrator, a scripted agent that starts two workers, ends its turn, and shows what
-# leon types into its prompt when they have reported
+# lead GO: the orchestrator, a scripted agent that, once the file GO exists (the recording runs),
+# starts two workers, ends its turn, and shows what leon types into its prompt when they report
 cat >"$home/bin/lead" <<'EOF'
 #!/usr/bin/perl
 $| = 1;
 print "\e]2;Release prep\a";
+select(undef, undef, undef, 0.2) until -e $ARGV[0];
 print "\n  > Get the release ready: run the tests and check the docs.\n\n";
 sleep 1;
 print "  ● Starting two agents to work on it:\n";
@@ -209,9 +210,10 @@ finish() {
 scene_agents() {
   fresh agents
   here new release >/dev/null
-  here -s release run --keep-open -c "$home/src/shelf" -- lead >/dev/null
+  here -s release run --keep-open -c "$home/src/shelf" -- lead "$run/go" >/dev/null
   here -s release window close 1 >/dev/null
   app
+  touch "$run/go"
   sleep 14 # it starts both, they work, report, and leon types the notice into its prompt
   finish agents
 }
@@ -222,7 +224,8 @@ scene_link-card() {
   here -s docs run --keep-open -c "$home/src/shelf" -- links >/dev/null
   here -s docs window close 1 >/dev/null
   app
-  # the link's line: below the pane's header, the third line of text; the sidebar is 200 points
+  # the link's line, the fourth of the pane's text (an estimate: look at the clip's frames, and
+  # move it if the card doesn't show); the sidebar is 200 points
   point 330 118
   sleep 2.5
   point 330 118 right
