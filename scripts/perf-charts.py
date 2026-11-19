@@ -42,6 +42,14 @@ def rows(name):
         return list(csv.DictReader(f))
 
 
+def num(row, field):
+    """A row's number, or the script stops naming the field it couldn't read."""
+    try:
+        return float(row[field])
+    except (KeyError, TypeError, ValueError):
+        sys.exit(f"perf-charts: {field} in {dict(row)} is not a number")
+
+
 def esc(s):
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
@@ -58,6 +66,8 @@ def text(x, y, s, cls="t1", size=13, anchor="start", weight=None):
 
 def nice(top):
     """The axis's end and step: a round step (1, 2, 2.5 or 5 times a power of ten), about five of them."""
+    if not top > 0:
+        sys.exit(f"perf-charts: nothing above zero to draw ({top})")
     k = 10 ** math.floor(math.log10(top / 6))
     step = next(m * k for m in (1, 2, 2.5, 5, 10) if top / (m * k) <= 6)
     return math.ceil(top / step - 1e-9) * step, step
@@ -128,7 +138,7 @@ def hbars(title, sub, desc, unit, short, groups, series, refline=None):
     x0, x1 = PAD + lw, W - PAD - 80
     top = 60 + 17 * len(sub) + (22 if len(series) > 1 else 0) + (14 if refline else 0)
     values = [float(v) for _, vs in groups for v in vs if v] + ([refline[0]] if refline else [])
-    end, step = nice(max(values))
+    end, step = nice(max(values, default=0))
     bh, gap = 14, 2
     body = legend(PAD, top - 12 - (14 if refline else 0), series) if len(series) > 1 else []
     y = top
@@ -154,10 +164,11 @@ def throughput():
     steps = list(dict.fromkeys(r["step"] for r in data))
     lw = 12 + 7 * max(len(s) for s in steps)
     x0, x1 = PAD + lw, W - PAD - 20
-    end, step = nice(max(float(r["mbps"]) for r in data))
+    limit = 115  # performance.md: the bare reader's MB/s of cat's output
+    end, step = nice(max([limit] + [num(r, "mbps") for r in data]))
     sub = [
         "Each dot is one run of cargo bench's speed bench: cat of 100 MB, MB/s of program output.",
-        "Apple M6, release build. The runs far below the rest were on a busy machine (load 7 to 18).",
+        "Apple M6, release build. The runs far below the rest ran while the machine was busy.",
     ]
     top = 60 + 17 * len(sub) + 22 + 14
     body = legend(PAD, top - 26, [("before a change", "c0"), ("with it", "c1")])
@@ -166,13 +177,13 @@ def throughput():
         body.append(text(x0 - 10, y + 4, s, "t1", 12, "end"))
         for r in data:
             if r["step"] == s:
-                x = x0 + (x1 - x0) * float(r["mbps"]) / end
+                x = x0 + (x1 - x0) * num(r, "mbps") / end
                 cls = "c1" if r["kind"] == "after" else "c0"
                 body.append(f'<circle cx="{f(x)}" cy="{f(y)}" r="5" class="{cls} ring" stroke-width="2"/>')
         y += 22
     bottom = y - 8
-    limit = ref(x0 + (x1 - x0) * 115 / end, top - 6, bottom, "the macOS PTY's own limit, about 115", True)
-    body = xaxis(x0, x1, top - 6, bottom, end, step, "MB/s") + limit + body
+    line = ref(x0 + (x1 - x0) * limit / end, top - 6, bottom, f"the macOS PTY's own limit, about {limit}", True)
+    body = xaxis(x0, x1, top - 6, bottom, end, step, "MB/s") + line + body
     desc = (
         "cat throughput at each step from the reader thread to scrollback B: with each change leon's runs sit "
         "near the macOS PTY's own limit of about 115 MB/s; the runs far below it were on a loaded machine."
@@ -210,7 +221,7 @@ def memory_soak():
     builds = list(dict.fromkeys(r["build"] for r in data))
     cls = {builds[0]: "c0", builds[1]: "c1"}
     minutes = max(int(r["minute"]) for r in data)
-    end, step = nice(max(float(r["server_mib"]) for r in data))
+    end, step = nice(max(num(r, "server_mib") for r in data))
     sub = [
         "soak.sh: 12 agent panes printing, and a session of 2 made and killed every minute.",
         "The server's footprint by minute. Apple M6, release build, 2026-11-19.",
@@ -227,7 +238,7 @@ def memory_soak():
     body.append(text((x0 + x1) / 2, y1 + 34, "minutes into the soak", "t2", 12, "middle"))
     body.append(text(x0 - 8, y0 - 14, "MiB", "t2", 12, "end"))
     for b in builds:
-        pts = [(x0 + (x1 - x0) * int(r["minute"]) / minutes, y1 - (y1 - y0) * float(r["server_mib"]) / end, r) for r in data if r["build"] == b]
+        pts = [(x0 + (x1 - x0) * int(r["minute"]) / minutes, y1 - (y1 - y0) * num(r, "server_mib") / end, r) for r in data if r["build"] == b]
         body.append(f'<polyline fill="none" class="{cls[b]}" stroke-width="2" style="fill:none" points="{" ".join(f"{f(x)},{f(y)}" for x, y, _ in pts)}"/>')
         for x, y, _ in pts:
             body.append(f'<circle cx="{f(x)}" cy="{f(y)}" r="4" class="{cls[b]} ring" stroke-width="2"/>')
@@ -242,10 +253,11 @@ def memory_soak():
 
 def memory_per_pane():
     data = rows("memory-per-pane")
-    groups = [(r["build"], [r["mib_per_agent_pane"]]) for r in data]
+    groups = [("per agent pane", [r["mib_per_agent_pane"] for r in data])]
     sub = ["Each agent pane's share of the soak's server memory, over the 4.9 MiB of an idle server.", "Apple M6, release build, 2026-11-19."]
     desc = "Memory per agent pane: about 33 MiB before scrollback B and 3 MiB with leon's history store, 90% less."
-    return hbars("Memory per agent pane", sub, desc, "MiB per pane", "MiB", groups, [("MiB", "c1")])
+    series = [(r["build"], cls) for r, cls in zip(data, ("c0", "c1"))]
+    return hbars("Memory per agent pane", sub, desc, "MiB per pane", "MiB", groups, series)
 
 
 def idle_cpu():

@@ -21,6 +21,9 @@ flowchart LR
   client -->|"tailnet://: straight over Tailscale"| listener
 ```
 
+Who the tailnet listener lets in, step by step, is in
+[Serving over Tailscale](architecture/tailnet.md#who-gets-in-step-by-step).
+
 The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
 and tabs and a dot for its connection. Click a host's label to fold it away. A remote pane works
 like a local one, with the host's name in its header. New Session, New Tab and the splits act on

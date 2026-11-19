@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# keylat.sh: key to pixel in the app, by two clocks, under three loads (docs/performance.md).
+# keylat.sh: key to pixel in the app, by two clocks, under three loads (docs/performance-app.md).
 #   scripts/perf/keylat.sh [--loads "idle flood1 busy8"] [--keys N] [--delay MS]
 # Per load: a fresh session whose focused right pane runs scripts/perf/echo.py, and on the left
 # nothing (idle: the session's shell), one pane looping `cat` of the 100 MB flood file, or eight

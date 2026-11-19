@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# startup.sh: how long leon takes to start (docs/performance.md).
+# startup.sh: how long leon takes to start (docs/performance-app.md).
 #   scripts/perf/startup.sh [--runs N]
 # - app, no server: `leon app` with no server running (it starts one, which starts the session's
 #   shell), to the first frame that shows the shell's prompt. Every run has a fresh state dir. The

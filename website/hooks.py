@@ -10,9 +10,11 @@ site.yml); the site's own files (website/, brand/) from the checkout this file i
 """
 
 import hashlib
+import http.client
 import os
 import posixpath
 import re
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -49,6 +51,7 @@ SERVED = (".md", ".png", ".gif", ".jpg", ".jpeg", ".webp", ".svg")
 MERMAID_VERSION = "11.17.2"
 MERMAID_SHA256 = "581ed7d74bd9048d0e3a91363927d72ef22942d7722546b27f7cc29e35390eb8"
 MERMAID_URL = f"https://cdn.jsdelivr.net/npm/mermaid@{MERMAID_VERSION}/dist/mermaid.min.js"
+DIAGRAM = re.compile(r'<pre class="(?:[^"]*\s)?mermaid[\s"]')
 
 state = {}
 
@@ -144,20 +147,25 @@ def mermaid(cache, fetch=None):
     path = Path(cache) / f"mermaid-{MERMAID_VERSION}.min.js"
     if path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() == MERMAID_SHA256:
         return path
-    fetch = fetch or (lambda url: urllib.request.urlopen(url, timeout=60).read())
     try:
-        data = fetch(MERMAID_URL)
-    except OSError as e:
+        data = (fetch or download)(MERMAID_URL)
+    except (OSError, http.client.HTTPException) as e:
         raise PluginError(f"fetching {MERMAID_URL}: {e}") from e
     got = hashlib.sha256(data).hexdigest()
     if got != MERMAID_SHA256:
         path.unlink(missing_ok=True)
         raise PluginError(f"{MERMAID_URL} has sha256 {got}, not the pinned {MERMAID_SHA256}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".part")
-    tmp.write_bytes(data)
-    tmp.replace(path)
+    # a name of its own, so two builds filling the cache at once never move each other's file
+    with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".part", delete=False) as tmp:
+        tmp.write(data)
+    Path(tmp.name).replace(path)
     return path
+
+
+def download(url):
+    with urllib.request.urlopen(url, timeout=60) as r:
+        return r.read()
 
 
 def on_config(config):
@@ -329,7 +337,7 @@ def on_page_context(context, page, config, nav):
 
 def on_post_page(output, page, config):
     output = re.sub(r'\s*<meta name="generator"[^>]*>', "", output, count=1)
-    if page and '<pre class="mermaid">' in output:
+    if page and DIAGRAM.search(output):
         # in the head, so it is defined before the theme's bundle looks for it (else the theme
         # fetches its own from a CDN)
         src = posixpath.relpath("assets/mermaid.min.js", page.url.rstrip("/") or ".")  # directory URLs

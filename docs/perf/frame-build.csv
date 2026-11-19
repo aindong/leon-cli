@@ -1,4 +1,4 @@
-panes,p50_ms,script,machine,source
-1,1.0,flood.sh,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
-8,1.4,flood.sh,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
-100,5.1,scale.sh,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
+panes,p50_ms,script,load,machine,source
+1,1.0,flood.sh,2 to 4.5,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
+8,1.4,flood.sh,2 to 4.5,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
+100,5.1,scale.sh,2 to 4.5,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf

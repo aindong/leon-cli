@@ -177,6 +177,13 @@ class Built(unittest.TestCase):
 
 
 class Mermaid(unittest.TestCase):
+    def test_a_diagram_with_more_classes_still_gets_the_script(self):
+        page = type("P", (), {"url": "a/b/"})()
+        for html in ['<pre class="mermaid wide">', '<pre class="wide mermaid">']:
+            out = hooks.on_post_page(f"<head></head><body>{html}</body>", page, None)
+            self.assertIn('<script src="../../assets/mermaid.min.js"></script></head>', out, html)
+        self.assertNotIn("<script", hooks.on_post_page('<head></head><pre class="mermaids">', page, None))
+
     def test_a_file_that_isn_t_the_recorded_one_stops_the_build(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(hooks.PluginError):

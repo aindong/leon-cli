@@ -42,6 +42,10 @@ short name (`http://devbox:7297/`) is refused on purpose; see below.
 
   Pages also carry a strict Content-Security-Policy, can't be framed, and load nothing from
   anywhere else: every file is built into leon.
+- **What a page can do** is what a caller over the tailnet can do: the page speaks the same API as
+  the socket. The page itself only reads today.
+
+A connection from the browser, step by step:
 
 ```mermaid
 flowchart TD
@@ -58,8 +62,6 @@ flowchart TD
   ws -->|no| e403["403"]
   ws -->|yes| socket["a WebSocket carrying the socket's API"]
 ```
-- **What a page can do** is what a caller over the tailnet can do: the page speaks the same API as
-  the socket. The page itself only reads today.
 
 ## HTTPS
 
