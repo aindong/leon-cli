@@ -113,6 +113,14 @@ class Built(unittest.TestCase):
         self.assertIn('href="../../changelog-milestones/"', old)
         self.assertIn('href="../../overview/#install"', old)
 
+    def test_an_archived_sections_links_go_back_to_the_root(self):
+        body = "[a](x.md) ![p](images/p.png) [r](../README.md#i) [h](#k) [u](https://e.x/y)\n[d]: x.md\n[w]: https://e.x/\n"
+        self.assertEqual(
+            hooks.rooted(body),
+            "[a](docs/x.md) ![p](docs/images/p.png) [r](README.md#i) [h](#k) [u](https://e.x/y)\n"
+            "[d]: docs/x.md\n[w]: https://e.x/\n",
+        )
+
     def test_a_changelog_anchor_goes_to_the_changelog(self):
         page = hooks.release_page("0.2.0", "2026-12-01", "See [it](#reading-api_version).\n\n[r]: #x")
         self.assertIn("[it](CHANGELOG.md#reading-api_version)", page)

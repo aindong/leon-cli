@@ -62,3 +62,29 @@ fn an_earlier_release_comes_from_the_archive_with_its_links_from_the_root() {
     assert!(notes.contains(&format!("{blob}README.md#install)")), "../ links: {notes}");
     assert!(!notes.contains("](changelog-") && !notes.contains("../"), "no link left relative: {notes}");
 }
+
+#[test]
+fn an_archived_sections_links_of_every_kind_come_back_from_the_root() {
+    // the script reads the archive beside it: a copy in a repo of its own
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(tmp.path().join("scripts")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("docs")).unwrap();
+    std::fs::copy(repo().join("scripts/release-notes.sh"), tmp.path().join("scripts/release-notes.sh")).unwrap();
+    std::fs::write(tmp.path().join("CHANGELOG.md"), "# Changelog\n\n## [1.1.0]\n\n- new\n").unwrap();
+    let archive = "## [1.0.0]\n\n[a](x.md) ![p](images/p.png) [r](../README.md#i) [u](https://e.x/y)\n\n\
+                   [d]: x.md\n[w]: https://keepachangelog.com/\n";
+    std::fs::write(tmp.path().join("docs/changelog-archive.md"), archive).unwrap();
+    let o = std::process::Command::new("bash")
+        .arg(tmp.path().join("scripts/release-notes.sh"))
+        .arg("1.0.0")
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o));
+    let (blob, raw) =
+        ("https://github.com/aindong/leon-cli/blob/v1.0.0", "https://github.com/aindong/leon-cli/raw/v1.0.0");
+    let want = format!(
+        "[a]({blob}/docs/x.md) ![p]({raw}/docs/images/p.png) [r]({blob}/README.md#i) [u](https://e.x/y)\n\n\
+         [d]: {blob}/docs/x.md\n[w]: https://keepachangelog.com/"
+    );
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), want);
+}

@@ -78,16 +78,16 @@ def every_release(root):
     links start from docs/: made CHANGELOG.md's again, which is where they were at the tag."""
     archive = root / "docs/changelog-archive.md"
     older = releases(archive.read_text(encoding="utf-8")) if archive.exists() else []
-    return releases((root / "CHANGELOG.md").read_text(encoding="utf-8")) + [
-        (v, d, rooted(body)) for v, d, body in older
-    ]
+    latest = releases((root / "CHANGELOG.md").read_text(encoding="utf-8"))
+    # a version in both is CHANGELOG.md's, as scripts/release-notes.sh reads it
+    return latest + [(v, d, rooted(body)) for v, d, body in older if v not in {r[0] for r in latest}]
 
 
 def rooted(body):
     """A docs/ file's relative links, as links from the repo's root."""
     up = lambda path: path[3:] if path.startswith("../") else f"docs/{path}"
     body = re.sub(r"\]\(([^):#\s][^):\s]*)\)", lambda m: f"]({up(m[1])})", body)
-    return re.sub(r"^(\[[^\]\n]+\]:[ \t]+)([^:#\s][^:\s]*)", lambda m: m[1] + up(m[2]), body, flags=re.M)
+    return re.sub(r"^(\[[^\]\n]+\]:[ \t]+)([^:#\s][^:\s]*)(?=\s|$)", lambda m: m[1] + up(m[2]), body, flags=re.M)
 
 
 def split(text):

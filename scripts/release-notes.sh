@@ -24,7 +24,7 @@ if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ] && [ -z "${2:-}" ] && [ 
   # its links start from docs/: as CHANGELOG.md's again, which is where they were at the tag
   notes=$(section "$archive" | sed -E \
     -e 's#\]\(([^):\#[:space:]][^):[:space:]]*)\)#](docs/\1)#g' \
-    -e 's#^(\[[^]]+\]:[[:space:]]+)([^:\#[:space:]][^:[:space:]]*)#\1docs/\2#' \
+    -e 's#^(\[[^]]+\]:[[:space:]]+)([^:\#[:space:]][^:[:space:]]*)([[:space:]].*)?$#\1docs/\2\3#' \
     -e 's#docs/\.\./##g')
 fi
 # tr, not ${notes//[[:space:]]/}: bash 3.2 (macOS) takes ten seconds over a 6 KB section that way
