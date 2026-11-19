@@ -47,7 +47,8 @@ leon agent ls         # your workers: label, state, agent, age, unread, block
 
 A report's state is what the worker said:
 
-- `done`: its turn ended; `body` is its result (or its last message).
+- `done`: its turn ended; `body` is its last message. A worker with leon's hooks asks by ending
+  its turn with the question, so that message can be a question waiting for `leon agent tell`.
 - `blocked`, kind `question`: it asks you something; `body` is the question.
 - `blocked`, kind `permission`: it waits on a permission prompt (to run a command, edit a file).
   **Only the user answers those**, in the leon app; until they have typed there, leon refuses your
@@ -80,8 +81,8 @@ close workers you didn't start.
 
 ## If you are the worker
 
-You were started with a task and a paragraph about reporting. With leon's hooks (Claude Code,
-Codex after `leon skill setup`), your state (working, waiting on a permission prompt, turn ended)
+You were started with a task and a paragraph about reporting. With leon's hooks (Claude Code after
+`leon skill setup`, in your settings or the project's), your state (working, waiting on a permission prompt, turn ended)
 reaches your orchestrator on its own, and so does your last message when your turn ends. So report
 by ending your turn: put the result in a line or two in your last message, or, to ask something,
 make the question your last message; the answer is typed into your prompt. Running a command to

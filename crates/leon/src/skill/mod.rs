@@ -339,12 +339,25 @@ fn hook_text() -> Option<String> {
     ))
 }
 
-/// Whether `program` (`claude`, `codex`) has leon's hooks installed and current, so its turns
-/// report on their own.
-pub fn hooks_installed(program: &str) -> bool {
-    let Some(agent) = Agent::ALL.into_iter().find(|a| a.name() == program) else { return false };
-    let Ok((_, t)) = target(agent, false) else { return false };
-    t.hook.is_some_and(|p| matches!(hooks::read(&p), Ok(Some(v)) if hooks::state(&v, agent) == State::Current))
+/// Whether a worker running `argv` in `cwd` reports its turns through leon's hooks: Claude Code
+/// with leon's hooks current in the project's `.claude/settings.json` or `settings.local.json`, or
+/// in the user's settings at their usual place (a `CLAUDE_CONFIG_DIR` set here may not be the
+/// pane's, which gets the server's environment), with hooks not turned off and not in print mode.
+/// Codex is left out: it runs new hooks only once the user trusts them in `/hooks`, which leon
+/// can't see. When unsure, false: the worker is then told to run `leon notify`, which works anyway.
+pub fn hooks_report(argv: &[String], cwd: &Path) -> bool {
+    let program = argv.first().and_then(|p| Path::new(p).file_name()).map(|n| n.to_string_lossy().into_owned());
+    if program.as_deref() != Some("claude") || resume::print_flag(argv) {
+        return false;
+    }
+    let current = |p: &Path| match hooks::read(p) {
+        Ok(Some(v)) => hooks::state(&v, Agent::Claude) == State::Current && v["disableAllHooks"] != true,
+        _ => false,
+    };
+    let project = ["settings.json", "settings.local.json"].iter().any(|f| current(&cwd.join(".claude").join(f)));
+    let user = env_dir("CLAUDE_CONFIG_DIR").is_none()
+        && leon_core::paths::home().is_some_and(|h| current(&h.join(".claude/settings.json")));
+    project || user
 }
 
 pub fn run(cli: &Cli, cmd: &SkillCmd) -> Result<(), Fail> {

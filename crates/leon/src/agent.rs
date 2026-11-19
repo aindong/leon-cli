@@ -19,8 +19,8 @@ use crate::{Cli, Cmd};
 /// A task bigger than this is refused: it goes on the agent's command line.
 const MAX_TASK: usize = 64 << 10;
 
-/// What leon adds after the task for an agent with leon's hooks: its last message is its report, so
-/// reporting runs no command a person would have to approve.
+/// What leon adds after the task for an agent whose hooks report for it (`skill::hooks_report`): its
+/// last message is its report, so reporting runs no command a person would have to approve.
 const HOOKED: &str = "You were started by another agent through leon, and you report to it through leon. \
 Your progress, your permission prompts and the end of each turn reach it on their own; a person \
 answers permission prompts, not that agent. When you finish, end your turn with the result in a \
@@ -126,7 +126,10 @@ pub fn run(c: &mut Client, cli: &Cli) -> Result<(), Fail> {
             let mut command: Vec<String> = std::iter::once(agent.clone()).chain(args.iter().cloned()).collect();
             // a prompt starting with `-` would be read as an option
             let lead = if task.starts_with('-') { "Task:\n" } else { "" };
-            let how = if crate::skill::hooks_installed(&name) { HOOKED } else { PREAMBLE };
+            // on another machine (-H) the worker's hooks are that machine's: leon can't look
+            let here = cwd.clone().or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+            let hooked = cli.host.is_none() && crate::skill::hooks_report(&command, &here);
+            let how = if hooked { HOOKED } else { PREAMBLE };
             command.push(format!("{lead}{}\n\n{how}", task.trim_end()));
             // kept open after it exits, so its last screen can still be read; the orchestrator closes it
             let options = json!({ "command": command, "cwd": cwd, "exit": { "on_completion": false } });

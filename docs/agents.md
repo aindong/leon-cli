@@ -141,9 +141,12 @@ leon block close "$id"
 ```
 
 - **Start.** `leon agent start AGENT TASK` runs `AGENT [ARGS…] PROMPT` in a new tab (`--split DIR`
-  for a pane) with the task and a paragraph on how to report as its first prompt (for an agent
-  with leon's hooks: end the turn with the result, or a question, as the last message, which runs
-  no command the user must approve; else `leon notify`), and makes it a
+  for a pane) with the task and a paragraph on how to report as its first prompt. A Claude Code
+  worker whose hooks leon finds (the project's `.claude/settings.json` or `settings.local.json`, or
+  `~/.claude/settings.json` when `CLAUDE_CONFIG_DIR` isn't set; not with `-p`, `disableAllHooks`
+  or `-H`) is told to end its turn with the result, or a question, as its last message, which runs
+  no command the user must approve; any other worker, Codex included (its hooks run only once
+  trusted in `/hooks`), is told to use `leon notify`. It makes the new block a
   worker of the caller's block (`$LEON_BLOCK`, or `-b`). `claude "…"` and `codex "…"` start an
   interactive session with that prompt; any agent CLI that takes a prompt as its last argument
   works. A worker's pane stays open after its program exits. Workers can start workers of their

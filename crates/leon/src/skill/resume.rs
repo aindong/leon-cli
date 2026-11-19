@@ -116,7 +116,7 @@ pub(super) fn print_mode() -> bool {
 
 /// `-p` (also among short flags written together, `-cp`), `--print` or `--print=…` among the
 /// options, before any `--`.
-fn print_flag(argv: &[String]) -> bool {
+pub(super) fn print_flag(argv: &[String]) -> bool {
     let short =
         |a: &str| a.strip_prefix('-').is_some_and(|f| f.contains('p') && f.chars().all(|c| c.is_ascii_alphabetic()));
     argv.iter().skip(1).take_while(|a| *a != "--").any(|a| short(a) || a == "--print" || a.starts_with("--print="))
