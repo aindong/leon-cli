@@ -8,6 +8,22 @@ typed while the link is stalled or down arrive whole or not at all, and the stat
 were not sent (keys sent as a stall starts may land). Use ssh keys or an agent: each
 connection is its own ssh session.
 
+```mermaid
+flowchart LR
+  subgraph mac["This Mac"]
+    client["Leon.app or the leon CLI"]
+  end
+  subgraph devbox["a host, such as devbox"]
+    proxy["leon server proxy"] --> server["leon server"]
+    listener["the tailnet listener,<br/>with serve_tailscale on"] --> server
+  end
+  client -->|"ssh://: an ssh session per connection"| proxy
+  client -->|"tailnet://: straight over Tailscale"| listener
+```
+
+Who the tailnet listener lets in, step by step, is in
+[Serving over Tailscale](architecture/tailnet.md#who-gets-in-step-by-step).
+
 The app shows every host from `leon hosts` in the sidebar, under This Mac, each with its sessions
 and tabs and a dot for its connection. Click a host's label to fold it away. A remote pane works
 like a local one, with the host's name in its header. New Session, New Tab and the splits act on

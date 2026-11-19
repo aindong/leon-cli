@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scale.sh: many panes, sessions and tabs (docs/performance.md).
+# scale.sh: many panes, sessions and tabs (docs/performance-app.md).
 #   scripts/perf/scale.sh [--secs 20]
 # 1. A tab of 5 x 5 panes, then one of 10 x 10, each pane printing a line every 100 ms (perl, a few
 #    MB a process): the time of every split (does the 100th cost more than the 1st?), memory, and

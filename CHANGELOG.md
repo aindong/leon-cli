@@ -30,6 +30,7 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **Diagrams and benchmark charts in the docs** ([detail](docs/changelog-detail.md#diagrams-and-benchmark-charts)).
 - **A website.** <https://aindong.github.io/leon-cli/>: the docs, What's new per release and a demo
   ([detail](docs/changelog-detail.md#the-website)).
 - **What's new, in the app.** The first launch of a new version says "Updated to leon X.Y.Z" once,

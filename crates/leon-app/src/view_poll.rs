@@ -1,6 +1,6 @@
 //! The poll: what the workspace does when woken (the reader thread's notice, a reply, a host's
 //! attempt, an update's phase, a notification's click) or when something timed is due. With
-//! nothing changing it does not run at all (docs/performance.md, idle CPU).
+//! nothing changing it does not run at all (docs/performance-app.md, idle CPU).
 
 use super::*;
 

@@ -8,6 +8,21 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### Diagrams and benchmark charts
+
+#### Added
+- Mermaid diagrams, which GitHub and the website both draw: the big picture and the object model
+  ([architecture.md](architecture.md)), an orchestrator and its worker and the permission hold
+  ([agents.md](agents.md)), links to a host ([remote-hosts.md](remote-hosts.md)), the tailnet
+  listener's admission ([architecture/tailnet.md](architecture/tailnet.md)), the web page's checks
+  ([web.md](web.md)), scrollback's store ([architecture/scrollback.md](architecture/scrollback.md)),
+  the release run ([releases.md](releases.md)) and the update check ([updates.md](updates.md)).
+  The website serves its own copy of Mermaid, pinned and checked against a recorded hash.
+- Charts of leon's benchmarks, drawn from data files in `docs/perf/` by
+  `scripts/perf-charts.py`, which a test runs so a chart never drifts from its data; a Performance
+  section on the website opens with them ([performance.md](performance.md)). The app's own
+  measurements moved to [performance-app.md](performance-app.md).
+
 ### What's new in the app
 
 #### Added

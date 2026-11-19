@@ -3,7 +3,7 @@
 `scripts/perf/flood.sh`'s `cat` of 100 MB of text and colour ran at 81 MB/s in leon and at 131 in
 another terminal. In the server's profile leon's own passes over the output cost more than
 alacritty's parse, and the parse thread waited 23% of its time for the terminal's lock while the
-screen push built frames under it (docs/performance.md, "The app end to end").
+screen push built frames under it (docs/performance-app.md, "The app end to end").
 
 ## The changes
 
@@ -34,6 +34,8 @@ showing it, Apple M6, the load beside each run:
 | branch | 115.2 MB/s (load 2.63) | 46.5 ms | 55.8 fps, none missed |
 | base | 79.7 MB/s (load 3.06) | 55.2 ms | 56.5 fps, none missed |
 | branch | 114.2 MB/s (load 2.95) | 46.3 ms | 55.3 fps, none missed |
+
+![flood.sh's cat of 100 MB of text and colour: about 80 MB/s before the flood fix and about 115 MB/s with it, 44% faster](images/perf/flood.svg)
 
 The speed bench's `cat` (`y` lines, no escapes): base 111.0 MB/s (load 2.95), branch 118.3
 (load 3.44). The later fixes (short runs copied, marks not shared) don't touch a flood with no OSC
