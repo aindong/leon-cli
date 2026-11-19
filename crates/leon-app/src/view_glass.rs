@@ -25,7 +25,7 @@ pub(super) struct GlassUi {
     /// window set to 0 must never show the desktop, so it is opaque.
     known: bool,
     /// The workspace's window, for a look from where there is no window at hand.
-    window: AnyWindowHandle,
+    pub(super) window: AnyWindowHandle,
 }
 
 impl GlassUi {

@@ -99,6 +99,8 @@ pub struct State {
     pub(crate) outbox: Vec<Event>,
     /// Sessions whose view changed since the events were last taken.
     pub(crate) dirty: Vec<String>,
+    /// Which blocks work for which, and their reports (agents.rs).
+    pub agents: crate::agents::Agents,
 }
 
 /// Labels are optional, trimmed, and at most 128 characters.

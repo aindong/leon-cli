@@ -3326,6 +3326,7 @@ dependencies = [
  "block2",
  "futures",
  "gpui",
+ "idna",
  "leon-core",
  "leon-hosts",
  "leon-lua",

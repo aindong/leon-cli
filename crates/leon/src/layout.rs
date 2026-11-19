@@ -12,7 +12,7 @@ use crate::commands::{pick_session, print_json, resolve};
 use crate::{Cli, Cmd, Edge};
 
 /// (direction, side) for a pane going to `edge` of its anchor.
-fn place(edge: Edge) -> (Direction, Side) {
+pub(crate) fn place(edge: Edge) -> (Direction, Side) {
     match edge {
         Edge::Right => (Direction::Horizontal, Side::After),
         Edge::Left => (Direction::Horizontal, Side::Before),
@@ -22,7 +22,7 @@ fn place(edge: Edge) -> (Direction, Side) {
 }
 
 /// The API ratio that gives the pane on `side` `pct` percent.
-fn ratio(side: Side, pct: u8) -> f64 {
+pub(crate) fn ratio(side: Side, pct: u8) -> f64 {
     f64::from(if side == Side::Before { pct } else { 100 - pct }) / 100.0
 }
 

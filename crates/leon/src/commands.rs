@@ -128,6 +128,7 @@ pub fn run(cli: &Cli) -> Result<(), Fail> {
         | Cmd::Wait { .. }
         | Cmd::Notify(_)
         | Cmd::Block(_) => crate::blocks::run(&mut c, cli)?,
+        Cmd::Agent(_) | Cmd::Inbox { .. } => crate::agent::run(&mut c, cli)?,
         Cmd::Float { .. }
         | Cmd::Toggle { .. }
         | Cmd::Dock { .. }

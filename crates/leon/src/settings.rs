@@ -25,7 +25,7 @@ pub enum ConfigCmd {
     /// Print a setting from init.lua, or every setting without KEY. Needs no server.
     Get {
         /// theme, font.family, font.size, notifications.done|blocked|error, copy_on_select,
-        /// repeat_time, hint_patterns, resume, fade_inactive_panes, check_for_updates, translucency,
+        /// link_card, repeat_time, hint_patterns, resume, fade_inactive_panes, check_for_updates, translucency,
         /// serve_tailscale, serve_tailscale_port, serve_tailscale_tags or scrollback.
         key: Option<String>,
     },

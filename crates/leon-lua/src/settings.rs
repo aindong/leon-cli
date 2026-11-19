@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 17] = [
+pub const KEYS: [&str; 18] = [
     "theme",
     "font.family",
     "font.size",
@@ -19,6 +19,7 @@ pub const KEYS: [&str; 17] = [
     "notifications.blocked",
     "notifications.error",
     "copy_on_select",
+    "link_card",
     "repeat_time",
     "hint_patterns",
     "resume",
@@ -77,6 +78,9 @@ pub struct Settings {
     pub notifications: Notifications,
     /// The app copies a selection to the clipboard as it is made.
     pub copy_on_select: bool,
+    /// The app shows a card with a link's address, Copy and Open in Browser when the mouse rests
+    /// on the link or it is right-clicked.
+    pub link_card: bool,
     /// Milliseconds after a repeatable binding during which its keys work without the prefix; 0
     /// turns repeat off.
     pub repeat_time: u64,
@@ -115,6 +119,7 @@ impl Default for Settings {
             font_size: 13.,
             notifications: Notifications { done: true, blocked: true, error: true },
             copy_on_select: false,
+            link_card: true,
             repeat_time: REPEAT_TIME,
             hint_patterns: vec![],
             resume: Resume::Ask,
@@ -138,6 +143,7 @@ impl Settings {
             "font": { "family": self.font_family, "size": self.font_size },
             "notifications": { "done": n.done, "blocked": n.blocked, "error": n.error },
             "copy_on_select": self.copy_on_select,
+            "link_card": self.link_card,
             "repeat_time": self.repeat_time,
             "hint_patterns": self.hint_patterns,
             "resume": self.resume.as_str(),
@@ -199,6 +205,7 @@ impl Settings {
             "notifications.blocked" => self.notifications.blocked = flag()?,
             "notifications.error" => self.notifications.error = flag()?,
             "copy_on_select" => self.copy_on_select = flag()?,
+            "link_card" => self.link_card = flag()?,
             "check_for_updates" => self.check_for_updates = flag()?,
             "repeat_time" => match v.as_f64() {
                 Some(ms) if ms.fract() == 0. && (0. ..=10_000.).contains(&ms) => self.repeat_time = ms as u64,

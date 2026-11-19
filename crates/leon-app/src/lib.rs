@@ -21,6 +21,8 @@ pub mod overlay_motion;
 pub mod overview;
 pub mod palette;
 pub mod panes;
+#[cfg(all(feature = "gui", target_os = "macos"))]
+pub mod popover;
 pub mod program_kind;
 pub mod remote;
 pub mod render;
