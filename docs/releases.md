@@ -52,6 +52,9 @@ Before the first release, do the one-time setup under [Secrets](#secrets).
   so the latest release never has files missing.
 - **homebrew**: `scripts/release-homebrew.sh` rewrites the tap's cask and formula.
 
+When the run succeeds, `.github/workflows/site.yml` deploys [the website](#the-website) from the
+new release.
+
 A version with a `-` in it (`0.2.0-rc.1`) becomes a pre-release and leaves the tap alone.
 
 ### When a run fails
@@ -265,3 +268,50 @@ The workflow has a step where Developer ID signing and notarization will go. It 
 Without the `APPLE_DEVELOPER_ID` secret it prints a notice and the release goes on; with the
 secret set it fails, so nobody takes an ad-hoc build for a notarized one. Building it means
 signing inside `scripts/release.sh`, between the bundle and the zip.
+
+## The website
+
+<https://aindong.github.io/leon-cli/> shows the latest release: its README, `docs/` and
+`CHANGELOG.md` at that release's tag, built with the `website/` and `brand/` files of the commit
+the workflow runs on, so a fix to the site itself needs no release. It has the landing page
+(`brand/marketing/index.html`), the README as its overview, a page for each doc and translation,
+What's new (a page for each `## [X.Y.Z]` section of the changelog, the text its GitHub release has)
+and the demo. Links into the source go to GitHub at the release's tag.
+
+`.github/workflows/site.yml` runs after a Release run that a tag push started and that succeeded,
+when a release is published by hand, and by hand (Actions, Site, Run workflow). It asks GitHub for
+`releases/latest`, which is never a draft or a pre-release, checks that its tag is `vX.Y.Z`
+(`website/latest-tag.sh`), builds, and deploys with GitHub's own Pages actions. Its token can read
+the repository and write only to Pages.
+
+To build it yourself, `website/build.sh` (it needs `python3`, and installs the pinned, hashed
+`website/requirements.txt` into `target/site-venv`), `website/build.sh serve` to preview it, and
+`target/site-venv/bin/python website/test_site.py` for its tests. CI runs both on a change to the
+docs or to `website/`. A change to `brand/` starts no CI run, so after changing the landing page or
+the font, run them yourself.
+
+### Demo videos
+
+Videos are too large for git, and a versioned release takes no extra files:
+`release-verify.sh --complete` fails on one, and the updater reads those releases. They live in one release of their
+own, tagged `media`, made once as a pre-release so that `releases/latest` never picks it
+(`website/fetch-media.sh` refuses to use it otherwise):
+
+```sh
+gh release create media --prerelease --latest=false --title "leon media" --notes "Videos for the website's demo page. Not a release of leon."
+gh release upload media demo.mp4 demo.jpg --clobber
+```
+
+`NAME.mp4` shows on the demo page with `NAME.jpg` (or `.png`) as its poster, and `demo.mp4`, the
+narrated tour, comes first. Names use lower-case letters, digits, `.`, `_` and `-`; other files
+are left out. The next run of the site shows them: run Site by hand after an upload.
+
+### Setting it up once
+
+These are the repository's settings, for its owner:
+
+- Settings, Pages, Source: **GitHub Actions** (or `gh api -X POST repos/aindong/leon-cli/pages -f build_type=workflow`).
+- Settings, Environments, `github-pages`: the default branch may deploy from the start. A run that a
+  release published by hand starts has the tag as its ref, so add a tag rule `v*` there, or those
+  runs stop at the deploy.
+

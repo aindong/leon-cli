@@ -1,0 +1,78 @@
+# leon's website, aindong.github.io/leon-cli: the latest release's docs, README and changelog,
+# built with the website/ and brand/ files of the commit this runs on (so a fix to the site needs no
+# release), and deployed with GitHub's own Pages actions. docs/releases.md#the-website tells the
+# whole story. Actions are pinned by commit, with their tag beside them.
+name: Site
+
+# A release published by hand starts it. One that release.yml publishes does not (events made with
+# a workflow's own token start no workflow), so it also follows a Release run that a tag push
+# started and that succeeded. By hand, for a fix to the site between releases.
+on:
+  release:
+    types: [published]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+
+permissions: {}
+
+# one deploy at a time, and a running one is never cut off
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # a Release run by hand stops at a draft, and a failed one published nothing
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash # with pipefail
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      # the site's own files: website/ and brand/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # releases/latest is never a draft, a prerelease or the media release; the tag is checked anyway
+      - name: Find the latest release
+        id: tag
+        run: |
+          tag=$(gh api "repos/$GH_REPO/releases/latest" | website/latest-tag.sh)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      # the release's docs, README and changelog
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          path: release
+          persist-credentials: false
+      - name: The demo videos, from the media release
+        run: website/fetch-media.sh "$RUNNER_TEMP/media"
+      - name: Build
+        env:
+          LEON_SITE_ROOT: ${{ github.workspace }}/release
+          LEON_SITE_REF: ${{ steps.tag.outputs.tag }}
+          LEON_SITE_MEDIA: ${{ runner.temp }}/media
+        run: website/build.sh
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: target/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

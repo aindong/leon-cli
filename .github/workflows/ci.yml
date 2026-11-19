@@ -1,6 +1,7 @@
 # macOS: the whole gate, app included. Linux (x86_64 and aarch64): the server and CLI in the pinned
 # Rust image, the smoke test and the packages (scripts/linux-test.sh, scripts/package-linux.sh).
-# A change to English docs alone runs only the tests that read them, on Linux (the docs job).
+# A change to English docs alone, or to the website (website/), runs only the tests that read the
+# docs and the website's build, on Linux (the docs job).
 # Actions are pinned by commit, with their tag beside them.
 name: CI
 
@@ -119,7 +120,8 @@ jobs:
             target/linux/*/*.deb
 
   # English docs alone: the tests that read them, in the linux job's pinned image (zsh, minisign
-  # and jq are there), and the translations' check, which reads the history their headers name.
+  # and jq are there), the translations' check, which reads the history their headers name, and
+  # the website's strict build and tests (website/, the same build site.yml deploys).
   docs:
     needs: changes
     if: needs.changes.outputs.kind == 'docs'
@@ -131,3 +133,5 @@ jobs:
           fetch-depth: 0
       - run: scripts/i18n-check.sh
       - run: scripts/linux-doc-tests.sh
+      - run: website/build.sh
+      - run: target/site-venv/bin/python website/test_site.py

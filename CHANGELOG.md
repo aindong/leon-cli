@@ -30,6 +30,8 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **A website.** <https://aindong.github.io/leon-cli/> has the docs, a What's new page for each
+  release and a demo, built from the latest release ([detail](docs/changelog-detail.md#the-website)).
 - **leon in the browser, over your tailnet.** `serve_web` serves a view-only page of your sessions,
   tabs and panes to your own machines; `api_version` goes to `1.16.0` ([detail](docs/changelog-detail.md#leon-in-the-browser)).
 - **HTTPS for the browser page.** `serve_web_cert` and `serve_web_key` name the files `tailscale cert`
