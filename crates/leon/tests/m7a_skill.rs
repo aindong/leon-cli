@@ -130,21 +130,33 @@ fn is_ours(hook: &Value) -> bool {
     hook["command"].as_str().is_some_and(|c| c.contains("leon skill hook"))
 }
 
-/// The commands of our SessionStart entries, and the hook file with them taken out.
+/// Our entries, across every event, and the hook file with them taken out (with the groups and
+/// event lists that held only ours).
 fn split_ours(v: &Value) -> (Vec<Value>, Value) {
     let mut v = v.clone();
     let mut ours = vec![];
-    if let Some(groups) = v["hooks"]["SessionStart"].as_array_mut() {
-        for g in groups.iter_mut() {
-            if let Some(hooks) = g["hooks"].as_array_mut() {
-                ours.extend(hooks.iter().filter(|h| is_ours(h)).cloned());
-                hooks.retain(|h| !is_ours(h));
+    if let Some(events) = v["hooks"].as_object_mut() {
+        for groups in events.values_mut().filter_map(Value::as_array_mut) {
+            let had = groups.len();
+            for g in groups.iter_mut() {
+                if let Some(hooks) = g["hooks"].as_array_mut() {
+                    ours.extend(hooks.iter().filter(|h| is_ours(h)).cloned());
+                    hooks.retain(|h| !is_ours(h));
+                }
+            }
+            groups.retain(|g| g["hooks"].as_array().is_none_or(|h| !h.is_empty()));
+            if had > 0 && groups.is_empty() {
+                *groups = vec![Value::Null]; // marked: only ours were here
             }
         }
-        groups.retain(|g| g["hooks"].as_array().is_none_or(|h| !h.is_empty()));
+        events.retain(|_, g| g != &json!([null]));
     }
     (ours, v)
 }
+
+/// leon's hooks per agent: SessionStart and the status events (crates/leon/src/skill/hooks.rs).
+const CLAUDE_HOOKS: usize = 7;
+const CODEX_HOOKS: usize = 6;
 
 const OTHER_SETTINGS: &str = r#"{
   "model": "opus",
@@ -202,8 +214,8 @@ fn setup_into_an_empty_home() {
     assert!(skill.contains("leon skill show"), "{skill}");
     assert!(skill.lines().any(|l| l == "name: leon"), "{skill}");
     let (ours, rest) = split_ours(&read_json(&e.settings()));
-    assert_eq!(ours.len(), 1, "one leon hook: {ours:?}");
-    assert_eq!(rest["hooks"]["SessionStart"], json!([]), "{rest}");
+    assert_eq!(ours.len(), CLAUDE_HOOKS, "one leon hook per event: {ours:?}");
+    assert_eq!(rest, json!({ "hooks": {} }), "{rest}");
     let group = &read_json(&e.settings())["hooks"]["SessionStart"][0];
     assert!(group.get("matcher").is_none(), "our hook runs on every session start: {group}");
     assert_eq!(group["hooks"][0]["type"], "command");
@@ -218,10 +230,11 @@ fn setup_keeps_every_other_key_and_hook() {
     e.ok(&["skill", "setup", "--agent", "claude"]);
     let now = read_json(&e.settings());
     let (ours, rest) = split_ours(&now);
-    assert_eq!(ours.len(), 1, "{now}");
+    assert_eq!(ours.len(), CLAUDE_HOOKS, "{now}");
     assert_eq!(rest, original, "other settings changed");
     assert_eq!(keys(&now), keys(&original), "key order changed");
-    assert_eq!(keys(&now["hooks"]), keys(&original["hooks"]), "hook event order changed");
+    let events = keys(&original["hooks"]);
+    assert_eq!(keys(&now["hooks"])[..events.len()], events, "hook event order changed");
     let backup = std::fs::read_to_string(e.claude().join("settings.json.leon-backup")).unwrap();
     assert_eq!(backup, OTHER_SETTINGS, "backup must hold the original bytes");
 }
@@ -331,7 +344,7 @@ fn codex_setup_and_remove() {
     let e = Env::new();
     e.ok(&["skill", "setup", "--agent", "codex"]);
     assert!(std::fs::read_to_string(e.codex_skill()).unwrap().contains("leon skill show"));
-    assert_eq!(split_ours(&read_json(&e.hooks_json())).0.len(), 1);
+    assert_eq!(split_ours(&read_json(&e.hooks_json())).0.len(), CODEX_HOOKS);
     assert_eq!(e.state("codex"), "current");
     assert!(!e.claude().exists(), "codex setup touched claude");
 
@@ -341,7 +354,7 @@ fn codex_setup_and_remove() {
     let original: Value = serde_json::from_str(other).unwrap();
     e.ok(&["skill", "setup", "--agent", "codex"]);
     let (ours, rest) = split_ours(&read_json(&e.hooks_json()));
-    assert_eq!(ours.len(), 1);
+    assert_eq!(ours.len(), CODEX_HOOKS);
     assert_eq!(rest, original);
     e.ok(&["skill", "remove", "--agent", "codex"]);
     assert_eq!(read_json(&e.hooks_json()), original);
@@ -387,7 +400,7 @@ fn a_symlinked_settings_file_stays_a_symlink() {
     std::os::unix::fs::symlink(&target, e.settings()).unwrap();
     e.ok(&["skill", "setup", "--agent", "claude"]);
     assert!(std::fs::symlink_metadata(e.settings()).unwrap().file_type().is_symlink());
-    assert_eq!(split_ours(&read_json(&target)).0.len(), 1);
+    assert_eq!(split_ours(&read_json(&target)).0.len(), CLAUDE_HOOKS);
     e.ok(&["skill", "remove"]);
     assert!(std::fs::symlink_metadata(e.settings()).unwrap().file_type().is_symlink());
     assert_eq!(read_json(&target), serde_json::from_str::<Value>(OTHER_SETTINGS).unwrap());

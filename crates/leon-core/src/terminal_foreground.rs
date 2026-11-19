@@ -120,6 +120,14 @@ impl Terminal {
         members(group, self.pid).into_iter().max().and_then(owned_process_name)
     }
 
+    /// The PTY's foreground process group, if it has one.
+    pub fn foreground_group(&self) -> Option<i32> {
+        let fd = lock(&self.master).as_raw_fd()?;
+        // SAFETY: reads the foreground group of a PTY fd we own.
+        let group = unsafe { libc::tcgetpgrp(fd) };
+        (group > 0).then_some(group)
+    }
+
     /// The foreground program as last reported (`check_foreground`): what a snapshot of the
     /// block gives, so it sits between the same events as the rest of the snapshot.
     pub fn reported_foreground(&self) -> Option<String> {

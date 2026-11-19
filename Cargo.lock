@@ -3327,6 +3327,7 @@ dependencies = [
  "core-video",
  "futures",
  "gpui",
+ "idna",
  "leon-core",
  "leon-hosts",
  "leon-lua",

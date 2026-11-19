@@ -413,7 +413,7 @@ async fn accept(
                     let mut first = [0u8; 1];
                     if matches!(stream.peek(&mut first).await, Ok(1)) && first[0] == b'{' {
                         let (read, write) = stream.into_split();
-                        let _ = crate::serve::connection(read, write, &guard.0).await;
+                        let _ = crate::serve::connection(read, write, &guard.0, crate::agents::Peer::Remote).await;
                     }
                 } => {}
             }

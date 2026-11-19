@@ -11,7 +11,7 @@ them in place; a running app follows them on a reload. A bad value is a skipped 
 
 The Settings window has a control for every setting in the table below, in sections: General
 (`resume`, `check_for_updates`), Appearance (`theme`, `translucency`, `fade_inactive_panes`,
-`font`, `cursor_shader`), Terminal (`copy_on_select`, `repeat_time`, `hint_patterns`) and Notifications. Its search
+`font`, `cursor_shader`), Terminal (`copy_on_select`, `link_card`, `repeat_time`, `hint_patterns`) and Notifications. Its search
 field finds a setting by its label or by its name here (`fade_inactive_panes`). A setting init.lua
 sets by code, not with a literal value, shows read-only there, with the line to change. Two more
 sections are read-only: Shortcuts lists every key the app binds, with Edit in init.lua to change
@@ -29,6 +29,7 @@ since every program in every session ends.
 | `font.size` | points, 8 to 32 | `13` |
 | `notifications.done`, `notifications.blocked`, `notifications.error` | `true` or `false` (below) | `true` |
 | `copy_on_select` | `true` or `false` | `false` |
+| `link_card` | `true` or `false`: a card with a link's address, Copy and Open in Browser when the mouse rests on a link or it is right-clicked | `true` |
 | `repeat_time` | milliseconds, 0 (off) to 10000 | `500` |
 | `hint_patterns` | a list of regular expressions, at most 32 | `{}` |
 | `resume` | `"ask"`, `"always"` or `"never"` | `"ask"` |

@@ -28,6 +28,8 @@ leon-update.workspace = true
 # already in the tree through GPUI; for notifications and the Dock badge (notify_mac.rs)
 objc2 = "0.6.5"
 block2 = "0.6.2"
+# already in the tree through GPUI (url); a link card shows a lookalike host as punycode
+idna = "1.1.0"
 # Cursor shaders (cursor_shader/): naga translates the user's GLSL to MSL (also for `leon config
 # check`, so not behind `gui`); the overlay draws with Metal on a display link of its own. The
 # versions are GPUI's own.

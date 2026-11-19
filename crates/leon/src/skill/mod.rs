@@ -4,6 +4,9 @@
 mod files;
 mod hooks;
 mod resume;
+mod status;
+
+pub use status::On;
 
 use std::path::{Path, PathBuf};
 
@@ -15,6 +18,7 @@ use crate::{Cli, SkillCmd};
 use files::Backup;
 
 const GUIDE: &str = include_str!("guide.md");
+const ORCHESTRATION: &str = include_str!("orchestration.md");
 const MARKER: &str = "<!-- leon-skill: installed by leon skill setup -->";
 const STUB_BODY: &str =
     "Before you use leon, run `leon skill show` and follow the guide it prints. The guide comes from
@@ -337,11 +341,15 @@ fn hook_text() -> Option<String> {
 
 pub fn run(cli: &Cli, cmd: &SkillCmd) -> Result<(), Fail> {
     match cmd {
-        SkillCmd::Show => {
-            print!("{GUIDE}");
+        SkillCmd::Show { part } => {
+            print!("{}", if part.is_some() { ORCHESTRATION } else { GUIDE });
             Ok(())
         }
-        SkillCmd::Hook { agent } => {
+        SkillCmd::Hook { agent: Some(agent), on: Some(on) } => {
+            status::report(*agent, *on);
+            Ok(())
+        }
+        SkillCmd::Hook { agent, .. } => {
             if let Some(t) = hook_text() {
                 println!("{t}");
             }

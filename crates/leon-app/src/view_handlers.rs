@@ -186,14 +186,6 @@ impl Workspace {
         }
     }
 
-    /// Close a window; if that ended its session, select a neighbouring one.
-    pub(super) fn close_window(&mut self, (sid, wid): (String, String), cx: &mut Context<Self>) {
-        self.app.act_later("session.close_window", json!({ "session_id": sid, "window_id": wid }), drop);
-        let rows = self.rows();
-        self.settle(&rows);
-        cx.notify();
-    }
-
     pub(super) fn step_tab(&mut self, by: isize, cx: &mut Context<Self>) {
         let Some(sid) = self.session_id.clone() else { return };
         let Some((n, active)) = self.app.model().session(&sid).map(|s| (s.windows.len(), s.active)) else {

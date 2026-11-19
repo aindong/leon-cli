@@ -1,5 +1,7 @@
 //! `leon`: the command-line client, and the server when run as `leon server run`.
 
+mod agent;
+mod agent_worktree;
 mod api;
 mod attach;
 mod blocks;
@@ -22,6 +24,7 @@ use std::process::ExitCode;
 use clap::builder::BoolishValueParser;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+pub use agent::AgentCmd;
 use client::Fail;
 pub use resources::{ApiCmd, BlockCmd, SessionCmd, WindowCmd};
 pub use settings::{ConfigCmd, ThemeCmd};
@@ -145,6 +148,15 @@ pub enum Cmd {
     },
     /// Report a status for your own block (-b, else $LEON_BLOCK), as an OSC 7501 report would.
     Notify(blocks::NotifyArgs),
+    /// Start agents that work for you (in tabs or panes), list them, and answer them.
+    #[command(subcommand)]
+    Agent(AgentCmd),
+    /// Your workers' reports (from `leon agent start`), oldest first; reading marks them read.
+    Inbox {
+        /// List them without marking them read.
+        #[arg(long)]
+        peek: bool,
+    },
     /// Wait for a terminal's program to exit, and exit with its status.
     Wait {
         /// The block to wait for [default: -b, else $LEON_BLOCK].
@@ -353,8 +365,12 @@ pub enum HostsCmd {
 
 #[derive(Subcommand)]
 pub enum SkillCmd {
-    /// Print the guide for agents driving leon (a SKILL.md).
-    Show,
+    /// Print the guide for agents driving leon (a SKILL.md), or one of its parts.
+    Show {
+        /// A part of the guide: orchestration (agents starting agents).
+        #[arg(value_parser = ["orchestration"])]
+        part: Option<String>,
+    },
     /// Install the skill and a session-start hook [default: for each agent found].
     Setup {
         /// Only this agent [default: each one found].
@@ -389,6 +405,9 @@ pub enum SkillCmd {
         /// The agent whose resume command to record for this block.
         #[arg(long, value_enum)]
         agent: Option<skill::Agent>,
+        /// The agent's event that ran the hook: report the block's state for it instead.
+        #[arg(long, value_enum, requires = "agent")]
+        on: Option<skill::On>,
     },
 }
 

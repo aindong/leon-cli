@@ -34,7 +34,9 @@ leon do ./examples/projects.lua dir="$PWD" worktrees=true
 The recipe reads `git worktree list --porcelain -z` and prints one session ID per usable worktree,
 including the main checkout. NUL delimiters preserve spaces, quotes and newlines in parent paths.
 Bare repositories and worktrees marked prunable are skipped. It doesn't create or remove worktrees;
-use `git worktree add` and `git worktree remove` yourself.
+use `git worktree add` and `git worktree remove` yourself. For an agent working in a worktree of its
+own, `leon agent start --worktree` makes one and `leon agent close` removes it, refusing while it
+holds work that isn't committed and pushed ([agents.md](agents.md#orchestrate-other-agents)).
 
 ## Copy an ignored file into a new worktree
 

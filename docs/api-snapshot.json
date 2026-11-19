@@ -1,5 +1,5 @@
 {
-  "api_version": "1.13.0",
+  "api_version": "1.15.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -2927,6 +2927,9 @@
               "copy_on_select": {
                 "type": "boolean"
               },
+              "link_card": {
+                "type": "boolean"
+              },
               "repeat_time": {
                 "type": "integer",
                 "format": "uint64",
@@ -2980,6 +2983,7 @@
               "font",
               "notifications",
               "copy_on_select",
+              "link_card",
               "repeat_time",
               "hint_patterns",
               "resume",

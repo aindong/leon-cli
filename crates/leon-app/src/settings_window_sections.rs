@@ -80,7 +80,7 @@ const fn entry(section: Section, id: &'static str, label: &'static str, keys: &'
 use Section::*;
 
 /// Every settings row, in the order each section shows them.
-pub(super) const ENTRIES: [Entry; 17] = [
+pub(super) const ENTRIES: [Entry; 18] = [
     entry(General, "resume", "Resume programs after a restart", &["resume"]),
     entry(General, "check_for_updates", "Look for updates once a day", &["check_for_updates"]),
     entry(Appearance, "theme", "Theme", &["theme"]),
@@ -89,6 +89,7 @@ pub(super) const ENTRIES: [Entry; 17] = [
     entry(Appearance, "font", "Font", &["font.family", "font.size"]),
     entry(Appearance, "cursor_shader", "Cursor shader", &["cursor_shader", "cursor_shader_duration", "shader"]),
     entry(Terminal, "copy_on_select", "Copy text as I select it", &["copy_on_select"]),
+    entry(Terminal, "link_card", "Show a card when the mouse rests on a link", &["link_card"]),
     entry(Terminal, "repeat_time", "Repeat keys without the prefix", &["repeat_time"]),
     entry(Terminal, "hint_patterns", "Hint patterns", &["hint_patterns"]),
     entry(Notifications, "notifications.done", rows::NOTIFY_DONE, &["notifications.done"]),

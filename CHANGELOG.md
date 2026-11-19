@@ -15,7 +15,7 @@ no section: the app on Linux (M15's second part; Linux has the server, the CLI a
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.13.0`.
+one is `1.15.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -31,7 +31,18 @@ fields it doesn't know. The full policy is in
 ## [Unreleased]
 
 - **Cursor shaders.** Leon.app draws a Shadertoy-style cursor shader file you name with
-  `cursor_shader` over its window, on macOS; `api_version` goes to `1.13.0` ([detail](docs/changelog-detail.md#cursor-shaders)).
+  `cursor_shader` over its window, on macOS; `api_version` goes to `1.15.0` ([detail](docs/changelog-detail.md#cursor-shaders)).
+- **Closing and renaming tabs and sessions.** Close Tab (⌥⌘W), Close Session (⌥⇧⌘W), a × on hover,
+  right-click menus and double-click to rename ([detail](docs/changelog-detail.md#closing-and-renaming-tabs-and-sessions)).
+- **A link card.** Resting the mouse on a link, or right-clicking it, shows its address with Copy and
+  Open in Browser; `link_card` turns it off, and `api_version` is `1.14.0` ([detail](docs/changelog-detail.md#the-link-card)).
+- **Agents orchestrating agents.** `leon agent start` runs Claude Code, Codex or any agent in a tab
+  or pane, working for you; its hooks report to your `leon inbox`, and leon types a notice into
+  your prompt when your turn ends. New experimental methods `agent.link`, `agent.list`,
+  `agent.inbox`, and `kind` on `dev.leon.terminal.report_status`; `api_version` 1.13.0.
+  `leon agent start --worktree` gives a worker its own git worktree, which `leon agent close`
+  removes only when that loses no work
+  ([detail](docs/changelog-detail.md#agents-orchestrating-agents)).
 
 ## [0.1.1] - 2026-11-19
 
