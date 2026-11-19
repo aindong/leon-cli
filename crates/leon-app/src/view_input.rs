@@ -22,6 +22,9 @@ pub(super) struct Ime {
     /// Marked text ended unsent (its pane lost the focus or stopped being the target) while the
     /// input method may still hold it: its next commit is dropped, unless it marks text again.
     stale: bool,
+    /// The text of the key `key_down` just left to the handler: text equal to it is that key typed,
+    /// anything else (Space committing 你好, a commit with no key) is a composition's.
+    key: Option<String>,
     commits: u64,
 }
 
@@ -128,9 +131,10 @@ impl EntityInputHandler for Workspace {
         cx: &mut Context<Self>,
     ) {
         let marked = self.ime.marked.take();
+        let key = self.ime.key.take();
         if marked.is_some() {
             cx.notify();
-        } else if std::mem::take(&mut self.ime.stale) {
+        } else if std::mem::take(&mut self.ime.stale) && key.as_deref() != Some(text) {
             return; // the commit of a composition no longer shown
         }
         let Some((sid, id, _)) = self.target() else { return };
@@ -164,7 +168,7 @@ impl EntityInputHandler for Workspace {
         if self.view_top(&block).is_some() {
             self.scroll_to(&block, None); // composing goes back to the prompt, as typing does
         }
-        self.ime.stale = false;
+        (self.ime.stale, self.ime.key) = (false, None);
         self.ime.marked = (!text.is_empty()).then_some(Marked { block, text, selected });
         cx.notify();
     }
@@ -202,6 +206,11 @@ impl Workspace {
         }
         self.ime.commits += 1;
         self.write_pane(sid, id, text.as_bytes(), cx);
+    }
+
+    /// `key_down` leaves this key's text to the handler.
+    pub(super) fn leave_key(&mut self, text: Option<&str>) {
+        self.ime.key = text.map(String::from);
     }
 
     /// Copy mode or hints are on in pane `id`: they take its keys, and no text.

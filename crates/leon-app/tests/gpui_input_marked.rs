@@ -57,7 +57,8 @@ fn marked_text_shows_at_the_cursor_and_only_the_commit_is_sent(cx: &mut TestAppC
     s.app.stop();
     assert!(moved, "the anchor follows the cursor: {start:?} then {here:?}");
     let shown = shown.expect("the marked text is drawn");
-    assert_eq!(shown.origin, here.origin, "at the cursor");
+    let off = (shown.origin.x - here.origin.x).abs().max((shown.origin.y - here.origin.y).abs());
+    assert!(off < gpui::px(0.5), "at the cursor (GPUI snaps to the pixel): {shown:?} {here:?}");
     assert_eq!(text.as_deref(), Some("にほん"), "the latest marked text");
     assert_eq!(range, Some(0..3), "marked, in UTF-16");
     assert_eq!(candidates, Some(here), "the candidate window at the cursor");

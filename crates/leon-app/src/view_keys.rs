@@ -76,8 +76,8 @@ impl Workspace {
         // the focus, which an input method composes through; one `retext` changed is final
         // (automation, not an input method): sent here
         let retexted = ks.key_char != ev.keystroke.key_char;
-        if crate::input::typed(ks).is_some() && !retexted && self.focus.is_focused(window) {
-            return;
+        if let Some(text) = crate::input::typed(ks).filter(|_| !retexted && self.focus.is_focused(window)) {
+            return self.leave_key(Some(text));
         }
         if let Some(bytes) = crate::input::key_bytes(ks, f.app_cursor) {
             self.write_pane(&sid, &id, &bytes, cx);
