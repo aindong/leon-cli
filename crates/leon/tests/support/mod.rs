@@ -5,6 +5,7 @@
 
 pub mod host;
 pub mod localapi;
+pub mod orch;
 pub mod remote;
 pub mod tailscale;
 pub mod tls;

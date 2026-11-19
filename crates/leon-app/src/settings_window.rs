@@ -39,6 +39,8 @@ mod rows;
 mod sections;
 #[path = "settings_window_server.rs"]
 mod server;
+#[path = "settings_window_shader.rs"]
+mod shader;
 #[path = "settings_window_tailscale.rs"]
 mod tailscale;
 #[path = "settings_window_theme.rs"]

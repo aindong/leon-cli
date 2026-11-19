@@ -1,6 +1,7 @@
 //! The leon server: a self-describing method registry over the model, served on a Unix socket.
 //! The socket loop (`serve`) takes a `Ctx` the caller built, so the app can embed the same state.
 
+mod agents;
 mod blocks;
 pub mod contract;
 pub mod events;

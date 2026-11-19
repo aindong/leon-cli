@@ -8,6 +8,7 @@ use base64::Engine;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 
+use crate::agents::Peer;
 use crate::serve::{Shared, MAX_LINE};
 
 /// The most a message may hold: a request line, its newline added here.
@@ -220,7 +221,7 @@ where
         }
     };
     tokio::select! {
-        _ = async { tokio::join!(crate::serve::connection(api_r, api_w, shared), outbound) } => {}
+        _ = async { tokio::join!(crate::serve::connection(api_r, api_w, shared, Peer::Remote), outbound) } => {}
         _ = inbound => {}
     }
 }

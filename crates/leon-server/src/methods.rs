@@ -418,6 +418,7 @@ pub fn registry() -> Registry {
         },
     );
     blocks::add(&mut r);
+    crate::agents::add(&mut r);
     crate::layout::add(&mut r);
     crate::overlays::add(&mut r);
     crate::events::add(&mut r);

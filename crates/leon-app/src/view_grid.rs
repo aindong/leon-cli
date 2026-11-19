@@ -14,6 +14,10 @@ pub(super) struct GridInput {
     marks: Vec<CellMark>,
     /// Its cursor is the one taking keys: the pane focused in the key window.
     active: bool,
+    /// It hands the cursor it paints to the window's cursor shader overlay: the active pane,
+    /// unless it is a tile under a shown float (the overlay draws above everything).
+    feeds: bool,
+    overlay: Option<Arc<crate::cursor_shader::Overlay>>,
     family: SharedString,
     font_size: f32,
     theme: Theme,
@@ -27,6 +31,8 @@ pub struct GridDrawn {
     pub text: String,
     pub marks: usize,
     pub active: bool,
+    /// It hands its cursor to the cursor shader overlay.
+    pub feeds: bool,
     pub font_size: f32,
     pub theme: Theme,
     /// It fits its PTY to its bounds (not a closing pane's, whose block is gone).
@@ -77,7 +83,7 @@ fn canvas_of(
         app,
         ids,
         (i.frame.clone(), i.marks.clone()),
-        i.active,
+        (i.active, i.feeds.then(|| i.overlay.clone()).flatten()),
         (i.family.clone(), i.font_size, i.theme),
         (stats.clone(), painted.clone()),
         i.fits,
@@ -91,10 +97,18 @@ impl Workspace {
         let focused = self.target().is_some_and(|(_, t, _)| t == id);
         let view = self.drawn(id);
         let marks = self.pane_marks(id, &view);
+        let active = self.window_active && focused;
+        // a float shown over it: only the top one feeds (the overlay draws over every float)
+        let under_float = |w: &leon_core::Window| {
+            let o = self.overlays_of(w);
+            o.floating.iter().rev().find(|f| !f.hidden).is_some_and(|top| top.block_id != id)
+        };
         GridInput {
             frame: crate::fade::frame(view.frame, theme.chrome, self.pane_fade(id)),
             marks,
-            active: self.window_active && focused,
+            active,
+            feeds: active && !self.active_window().is_some_and(|w| under_float(&w)),
+            overlay: self.shader.overlay.clone(),
             family: self.font_family.clone(),
             font_size: self.font_size,
             theme,
@@ -231,6 +245,7 @@ impl Workspace {
             text: i.frame.text(),
             marks: i.marks.len(),
             active: i.active,
+            feeds: i.feeds,
             font_size: i.font_size,
             theme: i.theme,
             fits: i.fits,

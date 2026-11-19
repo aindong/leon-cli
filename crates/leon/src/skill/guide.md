@@ -1,6 +1,6 @@
 ---
 name: leon
-description: Drive the leon terminal multiplexer. Open terminals beside you, run commands and wait for them, read other terminals' screens and type into them. Use when LEON_SESSION is set (you run inside leon) or the user mentions leon sessions, tabs, panes or blocks.
+description: Drive the leon terminal multiplexer. Open terminals beside you, run commands and wait for them, read other terminals' screens and type into them, and start other agents that report back to you. Use when LEON_SESSION is set (you run inside leon) or the user mentions leon sessions, tabs, panes or blocks. Do not use it for a plain command you can run in your own shell: that needs no leon.
 ---
 
 # Driving leon
@@ -50,8 +50,10 @@ block's ID. The command runs directly, not through a shell: for pipes, `&&` or g
 - `-c DIR` / `--cwd DIR`: working directory (default: yours).
 
 To put a terminal beside you instead of in a new tab, use `leon split` (same flags plus
-`--split right|left|above|below`) when your leon has it: check `leon split --help`. If it doesn't,
-use `leon run`.
+`--split right|left|above|below`).
+
+A command you can run in your own shell and read the output of needs none of this: run it there.
+Use leon for what must outlive your call, run beside you, or be seen by the user.
 
 ## Type into a terminal
 
@@ -60,6 +62,9 @@ leon send -b "$id" 'print(6 * 7)'      # types the text; no Enter is added
 leon send-key -b "$id" enter            # presses keys
 printf 'line 1\nline 2\n' | leon send -b "$id"   # text from stdin
 ```
+
+Typing isn't idempotent: if a `send` failed or you aren't sure it landed, `leon capture` the
+screen and look before you send again, or the text goes in twice.
 
 `leon send-key` takes keys in binding syntax, pressed in order: `enter`, `escape`, `tab`, `space`,
 `backspace`, `delete`, `up`, `down`, `left`, `right`, `home`, `end`, `pageup`, `pagedown`, `f1`–`f12`,
@@ -107,7 +112,9 @@ leon block ls                # blocks in your session: label, pid, command, exit
 leon block inspect "$id"     # one block
 ```
 
-Most commands take `--json` for machine-readable output.
+Most commands take `--json` for machine-readable output. `-H HOST` (a name from `leon hosts`, or
+`ssh://[USER@]HOST[:PORT]`) sends any command to the leon server on another machine; there your
+`LEON_SESSION` and `LEON_BLOCK` mean nothing, so pass `-s`/`-b`.
 
 ## Clean up what you create
 
@@ -154,10 +161,17 @@ Params are inline JSON, `@file`, or `-` for stdin. Use the API for what the comm
 - `1`: failed (also `wait --for` timing out).
 - `2`: bad command line.
 - `3`: target not found or ambiguous (`leon api call` exits `1` for every failed call instead).
-- `4`: server unreachable.
+- `4`: server unreachable. Don't retry in a loop: `leon server status` says whether one runs; the
+  user may have stopped it.
 - `130`: interrupted.
 
 `leon wait` and `leon run --wait` exit with the program's own status instead.
+
+## Other agents
+
+To hand work to another agent and hear back, `leon agent start claude "the task"` runs it in a new
+tab working for you; its reports come to `leon inbox`. Run `leon skill show orchestration` before
+you start one.
 
 ## Recipes
 
@@ -178,4 +192,13 @@ leon wait -b "$id" --text '>>>' --for 10s  # its prompt: typing before it shows 
 leon send -b "$id" 'print(6 * 7)'; leon send-key -b "$id" enter
 leon wait -b "$id" --text 42 --for 10s; leon capture -b "$id" --trim | tail -3
 leon send-key -b "$id" ctrl+d              # python exits; the block closes
+```
+
+Ask another agent and read its answer (it reports back; see `leon skill show orchestration`):
+
+```sh
+id=$(leon agent start --label reviewer claude "Review the diff on this branch; report findings")
+# end your turn: leon types "You have 1 leon message" into your prompt when it reports
+leon inbox                               # its answer, and how to look at its screen
+leon block close "$id"                   # when you are done with it
 ```

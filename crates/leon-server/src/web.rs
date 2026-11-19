@@ -11,6 +11,7 @@ use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 
+use crate::agents::Peer;
 use crate::serve::Shared;
 use crate::web_tls::Tls;
 
@@ -124,7 +125,7 @@ pub(crate) async fn route(stream: TcpStream, shared: &Arc<Shared>, site: Option<
     match (first[0], site) {
         (b'{', _) => {
             let (read, write) = stream.into_split();
-            let _ = crate::serve::connection(read, write, shared).await;
+            let _ = crate::serve::connection(read, write, shared, Peer::Remote).await;
         }
         (b'A'..=b'Z', Some(site)) => http(stream, shared, site, false).await,
         (0x16, Some(Site { tls: Some(tls), .. })) => {

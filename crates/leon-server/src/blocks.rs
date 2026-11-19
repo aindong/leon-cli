@@ -356,6 +356,8 @@ pub struct SetResume {
 pub struct ReportStatus {
     /// `working`, `blocked`, `done` or `error` (also `idle`, or `clear` to remove the record).
     pub state: String,
+    /// With `blocked`: `permission`, `question` or `auth`.
+    pub kind: Option<String>,
     /// One line of text, at most 192 bytes.
     pub title: Option<String>,
     /// One line of text, at most 2048 bytes.
@@ -476,7 +478,8 @@ static TERMINAL_METHODS: LazyLock<Vec<TermMethod>> = LazyLock::new(|| {
              (`leon notify`), for tools that can't write one to the terminal. The spec's limits apply; text \
              OSC 7501 would drop (controls, line breaks, invisible characters) is a 400.",
             |t, a: ReportStatus| {
-                t.report_status(&a.state, a.title.as_deref(), a.msg.as_deref()).map_err(ApiError::bad_request)?;
+                t.report_status(&a.state, a.kind.as_deref(), a.title.as_deref(), a.msg.as_deref())
+                    .map_err(ApiError::bad_request)?;
                 Ok(Empty {})
             },
         ),

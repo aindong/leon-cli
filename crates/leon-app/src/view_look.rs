@@ -46,9 +46,15 @@ impl Workspace {
         self.use_theme();
         // after `use_theme`: the first settings are drawn at once, a change from then on fades
         self.note_theme_names(&reply["settings"]);
+        self.note_cursor_shader(&reply["settings"]);
         // a server older than the setting doesn't report it, and would have skipped a
         // `check_for_updates = false` as unknown: no look of the app's own until it does
         self.check_for_updates = reply["settings"]["check_for_updates"].as_bool();
+        // on unless the config turned it off (a server older than the setting doesn't report it)
+        self.term.card.off = reply["settings"]["link_card"] == false;
+        if self.term.card.off {
+            self.card_cancel(); // a wait or a lookup already started shows nothing
+        }
         self.updates_looked = None; // a reload may have turned it on
         self.look_for_updates();
     }
