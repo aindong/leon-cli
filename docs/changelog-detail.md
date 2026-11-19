@@ -10,13 +10,29 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ### Leon.app never waits on its own server
 
+#### Changed
 - Every call the window makes to This Mac's server (a key, a paste, a split and the directory it
-  opens in, a copy, a cmd-click, End All Sessions) goes through one ordered queue thread, as a
-  host's calls already did: a stuck server no longer freezes the window for the 5 s call timeout.
+  opens in, a copy, a cmd-click, End All Sessions) goes through one ordered queue off the window's
+  thread, as a host's calls already did: a stuck server no longer freezes the window for the 5 s call timeout.
 - The window's copy of each machine's model changes only on its own thread, and only what a
   change touches is drawn again (docs/architecture/gpui.md, R4).
 - A config reload reaches the window through the server's `keymap_changed` event, at once,
   instead of the app asking for the keymap every second.
+
+### HTTPS for the browser page
+
+#### Added
+- `serve_web_cert` and `serve_web_key`: the files `tailscale cert` wrote. The page is then served
+  over HTTPS on the same port and plain HTTP only redirects; leon reloads renewed files and never
+  makes a certificate itself ([web.md](web.md#https)).
+- `server.status`'s `tailnet.web_error` says what is wrong with the files and the command to run;
+  `server.settings` gains both settings, so `api_version` goes from `1.16.0` to `1.17.0`.
+
+### leon in the browser
+
+#### Added
+- `serve_web`: a view-only page over the tailnet ([web.md](web.md)); `server.settings` and
+  `server.status` gain fields, so `api_version` goes from `1.15.0` to `1.16.0`.
 
 ### Cursor shaders
 

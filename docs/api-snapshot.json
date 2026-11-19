@@ -1,5 +1,5 @@
 {
-  "api_version": "1.15.0",
+  "api_version": "1.17.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -285,12 +285,25 @@
                     "type": "null"
                   }
                 ]
+              },
+              "web": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "web_error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
               "state",
               "port",
-              "addresses"
+              "addresses",
+              "web"
             ]
           }
         },
@@ -2976,6 +2989,15 @@
               "cursor_shader_duration": {
                 "type": "number",
                 "format": "double"
+              },
+              "serve_web": {
+                "type": "boolean"
+              },
+              "serve_web_cert": {
+                "type": "string"
+              },
+              "serve_web_key": {
+                "type": "string"
               }
             },
             "required": [
@@ -2994,7 +3016,10 @@
               "serve_tailscale_port",
               "serve_tailscale_tags",
               "cursor_shader",
-              "cursor_shader_duration"
+              "cursor_shader_duration",
+              "serve_web",
+              "serve_web_cert",
+              "serve_web_key"
             ]
           },
           "sources": {

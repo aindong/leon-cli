@@ -41,6 +41,8 @@ since every program in every session ends.
 | `serve_tailscale_tags` | a list of tags such as `"tag:ci"`, at most 16 | `{}` |
 | `cursor_shader` | a Shadertoy-style cursor shader file, or `""` for none ([cursor-shaders.md](../cursor-shaders.md)) | `""` |
 | `cursor_shader_duration` | seconds the cursor shader draws after the cursor changes, 0.1 to 5 | `1` |
+| `serve_web` | `true` or `false` ([web.md](../web.md)) | `false` |
+| `serve_web_cert`, `serve_web_key` | a file's path, from `/` or `~/` ([web.md](../web.md#https)) | `""` (plain HTTP) |
 
 `theme` names a theme `leon theme list` shows (built in or imported); an unknown name is an error.
 
@@ -79,6 +81,8 @@ Reduce Transparency and full screen are opaque, as is `leon.set("translucency", 
 `serve_tailscale` makes the server also listen on this machine's Tailscale addresses, on
 `serve_tailscale_port`, for your own other machines only (and tagged ones with a tag in
 `serve_tailscale_tags`); [cli/hosts.md](../cli/hosts.md#serve-over-tailscale) has the rest.
+`serve_web` also serves a view-only web page there, to the same machines ([web.md](../web.md)),
+over HTTPS when `serve_web_cert` and `serve_web_key` name the files `tailscale cert` wrote.
 
 `cursor_shader` names a GLSL file Leon.app draws over its window as the cursor moves, macOS only;
 `~/` is your home and a relative path is next to init.lua. [cursor-shaders.md](../cursor-shaders.md)

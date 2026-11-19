@@ -67,7 +67,8 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   layout changes (`act_later`: the call, the refetch, then a callback) run in order on one queue
   thread over the call connection, so a slow, stalled or hostile link never holds the thread that
   asked; while the link is down they fail at once. The app sends This Mac's calls through such a
-  queue too (`Remote::queue_calls`; `leon attach` calls This Mac directly). The app's calls whose
+  queue too (`Remote::call_queue`, run on GPUI's background executor; `leon attach` calls This
+  Mac directly). The app's calls whose
   reply it uses (history rows, `find`, `link_at`, a word selection's ends) go through that queue
   too, one of each kind out at a time, and the next wake applies the reply (a copy-mode motion into rows not fetched yet sees
   them on its next try); other selections are worked out in the app. Every call has one deadline

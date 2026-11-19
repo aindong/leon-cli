@@ -90,7 +90,7 @@ attach` and the agent skill. Part of [the architecture](../architecture.md).
   pane does, and `event: {type: "paste", data}`, which the server wraps by the program's
   bracketed-paste mode at that moment (the app's copy of the screen may be older). `block.watch`
   and `dev.leon.terminal.screen` are leon's own, in place of a
-  `data.connect` screen stream over a WebSocket, which leon doesn't serve. The app attaches only to a socket in a private dir.
+  `data.connect` stream; [the web page](web.md) gets them over a WebSocket. The app attaches only to a socket in a private dir.
 - **Scrollback in the app.** Every terminal numbers its lines: `scrolled` counts the lines ever
   pushed into its scrollback, so the screen's top row is line `scrolled`, the oldest kept is
   `scrolled - history`, and appended output never renumbers a line. The count is taken per 4 KiB

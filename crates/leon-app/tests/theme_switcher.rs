@@ -85,26 +85,37 @@ fn enter_keeps_one_theme_for_both_sides(cx: &mut TestAppContext) {
     let (ws, cx) = open(cx, &s.app);
     ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let sand = builtin("leon-sand").unwrap();
+    let generation = || s.app.call("client.keymap", serde_json::json!({})).unwrap()["generation"].as_u64().unwrap();
+    let loaded = generation();
     act(&ws, cx, "client.theme.change");
     cx.simulate_input("sand");
     cx.simulate_keystrokes("enter");
     let at_once = ws.read_with(cx, |ws, _| (ws.theme(), ws.palette_open()));
     // never back to the old theme while init.lua is written and the server reloads
     let mut wavered = vec![];
-    let written = shows(cx, |cx| {
+    let mut watch = |cx: &mut VisualTestContext| {
         let t = ws.read_with(cx, |ws, _| ws.theme());
         if t != sand {
             wavered.push(t.bg);
         }
+    };
+    let written = shows(cx, |cx| {
+        watch(cx);
         setting(&s) == ("leon-sand".into(), "leon-sand".into())
     });
     let got = setting(&s);
+    // the app's reload runs on a thread of its own: ask for the settings once it has landed
+    let reloaded = shows(cx, |cx| {
+        watch(cx);
+        generation() > loaded
+    });
     ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let after_reload = ws.read_with(cx, |ws, _| ws.theme());
     s.app.stop();
     assert_eq!(at_once, (sand, false), "↩ closes the list and keeps leon-sand at once");
     assert!(written, "init.lua names leon-sand for both appearances: {got:?}");
     assert!(wavered.is_empty(), "the theme went back meanwhile: {wavered:x?}");
+    assert!(reloaded, "the server reloaded init.lua");
     assert_eq!(after_reload, sand, "the window keeps drawing with it after the server reloads");
 }
 

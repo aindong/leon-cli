@@ -110,7 +110,8 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   threads and reach the UI only through a channel a `cx.spawn` task awaits (the wake), as Zed's
   terminal does (the link's retry and watchdog sleeps in `remote_link.rs` are on its own
   threads). The window's calls to every server, This Mac's too, go through the remote's one
-  ordered queue thread (`Remote::queue_calls`); a reply the window uses comes back on a wake or
+  ordered queue: a link's thread, or for This Mac a future the window runs on GPUI's background
+  executor (`Remote::call_queue`, so tests run it on GPUI's test scheduler); a reply the window uses comes back on a wake or
   to a task awaiting it, and a call made from another's reply is one job (`act_after`), so
   nothing queued meanwhile comes between them. Why: entities are main-thread only, and a
   blocked main thread stalls every window and every frame. Check: test (no thread, sleep or
