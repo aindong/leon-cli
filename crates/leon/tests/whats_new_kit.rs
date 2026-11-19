@@ -5,8 +5,6 @@
 
 mod support;
 
-use support::Env;
-
 fn read(path: &str) -> String {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     std::fs::read_to_string(root.join(path)).unwrap_or_else(|e| panic!("{path}: {e}"))
@@ -24,7 +22,7 @@ fn the_clips_shader_is_leon_s_own() {
 #[cfg(target_os = "macos")]
 #[test]
 fn the_clips_shader_compiles() {
-    let env = Env::new();
+    let env = support::Env::new();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let shader = root.join("scripts/demo-clips/trail.glsl").canonicalize().unwrap();
     let init = env.dir.path().join("init.lua");

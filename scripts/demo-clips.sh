@@ -19,9 +19,12 @@ cd "$(dirname "$0")/.."
 repo=$(pwd)
 scenes=(agents link-card tabs cursor-shader)
 if [ "${1:-}" = --only ]; then
-  case " ${scenes[*]} " in *" ${2:-} "*) scenes=("$2") ;; *) echo "demo-clips: --only takes one of: ${scenes[*]}" >&2; exit 2 ;; esac
+  for s in "${scenes[@]}"; do [ "$s" = "${2:-}" ] && only=$s; done
+  [ -n "${only:-}" ] || { echo "demo-clips: --only takes one of: ${scenes[*]}" >&2; exit 2; }
+  scenes=("$only")
   shift 2
 fi
+[ $# -le 1 ] || { echo "usage: scripts/demo-clips.sh [--only NAME] [OUT_DIR]" >&2; exit 2; }
 out=${1:-$repo/target/clips}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)

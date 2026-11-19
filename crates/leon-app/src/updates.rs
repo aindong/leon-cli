@@ -195,8 +195,10 @@ impl Updater {
     /// An updater whose `updates.json` is `store`, for the install `find` gives.
     pub fn new(store: Option<PathBuf>, find: Find, wake: Wake) -> Updater {
         let file = store.as_deref().and_then(|p| std::fs::read(p).ok());
-        let existed = file.is_some();
-        let mut saved: Saved = file.and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        let read: Option<Saved> = file.and_then(|b| serde_json::from_slice(&b).ok());
+        // only a file that reads is an earlier launch's: a broken one says nothing either way
+        let existed = read.is_some();
+        let mut saved = read.unwrap_or_default();
         let mut phase = Phase::Idle;
         let version = env!("CARGO_PKG_VERSION");
         if store.is_some() && saved.seen.as_deref() != Some(version) {
@@ -388,6 +390,14 @@ fn run(inner: &Mutex<Inner>, find: &Find, wake: &Wake, store: Option<&Path>, job
                 Check::Available(release) => {
                     let how = how(&t);
                     let mut i = lock(inner);
+                    // a release the user dismissed would hide the notice it replaces, and show nothing
+                    if !asked
+                        && matches!(i.phase, Phase::Updated(_))
+                        && i.saved.dismissed.as_ref() == Some(&release.version)
+                    {
+                        i.release = Some(Arc::new(release));
+                        return None;
+                    }
                     // asked for, a dismissed release is shown again: the user wants the answer
                     if asked && i.saved.dismissed.as_ref() == Some(&release.version) {
                         i.saved.dismissed = None;

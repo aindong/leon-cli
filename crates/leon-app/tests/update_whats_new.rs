@@ -49,6 +49,13 @@ fn a_first_install_says_nothing() {
     assert!(updater(&store).notice().is_none());
 }
 
+#[test]
+fn an_unreadable_file_is_not_an_update() {
+    let (_d, store) = state();
+    std::fs::write(&store, b"").unwrap();
+    assert!(updater(&store).notice().is_none(), "an empty or broken file says nothing");
+}
+
 #[gpui::test]
 fn whats_new_is_a_button_and_a_palette_row(cx: &mut TestAppContext) {
     let s = setup();
