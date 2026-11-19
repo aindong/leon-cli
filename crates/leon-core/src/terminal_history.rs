@@ -165,7 +165,12 @@ impl Store {
     }
 
     /// Whether stored row `i` wrapped: its line goes on in the next row.
-    pub(super) fn wrapped(&self, i: usize) -> bool {
+    /// A row from a wider pane whose wrap is past `cols` doesn't wrap here: a scratch `cols` wide
+    /// cuts it there.
+    pub(super) fn wrapped(&self, i: usize, cols: usize) -> bool {
+        if self.rows.get(i).is_none_or(|r| r.text.chars().count() > cols) {
+            return false;
+        }
         // a wrapped row's last cell has WRAPLINE, so its runs aren't the plain ones
         let last = self.rows.get(i).and_then(|r| r.runs.as_deref()?.last());
         last.is_some_and(|r| r.flags.contains(Flags::WRAPLINE))

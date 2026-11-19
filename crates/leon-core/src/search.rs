@@ -164,8 +164,12 @@ impl Finder {
         Ok(Some(Finder { regex, pattern: q.regex, limit, started: thread_cpu(), found: Found::default() }))
     }
 
-    /// Whether more may be found: neither the limit nor the budget is spent.
-    pub fn going(&self) -> bool {
+    /// Whether more may be found: neither the limit nor the budget is spent (once it is, the
+    /// find is `truncated`).
+    pub fn going(&mut self) -> bool {
+        if thread_cpu().saturating_sub(self.started) > MAX_FIND_TIME {
+            self.found.truncated = true;
+        }
         !self.found.truncated
     }
 

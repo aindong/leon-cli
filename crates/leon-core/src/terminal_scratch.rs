@@ -69,7 +69,7 @@ impl<'a> View<'a> {
     /// Whether line `n`'s logical line goes on in the next.
     fn wrapped(&self, n: usize) -> bool {
         if n < self.boundary {
-            return self.emu.store.wrapped(n - self.first);
+            return self.emu.store.wrapped(n - self.first, self.cols);
         }
         n <= self.last && self.emu.term.grid()[self.point(n, self.cols - 1)].flags.contains(Flags::WRAPLINE)
     }
@@ -86,6 +86,12 @@ impl<'a> View<'a> {
             }
         }
         t
+    }
+
+    /// Whether alacritty's first row goes on a line that began in the store: then reading it needs
+    /// the store too.
+    fn crosses(&self) -> bool {
+        self.boundary > self.first && self.wrapped(self.boundary - 1)
     }
 
     /// The lines of the logical line around `n`, at most `most` either way: `(from, to)`.
@@ -152,7 +158,7 @@ impl Terminal {
         // clamped as `search::select` clamps them
         let anchor = if anchor.line < v.first { Pos { line: v.first, col: 0 } } else { anchor };
         let head = Pos { line: head.line.clamp(v.first, v.last), col: head.col.min(v.cols - 1) };
-        if anchor.line.min(head.line) >= v.boundary {
+        if anchor.line.min(head.line) >= v.boundary && !v.crosses() {
             return search::select(&mut emu.term, scrolled, kind, anchor, head, text);
         }
         if anchor.line > v.last || anchor.col >= v.cols {
@@ -167,13 +173,17 @@ impl Terminal {
     pub fn link_at(&self, at: Pos) -> Option<Link> {
         let emu = lock(&self.term);
         let v = View::new(&emu, self.scrolled());
-        if at.line >= v.boundary {
+        if at.line >= v.boundary && !v.crosses() {
             return search::link_at(&emu.term, v.scrolled, at);
         }
-        if at.line < v.first {
+        if at.line < v.first || at.line > v.last {
             return None;
         }
+        // an OSC 8 link runs on over its cells, across line ends too, as far as alacritty looks
+        let reach = search::MAX_URI * 4 / v.cols + 2;
         let (from, to) = v.logical(at.line, CHUNK / 2);
+        let from = from.min(at.line.saturating_sub(reach)).max(v.first);
+        let to = to.max(at.line + reach + 1).min(v.last + 1);
         search::link_at(&v.scratch(from, to), from, at)
     }
 }
@@ -202,12 +212,29 @@ fn ends(v: &View, kind: Kind, anchor: Pos, head: Pos) -> Option<(Pos, Pos)> {
         return Some((Pos { line: top, col: l }, Pos { line: bottom, col: r }));
     }
     let (lo, hi) = (anchor.min(head), anchor.max(head));
-    // each end on its own logical line, the other end of the selection at the scratch's far side
-    let (from, to) = around(lo.line);
-    let far = Pos { line: to - 1, col: v.cols - 1 };
-    let start = search::select(&mut v.scratch(from, to), from, kind, lo, far, false)?.start;
-    let (from, to) = around(hi.line);
-    let end = search::select(&mut v.scratch(from, to), from, kind, Pos { line: from, col: 0 }, hi, false)?.end;
+    // each end widened on a scratch of its own logical line, as alacritty widens a selection's
+    // ends: half a wide character takes the whole one, then words or lines grow outwards
+    let widen = |at: Pos, left: bool| {
+        let (from, to) = around(at.line);
+        let sc = v.scratch(from, to);
+        let mut p = Point::new(Line((at.line - from) as i32), Column(at.col));
+        let flags = sc.grid()[p].flags;
+        if left && flags.contains(Flags::WIDE_CHAR_SPACER) && p.column.0 > 0 {
+            p.column -= 1;
+        }
+        if !left && flags.contains(Flags::WIDE_CHAR) && p.column.0 < v.cols - 1 {
+            p.column += 1;
+        }
+        p = match (kind, left) {
+            (Kind::Word, true) => sc.semantic_search_left(p),
+            (Kind::Word, false) => sc.semantic_search_right(p),
+            (Kind::Line, true) => sc.line_search_left(p),
+            (Kind::Line, false) => sc.line_search_right(p),
+            _ => p,
+        };
+        Pos { line: from + p.line.0 as usize, col: p.column.0 }
+    };
+    let (start, end) = (widen(lo, true), widen(hi, false));
     Some((start, end))
 }
 
@@ -220,14 +247,12 @@ fn copied(v: &View, kind: Kind, start: Pos, end: Pos) -> String {
         let to = v.cut(from, end.line + 1);
         let first = if from == start.line || block { start.col } else { 0 };
         let last = if to == end.line + 1 || block { end.col } else { v.cols - 1 };
-        let rows = (to - from - 1) as i32;
-        let mut scratch = v.scratch(from, to);
-        out += &search::text_of(
-            &mut scratch,
-            block,
-            Point::new(Line(0), Column(first)),
-            Point::new(Line(rows), Column(last)),
-        );
+        // with the row before, which alacritty reads when a copy's last row wraps a wide character
+        let before = usize::from(from > v.first);
+        let (top, bottom) = (before as i32, (to - from - 1 + before) as i32);
+        let mut scratch = v.scratch(from - before, to);
+        let (first, last) = (Point::new(Line(top), Column(first)), Point::new(Line(bottom), Column(last)));
+        out += &search::text_of(&mut scratch, block, first, last);
         // a chunk's text ends without the newline alacritty drops at a copy's end
         if to <= end.line && (block || !v.wrapped(to - 1)) {
             out.push('\n');
