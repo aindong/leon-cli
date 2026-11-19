@@ -30,6 +30,12 @@ pub enum LinkState {
     },
 }
 
+/// Where a remote's queued jobs go: a link's thread, or This Mac's task (`Remote::call_queue`).
+pub(super) enum Queue {
+    Thread(std::sync::mpsc::Sender<Job>),
+    Task(futures::channel::mpsc::UnboundedSender<Job>),
+}
+
 /// The reply a queued call hands back, on the queue thread.
 pub(super) type Done = Box<dyn FnOnce(Result<Value, ApiError>) + Send>;
 
@@ -53,30 +59,44 @@ pub(super) struct Job {
 pub(super) fn run_queue(shared: Weak<Shared>, jobs: Receiver<Job>) {
     for job in jobs {
         let Some(shared) = shared.upgrade() else { return };
-        let up = || *lock(&shared.link) == LinkState::Up; // not held over the call: the UI reads it
-        let call = |method: &str, params| {
-            if up() {
-                shared.call(method, params)
-            } else {
-                Err(unreachable("the link is down"))
-            }
-        };
-        let mut r = call(&job.method, job.params);
-        let mut method = job.method;
-        if let Some(next) = job.next {
-            let (m, params) = next(r);
-            r = call(&m, params);
-            method = m;
+        run_job(&shared, job);
+    }
+}
+
+/// This Mac's queue, as a future the window runs on its executor's background threads
+/// (`Remote::call_queue`): the same jobs in the same order as a link's queue thread.
+pub(super) async fn run_queue_task(shared: Weak<Shared>, mut jobs: futures::channel::mpsc::UnboundedReceiver<Job>) {
+    while let Some(job) = futures::StreamExt::next(&mut jobs).await {
+        let Some(shared) = shared.upgrade() else { return };
+        run_job(&shared, job);
+    }
+}
+
+/// One job: its call (and the call made from its reply), the refetch, then `done` with the reply.
+fn run_job(shared: &Shared, job: Job) {
+    let up = || *lock(&shared.link) == LinkState::Up; // not held over the call: the UI reads it
+    let call = |method: &str, params| {
+        if up() {
+            shared.call(method, params)
+        } else {
+            Err(unreachable("the link is down"))
         }
-        if job.refresh {
-            let _ = shared.refresh();
-        }
-        match job.done {
-            Some(done) => done(r),
-            None => {
-                if let Err(e) = r {
-                    eprintln!("leon: {method} failed: {}", e.message);
-                }
+    };
+    let mut r = call(&job.method, job.params);
+    let mut method = job.method;
+    if let Some(next) = job.next {
+        let (m, params) = next(r);
+        r = call(&m, params);
+        method = m;
+    }
+    if job.refresh {
+        let _ = shared.refresh();
+    }
+    match job.done {
+        Some(done) => done(r),
+        None => {
+            if let Err(e) = r {
+                eprintln!("leon: {method} failed: {}", e.message);
             }
         }
     }
@@ -223,7 +243,10 @@ impl Remote {
     fn enqueue(&self, job: Job) {
         if let Some(queue) = self.queue.get() {
             self.asks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let _ = queue.send(job);
+            match queue {
+                Queue::Thread(q) => drop(q.send(job)),
+                Queue::Task(q) => drop(q.unbounded_send(job)),
+            }
             return;
         }
         let Job { mut method, mut params, next, refresh, done } = job;

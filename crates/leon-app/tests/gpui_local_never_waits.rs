@@ -2,15 +2,18 @@
 //! answers the handshake and the model, then never answers the calls a window makes: a key, a
 //! split (which asks the pane's working directory), a layout call, a copy, a cmd-click and Quit
 //! and End All Sessions each return at once, where before each waited out the 5 s call timeout.
-//! They wait on the calls' thread instead, one after another, which the window never sees.
+//! Each is timed alone, before the test scheduler runs the queue: in the app the queue runs on
+//! GPUI's background threads, where an unanswered call holds only the queue. A cmd-click can't be
+//! sent without running the queue in GPUI's test context; the scan below covers it with every
+//! other call a view makes.
 mod fake_support;
 mod m10b_support;
 
 use std::time::{Duration, Instant};
 
 use fake_support::{open_fake, serve, Answer};
-use gpui::{Modifiers, MouseButton, TestAppContext};
-use leon_app::view::QuitAndEndAll;
+use gpui::{Keystroke, TestAppContext, VisualTestContext};
+use leon_app::view::{QuitAndEndAll, Workspace};
 use m10b_support::*;
 
 /// Each handler's limit: generous for a loaded machine, well under the 5 s a call waited.
@@ -22,51 +25,63 @@ fn took(f: impl FnOnce()) -> Duration {
     t.elapsed()
 }
 
+/// Run an app action by name and return, the queue not run.
+fn action(ws: &gpui::Entity<Workspace>, cx: &mut VisualTestContext, name: &str) -> Duration {
+    took(|| cx.update(|window, cx| ws.update(cx, |ws, cx| ws.run_action(name, None, "test", window, cx))))
+}
+
 #[gpui::test]
 fn a_this_mac_server_that_never_answers_holds_nothing(cx: &mut TestAppContext) {
     let fake = serve(Answer::Model);
-    let opened = Instant::now();
     let (ws, cx) = open_fake(cx, &fake);
-    // the grid fits its PTY from prepaint: a resize nobody answers
-    assert!(opened.elapsed() < AT_ONCE * 3, "the window opened in {:?}", opened.elapsed());
-    let area = at(cx, "terminal-block:0").expect("the pane is drawn");
-    // first, while the queue is clear: every unanswered call after this holds it for its timeout
+    assert!(drawn(cx, "terminal-block:0"), "the pane is drawn");
+    // first, while the queue is clear (a selection's range is answered)
     act(&ws, cx, "pane.select_all");
     let ranged = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.selection_range("block:0").is_some()));
     assert!(ranged, "the selection's range came back: {:?}", fake.log.lock().unwrap());
 
-    let key = took(|| {
-        cx.simulate_keystrokes("a");
-        cx.run_until_parked();
-    });
+    let mut typed = false;
+    let key = took(|| typed = cx.update(|window, cx| window.dispatch_keystroke(Keystroke::parse("a").unwrap(), cx)));
+    assert!(typed, "the key was handled");
     assert!(key < AT_ONCE, "a key took {key:?}");
-
-    let split = took(|| act(&ws, cx, "pane.split.right"));
+    let split = action(&ws, cx, "pane.split.right");
     assert!(split < AT_ONCE, "a split (its cwd asked first) took {split:?}");
-
-    let zoom = took(|| act(&ws, cx, "pane.zoom"));
+    let zoom = action(&ws, cx, "pane.zoom");
     assert!(zoom < AT_ONCE, "a layout call took {zoom:?}");
-
-    let copy = took(|| act(&ws, cx, "pane.copy"));
+    let copy = action(&ws, cx, "pane.copy");
     assert!(copy < AT_ONCE, "a copy took {copy:?}");
-
-    let click = took(|| {
-        cx.simulate_mouse_down(
-            gpui::point(area.origin.x + gpui::px(4.), area.origin.y + gpui::px(4.)),
-            MouseButton::Left,
-            Modifiers::command(),
-        );
-        cx.run_until_parked();
-    });
-    assert!(click < AT_ONCE, "a cmd-click (the link under it asked) took {click:?}");
-
-    cx.dispatch_action(QuitAndEndAll);
-    cx.run_until_parked();
+    cx.update(|window, cx| window.dispatch_action(Box::new(QuitAndEndAll), cx));
     assert!(cx.has_pending_prompt(), "End All Sessions asks first");
-    let quit = took(|| {
-        cx.simulate_prompt_answer("End All Sessions");
-        cx.run_until_parked();
-    });
-    // the stop waits on the calls' thread behind the calls above, each held for its timeout
+    let quit = took(|| cx.simulate_prompt_answer("End All Sessions"));
     assert!(quit < AT_ONCE, "End All Sessions (its server.stop) took {quit:?}");
+    let sent = fake.log.lock().unwrap().clone();
+    assert!(!sent.iter().any(|m| m == "dev.leon.terminal.write"), "the key waits in the queue: {sent:?}");
+    fake.hang_up(); // the queued calls fail at once now, not after their timeouts
+}
+
+/// No view file makes a call that waits for its reply (`Remote::call`, `act`, `lines`), but the
+/// first session made before the window draws and the test-only helpers that say they wait.
+#[test]
+fn no_view_code_waits_for_a_server() {
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let allowed = [
+        ("view.rs", "app.act(\"session.create\""),
+        ("view_poll.rs", "local().call(\"client.keymap\""),
+        ("view_poll.rs", "local().call(\"server.settings\""),
+        ("view_scroll.rs", "self.app.lines("),
+    ];
+    for e in std::fs::read_dir(&src).unwrap().flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if !name.starts_with("view") {
+            continue;
+        }
+        let text = std::fs::read_to_string(e.path()).unwrap();
+        for line in text.lines().filter(|l| !l.trim_start().starts_with("//")) {
+            // the workspace's own `self.call` queues (view_calls.rs); a remote's `call` and `act` wait
+            let waits =
+                ["app.call(", "().call(", "remote.call(", ".act(\"", "app.lines("].iter().any(|w| line.contains(w));
+            let ok = allowed.iter().any(|(f, w)| *f == name && line.contains(w));
+            assert!(!waits || ok, "{name} waits for a server on the window's thread: {}", line.trim());
+        }
+    }
 }

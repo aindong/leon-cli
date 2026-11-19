@@ -29,6 +29,17 @@ pub struct Fake {
     /// The calls past the handshake and the model, in arrival order: a `block.method` by its
     /// method (`dev.leon.terminal.write`), a `block.event` by its event's type (`block.event paste`).
     pub log: Arc<Mutex<Vec<String>>>,
+    /// Every connection made, and whether the server hung up.
+    conns: Arc<Mutex<(Vec<UnixStream>, bool)>>,
+}
+
+impl Fake {
+    /// Close every connection and refuse new ones: a call waiting for a reply fails at once.
+    pub fn hang_up(&self) {
+        let mut c = self.conns.lock().unwrap();
+        c.1 = true;
+        c.0.iter().for_each(|s| drop(s.shutdown(std::net::Shutdown::Both)));
+    }
 }
 
 fn reply(id: &Value, result: Value) -> Vec<u8> {
@@ -96,14 +107,21 @@ pub fn serve(answer: Answer) -> Fake {
     let socket = dir.path().join("server.sock");
     let listener = UnixListener::bind(&socket).unwrap();
     let log = Arc::new(Mutex::new(Vec::new()));
-    let l = log.clone();
+    let conns: Arc<Mutex<(Vec<UnixStream>, bool)>> = Arc::default();
+    let (l, c) = (log.clone(), conns.clone());
     std::thread::spawn(move || {
         for s in listener.incoming().flatten() {
+            let mut kept = c.lock().unwrap();
+            if kept.1 {
+                continue; // hung up: dropped at once
+            }
+            kept.0.extend(s.try_clone().ok());
+            drop(kept);
             let l = l.clone();
             std::thread::spawn(move || connection(s, answer, l));
         }
     });
-    Fake { _dir: dir, socket, log }
+    Fake { _dir: dir, socket, log, conns }
 }
 
 /// A window on the fake.

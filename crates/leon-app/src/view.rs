@@ -254,8 +254,8 @@ impl Workspace {
         if app.model().sessions.is_empty() {
             let _ = app.act("session.create", json!({}));
         }
-        if let Err(e) = app.queue_calls() {
-            eprintln!("leon: can't start the calls' thread: {e}"); // calls then wait, as before
+        if let Some(queue) = app.call_queue() {
+            cx.background_executor().spawn(queue).detach();
         }
         app.commit(); // the window's copy of the model, moved on only by the wake task
         let focus = cx.focus_handle();

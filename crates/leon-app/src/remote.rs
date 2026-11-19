@@ -13,7 +13,6 @@ use std::io::{self, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -45,7 +44,6 @@ use conn::{left, Conn};
 use events::{attach, read_events};
 pub use fetch_model::decode_overlays;
 use fetch_model::{fetch, read_line};
-use link::Job;
 pub use link::LinkState;
 pub use model::{Block, Model, Session};
 
@@ -170,9 +168,10 @@ type Asked = ((u16, u16), (usize, usize));
 
 pub struct Remote {
     shared: Arc<Shared>,
-    /// The window's calls go through here (`link::run_queue`): over a link from the start, on This
-    /// Mac once the window asks (`queue_calls`); `leon attach` here calls directly.
-    queue: OnceLock<Sender<Job>>,
+    /// The window's calls go through here: over a link a thread's from the start
+    /// (`link::run_queue`), on This Mac the window's task once it asks (`call_queue`); `leon
+    /// attach` here calls directly.
+    queue: OnceLock<link::Queue>,
     /// The window's copy of the model, moved on only by `commit` (on the window's thread); until
     /// the first commit `model` reads the reader thread's own (`leon attach`).
     shown: OnceLock<Mutex<Model>>,
@@ -246,7 +245,13 @@ impl Remote {
             asks: AtomicU64::new(0),
         };
         if retry.is_some() {
-            r.queue_calls()?;
+            let (tx, jobs) = std::sync::mpsc::channel();
+            let q = Arc::downgrade(&r.shared);
+            std::thread::Builder::new()
+                .name("leon-link-calls".into())
+                .spawn(move || link::run_queue(q, jobs))
+                .map_err(|e| e.to_string())?;
+            let _ = r.queue.set(link::Queue::Thread(tx));
             let w = Arc::downgrade(&r.shared);
             std::thread::Builder::new()
                 .name("leon-link-watchdog".into())
@@ -256,20 +261,14 @@ impl Remote {
         Ok(r)
     }
 
-    /// From now on `send`, `send_then` and `act_later` go through one ordered queue on a thread of
-    /// its own, as over a link, so the window never waits on this server (ADR R8). Once.
-    pub fn queue_calls(&self) -> Result<(), String> {
-        if self.queue.get().is_some() {
-            return Ok(());
-        }
-        let (tx, jobs) = std::sync::mpsc::channel();
-        let q = Arc::downgrade(&self.shared);
-        std::thread::Builder::new()
-            .name("leon-calls".into())
-            .spawn(move || link::run_queue(q, jobs))
-            .map_err(|e| e.to_string())?;
-        let _ = self.queue.set(tx);
-        Ok(())
+    /// From now on `send`, `send_then` and `act_later` go through one ordered queue, as over a
+    /// link, so the window never waits on this server (docs/architecture/gpui.md R8): the queue is
+    /// the returned future, which the window runs on its executor's background threads (and its
+    /// test scheduler runs deterministically). None once a queue runs.
+    pub fn call_queue(&self) -> Option<impl std::future::Future<Output = ()> + Send + 'static> {
+        let (tx, jobs) = futures::channel::mpsc::unbounded();
+        self.queue.set(link::Queue::Task(tx)).ok()?;
+        Some(link::run_queue_task(Arc::downgrade(&self.shared), jobs))
     }
 
     /// The model as the window last committed it, or before any commit as last received. Hold
