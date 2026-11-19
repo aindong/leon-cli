@@ -171,7 +171,9 @@ impl Escapes {
             (Scan::Params, b'h' | b'l') => {
                 // the mouse modes replace each other (xterm): setting or resetting another ends X10
                 for p in self.params.split(|&c| c == b';') {
-                    match p {
+                    // as numbers, as vte reads them: `01049` is 1049
+                    let zeros = p.iter().take_while(|&&c| c == b'0').count().min(p.len().saturating_sub(1));
+                    match &p[zeros..] {
                         b"9" => self.x10 = b == b'h',
                         b"1049" => self.alt = b == b'h',
                         b"1000" | b"1001" | b"1002" | b"1003" => self.x10 = false,

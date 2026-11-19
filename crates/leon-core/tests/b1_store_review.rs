@@ -180,3 +180,29 @@ fn a_linked_blank_keeps_its_link_in_the_store() {
         );
     }
 }
+
+#[test]
+fn a_cap_of_zero_keeps_no_history() {
+    let t = live();
+    t.write((0..300).map(|i| format!("line-{i}\r\n")).collect::<String>().as_bytes()).unwrap();
+    until(&t, "printed", |t| t.text(true).ends_with("line-299"));
+    t.set_scrollback(0);
+    assert_eq!(t.lines(0, 0, &DARK).history, 0, "nothing kept at once");
+    t.write(b"more\r\nand more\r\n").unwrap();
+    until(&t, "printed more", |t| t.text(true).ends_with("and more"));
+    assert_eq!(t.lines(0, 0, &DARK).history, 0, "nothing kept after more output");
+}
+
+#[test]
+fn a_zero_padded_screen_switch_is_the_same_switch() {
+    let t = live();
+    t.write((0..3000).map(|i| format!("kept-{i}\r\n")).collect::<String>().as_bytes()).unwrap();
+    until(&t, "printed", |t| t.text(true).ends_with("kept-2999"));
+    until(&t, "moved into the store", |t| t.with_term(|t| t.grid().history_size()) <= 1000);
+    // vte reads `01049` as 1049: the clear is the alternate screen's
+    t.write(b"\x1b[?01049hdrawn\x1b[3J").unwrap();
+    until(&t, "drawn", |t| t.text(true).ends_with("drawn"));
+    t.write(b"\x1b[?01049lback\r\n").unwrap();
+    until(&t, "back", |t| t.text(true).ends_with("back"));
+    assert_eq!(lost(&t, "kept", 3000), Vec::<usize>::new(), "the primary screen's history is kept");
+}

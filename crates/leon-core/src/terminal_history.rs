@@ -253,9 +253,12 @@ impl Store {
                 self.rows.shrink_to(self.rows.len() + GROW);
             }
         }
-        // the limit follows the cap (raised too), and drops what alacritty holds past it
+        // the limit follows the cap (raised too), and drops what alacritty holds past it (all of
+        // it at a cap of 0, though the limit stays 1 for `counting`)
         if !alt(term) {
-            term.grid_mut().update_history(self.limit());
+            let g = term.grid_mut();
+            g.update_history(self.cap);
+            g.update_history(self.limit());
         }
     }
 
