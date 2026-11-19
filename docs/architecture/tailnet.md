@@ -48,7 +48,8 @@ of [the architecture](../architecture.md); the ssh path it sits beside is in [Ho
   of tailscaled's own doesn't count against the caller.
 - **The same protocol.** A connection let in goes to `serve::connection`, the code the Unix socket
   uses (the stream halves are generic): the 1 MiB request line cap, events, resume and the idle
-  count all apply. A caller can do what a local client can.
+  count all apply. A caller can do what a local client can. Only the API is served: a connection
+  whose first byte isn't `{` (an HTTP request, say) is closed unread.
 - **`tailnet://HOST[:PORT]`** is an `Endpoint` like `ssh://` (no user part; default port 7297),
   so `-H`, the hosts list, `leon attach` and the app reach it through the same `Link`: the link's
   Unix socket keeps its peer-uid check, and each connection, instead of ssh, is

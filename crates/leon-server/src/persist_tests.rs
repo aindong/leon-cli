@@ -207,3 +207,29 @@ async fn m20_persist_hidden_float_only_and_drawer_roundtrip() {
     v["sessions"][0]["windows"][0]["floating"][0]["bounds"]["width"] = json!(2);
     assert!(check_json(&v).is_err());
 }
+
+#[test]
+fn saved_reports_are_capped_newest_first() {
+    let mut st = State::default();
+    let parents = ["block:a", "block:b", "block:c", "block:d", "block:e"];
+    for parent in parents {
+        for i in 0..300 {
+            let r = leon_core::agents::Report {
+                block_id: "block:w".into(),
+                label: None,
+                agent: "claude".into(),
+                state: "done".into(),
+                kind: None,
+                title: None,
+                body: Some(format!("{parent} {i}")),
+                at: 0,
+            };
+            st.agents.push(parent, r);
+        }
+    }
+    let mut left = SAVED_REPORTS;
+    let saved: Vec<_> = parents.iter().map(|p| saved_inbox(&st, p, &mut left)).collect();
+    assert_eq!(saved.iter().map(Vec::len).sum::<usize>(), SAVED_REPORTS, "never more than the cap in all");
+    assert_eq!(saved[0].last().unwrap().body.as_deref(), Some("block:a 299"), "the newest are kept");
+    assert_eq!(saved[0][0].body.as_deref(), Some("block:a 44"), "an inbox keeps its newest 256");
+}
