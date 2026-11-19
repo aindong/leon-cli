@@ -72,9 +72,11 @@ impl Workspace {
             }
         }
         let Some((sid, id, f)) = self.target_screen() else { return };
-        // typed text goes on to the input handler (view_input.rs), which an input method composes
-        // through; one `retext` changed is final (automation, not an input method): sent here
-        if crate::input::typed(ks).is_some() && ks.key_char == ev.keystroke.key_char {
+        // typed text goes on to the input handler (view_input.rs), registered while the pane has
+        // the focus, which an input method composes through; one `retext` changed is final
+        // (automation, not an input method): sent here
+        let retexted = ks.key_char != ev.keystroke.key_char;
+        if crate::input::typed(ks).is_some() && !retexted && self.focus.is_focused(window) {
             return;
         }
         if let Some(bytes) = crate::input::key_bytes(ks, f.app_cursor) {

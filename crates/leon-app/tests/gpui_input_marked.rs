@@ -61,7 +61,7 @@ fn marked_text_shows_at_the_cursor_and_only_the_commit_is_sent(cx: &mut TestAppC
     assert_eq!(range, Some(0..3), "marked, in UTF-16");
     assert_eq!(candidates, Some(here), "the candidate window at the cursor");
     assert!(!hold, "press-and-hold off: a held key repeats");
-    assert_eq!((read.as_deref(), adjusted), (Some("ほん"), Some(1..3)), "the marked text reads back");
+    assert_eq!((read.as_deref(), adjusted), (Some("ほん"), None), "the marked text reads back, the range as asked");
     assert_eq!(selected, Some(1..3), "with the selection the input method set");
     assert!(!leaked, "the pane got none of the marked text");
     assert!(after_commit.is_none(), "no marked text once committed");

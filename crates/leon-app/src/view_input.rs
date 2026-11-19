@@ -19,7 +19,9 @@ pub(super) struct Marked {
 #[derive(Default)]
 pub(super) struct Ime {
     marked: Option<Marked>,
-    /// Texts the handler wrote to a pane (tests).
+    /// Marked text ended unsent (its pane lost the focus or stopped being the target) while the
+    /// input method may still hold it: its next commit is dropped, unless it marks text again.
+    stale: bool,
     commits: u64,
 }
 
@@ -91,10 +93,11 @@ impl EntityInputHandler for Workspace {
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<String> {
+        // only a range inside the marked text, never adjusted: GPUI writes an adjusted range through
+        // AppKit's `actualRange`, which may be null (platform/mac/window.rs, attributedSubstring…)
+        let _ = adjusted;
         let utf16: Vec<u16> = self.ime.marked.as_ref()?.text.encode_utf16().collect();
-        let range = range.start.min(utf16.len())..range.end.min(utf16.len());
-        *adjusted = Some(range.clone());
-        Some(String::from_utf16_lossy(&utf16[range]))
+        String::from_utf16(utf16.get(range)?).ok()
     }
 
     fn selected_text_range(&mut self, _: bool, _: &mut Window, _: &mut Context<Self>) -> Option<UTF16Selection> {
@@ -106,9 +109,12 @@ impl EntityInputHandler for Workspace {
         self.ime.marked.as_ref().map(|m| 0..m.text.encode_utf16().count())
     }
 
+    /// AppKit: unmarking accepts the marked text as if it had been inserted.
     fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        if self.ime.marked.take().is_some() {
-            cx.notify();
+        let Some(m) = self.ime.marked.take() else { return };
+        cx.notify();
+        if let Some((sid, id, _)) = self.target().filter(|(_, id, _)| *id == m.block) {
+            self.commit(&sid, &id, &m.text, cx);
         }
     }
 
@@ -116,10 +122,11 @@ impl EntityInputHandler for Workspace {
     fn replace_text_in_range(&mut self, _: Option<Range<usize>>, text: &str, _: &mut Window, cx: &mut Context<Self>) {
         if self.ime.marked.take().is_some() {
             cx.notify();
+        } else if std::mem::take(&mut self.ime.stale) {
+            return; // the commit of a composition no longer shown
         }
         let Some((sid, id, _)) = self.target() else { return };
-        self.ime.commits += 1;
-        self.write_pane(&sid, &id, text.as_bytes(), cx);
+        self.commit(&sid, &id, text, cx);
     }
 
     fn replace_and_mark_text_in_range(
@@ -130,15 +137,19 @@ impl EntityInputHandler for Workspace {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let block = self.target().map(|(_, id, _)| id);
+        let Some((_, block, _)) = self.target() else { return };
         let end = text.encode_utf16().count();
         let selected = selected.map_or(end..end, |s| s.start.min(end)..s.end.min(end));
-        self.ime.marked = block.filter(|_| !text.is_empty()).map(|block| Marked { block, text: text.into(), selected });
+        if self.view_top(&block).is_some() {
+            self.scroll_to(&block, None); // composing goes back to the prompt, as typing does
+        }
+        self.ime.stale = false;
+        self.ime.marked = (!text.is_empty()).then(|| Marked { block, text: text.into(), selected });
         cx.notify();
     }
 
-    /// Where the candidate window goes: under the cursor's cell, a cell further per UTF-16 unit
-    /// (shortcut: a wide character puts it a little left of its end, close enough for the list).
+    /// Where the candidate window goes: the anchor, a cell further per UTF-16 unit (a wide
+    /// character counts one: the window sits a little left of its end).
     fn bounds_for_range(
         &mut self,
         range: Range<usize>,
@@ -161,7 +172,24 @@ impl EntityInputHandler for Workspace {
 }
 
 impl Workspace {
-    /// Bytes for pane `id`, from a key or the input handler: the pane's queue keeps them in order.
+    /// Text from the input handler into pane `id`: none while copy mode or hints are on there, and
+    /// no control character (an input method commits none; a held ⌘↩'s newline would run the line).
+    fn commit(&mut self, sid: &str, id: &str, text: &str, cx: &mut Context<Self>) {
+        let text: String = text.chars().filter(|c| !c.is_control()).collect();
+        if text.is_empty() || self.pane_mode(id) {
+            return;
+        }
+        self.ime.commits += 1;
+        self.write_pane(sid, id, text.as_bytes(), cx);
+    }
+
+    /// Copy mode or hints are on in pane `id`: they take its keys, and no text.
+    pub(super) fn pane_mode(&self, id: &str) -> bool {
+        self.term.copy.as_ref().is_some_and(|c| c.block == id)
+            || self.term.hints.as_ref().is_some_and(|h| h.block == id)
+    }
+
+    /// Bytes for pane `id`, from a key or the input handler, in the window's one call order.
     pub(super) fn write_pane(&mut self, sid: &str, id: &str, bytes: &[u8], cx: &mut Context<Self>) {
         // only what reaches the pane is timed (LEON_FRAME_LOG): its echo moves the cursor
         if self.stats.borrow().logging() {
@@ -177,17 +205,18 @@ impl Workspace {
         }
     }
 
-    /// The target pane's cursor cell in the window, where marked text is drawn.
+    /// Where marked text is drawn: the target pane's cursor cell, or its bottom-left cell while the
+    /// program hides the cursor (the frame then has none: the input method still has a place).
     pub fn ime_anchor(&self) -> Option<Bounds<Pixels>> {
         let (_, id, _) = self.target()?;
         let (frame, _, _) = self.grid_given(&id)?;
-        let c = frame.cursor.as_ref()?;
         let p = self.term.painted.borrow().get(&id).copied()?;
-        let origin = p.origin + gpui::point(p.cell.0 * c.col as f32, p.cell.1 * c.line as f32);
+        let (line, col) = frame.cursor.as_ref().map_or((p.size.0.saturating_sub(1), 0), |c| (c.line, c.col));
+        let origin = p.origin + gpui::point(p.cell.0 * col as f32, p.cell.1 * line as f32);
         Some(Bounds { origin, size: gpui::size(p.cell.0, p.cell.1) })
     }
 
-    /// What the input method is composing on the target pane (tests).
+    /// What the input method is composing (tests).
     pub fn marked_text(&self) -> Option<String> {
         self.ime.marked.as_ref().map(|m| m.text.clone())
     }
@@ -197,13 +226,18 @@ impl Workspace {
         self.ime.commits
     }
 
-    /// Marked text ends, unsent, when the focus leaves the pane (`sync_focus`).
-    pub(super) fn end_marked(&mut self) {
-        self.ime.marked = None;
+    /// Marked text ends, unsent, once its pane hasn't the focus or isn't the target any more.
+    pub(super) fn end_stale_marked(&mut self, window: &Window) {
+        let target = self.target().map(|(_, id, _)| id);
+        let gone = |m: &Marked| !self.focus.is_focused(window) || Some(&m.block) != target.as_ref();
+        if self.ime.marked.as_ref().is_some_and(gone) {
+            self.ime.marked = None;
+            self.ime.stale = true;
+        }
     }
 
-    /// Registers leon's input handler for the workspace's focus while painting: GPUI keeps it only
-    /// while that handle has the focus (the pane), and asks it for the window's next key text.
+    /// Registers leon's input handler while painting: GPUI takes it for the frame when the
+    /// workspace's handle has the focus (the pane), and hands it the window's key text.
     pub(super) fn input_canvas(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (focus, ws) = (self.focus.clone(), cx.entity());
         canvas(|_, _, _| {}, move |_, _, window, cx| window.handle_input(&focus, PaneInput::new(ws), cx))
@@ -227,6 +261,7 @@ impl Workspace {
             .font_family(self.font_family.clone())
             .text_size(px(self.font_size))
             .line_height(at.size.height)
+            .whitespace_nowrap()
             .text_decoration_1()
             .text_decoration_solid()
             .text_decoration_color(rgb(t.fg))

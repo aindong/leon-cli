@@ -11,8 +11,12 @@ fn the_adr_says_how_composed_text_arrives() {
     let adr = doc("docs/architecture/gpui.md");
     let consequences = adr.split("\n## Consequences\n").nth(1).expect("a Consequences section");
     assert!(!consequences.contains("No `InputHandler`"), "Consequences still say there is no InputHandler");
+    let r9 = adr.split("- **R9.").nth(1).and_then(|r| r.split("- **R10.").next()).expect("R9");
     for words in ["input handler", "marked text", "press-and-hold"] {
         assert!(consequences.contains(words), "Consequences say: {words}");
+    }
+    for words in ["`InputHandler`", "marked text", "press-and-hold"] {
+        assert!(r9.contains(words), "R9 says: {words}");
     }
     for e in std::fs::read_dir(help_walk::repo().join("docs/architecture")).unwrap().flatten() {
         let name = e.file_name().to_string_lossy().into_owned();

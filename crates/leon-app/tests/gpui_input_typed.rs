@@ -14,6 +14,8 @@ fn typed_text_goes_through_the_input_handler(cx: &mut TestAppContext) {
     settle(&t);
     let before = ws.read_with(cx, |ws, _| ws.input_commits());
     cx.simulate_keystrokes("e c h o space あ い");
+    // an arrow and a ctrl chord are key_down's, not the handler's
+    cx.simulate_keystrokes("left right ctrl-e");
     let typed = ws.read_with(cx, |ws, _| ws.input_commits()) - before;
     cx.simulate_keystrokes("enter");
     let printed = eventually(|| has_line(&t, "あい"));

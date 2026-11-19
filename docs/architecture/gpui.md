@@ -126,7 +126,8 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   the workspace gives the focus to the top open overlay after every change, else to itself. The
   terminal's keys go from `on_key_down` to leon's keymap (the server's Lua keymap, shared with
   `leon attach`). Text that composes (an input method, the emoji picker) goes through an
-  `InputHandler` (`window.handle_input`), as Zed's terminal does. Why: GPUI dispatches by the
+  `InputHandler` (`window.handle_input`), as Zed's terminal does: marked text drawn at the
+  cursor, never sent; press-and-hold off, so a held key repeats. Why: GPUI dispatches by the
   focused element's context path, and delivers marked text only to an input handler. Check: review.
 - **R10. Tests drive GPUI's test contexts.** `#[gpui::test]`, `add_window_view`, `simulate_*` and
   `run_until_parked`; a test of a view checks what it drew (`debug_selector`, the drawn list) or
