@@ -60,7 +60,11 @@ A row keeps its line number when it moves, and `history` counts the rows on both
   row, keeping its numbers, while one stored at another width can take more or fewer rows, which
   moves the older lines' numbers, as alacritty's own reflow does. A resize's numbers are
   alacritty's alone, as before (`scrolled` stays at least `history`; a client starts over on a new
-  size). `b1_store_grow.rs` compares each case with alacritty keeping the whole history.
+  size). When no whole line can go back (the newest runs on into alacritty's rows from another
+  width and would end in blanks there, or one line is past the cap), alacritty gets back only the
+  rows it held. A resize while the alternate screen shows grows the primary one from alacritty's
+  rows alone, as nothing moves then. `b1_store_grow.rs` compares each case with alacritty keeping
+  the whole history.
 - **The cap.** `leon.set("scrollback", N)` (0 to 100,000, default 10,000) caps the store and
   alacritty's rows together. The server applies it to every terminal on a reload and to each new
   one (a restored block's saved text included), and a lower value drops the oldest lines at once;

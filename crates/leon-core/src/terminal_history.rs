@@ -184,8 +184,10 @@ impl Store {
     /// Stored rows `from..to`, one line, as alacritty's rows `cols` wide: joined and wrapped again
     /// as alacritty's reflow wraps (WRAPLINE on each full row, a wide character that doesn't fit
     /// goes on to the next row with a leading spacer in its place), whatever width they were
-    /// stored at. Rows stored at this width come back as they were.
-    fn line_rows(&self, from: usize, to: usize, cols: usize) -> Vec<Row<Cell>> {
+    /// stored at. Rows stored at this width come back as they were. None for a line that goes on
+    /// in alacritty's rows and doesn't fill its last row here: joining it there would put blanks
+    /// inside it.
+    fn line_rows(&self, from: usize, to: usize, cols: usize) -> Option<Vec<Row<Cell>>> {
         let mut rows: Vec<Row<Cell>> = vec![Row::new(cols)];
         let mut col = 0;
         // a row's leading spacer goes where it joins the next; the last row's line goes on in
@@ -206,11 +208,13 @@ impl Store {
             rows.last_mut().expect("a row")[Column(col)] = cell;
             col += 1;
         }
-        // the newest stored line can go on in alacritty's rows
         if self.wraps(to - 1) {
+            if col < cols {
+                return None;
+            }
             rows.last_mut().expect("a row")[Column(cols - 1)].flags.insert(Flags::WRAPLINE);
         }
-        rows
+        Some(rows)
     }
 
     /// Every stored row's text, as alacritty's `bounds_to_string` gives a whole row: no newline
@@ -320,6 +324,7 @@ impl Store {
         if alt(term) || self.rows.is_empty() || held_enough(term, added, want) {
             return;
         }
+        let held = term.grid().history_size();
         self.take(term, 0);
         // whole lines, newest first, until they hold enough
         let (mut first, mut lent, mut count, mut starts) = (self.rows.len(), Vec::new(), 0, 0);
@@ -328,15 +333,20 @@ impl Store {
             while from > 0 && self.wraps(from - 1) {
                 from -= 1;
             }
-            let rows = self.line_rows(from, first, now);
-            if count + rows.len() > self.limit() {
+            let Some(rows) = self.line_rows(from, first, now).filter(|r| count + r.len() <= self.limit()) else {
                 break;
-            }
+            };
             (first, count, starts) = (from, count + rows.len(), starts + 1);
             lent.push(rows);
         }
         if count == 0 {
-            return;
+            // no whole line to lend: alacritty gets back the rows it held, as they were
+            let len = self.rows.len();
+            lent = (len - held.min(len)..len).rev().map_while(|i| self.line_rows(i, i + 1, now)).collect();
+            (first, count) = (len - lent.len(), lent.iter().map(Vec::len).sum());
+            if count == 0 {
+                return;
+            }
         }
         // alacritty makes history rows by scrolling: the screen goes back as it was
         let g = term.grid_mut();

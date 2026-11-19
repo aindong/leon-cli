@@ -281,3 +281,32 @@ fn lines_lent_back_to_alacritty_keep_their_numbers() {
     let json = |r: &[Row]| r.iter().map(|r| serde_json::to_string(r).unwrap()).collect::<Vec<_>>();
     assert_eq!(json(&rows(&t)), json(&before), "every line keeps its number, text and styles");
 }
+
+/// The line in `t`'s capture that starts with `start`.
+fn line_starting(t: &Terminal, start: char) -> String {
+    t.text(true).lines().find(|l| l.starts_with(start)).expect("the line").to_string()
+}
+
+#[test]
+fn a_wide_character_wrapped_at_the_stores_edge_reads_without_a_blank() {
+    let mut s: String = (0..3000).map(|n| format!("line-{n:04}\r\n")).collect();
+    // `a` and 19 wide characters fill 39 columns: the 20th moves on, a leading spacer in column
+    // 39; 24 rows, so the first is the history's newest when output pauses
+    s += &format!("a{}\r\n", "中".repeat(19 + 20 * 23));
+    let t = Terminal::spawn_sized(spec(), s.as_bytes(), Some((24, 40)), 10_000, |_| {}).unwrap();
+    assert_eq!(held(&t), 0, "the history is in the store");
+    t.resize(30, 40).unwrap();
+    assert!(!line_starting(&t, 'a').contains(' '), "a blank inside the wide line");
+}
+
+#[test]
+fn a_line_running_on_into_the_screen_reads_whole_after_a_narrow_then_a_grow() {
+    let mut s: String = (0..3000).map(|n| format!("line-{n:04}\r\n")).collect();
+    // 1,215 characters: 31 rows at 40, the first 7 in the history when output pauses
+    s += &"y".repeat(1215);
+    let t = Terminal::spawn_sized(spec(), s.as_bytes(), Some((24, 40)), 10_000, |_| {}).unwrap();
+    assert_eq!(held(&t), 0, "the history is in the store");
+    t.resize(24, 30).unwrap();
+    t.resize(80, 30).unwrap();
+    assert_eq!(line_starting(&t, 'y'), "y".repeat(1215), "the line whole");
+}
