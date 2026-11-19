@@ -1,0 +1,7 @@
+measurement,p50_ms,p99_ms,load,machine,source
+"idle, in the app",11.9,20.8,2 to 4.5,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
+"one pane flooding, in the app",12.4,20.4,2 to 4.5,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
+"eight panes busy, in the app",14.9,25.1,2 to 4.5,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
+"idle, outside",50.3,66.6,2 to 4.5,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
+"one pane flooding, outside",49.7,65.1,2 to 4.5,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
+"eight panes busy, outside",51.9,71.8,2 to 4.5,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf

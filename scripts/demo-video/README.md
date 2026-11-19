@@ -193,10 +193,10 @@ change the caption in `scenes.sh` (and the storyboard) if the number moved.
 | Caption | Measured by | Recorded in |
 |---|---|---|
 | 115 MB/s through the terminal | `scripts/perf/flood.sh` (a 100 MB `cat` of text and colour) | docs/performance-cat.md, "Before and after" |
-| 60 frames a second, none missed | `scripts/perf/scale.sh` (100 panes printing) and `flood.sh` (frames shown) | docs/performance.md, "The app end to end" |
-| 50 tabs, every card live in 33 ms | `scripts/perf/overview.sh` | docs/performance.md, "The overview with 50 tabs" |
-| 159 ms from launch to prompt | `scripts/perf/startup.sh` | docs/performance.md, "The app end to end" |
-| Under 1% of a core when idle | `scripts/perf/idle-cpu.sh` | docs/performance.md, "The app end to end" |
+| 60 frames a second, none missed | `scripts/perf/scale.sh` (100 panes printing) and `flood.sh` (frames shown) | docs/performance-app.md, "The app end to end" |
+| 50 tabs, every card live in 33 ms | `scripts/perf/overview.sh` | docs/performance-app.md, "The overview with 50 tabs" |
+| 159 ms from launch to prompt | `scripts/perf/startup.sh` | docs/performance-app.md, "The app end to end" |
+| Under 1% of a core when idle | `scripts/perf/idle-cpu.sh` | docs/performance-app.md, "The app end to end" |
 | Typing keeps up | no number by default | if one is wanted, only "a key reaches the painted frame in 12 ms" (`keylat.sh`, in-app; the outside clock measures about 50 ms to pixels on screen, so never call 12 ms key-to-screen latency) |
 
 The speed is measured on the host, not in the VM: the VM's display path adds 20 to 30 ms to

@@ -53,6 +53,16 @@ Before the first release, do the one-time setup under [Secrets](#secrets).
 
 `.github/workflows/release.yml` then runs:
 
+```mermaid
+flowchart LR
+  tag["a tag vX.Y.Z<br/>on main"] --> version["version"]
+  version --> macos["macos:<br/>arm64, x86_64"]
+  version --> linux["linux:<br/>arm64, x86_64"]
+  macos & linux --> publish["publish: sign, latest.json,<br/>verify, draft, publish"]
+  publish --> homebrew["homebrew: the tap"]
+  homebrew --> site["site.yml:<br/>the website"]
+```
+
 - **version**: `scripts/release-version.sh --on-main` fails unless the tag is `v` plus the version
   in `Cargo.toml` and the tagged commit is on `main`. Each build also checks that `leon --version`
   prints that version.
@@ -288,8 +298,7 @@ signing inside `scripts/release.sh`, between the bundle and the zip.
 <https://aindong.github.io/leon-cli/> shows the latest release: its README, `docs/` and
 `CHANGELOG.md` at that release's tag, built with the `website/` and `brand/` files of the commit
 the workflow runs on, so a fix to the site itself needs no release. It has the landing page
-(`brand/marketing/index.html`, a shell that `website/hooks.py` fills with the files in
-`brand/marketing/sections/`), the README as its overview, a page for each doc and translation,
+(`brand/marketing/index.html`, which `website/hooks.py` fills from its `sections/`), the README as its overview, a page for each doc and translation,
 What's new (a page for each `## [X.Y.Z]` section of the changelog, the text its GitHub release has)
 and the demo. Links into the source go to GitHub at the release's tag.
 

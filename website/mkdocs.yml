@@ -19,6 +19,7 @@ exclude_docs: |
   /research/
   /audit-*.md
   /api-snapshot.json
+  /perf/
 
 validation:
   omitted_files: info
@@ -105,7 +106,13 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      # ```mermaid blocks, as GitHub draws them; the theme draws them in its light and dark colours
+      # with the mermaid.min.js hooks.py serves
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 
 nav:
   - Overview: overview.md
@@ -143,10 +150,16 @@ nav:
       - changelog-milestones.md
       - changelog-0.1.0.md
   - Demo: demo.md
+  - Performance:
+      - performance.md
+      - performance-app.md
+      - performance-cat.md
+      - performance-memory.md
   - Project:
       - architecture.md
       - Decisions:
           - architecture/protocol-and-clients.md
+          - architecture/scrollback.md
           - architecture/state-and-hosts.md
           - architecture/hosts.md
           - architecture/tailnet.md
@@ -157,8 +170,5 @@ nav:
           - architecture/cursor-shaders.md
           - architecture/gpui.md
       - roadmap.md
-      - performance.md
-      - performance-cat.md
-      - performance-memory.md
       - releases.md
       - Translations: i18n/README.md

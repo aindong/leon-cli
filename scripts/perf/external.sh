@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# external.sh: the same measurements from outside, for any terminal (docs/performance.md).
+# external.sh: the same measurements from outside, for any terminal (docs/performance-app.md).
 #   scripts/perf/external.sh MEASURE [--runs N] -- LAUNCH...
 # LAUNCH starts a terminal window running one program, given as `{}` (a script path); its pid
 # must be the process that owns the window. scripts/perf/leon-term.sh does that for leon:

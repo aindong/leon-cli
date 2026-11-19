@@ -91,6 +91,21 @@ Every release is described by a signed manifest, `latest.json`. Before leon inst
    with `..` or an absolute target) refuses the whole archive.
 6. **The new leon.** It is run once (`leon --version`) and must report the release's version.
 
+```mermaid
+flowchart TD
+  fetch["latest.json and its .minisig"] --> sig{"signed with a key<br/>built into this leon?"}
+  sig -->|no| refuse["refused: nothing changed"]
+  sig -->|yes| newer{"newer, and for this system?"}
+  newer -->|no| stay["up to date, or refused"]
+  newer -->|yes| download["download the file,<br/>no more than its size"]
+  download --> file{"its sha256 and its own<br/>signature check out?"}
+  file -->|no| refuse
+  file -->|yes| unpack["unpack in .leon-update;<br/>a path that leaves it refuses all"]
+  unpack --> run{"the new leon --version<br/>is the release's?"}
+  run -->|no| refuse
+  run -->|yes| swap["renamed into place, in one step"]
+```
+
 Only then is the new leon renamed into place, in one step: an update that is killed at any point
 leaves a leon that runs, either the old one or the new one. The next `leon self-update` clears
 what an interrupted one left.

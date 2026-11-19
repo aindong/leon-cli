@@ -10,7 +10,7 @@ Built against: GPUI 0.2.2 from crates.io.
 
 leon's app uses GPUI's current API (`Render`, `cx.new`, `cx.notify()`, actions, focus handles,
 executors), but not its shape: the window is one `Workspace` view drawn through helper functions (`view_*.rs`), with no
-child views and no caching. The performance baseline (docs/performance.md) found a spinner frame
+child views and no caching. The performance baseline (docs/performance-app.md) found a spinner frame
 re-laying out the whole window (6.6% of a core then, 4.4% once the poll ran only when woken),
 key echo a display frame behind another terminal, and 0.74% of a core for an idle visible window. The fixes reached for next were AppKit
 tricks (`setNeedsDisplay:` on GPUI's view) and GPUI patches. This ADR is what GPUI's own source

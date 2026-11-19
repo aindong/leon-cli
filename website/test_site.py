@@ -6,6 +6,7 @@ temp dir and reads the result, and checks the hook's link rules and changelog re
 Run it as a script: `-m unittest` with a path would import it as a module of Python's own `site`.
 """
 
+import hashlib
 import os
 import re
 import subprocess
@@ -167,6 +168,64 @@ class Built(unittest.TestCase):
         config = read(HERE / "mkdocs.yml")
         self.assertIn("scheme: default", config)
         self.assertIn("scheme: slate", config)
+
+
+    def test_diagrams_use_the_site_s_own_mermaid(self):
+        arch = self.page("architecture")
+        self.assertIn('<pre class="mermaid">', arch)
+        head = arch.split("</head>")[0]
+        # in the head, before the theme's bundle, so the theme finds it and loads none of its own
+        self.assertIn('<script src="../assets/mermaid.min.js"></script>', head)
+        self.assertNotIn("mermaid.min.js", self.page("install"), "only pages with a diagram load it")
+        js = (self.out / "assets" / "mermaid.min.js").read_bytes()
+        self.assertEqual(hashlib.sha256(js).hexdigest(), hooks.MERMAID_SHA256)
+        for html in self.out.rglob("*.html"):
+            self.assertNotRegex(read(html), r"unpkg\.com|jsdelivr\.net|cdnjs", html)
+
+    def test_performance_is_in_the_nav_and_opens_with_charts(self):
+        tabs = re.findall(r'class="md-tabs__link"[^>]*>\s*([^<]+?)\s*<', self.page("overview"))
+        self.assertIn("Performance", tabs)
+        perf = self.page("performance")
+        self.assertRegex(perf, r'<img[^>]+src="\.\./images/perf/throughput\.svg"')
+        first = re.search(r"<img[^>]+src=\"([^\"]+)\"", perf.split('class="md-content"')[1])[1]
+        self.assertTrue(first.startswith("../images/perf/"), first)
+        self.assertTrue((self.out / "images" / "perf" / "throughput.svg").exists())
+        self.assertFalse((self.out / "perf").exists(), "the charts' data is not a page")
+
+
+class Mermaid(unittest.TestCase):
+    def test_a_cached_file_that_is_the_pinned_one_is_used_without_a_fetch(self):
+        pinned = hooks.MERMAID_SHA256
+        try:
+            hooks.MERMAID_SHA256 = hashlib.sha256(b"pinned bytes").hexdigest()
+            with tempfile.TemporaryDirectory() as d:
+                cached = Path(d) / f"mermaid-{hooks.MERMAID_VERSION}.min.js"
+                cached.write_bytes(b"pinned bytes")
+
+                def fetch(url):
+                    raise AssertionError("fetched although the cache holds the pinned file")
+
+                self.assertEqual(hooks.mermaid(Path(d), fetch=fetch), cached)
+        finally:
+            hooks.MERMAID_SHA256 = pinned
+
+    def test_a_diagram_with_more_classes_still_gets_the_script(self):
+        page = type("P", (), {"url": "a/b/"})()
+        for html in ['<pre class="mermaid wide">', '<pre class="wide mermaid">']:
+            out = hooks.on_post_page(f"<head></head><body>{html}</body>", page, None)
+            self.assertIn('<script src="../../assets/mermaid.min.js"></script></head>', out, html)
+        self.assertNotIn("<script", hooks.on_post_page('<head></head><pre class="mermaids">', page, None))
+
+    def test_a_file_that_isn_t_the_recorded_one_stops_the_build(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(hooks.PluginError):
+                hooks.mermaid(Path(d), fetch=lambda url: b"not mermaid")
+            self.assertEqual(list(Path(d).iterdir()), [], "nothing kept")
+            # a cached file that changed is fetched again, and checked again
+            cached = Path(d) / f"mermaid-{hooks.MERMAID_VERSION}.min.js"
+            cached.write_bytes(b"tampered")
+            with self.assertRaises(hooks.PluginError):
+                hooks.mermaid(Path(d), fetch=lambda url: b"still not mermaid")
 
 
 class LatestRelease(unittest.TestCase):

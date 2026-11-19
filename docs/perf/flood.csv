@@ -1,0 +1,5 @@
+run,build,commit,mbps,load,screen_current_ms,fps,machine,source
+1,before the flood fix,9b56116,79.5,3.48,38.7,56.3,"Apple M6, release build",performance-cat.md#before-and-after
+1,the flood fix,fac56ca,115.2,2.63,46.5,55.8,"Apple M6, release build",performance-cat.md#before-and-after
+2,before the flood fix,9b56116,79.7,3.06,55.2,56.5,"Apple M6, release build",performance-cat.md#before-and-after
+2,the flood fix,fac56ca,114.2,2.95,46.3,55.3,"Apple M6, release build",performance-cat.md#before-and-after
