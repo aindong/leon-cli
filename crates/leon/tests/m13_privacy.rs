@@ -79,7 +79,7 @@ fn image_names_readme_and_image_bytes_name_no_user_or_machine() {
             assert!(!mentions(text, name), "{page} mentions {name:?}");
         }
         for img in images() {
-            let file = img.file_name().unwrap().to_string_lossy().to_string();
+            let file = img.strip_prefix(root().join("docs/images")).unwrap().display().to_string();
             assert!(!mentions(&file, name), "{file} is named after {name:?}");
             let bytes = String::from_utf8_lossy(&std::fs::read(&img).unwrap()).to_string();
             assert!(!mentions(&bytes, name), "{file} holds {name:?} in its bytes (a text chunk?)");

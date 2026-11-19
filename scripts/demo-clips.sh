@@ -38,19 +38,28 @@ app=${DEMO_APP:-$repo/target/release/Leon.app}
 [ -x "$app/Contents/MacOS/leon" ] || { echo "demo-clips: no Leon.app at $app: run scripts/bundle.sh" >&2; exit 1; }
 
 # the take's seconds per scene, and the window's frame in the VM's pixels (guest.sh's WINDOW, 2x)
-secs() { case $1 in agents) echo 19 ;; link-card) echo 10 ;; tabs) echo 19 ;; cursor-shader) echo 12 ;; esac; }
+secs() { case $1 in agents) echo 19 ;; link-card) echo 10 ;; tabs) echo 19 ;; cursor-shader) echo 15 ;; esac; }
 crop=1800:1360:320:130
 
 ssh_vm() {
   ssh -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o LogLevel=ERROR -o ConnectTimeout=5 "demo@$(cat "$work/.ip")" "$@"
 }
-booted=
-if ! { tart ip "${DEMO_VM:-leon-demo}" >"$work/.ip" 2>/dev/null && ssh_vm true 2>/dev/null; }; then
-  "$run" boot
+# stop only a VM this run booted; and whatever happens, no recorder or wiggle left running in it
+booted= rec= wig=
+cleanup() {
+  [ -z "$rec$wig" ] || kill $rec $wig 2>/dev/null || true
+  ssh_vm 'pkill -INT screencapture; pkill -f "[k]eypost wiggle"; bash clips/guest.sh stop' 2>/dev/null || true
+  [ -z "$booted" ] || "$run" stop
+}
+trap cleanup EXIT
+vm=${DEMO_VM:-leon-demo}
+if [ "$(tart list | awk -v vm="$vm" '$2 == vm { print $NF }')" != running ]; then
   booted=1
+  "$run" boot
 fi
-trap 'ssh_vm "bash clips/guest.sh stop" 2>/dev/null || true; [ -z "$booted" ] || "$run" stop' EXIT
+tart ip "$vm" --wait 120 >"$work/.ip"
+for _ in $(seq 60); do ssh_vm true 2>/dev/null && break; sleep 2; done
 DEMO_APP=$app "$run" push
 COPYFILE_DISABLE=1 tar -C "$repo/scripts/demo-clips" -cf - . | ssh_vm 'rm -rf ~/clips && mkdir ~/clips && tar -xf - -C ~/clips'
 
@@ -59,38 +68,56 @@ gif() { # gif IN OUT [MAX]: at most MAX bytes (1.5 MB), the widest that fits; pr
   for width in 1080 960 840 720; do
     ffmpeg -loglevel error -y -i "$1" -vf \
       "fps=12,scale=$width:-1:flags=lanczos,mpdecimate,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
-      -loop 0 "$2"
+      -loop 0 "$2" || return 1
     [ "$(wc -c <"$2")" -le "$max" ] && { echo "$width"; return; }
   done
   echo "demo-clips: $2 is over $max bytes even at ${width}px" >&2
+  rm -f "$2"
   return 1
 }
 
-for s in "${scenes[@]}"; do
-  ssh_vm "bash clips/guest.sh stage $s"
+# take NAME: stage, record and pull one scene; 3 when the VM's recorder stopped early (it sometimes
+# does, and still exits 0: run-demo.sh's take checks it too), 1 on any other failure
+take() {
+  local s=$1 long
+  ssh_vm "bash clips/guest.sh stage $s" || return 1
   # screencapture hangs when started in the background inside the VM: it runs in the foreground
   # of its own ssh session, which is in the background here (run-demo.sh's take does the same)
   ssh_vm "rm -f ~/clip.mov; screencapture -v -V $(secs "$s") -x ~/clip.mov </dev/null" &
   rec=$!
   # a still second ends the VM's recorder early: the parked pointer steps on the screen's right
   # edge, outside the window (run-demo.sh's take does the same); not while the pointer is in use
-  wig=
   if [ "$s" != link-card ]; then
     ssh_vm "kit/bin/keypost wiggle $(secs "$s")" &
     wig=$!
   fi
   sleep 1.5
-  ssh_vm "bash clips/guest.sh play $s"
-  wait "$rec" $wig
-  ssh_vm "bash clips/guest.sh stop"
-  ssh_vm 'cat ~/clip.mov' >"$work/clip-$s.mov"
-  # the recorder's first second is the window standing still: drop it
+  ssh_vm "bash clips/guest.sh play $s" || return 1
+  wait "$rec" || return 1
+  [ -z "$wig" ] || wait "$wig" || return 1
+  rec= wig=
+  ssh_vm "bash clips/guest.sh stop" || return 1
+  ssh_vm 'cat ~/clip.mov' >"$work/clip-$s.mov" || return 1
+  long=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$work/clip-$s.mov") || return 1
+  if python3 -c "import sys; sys.exit(0 if float('${long:-0}') < $(secs "$s") - 2 else 1)"; then
+    echo "demo-clips: $s: the recording stopped at ${long:-0} s of $(secs "$s")" >&2
+    return 3
+  fi
   # the recording's frame rate varies with what changes: 30 a second, evenly, for the clip; and
-  # no longer than the recording, whose last frame can carry a bad timestamp (120 s on a 10 s take)
-  long=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$work/clip-$s.mov")
-  ffmpeg -loglevel error -y -ss 1.2 -i "$work/clip-$s.mov" -t "$(python3 -c "print(round($long - 1.2, 2))")" \
+  # no longer than asked for: its last frame can carry a bad timestamp (120 s on a 10 s take)
+  ffmpeg -loglevel error -y -ss 1.2 -i "$work/clip-$s.mov" -t "$(python3 -c "print(round(min($long, $(secs "$s")) - 1.2, 2))")" \
     -vf "fps=30,crop=$crop,scale=1600:-2:flags=lanczos,format=yuv420p" \
-    -c:v libx264 -crf 22 -preset slow -movflags +faststart -an "$out/$s.mp4"
+    -c:v libx264 -crf 22 -preset slow -movflags +faststart -an "$out/$s.mp4" || return 1
+}
+
+for s in "${scenes[@]}"; do
+  for n in 1 2 3; do
+    rc=0
+    take "$s" || rc=$?
+    [ $rc -eq 0 ] && break
+    [ $rc -eq 3 ] && [ $n -lt 3 ] || exit $rc
+    echo "demo-clips: $s: recording it again"
+  done
   width=$(gif "$out/$s.mp4" "$out/$s.gif")
   echo "demo-clips: $s.gif ($(($(wc -c <"$out/$s.gif") / 1024)) KB, ${width}px) and $s.mp4"
 done

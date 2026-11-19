@@ -1,7 +1,8 @@
 #!/bin/bash
 # guest.sh STEP SCENE: demo-clips.sh's scenes inside the demo VM, run as `demo` over ssh. It uses
 # the launch video's kit there (~/kit: keypost, git, the stand-in tailscale) and the app that
-# `run-demo.sh push` put in ~/leon; its own leon dirs are ~/leon-clips, never the take's.
+# `run-demo.sh push` put in ~/leon; its own leon dirs are ~/leon-clips, never the take's. The app is
+# the take's too: don't record clips while a launch video take runs in the same VM.
 #   stage SCENE  quit the app, a fresh server with the scene's sessions, the app windowed at
 #                WINDOW (points), pointer parked
 #   play SCENE   the scene's keys and clicks (keypost, inside the VM)
