@@ -1,0 +1,19 @@
+load,build,commit,run,p50_ms,p99_ms,vm_load,machine,source
+idle,before,2e773bd,1,25.52,50.74,4.44,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+one pane flooding,before,2e773bd,1,17.49,51.96,3.88,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+eight panes busy,before,2e773bd,1,17.81,51.88,3.05,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+idle,after,ae96f39,1,41.57,106.07,2.07,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+one pane flooding,after,ae96f39,1,20.83,50.72,3.24,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+eight panes busy,after,ae96f39,1,17.73,35.64,2.95,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+idle,before,2e773bd,2,26.63,57.53,2.05,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+one pane flooding,before,2e773bd,2,18.69,52.57,3.23,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+eight panes busy,before,2e773bd,2,18.74,85.17,2.54,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+idle,after,ae96f39,2,24.49,51.20,1.82,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+one pane flooding,after,ae96f39,2,26.30,56.03,2.86,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+eight panes busy,after,ae96f39,2,18.01,46.64,2.26,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+idle,before,2e773bd,3,25.98,50.95,1.71,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+one pane flooding,before,2e773bd,3,14.12,46.27,3.20,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+eight panes busy,before,2e773bd,3,18.04,52.37,2.42,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+idle,after,ae96f39,3,28.32,56.79,1.65,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+one pane flooding,after,ae96f39,3,17.51,34.77,2.49,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
+eight panes busy,after,ae96f39,3,19.27,37.91,2.22,"Tart macOS VM (6 cores) on an Apple M6, release build",performance-app.md#gpui-phases-5-to-7-before-and-after
