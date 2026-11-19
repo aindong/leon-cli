@@ -6,12 +6,12 @@ clients see is in [Protocol and clients](protocol-and-clients.md), "Scrollback i
 ```mermaid
 flowchart RL
   subgraph term["alacritty: full-width cells"]
-    screen["the screen"] --- newer["at most the newest<br/>1,000 history rows"]
+    screen["the screen"] --- newer["history rows: at rest,<br/>at most the newest 1,000"]
   end
   subgraph store["leon's store: text and style runs"]
     older["older rows"] --- oldest["line scrolled - history:<br/>the oldest kept"]
   end
-  newer -->|"settle: after 100 ms without output,<br/>or once a second, moves them all"| older
+  newer -->|"settle, once there are more than 1,000: after 100 ms<br/>without output, or once a second, moves them all"| older
 ```
 
 A row keeps its line number when it moves, and `history` counts the rows on both sides.

@@ -177,6 +177,21 @@ class Built(unittest.TestCase):
 
 
 class Mermaid(unittest.TestCase):
+    def test_a_cached_file_that_is_the_pinned_one_is_used_without_a_fetch(self):
+        pinned = hooks.MERMAID_SHA256
+        try:
+            hooks.MERMAID_SHA256 = hashlib.sha256(b"pinned bytes").hexdigest()
+            with tempfile.TemporaryDirectory() as d:
+                cached = Path(d) / f"mermaid-{hooks.MERMAID_VERSION}.min.js"
+                cached.write_bytes(b"pinned bytes")
+
+                def fetch(url):
+                    raise AssertionError("fetched although the cache holds the pinned file")
+
+                self.assertEqual(hooks.mermaid(Path(d), fetch=fetch), cached)
+        finally:
+            hooks.MERMAID_SHA256 = pinned
+
     def test_a_diagram_with_more_classes_still_gets_the_script(self):
         page = type("P", (), {"url": "a/b/"})()
         for html in ['<pre class="mermaid wide">', '<pre class="wide mermaid">']:
