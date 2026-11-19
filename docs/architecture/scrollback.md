@@ -4,15 +4,14 @@ How a terminal keeps its history (`crates/leon-core/src/terminal_history.rs`). T
 clients see is in [Protocol and clients](protocol-and-clients.md), "Scrollback in the app".
 
 ```mermaid
-flowchart LR
-  subgraph store["leon's store: text and style runs"]
-    oldest["line scrolled - history:<br/>the oldest kept"] --- older["older rows"]
-  end
+flowchart RL
   subgraph term["alacritty: full-width cells"]
-    newer["at most the newest 1,000<br/>history rows"] --- screen["the screen"]
+    screen["the screen"] --- newer["at most the newest<br/>1,000 history rows"]
   end
-  older --- newer
-  term -->|"settle: after 100 ms without output,<br/>or once a second, moves them all"| store
+  subgraph store["leon's store: text and style runs"]
+    older["older rows"] --- oldest["line scrolled - history:<br/>the oldest kept"]
+  end
+  newer -->|"settle: after 100 ms without output,<br/>or once a second, moves them all"| older
 ```
 
 A row keeps its line number when it moves, and `history` counts the rows on both sides.

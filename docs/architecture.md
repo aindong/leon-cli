@@ -11,16 +11,16 @@ a client goes away.
 
 ```mermaid
 flowchart LR
-  subgraph mac["This Mac"]
+  subgraph clients["clients on this Mac"]
+    direction TB
     app["Leon.app"]
     attach["leon attach"]
-    cli["the leon CLI and leon do scripts"]
+    cli["the leon CLI, leon do scripts"]
     agent["agents in panes, through the skill"]
-    server["leon server: owns the PTYs,<br/>sessions, windows and blocks"]
   end
-  app & attach & cli & agent -->|"the socket API"| server
+  clients -->|"the socket API"| server["leon server: owns the PTYs,<br/>sessions, windows and blocks"]
   web["the web page, in a browser<br/>on another of your machines"] -->|"the tailnet listener"| server
-  app & cli -->|"a Link: ssh and leon server proxy,<br/>or tailnet://"| host["the leon server on a host"]
+  clients -->|"a Link: ssh, or tailnet://"| host["the leon server on a host"]
 ```
 
 What the server holds: sessions, each with windows (the app's tabs); a window's tiles are a layout

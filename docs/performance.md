@@ -1,8 +1,8 @@
 # Performance
 
 What leon costs, measured on one machine over time. Each chart is drawn from a data file in
-[docs/perf/](perf/) by `python3 scripts/perf-charts.py`, which a test runs to keep them in step; the
-tables below and on the pages it links have every number.
+[docs/perf/](perf/) by `python3 scripts/perf-charts.py`, which a test runs to keep them in step. The
+tables below, and on the pages this one links, hold every number.
 
 ![cat of 100 MB at each step from the reader thread to scrollback B: leon's runs sit near the macOS PTY's own limit of about 115 MB/s, and the runs far below it were on a busy machine](images/perf/throughput.svg)
 
