@@ -235,3 +235,21 @@ fn a_pane_narrowed_then_grown_fills_its_new_rows() {
     reference.resize(Size(80, 80));
     same_screen(&t, &reference, "grown to 80x80");
 }
+
+#[test]
+fn a_resize_alacritty_can_fill_alone_moves_nothing() {
+    // a shrink leaves 376 rows in alacritty, under its window, with older ones in the store
+    let bytes = output(3000, 0);
+    let (t, mut reference) = (leon(&bytes, 400), plain(&bytes, 400));
+    t.resize(24, 80).unwrap();
+    reference.resize(Size(24, 80));
+    assert_eq!(held(&t), 376, "alacritty holds what the shrink pushed");
+    // a grow and a widening it can fill from its own rows: none of them goes to the store
+    t.resize(100, 80).unwrap();
+    reference.resize(Size(100, 80));
+    assert_eq!(held(&t), 300, "the grow took its 76 rows from alacritty's");
+    t.resize(100, 120).unwrap();
+    reference.resize(Size(100, 120));
+    assert_eq!(held(&t), 300, "the widening joined nothing and moved nothing");
+    same(&t, &reference, "after both");
+}

@@ -320,11 +320,11 @@ impl Store {
     fn lend(&mut self, term: &mut Term<Listener>, lines: usize, cols: usize) {
         let (shown, now) = (term.screen_lines(), term.columns());
         let (added, widens) = (lines.saturating_sub(shown), cols > now);
-        if alt(term) || self.rows.is_empty() || (added <= term.grid().history_size() && !widens) {
+        let want = if widens { lines } else { 0 };
+        if alt(term) || self.rows.is_empty() || held_enough(term, added, want) {
             return;
         }
         self.take(term, 0);
-        let want = if widens { lines } else { 0 };
         // newest first, until the block starts a line and holds enough
         let (mut first, mut lent, mut count, mut starts) = (self.rows.len(), Vec::new(), 0, 0);
         while first > 0 {
@@ -357,4 +357,13 @@ impl Store {
         }
         self.rows.truncate(first);
     }
+}
+
+/// Whether alacritty's history holds `rows` rows and `lines` whole lines (the oldest row's line
+/// may begin in the store): then a resize needs nothing from the store, as while output streams.
+fn held_enough(term: &Term<Listener>, rows: usize, lines: usize) -> bool {
+    let g = term.grid();
+    let (held, last) = (g.history_size(), Column(g.columns() - 1));
+    let starts = (1..held).filter(|&n| !g[Line(-(n as i32) - 1)][last].flags.contains(Flags::WRAPLINE));
+    held >= rows && (lines == 0 || starts.take(lines).count() == lines)
 }
