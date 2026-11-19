@@ -122,6 +122,8 @@ pub(crate) fn spawn(
             ctx.exited.send_modify(|n| *n += 1);
         }
     })
+    // noted now, not when its block is added: that can still fail, and the program outlive it
+    .inspect(|t| ctx.gone.note([t.pid()]))
     .map_err(|e| ApiError::bad_request(format!("can't start the program: {e}")))
 }
 

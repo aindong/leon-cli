@@ -71,6 +71,9 @@ fields it doesn't know. The full policy is in
   ([detail](docs/changelog-detail.md#agents-orchestrating-agents)).
 
   ![An agent starts two agents and hears back through its inbox](docs/images/whats-new/0.2.0/agents.gif)
+- **Permission prompts stay yours.** An agent in leon can't type into a pane that waits on one,
+  or move your keys onto it; only your own focus move puts them there. It keeps agents from
+  answering; it is not a sandbox ([detail](docs/changelog-detail.md#agents-orchestrating-agents)).
 
 ## [0.1.1] - 2026-11-19
 

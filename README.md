@@ -187,8 +187,9 @@ leon block close "$id"
 It knows where it is from `LEON_SESSION` and `LEON_BLOCK`, labels what it opens, and closes only
 what it created. An agent can also start other agents (`leon agent start claude "the task"`) and
 hear back from them: their reports go to its `leon inbox`, and leon types a short notice into its
-prompt when its turn has ended. Permission prompts stay yours: no agent in leon can type into a
-pane that waits on one. See [docs/agents.md](docs/agents.md).
+prompt when its turn has ended. Permission prompts stay yours: agents in leon can't type into a
+pane that waits on one or move your keys onto it. That keeps agents from answering; it is not a
+sandbox ([docs/agents.md](docs/agents.md) lists the limits).
 
 ## Know what needs you
 

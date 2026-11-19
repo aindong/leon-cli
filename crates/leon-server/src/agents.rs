@@ -236,6 +236,35 @@ pub enum Peer {
     Remote,
 }
 
+/// Whether `peer` is a person: another machine, or a local client outside every leon terminal
+/// (`programs`, the terminals' programs now) and outside what lives on of a closed one (`Gone`).
+fn is_person(peer: Peer, programs: &[i32], ended: &[i32]) -> bool {
+    use leon_core::process_tree::{in_ended_session, inside};
+    match peer {
+        Peer::Remote => true,
+        Peer::Unknown => false,
+        Peer::Process(p) => inside(p, programs) == Some(false) && !in_ended_session(p, ended),
+    }
+}
+
+/// Every terminal program this server ran. Each led its own session, which a job keeps after the
+/// terminal closes, whatever process group it moves to; `in_ended_session` counts such a job as
+/// inside. Noted when it starts and on every release of the state lock. Never forgotten: a pid is
+/// a few bytes, and no listing of processes can show a session is empty for sure; a reused id
+/// only ever counts a person as inside.
+#[derive(Default)]
+pub struct Gone(std::sync::Mutex<std::collections::HashSet<i32>>);
+
+impl Gone {
+    pub fn note(&self, programs: impl IntoIterator<Item = i32>) {
+        crate::events::lock(&self.0).extend(programs.into_iter().filter(|&p| p > 0));
+    }
+
+    pub fn sessions(&self) -> Vec<i32> {
+        crate::events::lock(&self.0).iter().copied().collect()
+    }
+}
+
 /// The block an input request types into: `block.event` but `focus`, `block.method` `write`, and
 /// `client.key` (to its block, else the session's focused one).
 fn input_target(ctx: &Ctx, method: &str, params: &Value) -> Option<String> {
@@ -254,8 +283,28 @@ fn input_target(ctx: &Ctx, method: &str, params: &Value) -> Option<String> {
 
 /// Whether an input request is typing (keys, a paste, text), as answering a prompt takes, rather
 /// than the mouse.
+/// A person's call made in-process (the app's keys), which no guard sees: where it types is theirs
+/// (`person_typed_at`), and a hold there ends, as `guard` does for a person's request.
+pub(crate) fn person_typing(ctx: &Ctx, method: &str, params: &Value) {
+    let Some(id) = input_target(ctx, method, params).filter(|_| typing(method, params)) else { return };
+    let mut st = ctx.state();
+    if let Ok((_, b)) = st.block(&id) {
+        if b.terminal.held_for_person() {
+            b.terminal.person_typed();
+        }
+    }
+    st.person_typed_at(&id);
+}
+
+/// Whether a person's input request reaches the terminal as typing, which ends a hold there. Not
+/// `client.key` itself: a binding may take the key; the `block.event` that types it when none
+/// does is its own call (`Ctx::call`, as the person's).
 fn typing(method: &str, params: &Value) -> bool {
-    method != "block.event" || matches!(params["event"]["type"].as_str(), Some("key" | "paste"))
+    match method {
+        "client.key" => false,
+        "block.event" => matches!(params["event"]["type"].as_str(), Some("key" | "paste")),
+        _ => true,
+    }
 }
 
 /// Keep agents from answering permission prompts. A block whose program reported one is held
@@ -264,37 +313,55 @@ fn typing(method: &str, params: &Value) -> bool {
 /// (only its own program and what that runs, its hooks, may), or run config actions or reloads
 /// (Lua in the server types where nothing here sees). A person is a client outside every leon
 /// terminal (the app, `leon attach` or a shell in a terminal app) or on another machine; a local
-/// client whose process can't be told is taken to be inside.
-pub fn guard(ctx: &Ctx, peer: Peer, method: &str, params: &Value) -> Result<(), ApiError> {
+/// client whose process can't be told is taken to be inside. Ok says whether the caller is a person.
+pub fn guard(ctx: &Ctx, peer: Peer, method: &str, params: &Value) -> Result<bool, ApiError> {
+    // the terminals' programs, and the server itself: what a config's Lua runs (`leon.exec`)
+    let mut programs: Vec<i32> =
+        ctx.state().sessions.iter().flat_map(|s| &s.blocks).map(|b| b.terminal.pid()).collect();
+    programs.push(std::process::id() as i32);
+    let person = is_person(peer, &programs, &ctx.gone.sessions());
+    // nor move the focus onto such a block, where a person's next keys would answer it
+    let steered = crate::focus_guard::onto_held(&ctx.state(), method, params);
+    if let Some(id) = steered.filter(|_| !person) {
+        return Err(ApiError::new(
+            403,
+            "permission_pending",
+            format!(
+                "{id} waits for a person to answer a permission prompt; until one types there, a program \
+                 inside a leon terminal can't move the focus onto it"
+            ),
+        ));
+    }
     let lua = matches!(method, "client.action" | "server.config_reload");
     let status = method == "block.method" && params["method"] == "dev.leon.terminal.report_status";
     let target = if status { params["block_id"].as_str().map(String::from) } else { input_target(ctx, method, params) };
-    let (held, programs) = {
-        let st = ctx.state();
+    let held = {
+        let mut st = ctx.state();
         let blocks = || st.sessions.iter().flat_map(|s| &s.blocks);
         let held = match (&target, lua) {
             (Some(id), _) => st.block(id).ok().map(|(_, b)| b.terminal.clone()).filter(|t| t.held_for_person()),
             (None, true) => blocks().map(|b| b.terminal.clone()).find(|t| t.held_for_person()),
             (None, false) => None,
         };
-        let Some(held) = held else { return Ok(()) };
-        (held, blocks().map(|b| b.terminal.pid()).collect::<Vec<_>>())
+        let Some(held) = held else {
+            // where a person types is theirs: a prompt raised there keeps their keys (held_keys.rs)
+            if let Some(id) = target.as_deref().filter(|_| person && !status && typing(method, params)) {
+                st.person_typed_at(id);
+            }
+            return Ok(person);
+        };
+        held
     };
     use leon_core::process_tree::inside;
-    let person = match peer {
-        Peer::Remote => true,
-        Peer::Unknown => false,
-        Peer::Process(p) => inside(p, &programs) == Some(false),
-    };
     if person {
         if target.is_some() && !status && typing(method, params) {
             held.person_typed();
         }
-        return Ok(());
+        return Ok(person);
     }
     // its own hooks report its state; the hold stays until a person types
     if status && matches!(peer, Peer::Process(p) if inside(p, &[held.pid()]) == Some(true)) {
-        return Ok(());
+        return Ok(person);
     }
     let id = target.unwrap_or_else(|| "a block".into());
     Err(ApiError::new(
