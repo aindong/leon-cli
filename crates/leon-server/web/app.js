@@ -1,19 +1,25 @@
-// leon in the browser, view only (docs/web.md): the sessions, the chosen session's tabs, and
-// the chosen tab's panes, live. It is one more client of the socket API, like the app: a copy of
-// the model refetched after each batch of events, and block.watch screens for the panes shown.
+// leon in the browser (docs/web.md): the sessions, the chosen session's tabs and the chosen tab's
+// panes, live, driven like the app: keys, paste, copy and the mouse (input.js), new and closed
+// sessions, tabs and panes, and Activity (activity.js). It is one more client of the socket API: a
+// copy of the model refetched after each batch of events, block.watch screens for the panes shown,
+// and the panes' terminals sized to the page's boxes.
 
 import { Conn } from "./conn.js";
-import { Grid, fontChanged } from "./grid.js";
+import { Grid, setFont } from "./grid.js";
+import { wire } from "./input.js";
+import { Activity } from "./activity.js";
 
 const $ = (id) => document.getElementById(id);
 const token = document.querySelector('meta[name="leon-token"]').content;
 
 const model = { sessions: [], view: null, blocks: new Map() };
 const chosen = { session: null, window: null };
-const panes = new Map(); // block id → { el, grid, title }
+const panes = new Map(); // block id → { el, grid, title, body, unwire, asked }
 let watched = "";
 let refetch = null;
 let burst = null; // when the events waiting for a refetch began
+let shown = null; // the window drawn now
+let activityAt = 0;
 
 const scheme = location.protocol === "https:" ? "wss" : "ws";
 const conn = new Conn(`${scheme}://${location.host}/ws?token=${encodeURIComponent(token)}`, {
@@ -46,13 +52,24 @@ function reconnect(wait) {
 }
 
 function failed(e) {
-  note(`Can't reach the server: ${e.message || e}`);
+  note(`${e.message || e}`);
 }
 
 function note(text) {
   $("note").textContent = text;
   $("note").hidden = !text;
 }
+
+const call = (method, params) => conn.call(method, params).catch(failed);
+
+/** The pane that gets the keys: the shown tab's focused one. */
+const target = () => (chosen.session && shown?.focused_block_id ? { s: chosen.session, b: shown.focused_block_id } : null);
+const pointer = wire(conn, $("keys"), target, failed);
+const activity = new Activity(conn, $("activity"), $("notify"), (e) => {
+  choose(e.s, e.w);
+  call("session.focus_block", { session_id: e.s, block_id: e.b });
+  call("block.event", { session_id: e.s, block_id: e.b, event: { type: "focus" } }); // clears done/error
+});
 
 function fromHash() {
   const decode = (part) => {
@@ -73,10 +90,10 @@ async function start() {
   const { settings } = await conn.call("server.settings");
   const family = settings.font.family.replace(/["\\]/g, "");
   document.documentElement.style.setProperty("--font", `"${family}", ui-monospace, Menlo, monospace`);
-  fontChanged();
+  setFont(settings.font.size);
   await conn.call("session.attach_all", { event_scope: "all" });
   await refresh();
-  new ResizeObserver(() => panes.forEach((p) => p.grid.fit())).observe($("panes"));
+  $("keys").focus({ preventScroll: true });
 }
 
 async function refresh() {
@@ -97,6 +114,10 @@ async function refresh() {
     model.view = null;
   }
   render();
+  if (Date.now() - activityAt > 1000) {
+    activityAt = Date.now();
+    activity.refresh(model.sessions).catch(failed);
+  }
 }
 
 function choose(session, window) {
@@ -108,38 +129,72 @@ function choose(session, window) {
 
 function render() {
   const win = model.view?.windows.find((w) => w.window_id === chosen.window) ?? model.view?.windows.find((w) => w.active);
+  shown = win ?? null;
   renderSidebar(win);
   renderPanes(win);
-  note(model.sessions.length ? "" : "No sessions. Start one with leon new on the server's machine.");
+  if (!model.sessions.length) note("No sessions. + Session starts one.");
+}
+
+function button(text, current, onclick, title) {
+  const b = document.createElement("button");
+  b.textContent = text;
+  b.onclick = onclick;
+  if (current) b.setAttribute("aria-current", "true");
+  if (title) b.title = b.ariaLabel = title;
+  return b;
+}
+
+/** A × that closes on a second click within 3 s (the first one asks). */
+function closer(what, close) {
+  const b = button("×", false, () => {
+    if (b.dataset.armed) return close();
+    b.dataset.armed = "1";
+    b.textContent = "close?";
+    setTimeout(() => {
+      delete b.dataset.armed;
+      b.textContent = "×";
+    }, 3000);
+  }, `Close ${what}`);
+  b.classList.add("close");
+  return b;
+}
+
+function row(main, ...extra) {
+  const r = document.createElement("div");
+  r.className = "row-actions";
+  r.append(main, ...extra);
+  return r;
 }
 
 function renderSidebar(win) {
   const items = model.sessions.map((s, i) => {
     const li = document.createElement("li");
-    const b = button(s.label || `session ${i + 1}`, s.session_id === chosen.session, () => choose(s.session_id, null));
+    const name = s.label || `session ${i + 1}`;
+    const b = button(name, s.session_id === chosen.session, () => choose(s.session_id, null));
     b.classList.add("session");
-    li.append(b);
+    li.append(row(b, closer(`session ${name}`, () => call("session.destroy", { session_id: s.session_id }))));
     if (s.session_id === chosen.session && model.view) {
       const tabs = document.createElement("ul");
       tabs.className = "tabs";
       for (const w of model.view.windows) {
         const t = document.createElement("li");
-        t.append(button(tabName(w), w === win, () => choose(s.session_id, w.window_id)));
+        const open = () => {
+          choose(s.session_id, w.window_id);
+          call("session.focus_window", { session_id: s.session_id, window_id: w.window_id });
+        };
+        const close = () => call("session.close_window", { session_id: s.session_id, window_id: w.window_id });
+        t.append(row(button(tabName(w), w === win, open), closer(`tab ${tabName(w)}`, close)));
         tabs.append(t);
       }
+      const add = document.createElement("li");
+      add.append(button("+ Tab", false, () => call("session.new_window", { session_id: s.session_id }), "New tab"));
+      add.firstChild.classList.add("add");
+      tabs.append(add);
       li.append(tabs);
     }
     return li;
   });
   $("sessions").replaceChildren(...items);
-}
-
-function button(text, current, onclick) {
-  const b = document.createElement("button");
-  b.textContent = text;
-  b.onclick = onclick;
-  if (current) b.setAttribute("aria-current", "true");
-  return b;
 }
 
 function tabName(w) {
@@ -153,24 +208,59 @@ function paneName(b) {
   return b.label || b.title || [b.foreground, where].filter(Boolean).join(" · ");
 }
 
+function split(id, direction) {
+  const s = chosen.session;
+  call("session.new_split", { session_id: s, anchor_id: id, direction, side: "after", layout: { block: {} }, focus: true });
+}
+
 function pane(id) {
   let p = panes.get(id);
   if (!p) {
     const el = document.createElement("section");
-    el.className = "pane";
-    const title = document.createElement("header");
+    const head = document.createElement("header");
+    const title = document.createElement("span");
+    title.className = "title";
+    const tools = document.createElement("span");
+    tools.className = "tools";
+    const s = chosen.session;
+    tools.append(
+      button("◫", false, () => split(id, "horizontal"), "Split right"),
+      button("⊟", false, () => split(id, "vertical"), "Split down"),
+      closer("pane", () => call("block.close", { session_id: s, block_id: id })),
+    );
+    head.append(title, tools);
     const body = document.createElement("div");
     body.className = "body";
     const grid = new Grid();
     body.append(grid.el);
-    el.append(title, body);
-    p = { el, grid, title };
+    el.append(head, body);
+    const focus = () => {
+      if (target()?.b !== id) call("session.focus_block", { session_id: s, block_id: id });
+    };
+    p = { el, grid, title, body, unwire: pointer(body, s, id, grid, focus), asked: "" };
+    new ResizeObserver(() => size(id)).observe(body);
     panes.set(id, p);
   }
   p.title.textContent = paneName(model.blocks.get(id));
   p.el.className = "pane"; // a pane moves between a split, a float and a zoom: start clean
   p.el.style.cssText = "";
   return p;
+}
+
+/**
+ * Size a pane's terminal to what its box fits, when the box (the page's own layout of it) changed
+ * since the page last asked; never because another client resized it (`leon attach`'s rule).
+ */
+function size(id) {
+  const p = panes.get(id);
+  if (!p?.el.isConnected) return;
+  p.grid.style();
+  const fit = p.grid.fits();
+  const key = fit ? `${fit.cols}x${fit.rows}` : "";
+  if (!fit || key === p.asked) return;
+  p.asked = key;
+  const s = chosen.session;
+  call("block.method", { session_id: s, block_id: id, method: "dev.leon.terminal.resize", args: { rows: fit.rows, cols: fit.cols } });
 }
 
 /** A layout node as nested boxes: `horizontal` splits side by side, `ratio` the first side's share. */
@@ -191,7 +281,7 @@ function tree(node, focused) {
 }
 
 function renderPanes(win) {
-  const shown = [];
+  const ids = [];
   const out = [];
   if (win?.zoomed_block_id) {
     out.push(tree({ block: { block_id: win.zoomed_block_id } }, win.focused_block_id));
@@ -202,7 +292,6 @@ function renderPanes(win) {
     if (f.hidden || win.zoomed_block_id) continue;
     const el = tree({ block: { block_id: f.block_id } }, win.focused_block_id);
     el.classList.add("float");
-    el.style.flex = "";
     Object.assign(el.style, {
       left: `${f.bounds.x * 100}%`,
       top: `${f.bounds.y * 100}%`,
@@ -213,18 +302,22 @@ function renderPanes(win) {
   }
   $("panes").replaceChildren(...out);
   for (const [id, p] of panes) {
-    if (p.el.isConnected) shown.push(id);
-    else panes.delete(id); // a new grid, and a whole screen, if it comes back
+    if (p.el.isConnected) ids.push(id);
+    else (p.unwire(), panes.delete(id)); // a new grid, and a whole screen, if it comes back
   }
-  panes.forEach((p) => p.grid.fit());
-  const key = shown.sort().join(" ");
+  ids.forEach(size);
+  const key = ids.sort().join(" ");
   if (key !== watched) {
     watched = key;
-    conn.call("block.watch", { block_ids: shown }).catch(() => {
+    conn.call("block.watch", { block_ids: ids }).catch(() => {
       watched = ""; // a block went away meanwhile: the next render asks again
     });
   }
 }
+
+$("new-session").onclick = () =>
+  conn.call("session.create", {}).then((r) => choose(r.session_id, r.window_id), failed);
+$("panes").addEventListener("mousedown", () => $("keys").focus({ preventScroll: true }));
 
 window.addEventListener("hashchange", () => {
   fromHash();

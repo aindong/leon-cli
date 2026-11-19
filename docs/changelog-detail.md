@@ -8,6 +8,15 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### Drive leon from the browser
+
+#### Added
+- The web page (`serve_web`) is no longer view only: keys go to the focused pane (encoded on the
+  server by the app's mapping), composed text and pastes as the program asked, copy of a selection,
+  mouse reports for programs that want them, + Session, + Tab, splits and ×, Activity across every
+  session, and browser notifications on HTTPS ([web.md](web.md#using-the-page)). No API change.
+- The page counts as a person for the permission guard, as the app does.
+
 ### HTTPS for the browser page
 
 #### Added

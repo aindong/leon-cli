@@ -29,6 +29,7 @@ export class Conn {
 
   call(method, params = {}) {
     const id = this.next++;
+    if (this.ws.readyState !== WebSocket.OPEN) return Promise.reject(new Error("not connected"));
     return new Promise((resolve, reject) => {
       this.waiting.set(id, { resolve, reject });
       this.ws.send(JSON.stringify({ id, method, params }));

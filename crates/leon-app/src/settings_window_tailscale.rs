@@ -78,7 +78,7 @@ impl SettingsWindow {
             .children(refused)
             .child(self.port_control(t, cx))
             .child(self.tags_control(t, cx))
-            .child(self.toggle(t, "serve_web", "Also serve them a view-only web page", cx))
+            .child(self.toggle(t, "serve_web", "Also serve them a web page of my sessions", cx))
             .child(self.web_file(t, "serve_web_cert", cx))
             .child(self.web_file(t, "serve_web_key", cx))
     }

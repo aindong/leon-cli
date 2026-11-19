@@ -30,6 +30,8 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **Drive leon from the browser.** The tailnet web page types, pastes, copies, sends the mouse,
+  opens and closes sessions, tabs and panes, and lists Activity ([detail](docs/changelog-detail.md#drive-leon-from-the-browser)).
 - **leon in the browser, over your tailnet.** `serve_web` serves a view-only page of your sessions,
   tabs and panes to your own machines; `api_version` goes to `1.16.0` ([detail](docs/changelog-detail.md#leon-in-the-browser)).
 - **HTTPS for the browser page.** `serve_web_cert` and `serve_web_key` name the files `tailscale cert`
