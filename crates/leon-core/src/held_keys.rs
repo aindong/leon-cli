@@ -76,17 +76,19 @@ fn off_held(s: &Session, was: Option<&str>, t: &str) -> Option<String> {
     if let Some(p) = was.filter(|p| free(p)) {
         return Some(p.to_string());
     }
-    if let Some(tree) = s.windows.get(s.active).and_then(|w| w.layout.as_ref()) {
-        let near = tree.sibling_leaf(t).filter(|id| free(id));
-        if let Some(id) = near.or_else(|| tree.leaves().into_iter().find(|id| free(id))) {
-            return Some(id.to_string());
-        }
+    // in a tab: a pane of it that isn't held, tiled first, then a float or drawer
+    let any = |w: usize| {
+        let win = s.windows.get(w)?;
+        let leaves = win.layout.as_ref().map(|t| t.leaves()).unwrap_or_default();
+        let overlays = s.blocks.iter().filter(|b| b.window_id == win.id).map(|b| b.id.as_str());
+        leaves.into_iter().chain(overlays).find(|id| free(id))
+    };
+    let near = s.windows.get(s.active).and_then(|w| w.layout.as_ref()).and_then(|tree| tree.sibling_leaf(t));
+    if let Some(id) = near.filter(|id| free(id)).or_else(|| any(s.active)) {
+        return Some(id.to_string());
     }
     // another tab: its own target, else any pane of it that isn't held
-    let tab = |w: usize| {
-        let leaves = s.windows.get(w)?.layout.as_ref().map(|t| t.leaves()).unwrap_or_default();
-        target(s, w).filter(|id| free(id)).or_else(|| leaves.into_iter().find(|id| free(id)))
-    };
+    let tab = |w: usize| target(s, w).filter(|id| free(id)).or_else(|| any(w));
     (1..s.windows.len())
         .flat_map(|d| [s.active.checked_sub(d), Some(s.active + d)])
         .flatten()

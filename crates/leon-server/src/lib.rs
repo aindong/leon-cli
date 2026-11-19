@@ -236,10 +236,10 @@ impl Ctx {
         // in-process for a program's request (its Lua, or a method's own call): the guard judges it
         // as the program's own; otherwise in-process is the app's, a person's
         let person = focus_guard::caller().is_none_or(|c| c.person);
-        if !person {
-            if let Err(e) = agents::guard(self, agents::Peer::Unknown, method, &params) {
-                return Box::pin(std::future::ready(Err(e)));
-            }
+        if person {
+            agents::person_typing(self, method, &params);
+        } else if let Err(e) = agents::guard(self, agents::Peer::Unknown, method, &params) {
+            return Box::pin(std::future::ready(Err(e)));
         }
         self.call_as(person, method, params)
     }

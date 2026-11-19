@@ -249,35 +249,19 @@ fn is_person(peer: Peer, programs: &[i32], ended: &[i32]) -> bool {
 
 /// Every terminal program this server ran. Each led its own session, which a job keeps after the
 /// terminal closes, whatever process group it moves to; `in_ended_session` counts such a job as
-/// inside. Noted on every release of the state lock, so a pane that lives a moment counts too.
+/// inside. Noted when it starts and on every release of the state lock. Never forgotten: a pid is
+/// a few bytes, and no listing of processes can show a session is empty for sure; a reused id
+/// only ever counts a person as inside.
 #[derive(Default)]
-pub struct Gone(std::sync::Mutex<GoneState>);
-
-#[derive(Default)]
-struct GoneState {
-    sessions: std::collections::HashSet<i32>,
-    /// How many were left at the last prune.
-    kept: usize,
-}
-
-/// Past this many (and twice as many as the last prune kept), sessions nothing lives in any more
-/// are forgotten. One that something still lives in is never dropped.
-const MOST_GONE: usize = 4096;
+pub struct Gone(std::sync::Mutex<std::collections::HashSet<i32>>);
 
 impl Gone {
     pub fn note(&self, programs: impl IntoIterator<Item = i32>) {
-        let mut g = crate::events::lock(&self.0);
-        g.sessions.extend(programs.into_iter().filter(|&p| p > 0));
-        if g.sessions.len() > MOST_GONE.max(2 * g.kept) {
-            if let Some(live) = leon_core::process_tree::live_sessions() {
-                g.sessions.retain(|s| live.contains(s));
-            }
-            g.kept = g.sessions.len();
-        }
+        crate::events::lock(&self.0).extend(programs.into_iter().filter(|&p| p > 0));
     }
 
     pub fn sessions(&self) -> Vec<i32> {
-        crate::events::lock(&self.0).sessions.iter().copied().collect()
+        crate::events::lock(&self.0).iter().copied().collect()
     }
 }
 
@@ -299,6 +283,19 @@ fn input_target(ctx: &Ctx, method: &str, params: &Value) -> Option<String> {
 
 /// Whether an input request is typing (keys, a paste, text), as answering a prompt takes, rather
 /// than the mouse.
+/// A person's call made in-process (the app's keys), which no guard sees: where it types is theirs
+/// (`person_typed_at`), and a hold there ends, as `guard` does for a person's request.
+pub(crate) fn person_typing(ctx: &Ctx, method: &str, params: &Value) {
+    let Some(id) = input_target(ctx, method, params).filter(|_| typing(method, params)) else { return };
+    let mut st = ctx.state();
+    if let Ok((_, b)) = st.block(&id) {
+        if b.terminal.held_for_person() {
+            b.terminal.person_typed();
+        }
+    }
+    st.person_typed_at(&id);
+}
+
 fn typing(method: &str, params: &Value) -> bool {
     method != "block.event" || matches!(params["event"]["type"].as_str(), Some("key" | "paste"))
 }

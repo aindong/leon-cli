@@ -156,10 +156,11 @@ of [the architecture](../architecture.md).
   pane that isn't held, or the nearest tab whose keys aren't on one (`held_keys.rs`;
   `focus_guard.rs` tells it who asked, through to the Lua thread, and in-process calls made for
   a program's request go through the guard as the program's own). A closed pane's session counts
-  as inside while its leader is gone and anything lives in it: every terminal program is noted
-  when it starts and when the state lock is released, and Linux and macOS don't hand out a pid
-  still in use as a session or group id. The server is a root too, so a closed pane's program
-  that outlives the close and what Lua runs (`leon.exec`) are inside. The
+  as inside while its leader is gone or still the server's child: every terminal program is noted
+  when it starts and when the state lock is released, and never forgotten, and Linux and macOS
+  don't hand out a pid still in use as a session or group id. The server is a root too, so a
+  closed pane's program that outlives the close and what Lua runs (`leon.exec`) are inside. The
+  app's own calls, in-process, go through the guard as a person's, so its typing is noted. The
   peer's pid comes from the socket (`SO_PEERCRED`, `LOCAL_PEEREPID`); a client the check can't
   place counts as inside. Agents run in leon terminals; the app, a `leon attach` in a terminal
   app and another machine don't. A program that moves itself to a new session (`setsid`) gets

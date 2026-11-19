@@ -281,3 +281,55 @@ fn a_close_moves_the_keys_to_a_free_pane_in_another_tab_not_onto_a_held_prompt()
     assert_ne!(keys_go_to(&v), h, "KEYS_ON_HELD: F2 was free, yet the keys stayed on held H: {v}");
     assert_eq!(keys_go_to(&v), f2, "{v}");
 }
+
+#[test]
+fn an_orphaned_job_of_a_closed_pane_whose_program_lives_on_counts_as_inside() {
+    let o = Orch::new();
+    let (_s, w) = held_reader(&o);
+    let dir = o.env.dir.path();
+    let (go, code) = (dir.join("go"), dir.join("code"));
+    let job = o.script(
+        "orphan",
+        &format!(
+            "trap '' HUP\nwhile [ ! -e '{}' ]; do sleep 0.05; done\nleon send -b {w} yes >/dev/null 2>&1\necho $? > '{}'",
+            go.display(),
+            code.display()
+        ),
+    );
+    // the pane's program ignores the hang-up and lives on after the close; its job is handed to
+    // pid 1 at once (a subshell that exits), in a process group of its own
+    let pane = o.script(
+        "leader",
+        &format!(
+            "trap '' HUP\n( set -m; '{}' </dev/null >/dev/null 2>&1 & )\necho started\nexec sleep 300",
+            job.display()
+        ),
+    );
+    let p = o.env.ok(&["run", "--label", "leader", "--", pane.to_str().unwrap()]);
+    o.env.screen_until(&p, "the program", |t| t.contains("started"));
+    o.env.ok(&["block", "close", &p]);
+    std::fs::write(&go, "").unwrap();
+    assert_ne!(tried(&code), "0", "ORPHAN_OF_LIVE_LEADER: a closed pane's orphaned job typed into the held prompt");
+}
+
+#[test]
+fn a_close_moves_the_keys_to_a_free_float_rather_than_a_held_prompt() {
+    let o = Orch::new();
+    let x = o.env.ok(&["run", "--label", "x", "--", "sh", "-c", "exec sleep 300"]);
+    let s = o.env.json(&["ls", "--json"])[0]["session_id"].as_str().unwrap().to_string();
+    let h = o.env.ok(&["split", "-b", &x, "--", "sh", "-c", "exec sleep 300"]);
+    let f = o.env.ok(&["split", "-b", &x, "--", "sh", "-c", "exec sleep 300"]);
+    o.env.ok(&["api", "call", "session.float_block", &json!({ "session_id": s, "block_id": f }).to_string()]);
+    focus(&o, &s, &x);
+    o.env.ok(&["notify", "-b", &h, "--state", "blocked", "--kind", "permission", "--body", "Bash: rm -rf build"]);
+    // the person closes X: the only pane left in the tab that isn't held is the float
+    o.env.ok(&["block", "close", &x]);
+    let end = Instant::now() + Duration::from_secs(5);
+    let mut v = view(&o, &s);
+    while keys_go_to(&v) == h && Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(50));
+        v = view(&o, &s);
+    }
+    assert_ne!(keys_go_to(&v), h, "FLOAT_SKIPPED: a free float was left, yet the keys stayed on held H: {v}");
+    assert_eq!(keys_go_to(&v), f, "{v}");
+}
