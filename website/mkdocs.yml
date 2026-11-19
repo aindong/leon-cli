@@ -51,7 +51,6 @@ theme:
         icon: material/weather-sunny
         name: Light
   features:
-    - navigation.tabs
     - navigation.sections
     - navigation.top
     - navigation.footer
@@ -110,7 +109,6 @@ markdown_extensions:
 nav:
   - Overview: overview.md
   - Get started:
-      - install.md
       - shortcuts.md
       - recipes.md
       - updates.md
@@ -144,6 +142,7 @@ nav:
       - changelog-0.1.0.md
   - Demo: demo.md
   - Project:
+      - Build from source: install.md
       - architecture.md
       - Decisions:
           - architecture/protocol-and-clients.md

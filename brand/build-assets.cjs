@@ -36,14 +36,12 @@ async function main() {
   // tile at 87.5%, so they take this crop and the icon keeps its size in them.
   const framed = () => sharp(master).extract({ left: 40, top: 40, width: 944, height: 944 });
   await fs.writeFile(path.join(root, 'icon/leon-1024.svg'), `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="leon Pocket guardian app icon"><title>leon Pocket guardian — raster master wrapper</title><image width="1024" height="1024" href="data:image/png;base64,${master.toString('base64')}"/></svg>\n`);
-  const pageIcon = await framed().resize(580, 580).png(png).toBuffer();
   const ogPath = path.join(root, 'marketing/og.svg');
   const ogIcon = await framed().resize(672, 672).png(png).toBuffer();
   const ogSource = await fs.readFile(ogPath, 'utf8');
   await fs.writeFile(ogPath, ogSource.replace(/<image id="app-icon"[^>]*\/>/, `<image id="app-icon" x="808" y="125" width="336" height="336" href="data:image/png;base64,${ogIcon.toString('base64')}"/>`));
-  const htmlPath = path.join(root, 'marketing/index.html');
-  const html = await fs.readFile(htmlPath, 'utf8');
-  await fs.writeFile(htmlPath, html.replace(/data:image\/png;base64,[A-Za-z0-9+/=]+/g, `data:image/png;base64,${pageIcon.toString('base64')}`));
+  // the landing page shows the icon at 112 px; this is twice that, for a sharp screen
+  await framed().resize(256, 256).webp({ quality: 90 }).toFile(path.join(root, 'marketing/app-icon.webp'));
   // shortcut: the README banner's layout exists only as its PNG, so the icon is redrawn in place; give it a source file before changing the layout
   const { BANNER, TILE } = geometry, bannerPath = path.join(root, '../docs/images/banner.png');
   const tile = await sharp(master).extract({ left: TILE.x, top: TILE.y, width: TILE.width, height: TILE.height }).resize(BANNER.width, BANNER.height).raw().toBuffer();
@@ -96,7 +94,7 @@ async function main() {
   } finally {
     await browser.close();
   }
-  console.log('Built the master, hero.png, og.png, the README banner, 10 iconset PNGs, Leon.icns, size-check.png, page embed, and raster SVG wrapper.');
+  console.log('Built the master, hero.png, og.png, the README banner, 10 iconset PNGs, Leon.icns, size-check.png, the landing page icon, and raster SVG wrapper.');
   if ((await check()).length) throw new Error('the built master does not pass check-icon.cjs');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

@@ -18,6 +18,10 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   hand; `website/build.sh` builds it, and CI builds it strictly on every change but one to
   translations, images or `brand/` alone (they start no run)
   ([releases.md](releases.md#the-website)).
+- It wears leon's brand: Instrument Sans and the paper, ink and clay colours in the docs too, code
+  colours that pass WCAG AA in both themes, and a header with Home, Docs, What's new, Demo and
+  GitHub. The landing page shows the app at work, its pictures and demo videos are files
+  (`brand/marketing/media.sh`), and no page asks another site for anything.
 
 ### HTTPS for the browser page
 

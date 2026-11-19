@@ -71,8 +71,8 @@ The proof shows 16/32/128 px on Parchment and Iron, plus direct reduction versus
 
 - [Hero](marketing/hero.png) / [SVG](marketing/hero.svg): **1600 × 600**.
 - [OG](marketing/og.png) / [SVG](marketing/og.svg): **1200 × 630**; the SVG embeds the app icon.
-- [Landing page](marketing/index.html): single HTML with inline CSS, embedded font/icon/favicon, phone layout and dark mode.
-- [Copy](marketing/copy.md): unchanged tagline, alternatives, 50-word pitch and 150-word description.
+- [Landing page](marketing/index.html): one HTML file with inline CSS, a phone layout and dark mode. The website serves it with its pictures as files: the font and favicon from the docs' assets, the app icon (`marketing/app-icon.webp`, from `build-assets.cjs`) and the screenshots and demo videos that [`marketing/media.sh`](marketing/media.sh) makes from `docs/images/`.
+- [Copy](marketing/copy.md): the tagline, the one line that says what leon is, alternatives, a 50-word pitch and a 150-word description.
 
 Instrument Sans remains the UI/marketing family, with the local Latin WOFF2 and SIL [OFL licence](fonts/OFL.txt). Menlo remains the terminal/code family with a monospace web fallback. The custom wordmark remains vector paths. No app typography or application code changes.
 

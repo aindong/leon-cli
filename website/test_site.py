@@ -62,9 +62,13 @@ class Built(unittest.TestCase):
         landing = read(self.out / "index.html")
         self.assertIn("Keep your", landing)
         for link in re.findall(r'href="([^"#:]+)"', landing):
-            self.assertTrue((self.out / link / "index.html").exists(), f"the landing page's {link}")
+            target = self.out / link
+            self.assertTrue(target.is_file() or (target / "index.html").exists(), f"the landing page's {link}")
         for name in ("Docs", "What's new", "Demo", "Install", "GitHub"):
             self.assertIn(f">{name}", landing)
+        # the steps for people who install it, not the build from source
+        self.assertIn('href="overview/#install"', landing)
+        self.assertNotIn('href="install/"', landing)
         self.assertIn("leon is a terminal multiplexer", self.page("overview"))
         tracked = subprocess.run(
             ["git", "ls-files", "docs"], cwd=ROOT, capture_output=True, text=True, check=True
@@ -124,10 +128,68 @@ class Built(unittest.TestCase):
         href = re.findall(logo, read(self.out / "404.html"))[0]
         self.assertEqual(urljoin(f"{base}missing/page/", href), base, "404")
 
-    def test_the_demo_page_without_media_shows_a_poster_and_no_video(self):
+    def test_the_demo_page_without_media_shows_a_video_with_a_poster(self):
         demo = self.page("demo")
-        self.assertNotIn("<video", demo)
-        self.assertRegex(demo, r'<img[^>]+src="\.\./images/demo-app\.gif"')
+        videos = re.findall(r"<video[^>]*>", demo)
+        self.assertEqual(len(videos), 2, "the app's and the command's demos as videos, not GIFs")
+        for video in videos:
+            self.assertIn("controls", video)
+            self.assertNotIn("autoplay", video)
+            for src in re.findall(r'(?:src|poster)="([^"]+)"', video):
+                self.assertTrue((self.out / "demo" / src).resolve().exists(), src)
+        self.assertNotIn(".gif", demo.split('class="md-content"', 1)[1])
+        self.assertNotIn("on its way", demo)
+        for tag in re.findall(r"<(?:img|video)\b[^>]*>", demo.split('class="md-content"', 1)[1]):
+            self.assertRegex(tag, r'width="\d+"', tag)
+            self.assertRegex(tag, r'height="\d+"', tag)
+
+    def test_the_landing_page_is_small_and_its_files_exist(self):
+        landing = read(self.out / "index.html")
+        self.assertLess(len(landing.encode()), 30_000, "pictures and the font are files, not inlined")
+        self.assertNotIn("base64,", landing)
+        links = re.findall(r'(?:src|poster|srcset)="([^"#]+)"', landing)
+        links += re.findall(r'<link[^>]+href="([^"#]+)"', landing)
+        links += re.findall(r'url\(["\']?([^"\')]+)', landing)
+        self.assertTrue(links)
+        for link in links:
+            self.assertNotRegex(link, r"^[a-z]+:", "nothing from another site")
+            self.assertTrue((self.out / link.split()[0]).is_file(), link)
+        for tag in re.findall(r"<(?:img|video)\b[^>]*>", landing):
+            self.assertRegex(tag, r'width="\d+"', tag)
+            self.assertRegex(tag, r'height="\d+"', tag)
+
+    def test_no_third_party_requests(self):
+        # a canonical link names the page's address; nothing fetches it
+        loads = re.compile(r'<(?:script|img|source|video|audio|iframe|link(?![^>]*rel="canonical"))\b[^>]*\b(?:src|href|poster)="(?:https?:)?//', re.I)
+        for html in self.out.rglob("*.html"):
+            text = read(html)
+            self.assertFalse(loads.search(text), f"{html}: {loads.search(text) and loads.search(text)[0]}")
+            # Material's repo widget fetches api.github.com for stars and the latest version
+            self.assertNotIn('data-md-component="source"', text, html)
+            # Material fetches sitemap.xml under each of these; the switcher has the right links
+            self.assertNotRegex(text, r'<link rel="alternate" href="[^"]*" hreflang=', html)
+        for css in self.out.rglob("assets/*.css"):
+            self.assertNotRegex(read(css), r"url\([\"']?(?:https?:)?//", css)
+
+    def test_the_header_links_the_site_s_sections(self):
+        from urllib.parse import urljoin
+
+        base = "https://aindong.github.io/leon-cli/"
+        want = {"Home": base, "Docs": f"{base}overview/", "What's new": f"{base}whats-new/", "Demo": f"{base}demo/", "GitHub": GITHUB}
+        for url in ["overview", "install", "whats-new", "demo", "cli/sessions", "i18n/ja"]:
+            header = self.page(url).split("<header", 1)[1].split("</header>", 1)[0]
+            got = {name: urljoin(f"{base}{url}/", href) for href, name in re.findall(r'<a href="([^"]+)"[^>]*>\s*([^<]+?)\s*</a>', header)}
+            for name, href in want.items():
+                self.assertEqual(got.get(name), href, f"{url}: {name}")
+
+    def test_the_site_s_own_copy_is_plain(self):
+        hype = re.compile(r"\b(supercharge|seamless(ly)?|blazing|effortless(ly)?|powerful|revolutionary|unleash|game-chang|cutting-edge|robust|elevate|empower)", re.I)
+        pages = {"index.html": read(self.out / "index.html"), "copy.md": read(ROOT / "brand/marketing/copy.md")}
+        for url in ["whats-new", "demo"]:
+            pages[url] = self.page(url).split('class="md-content"', 1)[1]
+        for name, text in pages.items():
+            self.assertNotIn("\u2014", text, f"{name}: an em dash")
+            self.assertFalse(hype.search(text), f"{name}: {hype.search(text) and hype.search(text)[0]}")
 
     def test_the_switcher_goes_to_the_page_s_own_translation(self):
         install = self.page("install")
@@ -147,6 +209,8 @@ class Built(unittest.TestCase):
         font = re.search(r"@font-face\s*{[^}]*url\(\"?([^\")]+)", css)
         self.assertTrue(font, "an @font-face")
         self.assertTrue((self.out / "assets" / font[1]).resolve().exists(), font[1])
+        # Material sets --md-text-font-family on body from --md-text-font: only the latter reaches it
+        self.assertRegex(css, r"--md-text-font:\s*\"?Instrument")
         config = read(HERE / "mkdocs.yml")
         self.assertIn("scheme: default", config)
         self.assertIn("scheme: slate", config)
@@ -185,7 +249,7 @@ class Media(unittest.TestCase):
             out = Path(d) / "site"
             build(out, media)
             demo = read(out / "demo" / "index.html")
-            self.assertEqual(demo.count("<video"), 2, demo)
+            self.assertEqual(demo.count("<video"), 3, "the two release videos and the command's")
             self.assertIn('poster="../media/demo.jpg"', demo)
             self.assertIn('src="../media/link-card.mp4"', demo)
             self.assertNotIn("Bad name", demo)

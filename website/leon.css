@@ -1,5 +1,6 @@
-/* leon's brand on the docs: brand/marketing/index.html's colours and Instrument Sans (brand/fonts,
-   SIL Open Font License beside it), Menlo for code, light and dark. */
+/* leon's brand on the docs: the landing page's colours (brand/marketing/index.html) and Instrument
+   Sans (brand/fonts, SIL Open Font License beside it), light and dark. Every text colour here passes
+   WCAG AA on the background it sits on; the code colours too, on the code background. */
 @font-face {
   font-family: Instrument;
   src: url("fonts/instrument-sans-latin.woff2") format("woff2");
@@ -7,47 +8,236 @@
   font-display: swap;
 }
 
+/* Material builds --md-text-font-family from --md-text-font on body: this is its own hook */
 :root {
-  --md-text-font-family: Instrument, system-ui, sans-serif;
-  --md-code-font-family: Menlo, ui-monospace, monospace;
+  --md-text-font: "Instrument";
 }
 
 [data-md-color-scheme="default"] {
+  --leon-line: #D1C5B8;
   --md-default-bg-color: #F5F0E7;
   --md-default-fg-color: #292521;
   --md-default-fg-color--light: #65594F;
-  --md-primary-fg-color: #292521;
-  --md-primary-fg-color--light: #463B33;
-  --md-primary-fg-color--dark: #1F1C19;
-  --md-primary-bg-color: #F5F0E7;
-  --md-accent-fg-color: #B64C32;
-  --md-typeset-a-color: #B64C32;
+  --md-default-fg-color--lighter: #A0938680;
+  --md-default-fg-color--lightest: #D1C5B880;
+  --md-primary-fg-color: #F5F0E7;
+  --md-primary-fg-color--light: #EBE3D7;
+  --md-primary-fg-color--dark: #EBE3D7;
+  --md-primary-bg-color: #292521;
+  --md-primary-bg-color--light: #65594F;
+  --md-accent-fg-color: #A0412A;
+  --md-accent-fg-color--transparent: #B64C321A;
+  --md-typeset-a-color: #A0412A;
+  --md-footer-bg-color: #EBE3D7;
+  --md-footer-bg-color--dark: #EBE3D7;
+  --md-footer-fg-color: #292521;
+  --md-footer-fg-color--light: #65594F;
+  --md-footer-fg-color--lighter: #65594F;
   --md-code-bg-color: #EBE3D7;
-  --md-footer-bg-color: #292521;
-  --md-footer-bg-color--dark: #1F1C19;
+  --md-code-fg-color: #292521;
+  --md-code-hl-color: #E8C77D;
+  --md-code-hl-color--light: #E8C77D66;
+  --md-code-hl-keyword-color: #9A3B22;
+  --md-code-hl-string-color: #4F6B2F;
+  --md-code-hl-number-color: #8A4B0F;
+  --md-code-hl-function-color: #5E4A8C;
+  --md-code-hl-constant-color: #8C3A5A;
+  --md-code-hl-special-color: #8C3A5A;
+  --md-code-hl-comment-color: #65594F;
+  --md-code-hl-name-color: #292521;
+  --md-code-hl-operator-color: #5A4E45;
+  --md-code-hl-punctuation-color: #5A4E45;
+  --md-code-hl-generic-color: #7A4A33;
+  --md-code-hl-variable-color: #6B4A12;
 }
 
 [data-md-color-scheme="slate"] {
+  --leon-line: #5A5047;
+  --md-hue: 30;
   --md-default-bg-color: #292521;
+  --md-default-bg-color--light: #292521B3;
   --md-default-fg-color: #F5F0E7;
   --md-default-fg-color--light: #D8CEC2;
-  --md-primary-fg-color: #1F1C19;
+  --md-default-fg-color--lighter: #A0938699;
+  --md-default-fg-color--lightest: #5A504780;
+  --md-primary-fg-color: #292521;
   --md-primary-fg-color--light: #352E28;
   --md-primary-fg-color--dark: #1F1C19;
   --md-primary-bg-color: #F5F0E7;
+  --md-primary-bg-color--light: #D8CEC2;
   --md-accent-fg-color: #E6AA91;
+  --md-accent-fg-color--transparent: #E6AA911A;
   --md-typeset-a-color: #E6AA91;
-  --md-code-bg-color: #352E28;
   --md-footer-bg-color: #1F1C19;
   --md-footer-bg-color--dark: #1F1C19;
+  --md-footer-fg-color: #F5F0E7;
+  --md-footer-fg-color--light: #D8CEC2;
+  --md-footer-fg-color--lighter: #D8CEC2;
+  --md-code-bg-color: #352E28;
+  --md-code-fg-color: #F5F0E7;
+  --md-code-hl-color: #E8C77D;
+  --md-code-hl-color--light: #E8C77D33;
+  --md-code-hl-keyword-color: #F0A27E;
+  --md-code-hl-string-color: #B8C6AC;
+  --md-code-hl-number-color: #E8C77D;
+  --md-code-hl-function-color: #C9B6F2;
+  --md-code-hl-constant-color: #F3A7B4;
+  --md-code-hl-special-color: #F3A7B4;
+  --md-code-hl-comment-color: #B5A99B;
+  --md-code-hl-name-color: #F5F0E7;
+  --md-code-hl-operator-color: #D8CEC2;
+  --md-code-hl-punctuation-color: #D8CEC2;
+  --md-code-hl-generic-color: #E6AA91;
+  --md-code-hl-variable-color: #E8C77D;
 }
 
-body {
-  font-family: var(--md-text-font-family);
+/* the header: paper like the landing page's, with a rule under it */
+.md-header,
+.md-header--shadow {
+  box-shadow: 0 1px 0 var(--leon-line);
 }
 
-.md-typeset code,
-.md-typeset kbd,
-.md-typeset pre {
-  font-family: var(--md-code-font-family);
+.md-header__title {
+  font-weight: 600;
+}
+
+.md-search__form,
+.md-search__form:hover {
+  background-color: var(--md-code-bg-color);
+}
+
+/* the site's own links where Material's repo widget was (overrides/partials/source.html) */
+.md-header__source {
+  width: auto;
+  max-width: none;
+}
+
+.leon-links {
+  display: flex;
+  gap: 0.1rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.leon-links a {
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.3rem;
+}
+
+.leon-links a:hover {
+  background-color: var(--md-code-bg-color);
+}
+
+.leon-links .leon-links__here {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.35em;
+}
+
+/* in the drawer on a phone: one link per line, as tall as a finger */
+.md-nav__source .leon-links {
+  flex-wrap: wrap;
+  padding: 0.4rem 0.2rem;
+  background-color: var(--md-code-bg-color);
+  color: var(--md-default-fg-color);
+}
+
+.md-nav__source .leon-links a {
+  padding: 0.6rem;
+}
+
+/* the language menu opens leftward from its button, so it never runs past a phone's edge */
+.md-select__inner,
+.md-select:focus-within .md-select__inner,
+.md-select:hover .md-select__inner {
+  left: auto;
+  right: 0;
+}
+
+.md-select__inner {
+  transform: translate3d(0, 0.3rem, 0);
+}
+
+.md-select:focus-within .md-select__inner,
+.md-select:hover .md-select__inner {
+  transform: translate3d(0, 0, 0);
+}
+
+.md-select__inner::after {
+  left: auto;
+  right: 0.8rem;
+}
+
+/* focus you can see, on every control */
+.md-header :focus-visible,
+.md-sidebar :focus-visible,
+.md-footer :focus-visible,
+.md-typeset :focus-visible,
+.md-select__link:focus,
+.md-option.focus-visible + label,
+.md-option:focus-visible + label {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+  border-radius: 0.1rem;
+}
+
+.md-search__input:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: -2px;
+}
+
+/* reading: headings in the brand's weight, prose at a readable measure, links that look like links */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  color: var(--md-default-fg-color);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.md-typeset h1 {
+  font-size: 2.2em;
+  line-height: 1.15;
+}
+
+.md-typeset :is(p, ul, ol, dl, blockquote) {
+  max-width: 38em;
+}
+
+.md-typeset a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.md-typeset a.headerlink,
+.md-typeset .md-button {
+  text-decoration: none;
+}
+
+/* code: a visible edge in the dark theme, a copy button you can find */
+.md-typeset pre > code {
+  box-shadow: inset 0 0 0 1px var(--leon-line);
+  border-radius: 0.2rem;
+}
+
+.md-typeset .md-clipboard {
+  color: var(--md-default-fg-color--light);
+}
+
+/* pictures keep their space while they load; a release video without a size takes the usual shape */
+.md-typeset video:not([height]) {
+  aspect-ratio: 16 / 9;
+}
+
+.md-typeset video,
+.md-typeset img {
+  max-width: 100%;
+  height: auto;
+}
+
+::selection {
+  background-color: var(--md-accent-fg-color);
+  color: var(--md-default-bg-color);
 }

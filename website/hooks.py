@@ -39,6 +39,7 @@ UNSAFE = re.compile(r"<(?:script|iframe|object|embed|frame)\b|<[a-z][^>]*\son[a-
 # an attribute's value in a tag, which a browser reads after decoding its character references
 ATTR = re.compile(r"""<[a-z][^>]*>""", re.I)
 VALUE = re.compile(r"""=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""")
+LANDING = ("app.webp", "overview.webp", "demo-app.mp4", "demo-app.webp", "demo-cli.mp4", "demo-cli.webp", "app-icon.webp")
 # the files in docs/ the site serves: pages and pictures
 SERVED = (".md", ".png", ".gif", ".jpg", ".jpeg", ".webp")
 
@@ -166,6 +167,10 @@ def on_files(files, config):
     add("overview.md", "README.md", abs_src_path=str(root / "README.md"))
     add("index.html", abs_src_path=str(tools / "brand/marketing/index.html"))
     add("og.png", abs_src_path=str(tools / "brand/marketing/og.png"))
+    # the landing page's pictures and the demo video (brand/marketing/media.sh), from this checkout like
+    # the page itself: the release's docs/images may not have them
+    for name in LANDING:
+        add(f"home/{name}", abs_src_path=str(tools / "brand/marketing" / name))
     add("assets/leon.css", abs_src_path=str(tools / "website/leon.css"))
     add("assets/logo-mark.svg", abs_src_path=str(tools / "brand/logo-mark.svg"))
     for name in ("instrument-sans-latin.woff2", "OFL.txt"):
@@ -227,12 +232,16 @@ def release_page(version, date, body):
 
 def demo(media):
     videos = sorted((n for n in media if n.endswith((".mp4", ".webm"))), key=lambda n: (not n.startswith("demo."), n))
-    lines = ["# Demo", ""]
+    lines = ["# Demo", "", "leon at work: the app, then the `leon` command.", ""]
     if not videos:
+        # the app's GIF as a video (brand/marketing/media.sh): a tenth of the bytes, and it can be paused
         lines += [
-            "The narrated tour is on its way. Until then, leon at work:",
+            "## The app",
             "",
-            '<img src="docs/images/demo-app.gif" alt="The leon app: splitting a tab, switching tabs and sessions, a popup, and an agent working, then blocked" width="100%">',
+            '<video controls preload="none" playsinline width="1760" height="908" poster="home/demo-app.webp" src="home/demo-app.mp4"'
+            ' aria-label="The leon app: splitting a tab, the command palette, a git popup, switching sessions, and an agent working, then blocked"></video>',
+            "",
+            "Splitting a tab, the command palette, a git popup, switching sessions with ⌘K, and an agent that stops to ask a question.",
             "",
         ]
     for video in videos:
@@ -248,7 +257,10 @@ def demo(media):
     lines += [
         "## The command",
         "",
-        '<img src="docs/images/demo-cli.gif" alt="The leon command: a new session, a run that waits, typing into Python, then leon attach and a split" width="100%">',
+        '<video controls preload="none" playsinline width="1100" height="620" poster="home/demo-cli.webp" src="home/demo-cli.mp4"'
+        ' aria-label="The leon command: a new session, a run that waits, typing into Python, then leon attach and a split"></video>',
+        "",
+        "A new session, a run that waits for its result, typing into Python and reading its answer, then `leon attach` and a split.",
         "",
         "Each release's own clips are on [What's new](whats-new/index.md).",
     ]
@@ -298,7 +310,10 @@ def on_page_context(context, page, config, nav):
 
 
 def on_post_page(output, page, config):
-    return re.sub(r'\s*<meta name="generator"[^>]*>', "", output, count=1)
+    output = re.sub(r'\s*<meta name="generator"[^>]*>', "", output, count=1)
+    # Material asks for a sitemap.xml under each of these head links, which the language homes don't
+    # have; the switcher in the header already goes to this page's own translation
+    return re.sub(r'\s*<link rel="alternate" href="[^"]*" hreflang="[^"]*">', "", output)
 
 
 def on_post_template(output, template_name, config):

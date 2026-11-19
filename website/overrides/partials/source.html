@@ -1,0 +1,17 @@
+{#- The site's own links where Material puts its repo widget, which would ask api.github.com for the
+    stars and the latest version: in the header on a wide screen, at the top of the drawer on a phone. -#}
+{% set url = page.url if page and page.url else "" %}
+{% if url.startswith("whats-new/") or url.startswith("changelog-") %}
+  {% set here = "new" %}
+{% elif url == "demo/" %}
+  {% set here = "demo" %}
+{% elif page and page.file %}
+  {% set here = "docs" %}
+{% endif %}
+<nav class="leon-links" aria-label="Site">
+  <a href="{{ config.extra.homepage | url }}">Home</a>
+  <a href="{{ 'overview/' | url }}"{% if here == "docs" %} class="leon-links__here"{% endif %}>Docs</a>
+  <a href="{{ 'whats-new/' | url }}"{% if here == "new" %} class="leon-links__here"{% endif %}>What's new</a>
+  <a href="{{ 'demo/' | url }}"{% if here == "demo" %} class="leon-links__here"{% endif %}>Demo</a>
+  <a href="{{ config.repo_url }}">GitHub</a>
+</nav>
