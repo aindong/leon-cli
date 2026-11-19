@@ -329,9 +329,10 @@ impl Workspace {
         self.deadlines.thumbs = slot;
     }
 
-    /// The Activity list's waited times (`12s`) turn once a second while it lists something and
-    /// frames are drawn: the sidebar's input moves, nothing else. A window drawing no frames
-    /// (hidden, covered) stops it; the next frame starts it again (`drew_frame`).
+    /// The Activity list's waited times (`12s`, then `1m`) are looked at once a second while it
+    /// lists something: the sidebar's input moves, nothing else. A tick that changed them and saw
+    /// no frame drawn by the next one means the window draws nothing (hidden, covered): it stops,
+    /// and the next frame starts it again (`drew_frame`). A tick that changed nothing expects no frame.
     pub(super) fn tick_activity(&mut self, window: &Window, cx: &mut Context<Self>) {
         let wanted = self.activity && !self.attention.rows().is_empty();
         if !wanted {
@@ -341,16 +342,15 @@ impl Workspace {
         if self.deadlines.activity.is_some() {
             return;
         }
-        let frames = self.frames;
         self.deadlines.activity = Some(cx.spawn_in(window, async move |this, cx| {
-            let mut seen = frames;
+            // the frames drawn when the last tick changed what the sidebar draws
+            let mut waiting: Option<u64> = None;
             loop {
                 cx.background_executor().timer(WAITED_TICK).await;
                 let on = this.update_in(cx, |ws, window, cx| {
-                    let drawn = ws.frames != seen;
-                    seen = ws.frames;
-                    if drawn && ws.activity && !ws.attention.rows().is_empty() {
-                        ws.sync_sections(window, cx);
+                    let hidden = waiting.is_some_and(|f| f == ws.frames);
+                    if !hidden && ws.activity && !ws.attention.rows().is_empty() {
+                        waiting = ws.sync_sections(window, cx).then_some(ws.frames);
                         return true;
                     }
                     ws.deadlines.activity = None;

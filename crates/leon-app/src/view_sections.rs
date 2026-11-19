@@ -125,8 +125,9 @@ impl Workspace {
 
     /// Give each section what it draws now, notifying the ones that changed; make the sections that
     /// came on screen and drop those that left; run the Pulse while a shown indicator works. After
-    /// `prepare`, with the grids; it notifies only sections, never the workspace.
-    pub(super) fn sync_sections(&mut self, window: &Window, cx: &mut Context<Self>) {
+    /// `prepare`, with the grids; it notifies only sections, never the workspace. True when it
+    /// notified one.
+    pub(super) fn sync_sections(&mut self, window: &Window, cx: &mut Context<Self>) -> bool {
         // GPUI sends a hover only when the mouse moves: when the panes move under a mouse resting
         // on one, the hovered pane is the one now under it (the front one), if any
         let rects = self.shown().map(|(w, ids)| (self.pane_rects(&w, window), ids));
@@ -145,10 +146,12 @@ impl Workspace {
         self.sections.retain(|n, _| wanted.iter().any(|(w, _)| w == n));
         self.section_renders.borrow_mut().retain(|n, _| wanted.iter().any(|(w, _)| w == n));
         let pulse = self.pulse.clone();
+        let mut notified = false;
         for (name, input) in wanted {
             match self.sections.get_mut(&name) {
                 Some(slot) => {
                     let changed = slot.input != input;
+                    notified |= changed;
                     slot.input = input.clone();
                     slot.view.update(cx, |s, cx| {
                         s.stamp = stamp;
@@ -189,6 +192,7 @@ impl Workspace {
         let wanted = root || self.sections.values().any(|s| s.input.working());
         self.pulse_wanted = wanted;
         pulse.update(cx, |p, cx| p.set_running(wanted, cx));
+        notified
     }
 
     /// Draw a section's helper from its input.
