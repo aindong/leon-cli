@@ -23,7 +23,8 @@ fn marked_text_shows_at_the_cursor_and_only_the_commit_is_sent(cx: &mut TestAppC
     cx.simulate_keystrokes("e c h o space");
     assert!(eventually(|| t.text(false).contains("echo")), "echo typed");
     // the app draws the pushed screen a moment after the server has it
-    let moved = shows(cx, |cx| anchor(cx).origin.x > start.origin.x);
+    // all five cells of `echo ` (the pushed screen may come in pieces)
+    let moved = shows(cx, |cx| anchor(cx).origin.x >= start.origin.x + start.size.width * 4.5);
     let here = anchor(cx);
     let mut h = PaneInput::new(ws.clone());
     mark(&mut h, cx, "にほ");
