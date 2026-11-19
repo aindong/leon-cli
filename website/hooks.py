@@ -14,15 +14,28 @@ import posixpath
 import re
 from pathlib import Path
 
+from mkdocs.exceptions import PluginError
 from mkdocs.structure.files import File
 
 TOOLS = Path(__file__).resolve().parent.parent
 GITHUB = "https://github.com/aindong/leon-cli"
 # a media file's name goes into the demo page's HTML: plain names only
 MEDIA = re.compile(r"[a-z0-9][a-z0-9._-]*\.(mp4|webm|jpg|png)")
-# an inline code span, or a Markdown link's target, or an HTML attribute that holds a URL
-LINK = re.compile(r"(`+)[^`].*?\1|(\]\()([^)\s]+)|(\b(?:src|href|poster)=\")([^\"]+)", re.S)
-FENCE = re.compile(r"^\s*(```|~~~)")
+# an inline code span (within a paragraph), a Markdown link or image, a reference definition, or
+# an HTML attribute that holds a URL
+LINK = re.compile(
+    r"(?P<code>(?P<tick>`+)(?:(?!\n[ \t]*\n).)+?(?P=tick)(?!`))"
+    r"|(?P<md>(?P<img>!)?\[[^\]]*\]\()(?P<mdlink>[^)\s]+)"
+    r"|(?P<ref>^[ \t]*\[[^\]\n]+\]:[ \t]+)(?P<reflink>\S+)"
+    r"|(?P<attr>\b(?:src|href|poster)=\")(?P<attrlink>[^\"]+)",
+    re.S | re.M,
+)
+FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
+# what would run on the public site: translations come from contributors, and GitHub's preview
+# strips these where the site would not, so the build refuses them outside code
+UNSAFE = re.compile(r"<(?:script|iframe|object|embed)\b|\son[a-z]+\s*=|javascript:", re.I)
+# the files in docs/ the site serves: pages and pictures
+SERVED = (".md", ".png", ".gif", ".jpg", ".jpeg", ".webp")
 
 state = {}
 
@@ -34,14 +47,47 @@ def releases(changelog):
     current = None
     for line in changelog.split("\n"):
         if line.startswith("## ["):
-            m = re.match(r"## \[(\d+\.\d+\.\d+[^\]]*)\](?: - (\S+))?", line)
+            m = re.match(r"## \[(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\](?: - (\S+))?", line)
             current = [m[1], m[2] or "", []] if m else None
             if current:
                 out.append(current)
         elif current:
             current[2].append(line)
-    bodies = [(v, d, re.sub(r"^(\s*\n)+", "", "\n".join(body)).rstrip("\n")) for v, d, body in out]
+    bodies = [(v, d, re.sub(r"^\n+", "", "\n".join(body)).rstrip("\n")) for v, d, body in out]
     return [(v, d, b) for v, d, b in bodies if b.strip()]
+
+
+def split(text):
+    """[(is_code, text)]: `text` cut into its fenced code blocks and the rest. A fence closes on a run
+    of its own character at least as long, with nothing after it."""
+    out, lines, fence = [], [], None
+
+    def cut(code):
+        if lines:
+            out.append((code, "\n".join(lines)))
+            lines.clear()
+
+    for line in text.split("\n"):
+        m = FENCE.match(line)
+        if fence:
+            lines.append(line)
+            if m and m[1][0] == fence[0] and len(m[1]) >= len(fence) and not m[2].strip():
+                cut(True)
+                fence = None
+        elif m:
+            cut(False)
+            fence = m[1]
+            lines.append(line)
+        else:
+            lines.append(line)
+    cut(fence is not None)
+    return out
+
+
+def prose(text):
+    """`text` without its code: fenced blocks and inline spans."""
+    rest = "\n".join(t for code, t in split(text) if not code)
+    return LINK.sub(lambda m: "" if m["code"] else m[0], rest)
 
 
 def rewrite(text, origin, page, staged, root, ref, urls):
@@ -49,7 +95,7 @@ def rewrite(text, origin, page, staged, root, ref, urls):
     the site page at `page`. `staged` maps a repo path to its page or file on the site, `urls` a site
     path to its URL (for raw HTML, which the site generator doesn't rewrite)."""
 
-    def target(link, html):
+    def target(link, html, raw):
         if re.match(r"[a-zA-Z][a-zA-Z0-9+.-]*:", link) or link.startswith(("#", "/")):
             return None
         path, hash, anchor = link.partition("#")
@@ -68,34 +114,22 @@ def rewrite(text, origin, page, staged, root, ref, urls):
         full = Path(root, repo)
         if not full.exists():
             return None
-        kind = "tree" if full.is_dir() else ("raw" if html and link.endswith((".png", ".gif", ".jpg", ".svg")) else "blob")
+        kind = "tree" if full.is_dir() else ("raw" if raw else "blob")
         return f"{GITHUB}/{kind}/{ref}/{repo}{'/' if path.endswith('/') else ''}{hash}{anchor}"
 
     def one(m):
-        if m[1]:
+        if m["code"]:
             return m[0]
-        lead, link = (m[2], m[3]) if m[2] else (m[4], m[5])
-        new = target(link, html=not m[2])
-        return lead + (new or link)
-
-    out, chunk, fenced = [], [], None
-    for line in text.split("\n"):
-        f = FENCE.match(line)
-        if fenced:
-            out.append(line)
-            if f and f[1] == fenced:
-                fenced = None
-        elif f:
-            if chunk:
-                out.append(LINK.sub(one, "\n".join(chunk)))
-            chunk = []
-            out.append(line)
-            fenced = f[1]
+        if m["md"]:
+            lead, link, html, raw = m["md"], m["mdlink"], False, bool(m["img"])
+        elif m["ref"]:
+            lead, link, html, raw = m["ref"], m["reflink"], False, False
         else:
-            chunk.append(line)
-    if chunk:
-        out.append(LINK.sub(one, "\n".join(chunk)))
-    return "\n".join(out)
+            lead, link, html = m["attr"], m["attrlink"], True
+            raw = not lead.startswith("href")
+        return lead + (target(link, html, raw) or link)
+
+    return "\n".join(t if code else LINK.sub(one, t) for code, t in split(text))
 
 
 def on_config(config):
@@ -109,18 +143,20 @@ def on_config(config):
         releases=releases((root / "CHANGELOG.md").read_text(encoding="utf-8")),
         langs=[a["lang"] for a in config.extra["alternate"] if a["lang"] != "en"],
     )
-    for item in config.nav:
-        if isinstance(item, dict) and "What's new" in item:
-            pages = item["What's new"]
-            at = pages.index("whats-new/index.md") + 1
-            pages[at:at] = [{f"leon {v}": f"whats-new/{v}.md"} for v, _, _ in state["releases"]]
+    section = next(i["What's new"] for i in config.nav if isinstance(i, dict) and "What's new" in i)
+    at = section.index("whats-new/index.md") + 1
+    section[at:at] = [{f"leon {v}": f"whats-new/{v}.md"} for v, _, _ in state["releases"]]
     return config
 
 
 def on_files(files, config):
     root, tools = state["root"], TOOLS
     # site path -> (where its links are relative to in the repo, the repo path it stands for)
-    origin = {f.src_uri: f"docs/{f.src_uri}" for f in files if not f.inclusion.is_excluded()}
+    docs = [f for f in files if f.src_dir == config.docs_dir and not f.inclusion.is_excluded()]
+    origin = {f.src_uri: f"docs/{f.src_uri}" for f in docs}
+    odd = [uri for uri in origin if not uri.lower().endswith(SERVED)]
+    if odd:
+        raise PluginError(f"docs/ has files the site would serve as they are, not pages or pictures: {odd}")
     context = dict(origin)
 
     def add(uri, repo=None, links=None, **source):
@@ -143,12 +179,12 @@ def on_files(files, config):
         f"more about each feature, and [CHANGELOG.md]({GITHUB}/blob/{state['ref']}/CHANGELOG.md) has every change.",
         "",
     ]
+    state["refs"] = {}
     for version, date, body in state["releases"]:
         lines.append(f"- [leon {version}](whats-new/{version}.md)" + (f" · {date}" if date else ""))
-        head = f"# leon {version}\n\n"
-        meta = [date] if date else []
-        meta.append(f"[the release on GitHub]({GITHUB}/releases/tag/v{version})")
-        add(f"whats-new/{version}.md", links="CHANGELOG.md", content=head + " · ".join(meta) + "\n\n" + body + "\n")
+        add(f"whats-new/{version}.md", links="CHANGELOG.md", content=release_page(version, date, body))
+        # its links into the source go where its GitHub release's notes go: its own tag
+        state["refs"][f"whats-new/{version}.md"] = f"v{version}"
     add("whats-new/index.md", links="CHANGELOG.md", content="\n".join(lines) + "\n")
 
     media = []
@@ -179,6 +215,15 @@ def prune(nav, pages):
         elif value in pages or "://" in value:
             out.append(item)
     return out
+
+
+def release_page(version, date, body):
+    """A release's page: its changelog section, whose `#anchor` links are anchors of CHANGELOG.md."""
+    meta = [date] if date else []
+    meta.append(f"[the release on GitHub]({GITHUB}/releases/tag/v{version})")
+    body = re.sub(r"\]\(#", "](CHANGELOG.md#", body)
+    body = re.sub(r"^([ \t]*\[[^\]\n]+\]:[ \t]+)#", r"\1CHANGELOG.md#", body, flags=re.M)
+    return f"# leon {version}\n\n" + " · ".join(meta) + "\n\n" + body + "\n"
 
 
 def demo(media):
@@ -213,7 +258,11 @@ def demo(media):
 
 def on_page_markdown(markdown, page, config, files):
     uri = page.file.src_uri
-    return rewrite(markdown, state["context"].get(uri, uri), uri, state["staged"], state["root"], state["ref"], state["urls"])
+    bad = UNSAFE.search(prose(markdown))
+    if bad:
+        raise PluginError(f"{uri}: {bad[0]!r} would run on the website; leave HTML scripts and handlers out of the docs")
+    ref = state["refs"].get(uri, state["ref"])
+    return rewrite(markdown, state["context"].get(uri, uri), uri, state["staged"], state["root"], ref, state["urls"])
 
 
 def on_page_context(context, page, config, nav):
@@ -235,4 +284,4 @@ def on_post_page(output, page, config):
 
 
 def on_post_template(output, template_name, config):
-    return on_post_page(output, None, config)  # 404.html
+    return on_post_page(output, None, config)  # the static templates: 404.html, the sitemap

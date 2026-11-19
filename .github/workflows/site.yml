@@ -4,12 +4,13 @@
 # whole story. Actions are pinned by commit, with their tag beside them.
 name: Site
 
-# A release published by hand starts it. One that release.yml publishes does not (events made with
-# a workflow's own token start no workflow), so it also follows a Release run that a tag push
-# started and that succeeded. By hand, for a fix to the site between releases.
+# It follows every Release run that a tag push started and that succeeded: that run publishes the
+# release, and a release that a workflow publishes with its own token starts no workflow, so
+# `release: published` would never fire for it. It runs from the default branch, the only ref the
+# github-pages environment lets deploy; a `release` trigger would run from the tag, and letting tags
+# deploy would let anyone who can push one publish site code nobody reviewed. By hand, for a fix to
+# the site between releases, or after a release published by hand.
 on:
-  release:
-    types: [published]
   workflow_run:
     workflows: [Release]
     types: [completed]
@@ -32,9 +33,6 @@ jobs:
     defaults:
       run:
         shell: bash # with pipefail
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
     steps:
       # the site's own files: website/ and brand/
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,6 +41,9 @@ jobs:
       # releases/latest is never a draft, a prerelease or the media release; the tag is checked anyway
       - name: Find the latest release
         id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           tag=$(gh api "repos/$GH_REPO/releases/latest" | website/latest-tag.sh)
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -53,6 +54,9 @@ jobs:
           path: release
           persist-credentials: false
       - name: The demo videos, from the media release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: website/fetch-media.sh "$RUNNER_TEMP/media"
       - name: Build
         env:

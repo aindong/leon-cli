@@ -279,7 +279,8 @@ What's new (a page for each `## [X.Y.Z]` section of the changelog, the text its 
 and the demo. Links into the source go to GitHub at the release's tag.
 
 `.github/workflows/site.yml` runs after a Release run that a tag push started and that succeeded,
-when a release is published by hand, and by hand (Actions, Site, Run workflow). It asks GitHub for
+and by hand (Actions, Site, Run workflow), which is also the way after publishing a release by
+hand. It always runs from the default branch, the only ref allowed to deploy to Pages. It asks GitHub for
 `releases/latest`, which is never a draft or a pre-release, checks that its tag is `vX.Y.Z`
 (`website/latest-tag.sh`), builds, and deploys with GitHub's own Pages actions. Its token can read
 the repository and write only to Pages.
@@ -311,7 +312,6 @@ are left out. The next run of the site shows them: run Site by hand after an upl
 These are the repository's settings, for its owner:
 
 - Settings, Pages, Source: **GitHub Actions** (or `gh api -X POST repos/aindong/leon-cli/pages -f build_type=workflow`).
-- Settings, Environments, `github-pages`: the default branch may deploy from the start. A run that a
-  release published by hand starts has the tag as its ref, so add a tag rule `v*` there, or those
-  runs stop at the deploy.
-
+- Settings, Environments, `github-pages`: leave its rule as GitHub makes it, the default branch
+  only. Don't add tags: a run from a tag runs that tag's files, so anyone who can push a tag could
+  publish site code nobody reviewed.

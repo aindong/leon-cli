@@ -8,7 +8,7 @@ repo_url: https://github.com/aindong/leon-cli
 repo_name: aindong/leon-cli
 edit_uri: ""
 copyright: leon is free software under the MIT license.
-docs_dir: ../docs # hooks.py moves it to LEON_SITE_ROOT's docs/ when that is set
+docs_dir: ../docs # hooks.py sets it to LEON_SITE_ROOT's docs/ (this checkout's by default)
 site_dir: ../target/site
 strict: true
 

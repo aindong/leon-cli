@@ -35,22 +35,24 @@ fn latest_tag(json: &str) -> (bool, String) {
 }
 
 #[test]
-fn it_runs_on_a_release_after_the_release_workflow_and_by_hand() {
+fn it_runs_after_the_release_workflow_and_by_hand_from_the_default_branch_only() {
     let yml = read(".github/workflows/site.yml");
     let on = yml.split_once("\non:\n").expect("an on: block").1.split("\n\n").next().unwrap();
-    for want in [
-        "  release:\n    types: [published]",
-        "  workflow_run:\n    workflows: [Release]\n    types: [completed]",
-        "  workflow_dispatch:",
-    ] {
-        assert!(on.contains(want), "on: has {want:?}: {on}");
-    }
-    // a Release run by hand stops at a draft, and a failed one published nothing
+    assert_eq!(on, "  workflow_run:\n    workflows: [Release]\n    types: [completed]\n  workflow_dispatch:");
+    // a `release` or `push` trigger would run from a tag, which the github-pages environment would
+    // have to let deploy: anyone who can push a tag could then publish site code nobody reviewed
     let build = job(&yml, "build");
     assert!(
         build.contains("github.event.workflow_run.conclusion == 'success'")
             && build.contains("github.event.workflow_run.event == 'push'"),
         "{build}"
+    );
+    // that Release run published: only a tag push publishes, a run by hand stops at a draft
+    let release = read(".github/workflows/release.yml");
+    let publish = release.split("- name: Publish it").nth(1).expect("release.yml publishes in a step of its own");
+    assert!(
+        publish.lines().nth(1).unwrap().contains("if: github.event_name == 'push' && github.ref_type == 'tag'"),
+        "{publish}"
     );
 }
 
@@ -108,6 +110,8 @@ fn every_action_is_github_s_own_and_pinned_and_permissions_are_pages_only() {
     granted.dedup();
     assert_eq!(granted, ["contents: read", "id-token: write", "pages: write"], "{yml}");
     assert!(yml.contains("persist-credentials: false"), "checkouts keep no token");
+    // the token only where gh needs it, not in the build's environment
+    assert!(!job(&yml, "build").contains("    env:\n      GH_TOKEN"), "no job-wide GH_TOKEN");
 }
 
 #[test]

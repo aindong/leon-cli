@@ -108,6 +108,11 @@ class Built(unittest.TestCase):
             self.assertIn(f"leon {v}", self.page(f"whats-new/{v}"))
         self.assertIn("serve_tailscale", self.page("whats-new/0.1.1"))
 
+    def test_a_changelog_anchor_goes_to_the_changelog(self):
+        page = hooks.release_page("0.2.0", "2026-12-01", "See [it](#reading-api_version).\n\n[r]: #x")
+        self.assertIn("[it](CHANGELOG.md#reading-api_version)", page)
+        self.assertIn("[r]: CHANGELOG.md#x", page)
+
     def test_the_logo_goes_to_the_landing_page_under_the_base_path(self):
         from urllib.parse import urljoin
 
@@ -201,6 +206,17 @@ class Links(unittest.TestCase):
         self.assertEqual(self.rewrite("[a](../README.md)"), "[a](overview.md)")
         self.assertEqual(self.rewrite("[a](docs/cli.md)", "README.md", "overview.md"), "[a](cli.md)")
 
+    def test_review_edge_cases(self):
+        blob = f"{GITHUB}/blob/v1.2.3/crates/leon/Cargo.toml"
+        # a stray backtick doesn't hide the next paragraph's link
+        self.assertIn(blob, self.rewrite("Press ` to type one.\n\n[a](../crates/leon/Cargo.toml)\n\nThen `x`."))
+        self.assertEqual(self.rewrite("[a][r]\n\n[r]: ../crates/leon/Cargo.toml"), f"[a][r]\n\n[r]: {blob}")
+        self.assertEqual(self.rewrite("![logo](../brand/logo-mark.svg)"), f"![logo]({GITHUB}/raw/v1.2.3/brand/logo-mark.svg)")
+        self.assertEqual(self.rewrite("[a\nb](../crates/leon/Cargo.toml)"), f"[a\nb]({blob})")
+        self.assertEqual(self.rewrite("[`x`](cli.md#y)"), "[`x`](cli.md#y)")
+        nested = "````md\n```lua\n[a](../crates/leon/Cargo.toml)\n```\n````\n[b](../crates/leon/Cargo.toml)"
+        self.assertEqual(self.rewrite(nested), nested.rsplit("(", 1)[0] + f"({blob})")
+
     def test_missing_files_code_and_absolute_links_are_left_alone(self):
         for text in [
             "[a](nope.md)",
@@ -211,6 +227,17 @@ class Links(unittest.TestCase):
             "   ~~~lua\n   t[1](../crates/leon/Cargo.toml)\n   ~~~",
         ]:
             self.assertEqual(self.rewrite(text), text)
+
+
+class Guard(unittest.TestCase):
+    def test_scripts_in_a_doc_stop_the_build(self):
+        page = type("P", (), {"file": type("F", (), {"src_uri": "i18n/ja/install.md"})()})()
+        hooks.state.update(context={}, staged={}, root=ROOT, ref="v9.9.9", refs={}, urls={})
+        for bad in ['<script>alert(1)</script>', '<img src="x" onerror="alert(1)">', "[x](javascript:alert(1))", "<iframe src=x>"]:
+            with self.assertRaises(hooks.PluginError, msg=bad):
+                hooks.on_page_markdown(f"# t\n\n{bad}\n", page, None, None)
+        # in code it is text, as the docs about leon's own web page show
+        hooks.on_page_markdown("# t\n\n`<script>`\n\n```html\n<script src=x></script>\n```\n", page, None, None)
 
 
 class Notes(unittest.TestCase):
@@ -225,6 +252,7 @@ class Notes(unittest.TestCase):
             path.write_text(changelog)
             got = hooks.releases(changelog)
             self.assertEqual([(v, date) for v, date, _ in got], [("0.2.0", "2026-12-01"), ("0.1.0-rc.1", "2026-11-01")])
+            self.assertEqual(hooks.releases("## [1.0.0]\n   \nText\n")[0][2], "   \nText", "a line of spaces is a line")
             for version, _, body in got:
                 script = subprocess.run(
                     ["bash", str(ROOT / "scripts" / "release-notes.sh"), version, str(path)],
