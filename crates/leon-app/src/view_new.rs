@@ -71,6 +71,9 @@ impl Workspace {
         // every notify of the workspace (its own state, or what the root draws from a model
         // event, view_feed.rs) brings what render draws from up to date (R5), and gives each grid
         // and section its input; a pushed screen reaches its grid from its model event instead
+        // a press that changes nothing (blank chrome) focuses the workspace's handle: the top open
+        // overlay gets it back
+        let refocus = cx.on_focus(&focus, window, |ws, window, cx| ws.sync_focus(window, cx));
         let prepare = cx.observe_in(&cx.entity(), window, |ws, _, window, cx| {
             ws.wakes.1 += 1;
             ws.prepare();
@@ -161,6 +164,7 @@ impl Workspace {
             _release: release,
             _appearance: appearance,
             _prepare: prepare,
+            _refocus: refocus,
         };
         ws.prepare(); // the first frame comes before any notify
         ws.root_seen = ws.root_input();

@@ -1,6 +1,6 @@
-//! Keys and actions: every keystroke goes through the keymap (defaults under the config's
-//! bindings), the palette when it is open, else the focused pane. Actions run by name, from a key,
-//! the palette or a menu.
+//! Keys and actions: a keystroke no overlay took (view_overlays.rs) goes through the keymap
+//! (defaults under the config's bindings), else to the focused pane. Actions run by name, from a
+//! key, the palette or a menu.
 
 use super::*;
 use crate::palette::{self, Item};
@@ -170,6 +170,7 @@ impl Workspace {
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
+                    None if self.overlays.palette_closed => None, // this press closed it
                     None => Some(Palette {
                         query: String::new(),
                         selected: 0,

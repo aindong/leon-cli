@@ -300,7 +300,7 @@ impl Workspace {
         self.drop_unshown_thumbs();
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.term.painted.borrow_mut().retain(|id, _| shown.contains(id)); // hit tests see only these
-        self.renaming_open(); // a rename whose row went away ends
+        self.end_hidden_rename();
         if self.term.find.as_ref().is_some_and(|f| !shown.contains(&f.block)) {
             self.term.find = None; // its pane left the screen
         }

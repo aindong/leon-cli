@@ -32,8 +32,8 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
-- **Leon.app never waits on its own server.** Keys, splits, copies and every other call to This
-  Mac's server queue in order off the window's thread, and a config reload shows at once ([detail](docs/changelog-detail.md#leonapp-never-waits-on-its-own-server)).
+- **Leon.app doesn't wait on its own server once its window is up.** Keys, splits, copies and every
+  other call to This Mac's server queue in order off the window's thread, and a config reload shows at once ([detail](docs/changelog-detail.md#leonapp-doesnt-wait-on-its-own-server)).
 - **Overlays give the keys back.** The palette, switcher, find bar, overview and rename field each
   take the focus while open and give it back to the pane however they close ([detail](docs/changelog-detail.md#overlays-give-the-keys-back)).
 - **Diagrams and benchmark charts in the docs** ([detail](docs/changelog-detail.md#diagrams-and-benchmark-charts)).

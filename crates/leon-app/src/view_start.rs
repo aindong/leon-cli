@@ -2,7 +2,8 @@
 
 use super::*;
 
-/// GPUI key bindings: only Quit. Every other shortcut goes through `key_down` and the keymap
+/// GPUI key bindings: only Quit. Every other shortcut goes through `key_down` (or the open overlay's
+/// own handler, view_overlays.rs) and the keymap
 /// (`keymap::DEFAULTS` under the config's bindings), since GPUI matches its own bindings before
 /// any key listener and a config could never override them.
 pub fn init(cx: &mut App) {

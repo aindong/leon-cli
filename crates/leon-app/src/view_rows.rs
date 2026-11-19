@@ -29,6 +29,8 @@ pub(in crate::view) struct Renaming {
     pub(in crate::view) row: RowRef,
     pub(in crate::view) text: String,
     pub(in crate::view) fresh: bool,
+    /// Where the window drew its rows when it started: the field is drawn only there.
+    place: crate::chrome::Places,
 }
 
 struct RowMenu {
@@ -171,7 +173,7 @@ impl Workspace {
     /// Turn a row's name into a field holding it, all selected.
     pub(in crate::view) fn start_rename(&mut self, row: RowRef, cx: &mut Context<Self>) {
         if let Some(text) = self.row_name(&row) {
-            self.term.rows.renaming = Some(Renaming { row, text, fresh: true });
+            self.term.rows.renaming = Some(Renaming { row, text, fresh: true, place: self.places() });
             cx.notify();
         }
     }
@@ -186,13 +188,14 @@ impl Workspace {
         }
     }
 
-    /// Whether the inline field is open; one whose row went (closed elsewhere) lets go of the keys.
-    pub(in crate::view) fn renaming_open(&mut self) -> bool {
-        let gone = self.term.rows.renaming.as_ref().is_some_and(|r| self.row_name(&r.row).is_none());
-        if gone {
+    /// End, changing nothing, a rename whose field isn't drawn any more: its row went (closed
+    /// elsewhere), the sidebar or the tab style moved its rows, or the overview covers them.
+    pub(in crate::view) fn end_hidden_rename(&mut self) {
+        let (places, overview) = (self.places(), self.overview_shown());
+        let hidden = |r: &Renaming| r.place != places || overview || self.row_name(&r.row).is_none();
+        if self.term.rows.renaming.as_ref().is_some_and(hidden) {
             self.term.rows.renaming = None;
         }
-        self.term.rows.renaming.is_some()
     }
 
     /// A key while the inline field is open: it edits the name, and goes nowhere else.

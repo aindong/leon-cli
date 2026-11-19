@@ -138,6 +138,11 @@ impl Workspace {
                     .on_key_down(cx.listener(Self::palette_key_down))
                     .on_mouse_down_out(cx.listener(|ws, _, _, cx| {
                         ws.palette = None;
+                        // the press goes on to what it landed on: its palette toggle (the
+                        // toolbar's button) must not open the palette again
+                        ws.overlays.palette_closed = true;
+                        let this = cx.entity().downgrade();
+                        cx.defer(move |cx| drop(this.update(cx, |ws, _| ws.overlays.palette_closed = false)));
                         cx.notify();
                     }))
             })

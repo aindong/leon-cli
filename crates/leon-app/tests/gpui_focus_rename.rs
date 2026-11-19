@@ -29,7 +29,7 @@ fn enter_and_escape_give_the_pane_its_keys_back(cx: &mut TestAppContext) {
     assert!(renaming(cx).is_none(), "Escape ended it");
     back_on_pane(&s, &ws, cx, "esc2").unwrap();
 
-    // its tab goes away under it (closed from the CLI): the pane shown takes the keys
+    // its tab goes away under it (closed through the server): the pane shown takes the keys
     let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
     act(&ws, cx, "client.tab.new");
     assert!(shows(cx, |_| tabs(&s, &sid) == 2), "a second tab");
