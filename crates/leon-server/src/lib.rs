@@ -75,6 +75,8 @@ pub struct Ctx {
     /// Each window's geometry as a client last drew it (`client.geometry`): the most recent report
     /// wins when several apps are attached. Runtime only, never saved.
     geometry: Mutex<std::collections::HashMap<String, leon_core::overlays::Geometry>>,
+    /// The `scrollback` setting: lines of history a terminal keeps (lua.rs sets it on a reload).
+    scrollback: std::sync::atomic::AtomicUsize,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -131,6 +133,7 @@ impl Ctx {
             tailnet: tailnet::Tailnet::default(),
             pane_env: Vec::new(),
             geometry: Mutex::default(),
+            scrollback: leon_core::terminal::SCROLLBACK.into(),
         }
     }
 

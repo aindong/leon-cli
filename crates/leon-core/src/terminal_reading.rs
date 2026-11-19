@@ -1,10 +1,17 @@
 //! The reader and parser threads: PTY output into the OSC 7501 tracker and the emulator.
 
+use std::time::Instant;
+
 use super::*;
+
+/// A pause in output this long moves history into the store (`Store::settle`)...
+const SETTLE_IDLE: Duration = Duration::from_millis(100);
+/// ...and so does this much time of output that never pauses.
+const SETTLE_EVERY: Duration = Duration::from_secs(1);
 
 /// The reader thread's share of a terminal.
 pub(super) struct Reading {
-    pub(super) term: Arc<Mutex<Term<Listener>>>,
+    pub(super) term: Arc<Mutex<Emu>>,
     pub(super) tracker: Arc<Mutex<Tracker>>,
     pub(super) seen: Arc<Mutex<Seen>>,
     pub(super) writer: Writer,
@@ -92,7 +99,24 @@ impl Reading {
         // The last title and pwd reported: shells resend them at every prompt.
         let (mut title, mut pwd) = (None, None);
         let mut escapes = super::view::Escapes::default();
-        while let Ok(mut batch) = reads.recv() {
+        // history past alacritty's window moves into the store when output pauses, and at least
+        // this often while it streams (a slow trickle never pauses for long)
+        let mut settled = Instant::now();
+        let settle = |settled: &mut Instant| {
+            let mut emu = lock(&self.term);
+            let Emu { term, store } = &mut *emu;
+            store.settle(term);
+            *settled = Instant::now();
+        };
+        loop {
+            let mut batch = match reads.recv_timeout(SETTLE_IDLE) {
+                Ok(batch) => batch,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    settle(&mut settled);
+                    continue;
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            };
             while batch.len() < BATCH {
                 match reads.try_recv() {
                     Ok(more) => batch.extend_from_slice(&more),
@@ -100,10 +124,9 @@ impl Reading {
                 }
             }
             let fed = {
-                let mut term = lock(&self.term);
-                lock(&self.tracker).feed(&batch, |bytes| {
-                    super::view::feed(&mut term, &mut parser, &mut escapes, bytes, &self.scrolled)
-                })
+                let mut emu = lock(&self.term);
+                lock(&self.tracker)
+                    .feed(&batch, |bytes| super::view::feed(&mut emu, &mut parser, &mut escapes, bytes, &self.scrolled))
             };
             self.x10.store(escapes.x10(), Ordering::SeqCst);
             self.output.fetch_add(batch.len() as u64, Ordering::SeqCst);
@@ -127,7 +150,11 @@ impl Reading {
                 notify(Notice::Bell);
             }
             coalesce(fed.changes).into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
+            if settled.elapsed() >= SETTLE_EVERY {
+                settle(&mut settled);
+            }
         }
+        settle(&mut settled); // what the program printed last, as it ended
         let gone = lock(&self.tracker).store.process_exited();
         gone.into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
     }

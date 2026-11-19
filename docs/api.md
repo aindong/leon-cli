@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.17.0**. Every method is marked:
+API version **1.18.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -497,7 +497,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.17.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.18.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -615,6 +615,7 @@ same facts for the server you run.
 | `serve_web` | boolean | yes | With serve_tailscale on, the tailnet listener also serves the web page. |
 | `serve_web_cert` | string | yes | The certificate file `tailscale cert` wrote, for HTTPS ("" for plain HTTP). |
 | `serve_web_key` | string | yes | Its private key file. |
+| `scrollback` | integer (uint) | yes | Lines of history each terminal keeps, from 0 to 100000; a change applies to running terminals at once, and a lower value drops their oldest lines. |
 
 **`ThemeChoice`:** A theme name for each OS appearance (the same one for both unless init.lua gives two).
 
@@ -760,6 +761,12 @@ same facts for the server you run.
           "serve_web_key": {
             "description": "Its private key file.",
             "type": "string"
+          },
+          "scrollback": {
+            "description": "Lines of history each terminal keeps, from 0 to 100000; a change applies to running\nterminals at once, and a lower value drops their oldest lines.",
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
           }
         },
         "required": [
@@ -781,7 +788,8 @@ same facts for the server you run.
           "cursor_shader_duration",
           "serve_web",
           "serve_web_cert",
-          "serve_web_key"
+          "serve_web_key",
+          "scrollback"
         ]
       },
       "ThemeChoice": {

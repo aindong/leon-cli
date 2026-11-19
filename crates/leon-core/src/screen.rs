@@ -335,20 +335,25 @@ pub fn grid_rows<T>(term: &Term<T>, theme: &Theme, from: i32, count: usize) -> V
     let (top, bottom) = (term.topmost_line().0, term.bottommost_line().0);
     let mut out = Vec::new();
     for l in (from.max(top)..from.saturating_add(count as i32).min(bottom + 1)).map(Line) {
-        let (mut spans, mut bgs) = (Vec::new(), Vec::new());
         let row = &term.grid()[l];
-        for col in 0..term.columns() {
-            let cell = &row[Column(col)];
-            if cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
-                continue;
-            }
-            let (span, bg) = cell_span(cell, col, colors, theme);
-            push_cell(&mut spans, &mut bgs, 0, span, bg, theme);
-        }
-        trim(&mut spans);
-        out.push((l.0, spans, bgs.iter().map(|b| Bg { col: b.col, len: b.len, color: b.color }).collect()));
+        let (spans, bgs) = row_spans((0..term.columns()).map(|col| &row[Column(col)]), colors, theme);
+        out.push((l.0, spans, bgs));
     }
     out
+}
+
+/// One row's spans and backgrounds from its cells (column 0 first), as `frame` builds a screen row.
+pub fn row_spans<'a>(cells: impl Iterator<Item = &'a Cell>, colors: &Colors, theme: &Theme) -> (Vec<Span>, Vec<Bg>) {
+    let (mut spans, mut bgs) = (Vec::new(), Vec::new());
+    for (col, cell) in cells.enumerate() {
+        if cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+            continue;
+        }
+        let (span, bg) = cell_span(cell, col, colors, theme);
+        push_cell(&mut spans, &mut bgs, 0, span, bg, theme);
+    }
+    trim(&mut spans);
+    (spans, bgs.iter().map(|b| Bg { col: b.col, len: b.len, color: b.color }).collect())
 }
 
 /// One cell as a span, with its background.
