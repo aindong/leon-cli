@@ -62,8 +62,12 @@ fn prefix_then_the_key_again(cx: &mut TestAppContext) {
     // where k went if not there: the pane the app types into, the server's focus, each pane's last line
     let app_target = ws.read_with(cx, |ws, _| ws.target_block());
     let focus = window(&s.app, &ws, cx).0.focus;
-    let ends: Vec<String> =
-        panes.iter().map(|p| term(&s.app, p).text(false).trim_end().lines().last().unwrap_or("").to_string()).collect();
+    let last_line = |p: &str| {
+        let st = s.app.ctx().state();
+        st.block(p)
+            .map_or("<gone>".into(), |(_, b)| b.terminal.text(false).trim_end().lines().last().unwrap_or("").into())
+    };
+    let ends: Vec<String> = panes.iter().map(|p| last_line(p)).collect();
     assert!(
         typed && label(cx) == "runs 3",
         "k went to the pane: {:?}; the app typed into {app_target:?} (the server's focus {focus:?}) of {panes:?}, whose last lines are {ends:?}",

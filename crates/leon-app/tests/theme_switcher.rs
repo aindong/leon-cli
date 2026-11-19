@@ -93,16 +93,22 @@ fn enter_keeps_one_theme_for_both_sides(cx: &mut TestAppContext) {
     let at_once = ws.read_with(cx, |ws, _| (ws.theme(), ws.palette_open()));
     // never back to the old theme while init.lua is written and the server reloads
     let mut wavered = vec![];
-    let written = shows(cx, |cx| {
+    let mut watch = |cx: &mut VisualTestContext| {
         let t = ws.read_with(cx, |ws, _| ws.theme());
         if t != sand {
             wavered.push(t.bg);
         }
+    };
+    let written = shows(cx, |cx| {
+        watch(cx);
         setting(&s) == ("leon-sand".into(), "leon-sand".into())
     });
     let got = setting(&s);
     // the app's reload runs on a thread of its own: ask for the settings once it has landed
-    let reloaded = shows(cx, |_| generation() > loaded);
+    let reloaded = shows(cx, |cx| {
+        watch(cx);
+        generation() > loaded
+    });
     ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let after_reload = ws.read_with(cx, |ws, _| ws.theme());
     s.app.stop();
