@@ -245,11 +245,13 @@ class Guard(unittest.TestCase):
             "<iframe src=x></iframe>",
             '![x](data:,){onerror="alert(1)"}',  # attr_list puts the handler on the image
             "```\n<script>alert(1)</script>",  # a fence never closed is not code
+            '<a href="java&#x73;cript:alert(1)">x</a>',  # a browser decodes the attribute first
+            '<a href=" JaVa&#9;Script:alert(1)">x</a>',
         ]:
             with self.assertRaises(hooks.PluginError, msg=bad):
                 hooks.on_page_content(self.html(f"# t\n\n{bad}\n"), page, None, None)
         # in code it is text, as the docs about leon's own web page show
-        ok = "# t\n\n`<script>`\n\n```html\n<script src=x></script>\n<a onclick=x>\n```\n"
+        ok = "# t\n\n`<script>`\n\n```html\n<script src=x></script>\n<a onclick=x>\n```\n\n[javascript: a word](https://example.com/js)\n"
         hooks.on_page_content(self.html(ok), page, None, None)
 
 
