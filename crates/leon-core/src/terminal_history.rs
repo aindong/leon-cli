@@ -171,9 +171,49 @@ impl Store {
         if self.rows.get(i).is_none_or(|r| r.text.chars().count() > cols) {
             return false;
         }
+        self.wraps(i)
+    }
+
+    /// Whether stored row `i` ended in a wrap at the width it was written at.
+    fn wraps(&self, i: usize) -> bool {
         // a wrapped row's last cell has WRAPLINE, so its runs aren't the plain ones
         let last = self.rows.get(i).and_then(|r| r.runs.as_deref()?.last());
         last.is_some_and(|r| r.flags.contains(Flags::WRAPLINE))
+    }
+
+    /// Stored row `i` as alacritty's rows `cols` wide: the one row, or a row kept whole from a
+    /// wider pane wrapped as alacritty wraps it (a wide character that doesn't fit goes on to the
+    /// next row, a leading spacer in its place).
+    fn grid_rows(&self, i: usize, cols: usize) -> Vec<Row<Cell>> {
+        let mut cells = self.cells(i);
+        let mut rows = vec![Row::new(cols)];
+        if cells.len() <= cols {
+            for (col, cell) in cells.into_iter().enumerate() {
+                rows[0][Column(col)] = cell;
+            }
+            return rows;
+        }
+        // the wrap it had at its own width marks the last row here
+        cells.retain(|c| !c.flags.contains(Flags::LEADING_WIDE_CHAR_SPACER));
+        let mut col = 0;
+        for mut cell in cells {
+            cell.flags.remove(Flags::WRAPLINE);
+            if col == cols || (col + 1 == cols && cell.flags.contains(Flags::WIDE_CHAR)) {
+                let row = rows.last_mut().expect("a row");
+                if col < cols {
+                    row[Column(col)].flags.insert(Flags::LEADING_WIDE_CHAR_SPACER);
+                }
+                row[Column(cols - 1)].flags.insert(Flags::WRAPLINE);
+                rows.push(Row::new(cols));
+                col = 0;
+            }
+            rows.last_mut().expect("a row")[Column(col)] = cell;
+            col += 1;
+        }
+        if self.wraps(i) {
+            rows.last_mut().expect("a row")[Column(cols - 1)].flags.insert(Flags::WRAPLINE);
+        }
+        rows
     }
 
     /// Every stored row's text, as alacritty's `bounds_to_string` gives a whole row: no newline
@@ -263,10 +303,58 @@ impl Store {
     }
 
     /// Resize `term`. alacritty re-wraps its own rows, within the cap like any push; stored rows
-    /// aren't re-wrapped.
+    /// aren't re-wrapped. A taller or wider pane fills from history as alacritty alone fills it
+    /// (`lend`).
     pub(super) fn resize(&mut self, term: &mut Term<Listener>, size: impl Dimensions) {
+        self.lend(term, size.screen_lines(), size.columns());
         term.resize(size);
         self.settle(term);
         self.trim(term);
+    }
+
+    /// Before a resize to `lines` x `cols`: alacritty fills new rows, and rows its reflow joins on a
+    /// widening, from its own history only. When it holds too few, the store's newest lines go back
+    /// to it first: whole lines, at least the rows added and, on a widening, `lines` lines (each is
+    /// at least a row at the new width). Moving rows between the two parts of `history` renumbers
+    /// nothing; a row kept whole from a wider pane comes back wrapped, as alacritty wraps it.
+    fn lend(&mut self, term: &mut Term<Listener>, lines: usize, cols: usize) {
+        let (shown, now) = (term.screen_lines(), term.columns());
+        let (added, widens) = (lines.saturating_sub(shown), cols > now);
+        if alt(term) || self.rows.is_empty() || (added <= term.grid().history_size() && !widens) {
+            return;
+        }
+        self.take(term, 0);
+        let want = if widens { lines } else { 0 };
+        // newest first, until the block starts a line and holds enough
+        let (mut first, mut lent, mut count, mut starts) = (self.rows.len(), Vec::new(), 0, 0);
+        while first > 0 {
+            let rows = self.grid_rows(first - 1, now);
+            if count + rows.len() > self.limit() {
+                break;
+            }
+            first -= 1;
+            count += rows.len();
+            lent.push(rows);
+            if first == 0 || !self.wraps(first - 1) {
+                starts += 1;
+                if count >= added && starts >= want {
+                    break;
+                }
+            }
+        }
+        if count == 0 {
+            return;
+        }
+        // alacritty makes history rows by scrolling: the screen goes back as it was
+        let g = term.grid_mut();
+        let screen: Vec<Row<Cell>> = (0..shown).map(|l| g[Line(l as i32)].clone()).collect();
+        g.scroll_up::<Color>(&(Line(0)..Line(shown as i32)), count);
+        for (l, row) in screen.into_iter().enumerate() {
+            g[Line(l as i32)] = row;
+        }
+        for (l, row) in lent.into_iter().rev().flatten().enumerate() {
+            g[Line(l as i32 - count as i32)] = row;
+        }
+        self.rows.truncate(first);
     }
 }
