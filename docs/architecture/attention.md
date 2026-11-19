@@ -134,3 +134,21 @@ of [the architecture](../architecture.md).
   calls it for `-b`, else `$LEON_BLOCK`, never the focused pane (exit 2 with neither), since a job
   outside leon would light up whatever the user looks at. It writes no escape to a tty: agents' tool
   shells and launchd jobs have none.
+- **Agents orchestrating agents** (`leon-core/src/agents.rs`, `leon-server/src/agents.rs`). A worker
+  is a block linked to its parent's block (`agent.link`); a change of its root OSC 7501 record to
+  done, blocked or error, whatever made it, becomes a report in the parent's inbox, so hooks,
+  `leon notify` and a program's own reports all count. The server keeps what each program last
+  reported apart from the shown record (looking at a pane clears `done`, not what the agent said),
+  with the foreground program of that moment: an agent that quit back to its shell said nothing
+  about the shell. The notice is typed only into a pane whose own program last reported its turn
+  ended, after 3 s with no input, once per batch of reports, and with no shell syntax in it.
+- **Only a person answers permission prompts.** A block whose program reported
+  `blocked`/`permission` is held until a person's keys reach it; status changes alone don't end
+  that, since any program can write a report to a terminal. Meanwhile the socket loop refuses
+  input to it, a status change from outside its own program, and config actions or reloads (Lua in
+  the server would type where the loop doesn't look) from any client inside a leon terminal: a
+  pane's program, anything under it, or anything in its session (an orphaned job keeps it). The
+  peer's pid comes from the socket (`SO_PEERCRED`, `LOCAL_PEEREPID`); a client the check can't
+  place counts as inside. Agents run in leon terminals; the app, a `leon attach` in a terminal
+  app and another machine don't. A program that moves itself to a new session (`setsid`) gets
+  past it: this keeps agents from answering, it is not a sandbox.

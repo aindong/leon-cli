@@ -1,5 +1,5 @@
 {
-  "api_version": "1.13.0",
+  "api_version": "1.16.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -2934,6 +2934,9 @@
               "copy_on_select": {
                 "type": "boolean"
               },
+              "link_card": {
+                "type": "boolean"
+              },
               "repeat_time": {
                 "type": "integer",
                 "format": "uint64",
@@ -2974,6 +2977,13 @@
                   "type": "string"
                 }
               },
+              "cursor_shader": {
+                "type": "string"
+              },
+              "cursor_shader_duration": {
+                "type": "number",
+                "format": "double"
+              },
               "serve_web": {
                 "type": "boolean"
               }
@@ -2983,6 +2993,7 @@
               "font",
               "notifications",
               "copy_on_select",
+              "link_card",
               "repeat_time",
               "hint_patterns",
               "resume",
@@ -2992,6 +3003,8 @@
               "serve_tailscale",
               "serve_tailscale_port",
               "serve_tailscale_tags",
+              "cursor_shader",
+              "cursor_shader_duration",
               "serve_web"
             ]
           },

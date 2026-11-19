@@ -9,6 +9,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 
+use crate::agents::Peer;
 use crate::serve::{Shared, MAX_LINE};
 
 /// The most a message may hold: a request line, its newline added here.
@@ -218,7 +219,7 @@ pub(crate) async fn bridge(stream: TcpStream, rest: Vec<u8>, shared: &Arc<Shared
         }
     };
     tokio::select! {
-        _ = async { tokio::join!(crate::serve::connection(api_r, api_w, shared), outbound) } => {}
+        _ = async { tokio::join!(crate::serve::connection(api_r, api_w, shared, Peer::Remote), outbound) } => {}
         _ = inbound => {}
     }
 }

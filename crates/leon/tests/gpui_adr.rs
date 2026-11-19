@@ -112,8 +112,13 @@ fn raw_appkit_is_only_where_the_adr_allows_it() {
             users += 1;
             assert!(allowed.contains(&format!("`{name}`")), "{name} calls AppKit: list it under Allowed outside GPUI");
         }
-        for poke in ["setNeedsDisplay", "displayLayer", "raw_window_handle", "HasWindowHandle"] {
+        for poke in ["setNeedsDisplay", "displayLayer"] {
             assert!(!code.contains(poke), "{name} uses {poke}: never schedule GPUI's frames through AppKit (R2)");
+        }
+        // GPUI's view, only for the cursor shader overlay's sublayer, as the amendment says
+        let overlay = name == "cursor_shader/overlay.rs" && allowed.contains("`raw-window-handle`, here only");
+        for poke in ["raw_window_handle", "HasWindowHandle"] {
+            assert!(overlay || !code.contains(poke), "{name} uses {poke}: GPUI's view is GPUI's (R2)");
         }
     }
     assert!(users > 0, "the walk sees the AppKit calls there are");

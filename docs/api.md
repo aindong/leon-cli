@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.13.0**. Every method is marked:
+API version **1.16.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -22,6 +22,7 @@ same facts for the server you run.
 - [session](#session): 28
 - [target](#target): 1
 - [block](#block): 5
+- [agent](#agent): 3
 - [client](#client): 4
 - [Block methods: dev.leon.terminal](#block-methods-devleonterminal): 14
 
@@ -488,7 +489,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.13.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.16.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -591,6 +592,7 @@ same facts for the server you run.
 | `font` | `Font` | yes |  |
 | `notifications` | `Notifications` | yes |  |
 | `copy_on_select` | boolean | yes | The app copies a selection to the clipboard as it is made. |
+| `link_card` | boolean | yes | Leon.app shows a card with a link's address, Copy and Open in Browser when the mouse rests on the link or it is right-clicked; false, ⌘-click only. |
 | `repeat_time` | integer (uint64) | yes | Milliseconds after a repeatable binding during which its keys work without the prefix (0 turns repeat off). |
 | `hint_patterns` | [string] | yes | Regular expressions hints match besides the built-in ones. |
 | `resume` | string | yes | What a restored block does with its program's resume command: `ask`, `always` or `never`. |
@@ -600,6 +602,8 @@ same facts for the server you run.
 | `serve_tailscale` | boolean | yes | The server also listens on this machine's Tailscale addresses, letting in only your own machines (`server.status`'s `tailnet` says how it went). |
 | `serve_tailscale_port` | integer (uint16) | yes | The port it listens on there. |
 | `serve_tailscale_tags` | [string] | yes | Tagged machines it lets in too, by tag (`tag:ci`). |
+| `cursor_shader` | string | yes | A Shadertoy-style cursor shader file Leon.app draws over its window, as init.lua wrote it (`~` and a path relative to init.lua's folder are resolved by the app); empty: none. |
+| `cursor_shader_duration` | number | yes | Seconds the cursor shader animates after the cursor changes, from 0.1 to 5. |
 | `serve_web` | boolean | yes | With serve_tailscale on, the tailnet listener also serves the web page. |
 
 **`ThemeChoice`:** A theme name for each OS appearance (the same one for both unless init.lua gives two).
@@ -673,6 +677,10 @@ same facts for the server you run.
             "description": "The app copies a selection to the clipboard as it is made.",
             "type": "boolean"
           },
+          "link_card": {
+            "description": "Leon.app shows a card with a link's address, Copy and Open in Browser when the mouse rests\non the link or it is right-clicked; false, ⌘-click only.",
+            "type": "boolean"
+          },
           "repeat_time": {
             "description": "Milliseconds after a repeatable binding during which its keys work without the prefix\n(0 turns repeat off).",
             "type": "integer",
@@ -722,6 +730,15 @@ same facts for the server you run.
               "type": "string"
             }
           },
+          "cursor_shader": {
+            "description": "A Shadertoy-style cursor shader file Leon.app draws over its window, as init.lua wrote it\n(`~` and a path relative to init.lua's folder are resolved by the app); empty: none.",
+            "type": "string"
+          },
+          "cursor_shader_duration": {
+            "description": "Seconds the cursor shader animates after the cursor changes, from 0.1 to 5.",
+            "type": "number",
+            "format": "double"
+          },
           "serve_web": {
             "description": "With serve_tailscale on, the tailnet listener also serves the web page.",
             "type": "boolean"
@@ -732,6 +749,7 @@ same facts for the server you run.
           "font",
           "notifications",
           "copy_on_select",
+          "link_card",
           "repeat_time",
           "hint_patterns",
           "resume",
@@ -741,6 +759,8 @@ same facts for the server you run.
           "serve_tailscale",
           "serve_tailscale_port",
           "serve_tailscale_tags",
+          "cursor_shader",
+          "cursor_shader_duration",
           "serve_web"
         ]
       },
@@ -5166,6 +5186,478 @@ same facts for the server you run.
 
 </details>
 
+## agent
+
+### `agent.link`
+
+*experimental*. Make `block_id` a worker of `parent_id`: its status reports (done, blocked, error) and its end go to the parent's inbox. `leon agent start` calls it.
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `block_id` | string | yes | The worker's block. |
+| `parent_id` | string | yes | The block it reports to. |
+| `agent` | string | yes | The agent's program name, e.g. `claude`. |
+| `worktree` | `Worktree` \| null |  | The git worktree made for it, kept with the block until it closes. |
+
+**Output:** none
+
+**`Worktree`:** A git worktree and branch made for a worker (`leon agent start --worktree`).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | yes |  |
+| `branch` | string | yes |  |
+| `repo` | string | yes | The checkout it was made from, which removes it. |
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Link",
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "description": "The worker's block.",
+        "type": "string"
+      },
+      "parent_id": {
+        "description": "The block it reports to.",
+        "type": "string"
+      },
+      "agent": {
+        "description": "The agent's program name, e.g. `claude`.",
+        "type": "string"
+      },
+      "worktree": {
+        "description": "The git worktree made for it, kept with the block until it closes.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Worktree"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "block_id",
+      "parent_id",
+      "agent"
+    ],
+    "$defs": {
+      "Worktree": {
+        "description": "A git worktree and branch made for a worker (`leon agent start --worktree`).",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "repo": {
+            "description": "The checkout it was made from, which removes it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "branch",
+          "repo"
+        ]
+      }
+    }
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Empty",
+    "type": "object"
+  }
+}
+```
+
+</details>
+
+### `agent.list`
+
+*experimental*. A block's parent, the state its program last reported, and its workers with theirs and their unread reports.
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `block_id` | string | yes |  |
+
+**Output:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `parent` | string \| null |  | The block this one works for, if any. |
+| `state` | `State` \| null |  | The state this block's own program last reported, and its kind. |
+| `kind` | `Kind` \| null |  |  |
+| `worktree` | `Worktree` \| null |  | The git worktree made for this block, if any. |
+| `workers` | [`WorkerView`] | yes | The blocks that work for this one, oldest first. |
+
+**`State`:** `"idle"` | `"working"` | `"done"` | `"blocked"` | `"error"`.
+
+**`Kind`:** `"permission"` | `"question"` | `"auth"`.
+
+**`Worktree`:** A git worktree and branch made for a worker (`leon agent start --worktree`).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | yes |  |
+| `branch` | string | yes |  |
+| `repo` | string | yes | The checkout it was made from, which removes it. |
+
+**`WorkerView`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `block_id` | string | yes |  |
+| `label` | string \| null |  |  |
+| `agent` | string | yes |  |
+| `started_at` | integer (uint64) | yes | Seconds since the epoch. |
+| `state` | `State` \| null |  | The state its program last reported (`working`, `blocked`, `done`, `error`, `idle`); null before its first report. |
+| `kind` | `Kind` \| null |  |  |
+| `unread` | integer (uint) | yes | Its reports the orchestrator hasn't read. |
+| `worktree` | `Worktree` \| null |  |  |
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Of",
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "block_id"
+    ]
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Team",
+    "type": "object",
+    "properties": {
+      "parent": {
+        "description": "The block this one works for, if any.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "state": {
+        "description": "The state this block's own program last reported, and its kind.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/State"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "kind": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Kind"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "worktree": {
+        "description": "The git worktree made for this block, if any.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Worktree"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "workers": {
+        "description": "The blocks that work for this one, oldest first.",
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/WorkerView"
+        }
+      }
+    },
+    "required": [
+      "workers"
+    ],
+    "$defs": {
+      "State": {
+        "type": "string",
+        "enum": [
+          "idle",
+          "working",
+          "done",
+          "blocked",
+          "error"
+        ]
+      },
+      "Kind": {
+        "type": "string",
+        "enum": [
+          "permission",
+          "question",
+          "auth"
+        ]
+      },
+      "Worktree": {
+        "description": "A git worktree and branch made for a worker (`leon agent start --worktree`).",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "repo": {
+            "description": "The checkout it was made from, which removes it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "branch",
+          "repo"
+        ]
+      },
+      "WorkerView": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agent": {
+            "type": "string"
+          },
+          "started_at": {
+            "description": "Seconds since the epoch.",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "state": {
+            "description": "The state its program last reported (`working`, `blocked`, `done`, `error`, `idle`); null\nbefore its first report.",
+            "anyOf": [
+              {
+                "$ref": "#/$defs/State"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Kind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unread": {
+            "description": "Its reports the orchestrator hasn't read.",
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "worktree": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Worktree"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "block_id",
+          "agent",
+          "started_at",
+          "unread"
+        ]
+      }
+    }
+  }
+}
+```
+
+</details>
+
+### `agent.inbox`
+
+*experimental*. The reports a block's workers sent it, oldest first; they are marked read unless `peek`.
+
+**Input:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `block_id` | string | yes |  |
+| `peek` | boolean |  | List the reports without marking them read. |
+
+**Output:** 
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `reports` | [`Report`] | yes | Oldest first. |
+
+**`Report`:** What a worker told its orchestrator.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `block_id` | string | yes |  |
+| `label` | string \| null |  |  |
+| `agent` | string | yes |  |
+| `state` | string | yes | `done`, `blocked` or `error` as the worker reported it; `exited` or `closed` when it ended. |
+| `kind` | `Kind` \| null |  |  |
+| `title` | string \| null |  |  |
+| `body` | string \| null |  |  |
+| `at` | integer (uint64) | yes | Seconds since the epoch. |
+
+**`Kind`:** `"permission"` | `"question"` | `"auth"`.
+
+<details><summary>JSON Schemas</summary>
+
+```json
+{
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "ReadInbox",
+    "type": "object",
+    "properties": {
+      "block_id": {
+        "type": "string"
+      },
+      "peek": {
+        "description": "List the reports without marking them read.",
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "block_id"
+    ]
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Reports",
+    "type": "object",
+    "properties": {
+      "reports": {
+        "description": "Oldest first.",
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Report"
+        }
+      }
+    },
+    "required": [
+      "reports"
+    ],
+    "$defs": {
+      "Report": {
+        "description": "What a worker told its orchestrator.",
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agent": {
+            "type": "string"
+          },
+          "state": {
+            "description": "`done`, `blocked` or `error` as the worker reported it; `exited` or `closed` when it ended.",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Kind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "at": {
+            "description": "Seconds since the epoch.",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "block_id",
+          "agent",
+          "state",
+          "at"
+        ]
+      },
+      "Kind": {
+        "type": "string",
+        "enum": [
+          "permission",
+          "question",
+          "auth"
+        ]
+      }
+    }
+  }
+}
+```
+
+</details>
+
 ## client
 
 ### `client.geometry`
@@ -6495,6 +6987,7 @@ the method's full name as `method` and its input as `args`. The output is `block
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `state` | string | yes | `working`, `blocked`, `done` or `error` (also `idle`, or `clear` to remove the record). |
+| `kind` | string \| null |  | With `blocked`: `permission`, `question` or `auth`. |
 | `title` | string \| null |  | One line of text, at most 192 bytes. |
 | `msg` | string \| null |  | One line of text, at most 2048 bytes. |
 
@@ -6512,6 +7005,13 @@ the method's full name as `method` and its input as `args`. The output is `block
       "state": {
         "description": "`working`, `blocked`, `done` or `error` (also `idle`, or `clear` to remove the record).",
         "type": "string"
+      },
+      "kind": {
+        "description": "With `blocked`: `permission`, `question` or `auth`.",
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "title": {
         "description": "One line of text, at most 192 bytes.",

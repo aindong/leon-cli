@@ -17,6 +17,14 @@ leon's page in a browser, served over the tailnet listener to the owner's own ma
   64 KiB `tokio::io::duplex` to `serve::connection`, the function the Unix socket and the tailnet
   NDJSON use; each line it writes goes back as one text message. Methods, events, `block.watch`
   screens, the 1 MiB line cap and backpressure are the socket's own. No method is web-only.
+- **A person at a keyboard, for the permission guard.** The guard
+  ([attention.md](attention.md)) lets only a person answer a permission prompt, and counts another
+  machine as one. The web client is always another machine (`admit` refuses this machine's own
+  address), so both its WebSocket and the API on the same port reach `serve::connection` as
+  `Peer::Remote`, as `tailnet://` callers do. That fits what the page is: it sends only what a
+  person's keys and clicks in the browser make (this view-only page sends no input at all), never
+  input of its own. Something that drives a browser on another of the owner's machines counts as a
+  person too: the same residual as `tailnet://`.
 - **HTTP, a small subset** (`web.rs`): `GET` only (else 405), a head of at most 8 KiB read within
   5 s (else closed) and 64 headers with token names (else 400), one request per connection
   (`Connection: close`), paths `/`, `/app.js`, `/conn.js`, `/grid.js`, `/app.css`, `/theme.css`,

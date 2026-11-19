@@ -52,6 +52,7 @@ impl Workspace {
         self.report_geometry(window);
         self.sync_grids(seen, cx);
         self.sync_sections(window, cx);
+        self.sync_cursor_shader(window, cx);
     }
 
     /// Tell the server how the active tab is drawn (`client.geometry`): the pane area, a cell, and

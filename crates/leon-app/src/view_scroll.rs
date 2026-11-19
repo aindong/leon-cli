@@ -53,6 +53,9 @@ pub(super) struct TermUi {
     pub(super) hover_at: Option<(String, Pos)>,
     /// Numbers each history fetch, so a reply only fills the pane that asked.
     pub(super) fetches: u64,
+    pub(super) card: super::link_card::CardUi,
+    /// Closing and renaming tabs and sessions (view_rows.rs): an inline rename, a row's menu.
+    pub(super) rows: super::sidebar::rows::RowsUi,
 }
 
 #[derive(Debug, Clone, Copy)]

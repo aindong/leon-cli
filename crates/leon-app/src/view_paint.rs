@@ -53,7 +53,7 @@ pub(super) fn terminal_canvas(
     app: Rc<Remote>,
     (sid, block_id): (String, String),
     (frame, marks): (Frame, Vec<CellMark>),
-    active: bool,
+    (active, overlay): (bool, Option<Arc<crate::cursor_shader::Overlay>>),
     (family, font_size, theme): (SharedString, f32, Theme),
     (stats, painted): (Rc<RefCell<Stats>>, scroll::PaintedMap),
     fits: bool,
@@ -70,7 +70,21 @@ pub(super) fn terminal_canvas(
         },
         move |bounds, (frame, cell_w, line_h, size, id), window, cx| {
             let p = scroll::Painted { origin: bounds.origin, cell: (cell_w, line_h), size };
-            paint_frame(&frame, &marks, &theme, bounds, (cell_w, line_h), (&family, font_size), active, window, cx);
+            let cursor =
+                paint_frame(&frame, &marks, &theme, bounds, (cell_w, line_h), (&family, font_size), active, window, cx);
+            if let Some(overlay) = &overlay {
+                // what was just painted, for the cursor shader overlay (R5's second exception,
+                // docs/architecture/cursor-shaders.md): a value handed over, nothing else
+                let drawn = cursor.map(|(b, style, cell)| crate::cursor_shader::Drawn {
+                    block: id.clone(),
+                    rect: [b.origin.x, b.origin.y, b.size.width, b.size.height].map(f32::from),
+                    scale: window.scale_factor(),
+                    style,
+                    cell,
+                    rgb: theme.cursor,
+                });
+                overlay.feed(window, drawn.as_ref());
+            }
             if stats.borrow().enabled {
                 let cursor = frame.cursor.as_ref().map(|c| (c.line, c.col));
                 let text =
@@ -94,7 +108,7 @@ pub(super) fn paint_frame(
     active: bool,
     window: &mut Window,
     cx: &mut App,
-) {
+) -> Option<(Bounds<Pixels>, crate::cursor_shader::Style, (usize, usize))> {
     let at =
         |line: usize, col: usize| point(bounds.origin.x + cell_w * col as f32, bounds.origin.y + line_h * line as f32);
     for r in &f.backgrounds {
@@ -162,9 +176,19 @@ pub(super) fn paint_frame(
         (Some(CursorMark::Hollow(b)), _) => window.paint_quad(outline(b, rgb(t.cursor), gpui::BorderStyle::Solid)),
         _ => {}
     }
+    // the cursor painted, as cursor shaders name its style
+    use crate::cursor_shader::Style;
+    let c = f.cursor.as_ref()?;
+    Some(match mark? {
+        CursorMark::Block(b) => (b, Style::Block, (c.line, c.col)),
+        CursorMark::Bar(b) if c.shape == CursorShape::Underline => (b, Style::Underline, (c.line, c.col)),
+        CursorMark::Bar(b) => (b, Style::Bar, (c.line, c.col)),
+        CursorMark::Hollow(b) => (b, Style::Hollow, (c.line, c.col)),
+    })
 }
 
 /// How the cursor is drawn.
+#[derive(Clone, Copy)]
 enum CursorMark {
     /// Filled, under the text.
     Block(Bounds<Pixels>),

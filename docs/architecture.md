@@ -84,6 +84,8 @@ The decisions, in nine parts:
 - [How leon uses GPUI](architecture/gpui.md): the app's view structure, redraws, animation,
   painting, input, async and tests as GPUI intends them, what may go beside GPUI, and that GPUI
   is used as published.
+- [Cursor shaders](architecture/cursor-shaders.md): users' Shadertoy-style cursor shaders on an
+  overlay of leon's own above GPUI (an amendment to the GPUI rules), and its Linux plan.
 
 ## Verification
 

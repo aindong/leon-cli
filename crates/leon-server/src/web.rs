@@ -11,6 +11,7 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
+use crate::agents::Peer;
 use crate::serve::Shared;
 
 /// The longest request head read, and the time it may take.
@@ -81,7 +82,7 @@ pub(crate) async fn route(stream: TcpStream, shared: &Arc<Shared>, site: Option<
     match (first[0], site) {
         (b'{', _) => {
             let (read, write) = stream.into_split();
-            let _ = crate::serve::connection(read, write, shared).await;
+            let _ = crate::serve::connection(read, write, shared, Peer::Remote).await;
         }
         (b'A'..=b'Z', Some(site)) => http(stream, shared, site).await,
         _ => {} // HTTP with the web off, TLS, anything else: closed unanswered, never read as requests

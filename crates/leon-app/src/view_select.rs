@@ -6,7 +6,6 @@ use std::collections::HashMap;
 
 use gpui::{ClipboardItem, Modifiers, MouseDownEvent};
 use leon_core::mouse::Button;
-use leon_core::program_status::strip_hidden;
 use leon_core::screen::{Lines, Span};
 use leon_core::search::{needs_confirm, Kind, Link, Pos, Range, Selected};
 
@@ -53,14 +52,14 @@ fn button(b: MouseButton) -> Option<Button> {
 
 impl Workspace {
     /// The absolute cell under `at` in pane `id`.
-    fn pos_at(&self, id: &str, at: gpui::Point<Pixels>) -> Option<Pos> {
+    pub(super) fn pos_at(&self, id: &str, at: gpui::Point<Pixels>) -> Option<Pos> {
         let (row, col) = self.cell_at(id, at)?;
         Some(Pos { line: self.composed(id).top + row, col })
     }
 
     /// Whether a press on pane `id` goes to its program: it asked for the mouse, shift isn't
     /// held, and the view shows the live screen.
-    fn reports(&self, id: &str, m: &Modifiers) -> bool {
+    pub(super) fn reports(&self, id: &str, m: &Modifiers) -> bool {
         self.live(id).view.mouse.is_some() && !m.shift && self.view_top(id).is_none()
     }
 
@@ -88,9 +87,7 @@ impl Workspace {
                 None => self.link_at(id, ev.position),
             };
             if let Some(link) = link {
-                // a host's uri opens without asking only when it is the text drawn there
-                let checked =
-                    !self.app.is_link() || self.drawn_over(id, link.start, link.end).as_ref() == Some(&link.uri);
+                let checked = self.link_checked(id, &link);
                 self.open_link(link.uri, checked, window, cx);
             }
             return;
@@ -100,6 +97,9 @@ impl Workspace {
             let pv = self.term.panes.entry(id.to_string()).or_default();
             pv.reporting = pv.reporting.or(button(ev.button)); // the first button held is the one tracked
             return;
+        }
+        if ev.button == MouseButton::Right {
+            return self.card_click(id, ev.position, window, cx);
         }
         let Some(at) = self.pos_at(id, ev.position).filter(|_| ev.button == MouseButton::Left) else { return };
         let pv = self.term.panes.entry(id.to_string()).or_default();
@@ -273,6 +273,11 @@ impl Workspace {
         self.term.clip = Some(lines.join("\n"));
     }
 
+    /// Whether `link` on pane `id` opens without asking: a host's uri only when it is the text drawn there.
+    pub(super) fn link_checked(&self, id: &str, link: &Link) -> bool {
+        !self.app.is_link() || self.drawn_over(id, link.start, link.end).as_ref() == Some(&link.uri)
+    }
+
     /// The text the view shows over `start..=end` of pane `id` (a link wrapped over rows is
     /// joined); None when a row of it is off the view.
     fn drawn_over(&self, id: &str, start: Pos, end: Pos) -> Option<String> {
@@ -345,6 +350,9 @@ impl Workspace {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if ev.modifiers.modified() {
+            self.card_cancel();
+        }
         let Some(at) = self.term.mouse_at else { return };
         // a float over a tile: the float's grid
         match self.grid_at(at, &self.term.painted.clone()) {
@@ -356,7 +364,7 @@ impl Workspace {
 
     /// Open `uri` with the system handler: a web link that was `checked` at once, anything else
     /// after showing it.
-    fn open_link(&mut self, uri: String, checked: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_link(&mut self, uri: String, checked: bool, window: &mut Window, cx: &mut Context<Self>) {
         let open = self.term.opener.clone();
         let go = move |uri: &str, cx: &mut App| match &open {
             Some(f) => f(uri),
@@ -367,8 +375,8 @@ impl Workspace {
             return;
         }
         let buttons = [PromptButton::Ok("Open".into()), PromptButton::Cancel("Cancel".into())];
-        let (shown, plain) = (strip_hidden(&uri), strip_hidden(&leon_core::search::decoded(&uri)));
-        let detail = if plain == shown { shown } else { format!("{shown}\n\nwhich opens {plain}") };
+        // the link card's lines: what it opens and its host, which escapes can't disguise
+        let detail = super::link_card::link_card_lines(&uri).join("\n\n");
         let answer = window.prompt(PromptLevel::Info, "Open this link?", Some(&detail), &buttons, cx);
         cx.spawn(async move |_, cx| {
             if answer.await == Ok(0) {

@@ -229,6 +229,8 @@ pub struct Workspace {
     updates_auto: bool,
     check_for_updates: Option<bool>,
     updates_looked: Option<Instant>,
+    /// The cursor shader init.lua names, and the window's overlay for it.
+    shader: cursor_shader_view::ShaderUi,
     /// Wakes the poll from another thread.
     wake: Arc<dyn Fn() + Send + Sync>,
     _poll: Task<()>,
@@ -242,32 +244,6 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    /// A workspace whose settings live in memory only.
-    pub fn new(app: Rc<Remote>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::with_settings(app, None, window, cx)
-    }
-
-    /// The app's own workspace: settings from `settings_path()`, saved there on each change, and
-    /// the hosts list's machines.
-    pub fn for_app(app: Rc<Remote>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let hosts = leon_hosts::hosts::load().unwrap_or_else(|e| {
-            eprintln!("leon: can't read the hosts list: {e}");
-            Vec::new()
-        });
-        let mut ws = Self::with_hosts(app, settings_path(), hosts, window, cx);
-        ws.platform = true;
-        ws.native_key = crate::input::current_key_event;
-        let store = leon_core::paths::state_dir().map(|d| d.join("updates.json"));
-        ws.enable_updates(store, Arc::new(leon_update::Target::running));
-        crate::notify::prepare();
-        ws
-    }
-
-    /// A workspace with the settings in `path` (the defaults when it is None or unreadable).
-    pub fn with_settings(app: Rc<Remote>, path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::with_hosts(app, path, Vec::new(), window, cx)
-    }
-
     /// A workspace on This Mac's `app` that also shows `hosts`, connecting to each.
     pub fn with_hosts(
         app: Rc<Remote>,
@@ -310,13 +286,17 @@ impl Workspace {
             ws.settings.window = Some(state::frame(window.window_bounds().get_bounds()));
             ws.settings.display = window.display(cx).map(|d| u32::from(d.id()));
             ws.update_glass(window, cx); // full screen in or out
+            ws.fit_cursor_shader(window);
             cx.notify(); // the headers' titles are cut to the panes' widths
         });
         let quit = cx.on_app_quit(|ws, _| {
             ws.save_settings();
             async {}
         });
-        let release = cx.on_release(|ws, _| ws.save_settings());
+        let release = cx.on_release(|ws, _| {
+            ws.save_settings();
+            ws.drop_cursor_shader();
+        });
         let appearance = cx.observe_window_appearance(window, |ws, window, cx| {
             ws.set_appearance(look_view::is_dark(window.appearance()), cx);
             ws.update_glass(window, cx)
@@ -397,6 +377,7 @@ impl Workspace {
             updates_auto: false,
             check_for_updates: None,
             updates_looked: None,
+            shader: Default::default(),
             wake,
             _poll: poll,
             _tick: tick,
@@ -427,6 +408,8 @@ mod bars;
 mod calls;
 #[path = "view_copy.rs"]
 mod copy;
+#[path = "view_cursor_shader.rs"]
+mod cursor_shader_view;
 #[path = "view_drawn.rs"]
 mod drawn_view;
 #[path = "view_fade.rs"]
@@ -449,6 +432,8 @@ mod hosts_view;
 mod keys;
 #[path = "view_layout.rs"]
 mod layout_view;
+#[path = "view_link_card.rs"]
+pub mod link_card;
 #[path = "view_look.rs"]
 mod look_view;
 #[path = "view_pulse.rs"]
