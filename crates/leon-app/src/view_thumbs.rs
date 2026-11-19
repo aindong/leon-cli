@@ -90,7 +90,7 @@ fn paint_small(
         return;
     }
     window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
-        paint_frame(f, &[], t, bounds, (cell_w * s, line_h * s), (family, pt * s), false, window, cx)
+        paint_frame(f, &[], t, bounds, (cell_w * s, line_h * s), (family, pt * s), false, window, cx);
     });
 }
 

@@ -80,13 +80,14 @@ const fn entry(section: Section, id: &'static str, label: &'static str, keys: &'
 use Section::*;
 
 /// Every settings row, in the order each section shows them.
-pub(super) const ENTRIES: [Entry; 17] = [
+pub(super) const ENTRIES: [Entry; 18] = [
     entry(General, "resume", "Resume programs after a restart", &["resume"]),
     entry(General, "check_for_updates", "Look for updates once a day", &["check_for_updates"]),
     entry(Appearance, "theme", "Theme", &["theme"]),
     entry(Appearance, "translucency", "Translucency", &["translucency"]),
     entry(Appearance, "fade_inactive_panes", "Fade panes without the focus", &["fade_inactive_panes"]),
     entry(Appearance, "font", "Font", &["font.family", "font.size"]),
+    entry(Appearance, "cursor_shader", "Cursor shader", &["cursor_shader", "cursor_shader_duration", "shader"]),
     entry(Terminal, "copy_on_select", "Copy text as I select it", &["copy_on_select"]),
     entry(Terminal, "link_card", "Show a card when the mouse rests on a link", &["link_card"]),
     entry(Terminal, "repeat_time", "Repeat keys without the prefix", &["repeat_time"]),
@@ -310,6 +311,7 @@ impl SettingsWindow {
         match id {
             "theme" => self.theme_section(t, cx).into_any_element(),
             "font" => self.font_section(t, cx).into_any_element(),
+            "cursor_shader" => self.cursor_shader_section(t, cx).into_any_element(),
             "hint_patterns" => self.patterns(t, cx).into_any_element(),
             "agents" => self.agents_intro(t).into_any_element(),
             "hosts" => self.hosts_intro(t, cx).into_any_element(),

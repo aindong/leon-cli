@@ -1,5 +1,5 @@
 {
-  "api_version": "1.14.0",
+  "api_version": "1.15.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -2969,6 +2969,13 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "cursor_shader": {
+                "type": "string"
+              },
+              "cursor_shader_duration": {
+                "type": "number",
+                "format": "double"
               }
             },
             "required": [
@@ -2985,7 +2992,9 @@
               "translucency",
               "serve_tailscale",
               "serve_tailscale_port",
-              "serve_tailscale_tags"
+              "serve_tailscale_tags",
+              "cursor_shader",
+              "cursor_shader_duration"
             ]
           },
           "sources": {

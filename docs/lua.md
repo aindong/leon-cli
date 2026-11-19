@@ -33,7 +33,8 @@ last good config. `leon config check` exits 1 in both cases.
   vim-navigator, modes and `leon attach`'s prefix, function bindings, floating panes and a
   scratch shell key.
 - [Your own actions](lua/actions.md): `leon.action`, `leon.session.<method>` and `leon.call`.
-- [Settings](lua/settings.md): every `leon.set` setting, its values and its default.
+- [Settings](lua/settings.md): every `leon.set` setting, its values and its default; a cursor
+  shader file is one ([cursor-shaders.md](cursor-shaders.md)).
 - [Scripts and the functions](lua/scripts.md): `leon do`, events, timers, `leon.exec`, the
   list of `leon.*` functions and the limits.
 
