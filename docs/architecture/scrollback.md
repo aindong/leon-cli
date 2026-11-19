@@ -44,7 +44,18 @@ clients see is in [Protocol and clients](protocol-and-clients.md), "Scrollback i
   16-byte entry per cell with a mark or a link come on top. Ordinary text is about 2 bytes a cell;
   output that changes style and stacks a mark on every cell, the worst case, about 32, more than
   alacritty's 24 (still bounded by the cap times the width).
-- **Known limits.** Find, selection and links read alacritty's rows only, so they reach the store's
-  lines only when B2 lands. A stored tab is shown in `text` with alacritty's default 8-column stops
-  (a program's own, set with HTS, aren't readable from outside). The underline colour is kept but
-  not drawn, as before.
+- **Find, selection and links** (`terminal_scratch.rs`) run alacritty's own code on the store's
+  lines: those lines, and alacritty's rows where a range runs on into them, are copied into a plain
+  alacritty grid as wide as the pane (a scratch) at most 1,000 rows at a time, cut where a logical
+  line ends. Find searches the store a scratch at a time, then alacritty's rows, with one limit and
+  one CPU budget. A selection's ends are widened (words, lines, half a wide character, a bracket's
+  match within a few hundred lines) on a scratch around each, and its text is copied a scratch at a
+  time, so a select-all of 100,000 lines holds one scratch. A link is read on a scratch of its line.
+  With both ends in alacritty's rows nothing is copied. Tests compare each with alacritty alone
+  keeping the whole history.
+- **Known limits.** A stored tab is shown in `text` with alacritty's default 8-column stops (a
+  program's own, set with HTS, aren't readable from outside). The underline colour is kept but not
+  drawn, as before. A scratch is as wide as the pane: a stored row wider than it is cut (as `lines`
+  shows it), and one that wrapped at a narrower width copies with a newline where it wrapped then.
+  A logical line longer than a scratch (1,000 rows) is cut there for find and copying, and a
+  regular expression that would match across two lines may miss where a scratch ends.

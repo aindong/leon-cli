@@ -19,6 +19,8 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   ([architecture/scrollback.md](architecture/scrollback.md)).
 - Stored lines aren't re-wrapped when a pane is resized: a narrower pane cuts them at its edge
   (their whole text stays in `capture`).
+- Find, selection, copy and links in the app reach the stored lines too, with the same results as
+  when alacritty held them all.
 
 #### Added
 - `leon.set("scrollback", N)` (0 to 100000, default 10000) and `leon config set scrollback N`: the

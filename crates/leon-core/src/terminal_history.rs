@@ -164,6 +164,13 @@ impl Store {
         out
     }
 
+    /// Whether stored row `i` wrapped: its line goes on in the next row.
+    pub(super) fn wrapped(&self, i: usize) -> bool {
+        // a wrapped row's last cell has WRAPLINE, so its runs aren't the plain ones
+        let last = self.rows.get(i).and_then(|r| r.runs.as_deref()?.last());
+        last.is_some_and(|r| r.flags.contains(Flags::WRAPLINE))
+    }
+
     /// Every stored row's text, as alacritty's `bounds_to_string` gives a whole row: no newline
     /// after a wrapped row, a tab's blanks skipped. shortcut: tab stops are the default 8
     /// columns (alacritty doesn't expose a program's own, set with HTS); read them if one matters.

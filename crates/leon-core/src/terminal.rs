@@ -32,6 +32,8 @@ pub use history::WINDOW;
 use history::{Emu, Store};
 #[path = "terminal_foreground.rs"]
 mod foreground;
+#[path = "terminal_scratch.rs"]
+mod scratch;
 pub use foreground::owned_process_name;
 #[path = "terminal_process.rs"]
 mod process;
@@ -235,8 +237,7 @@ impl Terminal {
     }
 
     /// `spawn_showing` at `size` (None: 24x80, clamped as `resize` clamps): the program's first
-    /// look at its size is right. It keeps `scrollback` lines of history (`set_scrollback`), what
-    /// it shows first included.
+    /// look at its size is right. It keeps `scrollback` lines of history, `shown` included.
     pub fn spawn_sized(
         spec: Spec,
         shown: &[u8],

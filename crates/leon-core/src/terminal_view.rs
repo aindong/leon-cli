@@ -8,7 +8,6 @@ use alacritty_terminal::index::{Column, Line};
 use super::*;
 use crate::mouse;
 use crate::screen::{self, Frame, Lines, Row};
-use crate::search::{self, Found, Kind, Link, Pos, Query, Selected};
 use crate::theme::Theme;
 
 /// Output is counted this many bytes at a time at most (`piece`), and finding the newest history
@@ -258,18 +257,6 @@ impl Terminal {
             backgrounds,
         }));
         Lines { scrolled, history, rows }
-    }
-
-    pub fn find(&self, q: &Query) -> Result<Found, String> {
-        self.with_term(|term| search::find(term, self.scrolled(), q))
-    }
-
-    pub fn selection(&self, kind: Kind, anchor: Pos, head: Pos, text: bool) -> Option<Selected> {
-        search::select(&mut lock(&self.term).term, self.scrolled(), kind, anchor, head, text)
-    }
-
-    pub fn link_at(&self, at: Pos) -> Option<Link> {
-        self.with_term(|term| search::link_at(term, self.scrolled(), at))
     }
 
     /// Send `e` to the program as its mouse mode asks now; false when the mode doesn't want it.
