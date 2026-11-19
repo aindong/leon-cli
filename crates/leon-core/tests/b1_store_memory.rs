@@ -76,13 +76,16 @@ fn leon(bytes: &[u8], kept: &mut Vec<Terminal>) -> isize {
     let start = HELD.load(Ordering::SeqCst);
     let spec = Spec { command: vec!["/bin/sleep".into(), "60".into()], cwd: None, env: vec![] };
     let t = Terminal::spawn_showing(spec, bytes, |_| {}).unwrap();
-    let end = Instant::now() + Duration::from_secs(5);
-    while t.output_bytes() == 0 && t.lines(0, 0, &DARK).history == 0 && Instant::now() < end {
+    // the reader thread makes its parser (2 MB) as it starts: wait until what is held stops moving
+    let end = Instant::now() + Duration::from_secs(10);
+    let (mut last, mut same) = (HELD.load(Ordering::SeqCst), 0);
+    while same < 10 {
+        assert!(Instant::now() < end, "the terminal's memory never settled");
         std::thread::sleep(Duration::from_millis(20));
+        let now = HELD.load(Ordering::SeqCst);
+        (last, same) = (now, if now == last { same + 1 } else { 0 });
     }
-    // the reader thread makes its parser as it starts
-    std::thread::sleep(Duration::from_millis(300));
-    let held = HELD.load(Ordering::SeqCst) - start;
+    let held = last - start;
     kept.push(t);
     held
 }

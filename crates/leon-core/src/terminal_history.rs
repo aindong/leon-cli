@@ -123,8 +123,8 @@ impl Store {
 
     fn push(&mut self, row: &Row<Cell>) {
         // alacritty's text ends at the last character (`LineLength`); a coloured blank after it
-        // still draws
-        let len = row.into_iter().rposition(|c| c.c != ' ' || !c.is_empty()).map_or(0, |i| i + 1);
+        // still draws, and a blank in a link still links
+        let len = row.into_iter().rposition(|c| c.c != ' ' || c.extra.is_some() || !c.is_empty()).map_or(0, |i| i + 1);
         let mut text = String::with_capacity(len);
         let (mut runs, mut extras): (Vec<Run>, Vec<_>) = (Vec::new(), Vec::new());
         for col in 0..len {
@@ -253,10 +253,9 @@ impl Store {
                 self.rows.shrink_to(self.rows.len() + GROW);
             }
         }
-        if shown > self.cap {
-            let g = term.grid_mut();
-            g.update_history(self.cap);
-            g.update_history(self.limit());
+        // the limit follows the cap (raised too), and drops what alacritty holds past it
+        if !alt(term) {
+            term.grid_mut().update_history(self.limit());
         }
     }
 

@@ -37,7 +37,8 @@ pub(super) fn feed(emu: &mut Emu, parser: &mut Processor, escapes: &mut Escapes,
         let guess = memchr::memchr_iter(b'\n', slice).count();
         let mut pushed = counting(term, store.limit(), guess, |t| parser.advance(t, slice));
         // `ESC c` resets both screens; `CSI 3 J` clears only the one showing
-        if escapes.take_reset() || clears && !term.mode().contains(TermMode::ALT_SCREEN) {
+        // the screen as the bytes have it: vte holds a synchronized update back, switches included
+        if escapes.take_reset() || clears && !escapes.alt() {
             store.clear();
         }
         store.trim(term);
@@ -60,6 +61,8 @@ pub(super) fn feed(emu: &mut Emu, parser: &mut Processor, escapes: &mut Escapes,
 #[derive(Debug, Default)]
 pub struct Escapes {
     x10: bool,
+    /// The alternate screen shows (`CSI ? 1049 h`), in the order the bytes came.
+    alt: bool,
     /// An `ESC c` was seen since `take_reset`.
     reset: bool,
     state: Scan,
@@ -83,6 +86,11 @@ impl Escapes {
     /// Whether the program has X10 mouse reporting (`?9`) on.
     pub fn x10(&self) -> bool {
         self.x10
+    }
+
+    /// Whether the output so far left the alternate screen showing.
+    pub fn alt(&self) -> bool {
+        self.alt
     }
 
     /// Whether an `ESC c` (a reset of both screens) was seen since the last call.
@@ -131,16 +139,20 @@ impl Escapes {
             (_, 0x1b) => Scan::Esc,
             (Scan::Esc, b'[') => Scan::Csi,
             (Scan::Esc, b'c') => {
-                (self.x10, cleared, self.reset) = (false, true, true); // RIS
+                (self.x10, self.alt, cleared, self.reset) = (false, false, true, true); // RIS
                 Scan::Text
             }
-            (Scan::Csi, b'0'..=b'9' | b';' | b':') => {
-                self.params.clear();
-                self.params.push(b);
-                Scan::Ansi
-            }
-            (Scan::Ansi, b'0'..=b'9' | b';' | b':') if self.params.len() < MAX_PARAMS => {
-                self.params.push(b);
+            (Scan::Csi | Scan::Ansi, b'0'..=b'9' | b';' | b':') => {
+                if self.state == Scan::Csi {
+                    self.params.clear();
+                }
+                // only the first parameter, without its leading zeros (vte reads `CSI 000…3 J`
+                // as 3): a clear is known in a few bytes however long the sequence
+                let first_done = self.params.iter().any(|&c| c == b';' || c == b':');
+                let leading_zero = b == b'0' && self.params.is_empty();
+                if !first_done && !leading_zero && self.params.len() < MAX_PARAMS {
+                    self.params.push(b);
+                }
                 Scan::Ansi
             }
             (Scan::Ansi, b'J') => {
@@ -161,6 +173,7 @@ impl Escapes {
                 for p in self.params.split(|&c| c == b';') {
                     match p {
                         b"9" => self.x10 = b == b'h',
+                        b"1049" => self.alt = b == b'h',
                         b"1000" | b"1001" | b"1002" | b"1003" => self.x10 = false,
                         _ => {}
                     }

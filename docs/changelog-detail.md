@@ -77,9 +77,9 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 - When output pauses, a pane's history moves out of alacritty, which keeps every row at the pane's
   full width, into leon's own store of each row's text and runs of style: 10,000 lines of 70
   characters at 80 columns cost about 2.2 MB instead of 19.7 MB, and a wide pane no more than a
-  narrow one. While output streams nothing is copied, so `cat` is as fast as before. Line numbers,
-  styles, `capture`, restore after a restart and `leon attach` are unchanged
-  ([architecture/scrollback.md](architecture/scrollback.md)).
+  narrow one. Rows aren't copied as they scroll, only when output pauses (or once a second), so
+  `cat` is as fast as before. Line numbers, styles, `capture`, restore after a restart and `leon
+  attach` are unchanged ([architecture/scrollback.md](architecture/scrollback.md)).
 - Stored lines aren't re-wrapped when a pane is resized: a narrower pane cuts them at its edge
   (their whole text stays in `capture`).
 - Find, selection, copy and links in the app reach the stored lines too, with the same results as

@@ -154,6 +154,7 @@ impl Reading {
                 settle(&mut settled);
             }
         }
+        settle(&mut settled); // what the program printed last, as it ended
         let gone = lock(&self.tracker).store.process_exited();
         gone.into_iter().for_each(|c| notify(Notice::ProgramStatus(c)));
     }

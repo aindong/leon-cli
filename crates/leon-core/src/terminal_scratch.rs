@@ -138,7 +138,7 @@ impl Terminal {
         while from < v.boundary && f.going() {
             let mut to = v.cut(from, v.boundary);
             // the store's last line may go on in alacritty's rows: searched here, as one line
-            while to >= v.boundary && to <= v.last && v.wrapped(to - 1) {
+            while to >= v.boundary && to <= v.last && to - v.boundary < CHUNK && v.wrapped(to - 1) {
                 to += 1;
             }
             f.run(&v.scratch(from, to), from, Point::new(Line(0), Column(0)));

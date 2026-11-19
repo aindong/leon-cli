@@ -47,11 +47,12 @@ load is given with each:
 - In process, 10,000 lines of 70 characters at 80 columns (`b1_store_memory.rs`, a counting
   allocator): 19.7 MB in alacritty alone, 2.2 MB with the store (89% less).
 - `cargo bench -p leon --bench speed`, three rounds each, alternating: `cat` of 100 MB at 119.0,
-  115.8 and 92.8 MB/s on dev (load 2.8, 3.1, 5.1) and 127.0, 58.2 and 123.4 MB/s on the branch
-  (load 3.0, 3.1 rising to 6.9 during the run, 9.2); input latency p50 0.023 to 0.035 ms on dev,
-  0.028 to 0.030 ms on the branch; the attached keystroke to screen p50 0.36 to 0.51 ms on dev,
-  0.22 to 0.51 ms on the branch. While output streams nothing is copied, so the parse path is as
-  before; a first version that copied each row as it scrolled ran `cat` at 11 MB/s.
+  115.8 and 92.8 MB/s on dev (load 2.8, 3.1, 5.1) and 127.0, 58.2 and 123.4 MB/s on the branch (load
+  3.0, 3.1 rising to 6.9 during the run, 9.2); input latency p50 0.023 to 0.035 ms on dev, 0.028 to
+  0.030 ms on the branch; the attached keystroke to screen p50 0.36 to 0.51 ms on dev, 0.22 to 0.51
+  ms on the branch. Rows aren't copied as they scroll, only when output pauses (or once a second),
+  so the parse path is as before; a first version that copied each row as it scrolled ran `cat` at
+  11 MB/s.
 
 ## Two leaks in GPUI
 
