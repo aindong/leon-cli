@@ -51,6 +51,39 @@ fn the_overlay_follows_a_pushed_cursor(cx: &mut TestAppContext) {
     assert!(back, "back on tab 1, the overlay has its pane's cursor");
 }
 
+/// A focused float moved from the CLI pushes no new screen: the overlay hears where its cursor
+/// went from the frames drawn (`drew_frame`), placed where the grid painted.
+#[gpui::test]
+fn the_overlay_follows_a_float_that_moves(cx: &mut TestAppContext) {
+    let d = private_dir();
+    let file = d.path().join("trail.glsl");
+    std::fs::write(&file, GOOD).unwrap();
+    let s = setup_with_config(&format!("leon.set(\"cursor_shader\", {:?})\n", file.to_str().unwrap()));
+    let (ws, cx) = open(cx, &s.app);
+    ws.update(cx, |ws, _| ws.set_reduce_motion(true)); // the move lands in one frame
+    cx.update(|window, _| window.activate_window());
+    ws.update(cx, |ws, cx| ws.sync_keymap(cx));
+    assert!(shows(cx, |cx| state(&ws, cx).is_some()), "the shader loaded");
+    let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
+    let at = |x: f64| serde_json::json!({ "x": x, "y": 0.2, "width": 0.4, "height": 0.4 });
+    let made = s.app.call("session.new_floating", serde_json::json!({ "session_id": sid, "bounds": at(0.1) })).unwrap();
+    let float = made["block_id"].as_str().unwrap().to_string();
+    let t = term(&s.app, &float);
+    run_until(&t, "echo float-ready", "float-ready");
+    settle(&t);
+    let on = |cx: &mut VisualTestContext| {
+        state(&ws, cx).filter(|c| c.block() == Some(float.as_str()) && c.u.cursor_visible == 1)
+    };
+    assert!(shows(cx, |cx| on(cx).is_some()), "the overlay has the float's cursor");
+    let x0 = on(cx).unwrap().u.current_cursor[0];
+    s.app
+        .call("session.float_block", serde_json::json!({ "session_id": sid, "block_id": float, "bounds": at(0.5) }))
+        .unwrap();
+    let moved = shows(cx, |cx| on(cx).is_some_and(|c| c.u.current_cursor[0] > x0 + 100.));
+    s.app.stop();
+    assert!(moved, "the overlay's cursor went with the float");
+}
+
 /// The feed is the workspace's (view_cursor_shader.rs), never a grid's paint.
 #[test]
 fn only_the_workspace_feeds_the_overlay() {

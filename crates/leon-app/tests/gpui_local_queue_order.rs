@@ -5,7 +5,7 @@ mod fake_support;
 mod m10b_support;
 
 use fake_support::{open_fake, serve, Answer};
-use gpui::{ClipboardItem, TestAppContext};
+use gpui::{ClipboardItem, Keystroke, TestAppContext};
 use leon_app::view::Paste;
 use m10b_support::*;
 
@@ -14,11 +14,20 @@ fn calls_reach_this_mac_in_the_order_sent(cx: &mut TestAppContext) {
     let fake = serve(Answer::All);
     let (ws, cx) = open_fake(cx, &fake);
     cx.write_to_clipboard(ClipboardItem::new_string("pasted".into()));
-    cx.simulate_keystrokes("a");
-    cx.dispatch_action(Paste);
-    act(&ws, cx, "pane.split.right");
-    act(&ws, cx, "pane.focus.left");
-    cx.simulate_keystrokes("b");
+    // all sent before the queue runs once (each step alone would let it run in between, and a
+    // call sent past the queue would still look in order)
+    let key = |cx: &mut gpui::VisualTestContext, k: &str| {
+        cx.update(|window, cx| assert!(window.dispatch_keystroke(Keystroke::parse(k).unwrap(), cx), "{k} handled"))
+    };
+    let action = |cx: &mut gpui::VisualTestContext, name: &str| {
+        cx.update(|window, cx| ws.update(cx, |ws, cx| ws.run_action(name, None, "test", window, cx)))
+    };
+    key(cx, "a");
+    cx.update(|window, cx| window.dispatch_action(Box::new(Paste), cx));
+    action(cx, "pane.split.right");
+    action(cx, "pane.focus.left");
+    key(cx, "b");
+    cx.run_until_parked();
     let wanted = [
         "dev.leon.terminal.write",
         "block.event paste",
