@@ -48,3 +48,17 @@ fn notes_stop_at_the_next_section_and_a_missing_version_fails() {
         assert!(String::from_utf8_lossy(&o.stderr).contains(missing), "the error names {missing}: {}", text(&o));
     }
 }
+
+#[test]
+fn an_earlier_release_comes_from_the_archive_with_its_links_from_the_root() {
+    let archive = std::fs::read_to_string(repo().join("docs/changelog-archive.md")).unwrap();
+    assert!(section(&archive, "0.1.0").len() > 200, "the archive has 0.1.0's section");
+    let o = script("release-notes.sh", &["0.1.0"], &[]);
+    assert!(o.status.success(), "{}", text(&o));
+    let notes = String::from_utf8_lossy(&o.stdout);
+    let blob = "](https://github.com/aindong/leon-cli/blob/v0.1.0/";
+    assert!(notes.starts_with("The first release of leon"), "{notes}");
+    assert!(notes.contains(&format!("{blob}docs/changelog-milestones.md)")), "docs/ links: {notes}");
+    assert!(notes.contains(&format!("{blob}README.md#install)")), "../ links: {notes}");
+    assert!(!notes.contains("](changelog-") && !notes.contains("../"), "no link left relative: {notes}");
+}

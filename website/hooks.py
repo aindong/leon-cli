@@ -73,6 +73,23 @@ def releases(changelog):
     return [(v, d, b) for v, d, b in bodies if b.strip()]
 
 
+def every_release(root):
+    """`releases` of CHANGELOG.md, then of docs/changelog-archive.md (earlier releases), whose
+    links start from docs/: made CHANGELOG.md's again, which is where they were at the tag."""
+    archive = root / "docs/changelog-archive.md"
+    older = releases(archive.read_text(encoding="utf-8")) if archive.exists() else []
+    return releases((root / "CHANGELOG.md").read_text(encoding="utf-8")) + [
+        (v, d, rooted(body)) for v, d, body in older
+    ]
+
+
+def rooted(body):
+    """A docs/ file's relative links, as links from the repo's root."""
+    up = lambda path: path[3:] if path.startswith("../") else f"docs/{path}"
+    body = re.sub(r"\]\(([^):#\s][^):\s]*)\)", lambda m: f"]({up(m[1])})", body)
+    return re.sub(r"^(\[[^\]\n]+\]:[ \t]+)([^:#\s][^:\s]*)", lambda m: m[1] + up(m[2]), body, flags=re.M)
+
+
 def split(text):
     """[(is_code, text)]: `text` cut into its fenced code blocks and the rest. A fence closes on a run
     of its own character at least as long, with nothing after it."""
@@ -176,7 +193,7 @@ def on_config(config):
         root=root,
         ref=os.environ.get("LEON_SITE_REF") or "dev",
         media=Path(media) if media else None,
-        releases=releases((root / "CHANGELOG.md").read_text(encoding="utf-8")),
+        releases=every_release(root),
         langs=[a["lang"] for a in config.extra["alternate"] if a["lang"] != "en"],
     )
     section = next(i["What's new"] for i in config.nav if isinstance(i, dict) and "What's new" in i)

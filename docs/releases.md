@@ -27,7 +27,8 @@ Before the first release, do the one-time setup under [Secrets](#secrets).
 
 1. Set the version in `Cargo.toml`. Give `CHANGELOG.md` a `## [X.Y.Z]` section and move what is
    under `[Unreleased]` into it: the release notes are that section's text and nothing else, its
-   relative links made absolute to the tag on GitHub.
+   relative links made absolute to the tag on GitHub. The previous one moves to
+   [changelog-archive.md](changelog-archive.md).
 2. Show what it brings. `scripts/demo-clips.sh` records a short clip of each new feature in the
    launch video's macOS VM ([scripts/demo-video/README.md](../scripts/demo-video/README.md): its
    one-time setup), so nothing touches your own screen; first edit its scenes
