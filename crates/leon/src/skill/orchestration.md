@@ -47,7 +47,8 @@ leon agent ls         # your workers: label, state, agent, age, unread, block
 
 A report's state is what the worker said:
 
-- `done`: its turn ended; `body` is its result (or its last message).
+- `done`: its turn ended; `body` is its last message. A worker with leon's hooks asks by ending
+  its turn with the question, so that message can be a question waiting for `leon agent tell`.
 - `blocked`, kind `question`: it asks you something; `body` is the question.
 - `blocked`, kind `permission`: it waits on a permission prompt (to run a command, edit a file).
   **Only the user answers those**, in the leon app; until they have typed there, leon refuses your
@@ -80,8 +81,14 @@ close workers you didn't start.
 
 ## If you are the worker
 
-You were started with a task and a paragraph about reporting. Your state (working, waiting on a
-permission prompt, turn ended) reaches your orchestrator through leon's hooks. Also:
+You were started with a task and a paragraph about reporting. With leon's hooks (Claude Code after
+`leon skill setup`, in your settings or the project's), your state (working, waiting on a permission prompt, turn ended)
+reaches your orchestrator on its own, and so does your last message when your turn ends. So report
+by ending your turn: put the result in a line or two in your last message, or, to ask something,
+make the question your last message; the answer is typed into your prompt. Running a command to
+report would cost the user one more approval for nothing.
+
+Without the hooks, report with `leon notify`:
 
 ```sh
 leon notify --state done --body "Fixed: the parser skipped empty lines. Tests pass."
@@ -89,6 +96,4 @@ leon notify --state blocked --kind question --body "Postgres or SQLite for the t
 leon notify --state error --body "Can't build: the toolchain is missing."
 ```
 
-Report your result in a line or two when you finish, then end your turn. To ask, report the
-question and end your turn: the answer is typed into your prompt. A body is one line, at most 2048
-bytes; put more in a file and name the file.
+then end your turn. A body is one line, at most 2048 bytes; put more in a file and name the file.

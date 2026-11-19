@@ -141,7 +141,12 @@ leon block close "$id"
 ```
 
 - **Start.** `leon agent start AGENT TASK` runs `AGENT [ARGS…] PROMPT` in a new tab (`--split DIR`
-  for a pane) with the task and a paragraph on how to report as its first prompt, and makes it a
+  for a pane) with the task and a paragraph on how to report as its first prompt. A Claude Code
+  worker whose hooks leon finds (the project's `.claude/settings.json` or `settings.local.json`, or
+  `~/.claude/settings.json` when `CLAUDE_CONFIG_DIR` isn't set; not with `-p`, `disableAllHooks`
+  or `-H`) is told to end its turn with the result, or a question, as its last message, which runs
+  no command the user must approve; any other worker, Codex included (its hooks run only once
+  trusted in `/hooks`), is told to use `leon notify`. It makes the new block a
   worker of the caller's block (`$LEON_BLOCK`, or `-b`). `claude "…"` and `codex "…"` start an
   interactive session with that prompt; any agent CLI that takes a prompt as its last argument
   works. A worker's pane stays open after its program exits. Workers can start workers of their
@@ -152,7 +157,8 @@ leon block close "$id"
   message right after an unread one of the same state and kind from the same worker adds nothing.
   When a worker's program exits or its block closes, an `exited` or `closed` report says so, and
   it leaves the team. An inbox keeps the newest 256 unread reports.
-- **The notice.** leon types `You have N leon messages. Run leon inbox to read them.` into the
+- **The notice.** leon types `You have 2 leon messages. Run leon inbox to read them.` (for one,
+  `… 1 leon message. Run leon inbox to read it.`) into the
   orchestrator's prompt and presses Enter, once: when the program in front of its pane is the one
   whose hooks last said its turn ended (`done`, or Codex's interrupt), at least a second ago, and
   nothing was typed into its pane for 3 seconds. Reports that come while it works make one notice.
