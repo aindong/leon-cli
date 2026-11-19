@@ -63,7 +63,8 @@ class Built(unittest.TestCase):
         landing = read(self.out / "index.html")
         self.assertIn("Keep your", landing)
         for link in re.findall(r'href="([^"#:]+)"', landing):
-            self.assertTrue((self.out / link / "index.html").exists(), f"the landing page's {link}")
+            page = self.out / link / "index.html" if link.endswith("/") else self.out / link
+            self.assertTrue(page.exists(), f"the landing page's {link}")
         for name in ("Docs", "What's new", "Demo", "Install", "GitHub"):
             self.assertIn(f">{name}", landing)
         self.assertIn("leon is a terminal multiplexer", self.page("overview"))
@@ -80,6 +81,34 @@ class Built(unittest.TestCase):
         for lang in LANGS:
             self.assertTrue((self.out / "i18n" / lang / "index.html").exists(), lang)
             self.assertTrue((self.out / "i18n" / lang / "install" / "index.html").exists(), lang)
+
+    def test_the_landing_page_is_whole_and_asks_no_other_server(self):
+        landing = read(self.out / "index.html")
+        self.assertNotIn("<!--#include", landing, "every section is in place")
+        for section in ("hero-h", "app-h", "agents-h", "statement", "handoff-h", "cli-h", "questions-h", "close-h"):
+            self.assertIn(f'id="{section}"', landing)
+        # what a visitor's browser loads: the page's own files, never another server's
+        loads = re.findall(r'<(?:link(?![^>]*rel="canonical")|script|img|source|video)\b[^>]*?\s(?:href|src|poster)="([^"]+)"', landing)
+        self.assertGreater(len(loads), 10)
+        for url in loads:
+            self.assertNotRegex(url, r"^(https?:)?//", f"the landing page loads {url}")
+            self.assertTrue((self.out / url).exists(), url)
+        for css in self.out.joinpath("assets").rglob("*.css"):
+            self.assertNotRegex(read(css), r"url\(\s*[\"']?(https?:)?//", css)
+        for font in ("instrument-sans-latin.woff2", "dm-mono-400-latin.woff2", "OFL-DMMono.txt"):
+            self.assertTrue((self.out / "assets" / "fonts" / font).exists(), font)
+
+    def test_the_landing_page_is_small_files_of_its_own(self):
+        # the repo's 20 KB file limit holds for the page's own code, with no file marked to escape it
+        tracked = subprocess.run(
+            ["git", "ls-files", "brand/marketing"], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout.split()
+        code = [ROOT / p for p in tracked if p.endswith((".html", ".css", ".js"))]
+        self.assertGreater(len(code), 5)
+        for path in code:
+            self.assertLess(path.stat().st_size, 20000, path)
+        marks = [line for line in read(ROOT / ".gitattributes").splitlines() if line.startswith("brand/marketing/")]
+        self.assertEqual(marks, ["brand/marketing/*.svg linguist-generated"], "only hero.svg and og.svg, which embed images")
 
     def test_nothing_is_copied_into_git(self):
         tracked = subprocess.run(

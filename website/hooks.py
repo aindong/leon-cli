@@ -34,6 +34,7 @@ LINK = re.compile(
     r"|(?P<attr>\b(?:src|href|poster)=\")(?P<attrlink>[^\"]+)",
     re.S | re.M,
 )
+INCLUDE = re.compile(r"<!--#include (sections/[a-z0-9-]+\.html) -->")
 FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 # what would run on the public site: translations come from contributors, and GitHub's preview
 # strips these where the site would not, so the build refuses them in a page's HTML (where code is
@@ -218,13 +219,20 @@ def on_files(files, config):
         context[uri] = links or repo or uri
 
     add("overview.md", "README.md", abs_src_path=str(root / "README.md"))
-    add("index.html", abs_src_path=str(tools / "brand/marketing/index.html"))
-    add("og.png", abs_src_path=str(tools / "brand/marketing/og.png"))
+    marketing = tools / "brand/marketing"
+    add("index.html", content=landing(marketing))
+    add("og.png", abs_src_path=str(marketing / "og.png"))
+    add("share.jpg", abs_src_path=str(marketing / "share.jpg"))
+    # the landing page's pictures, styles and scripts; its fonts are brand/fonts (assets/fonts is a link)
+    for path in sorted((marketing / "assets").rglob("*")):
+        uri = path.relative_to(marketing).as_posix()
+        if path.is_file() and not uri.startswith("assets/fonts/"):
+            add(uri, abs_src_path=str(path))
     add("assets/leon.css", abs_src_path=str(tools / "website/leon.css"))
     add("assets/logo-mark.svg", abs_src_path=str(tools / "brand/logo-mark.svg"))
     add("assets/mermaid.min.js", abs_src_path=str(mermaid(tools / "target/site-cache")))
-    for name in ("instrument-sans-latin.woff2", "OFL.txt"):
-        add(f"assets/fonts/{name}", abs_src_path=str(tools / "brand/fonts" / name))
+    for font in sorted((tools / "brand/fonts").iterdir()):
+        add(f"assets/fonts/{font.name}", abs_src_path=str(font))
 
     lines = [
         "# What's new",
@@ -256,6 +264,16 @@ def on_files(files, config):
         # an older release's checkout may not have every page the nav names yet
         config.nav = prune(config.nav, state["urls"])
     return files
+
+
+def landing(folder):
+    """brand/marketing/index.html with each `<!--#include sections/x.html -->` replaced by that file:
+    the page is kept as a file per section so no file grows past the repo's size limit."""
+
+    def section(m):
+        return (folder / m[1]).read_text(encoding="utf-8").rstrip("\n")
+
+    return INCLUDE.sub(section, (folder / "index.html").read_text(encoding="utf-8"))
 
 
 def prune(nav, pages):

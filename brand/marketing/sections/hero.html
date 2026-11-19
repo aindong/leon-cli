@@ -1,0 +1,46 @@
+  <section class="hero" data-enter aria-labelledby="hero-h">
+    <div class="wrap">
+      <div class="grid hero-text">
+        <div class="c5 stack hero-copy">
+          <h1 id="hero-h">A terminal multiplexer for coding agents</h1>
+          <p class="lead">Your shells, tests and agents keep running when you close the window, and each agent says when it is working, blocked or done. Free for macOS and Linux.</p>
+          <div class="btn-row"><a class="btn btn-primary" href="install/">Install leon<svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a><a class="btn btn-secondary" href="overview/">Read the docs</a></div>
+        </div>
+        <div class="c6r satin">
+          <div class="lw lw-hero" role="img" aria-label="The leon app: an agent in the auth session waits for permission to edit src/routes.rs, beside sessions that are working and done">
+            <div class="lw-bar"><span class="lw-dots"><i></i><i></i><i></i></span></div>
+            <div class="lw-body">
+              <div class="lw-side">
+                <div class="lw-group">auth</div>
+                <div class="lw-row on"><b class="b">!</b>Add rate limiting</div>
+                <div class="lw-row"><b class="w">●</b>Fix the flaky test</div>
+                <div class="lw-group">site</div>
+                <div class="lw-row"><b class="d">✓</b>Review the README</div>
+                <div class="lw-group">infra</div>
+                <div class="lw-row"><b>$</b>dev server</div>
+              </div>
+              <div class="lw-pane focus">
+                <div class="lw-head"><span>Add rate limiting</span><span class="b">! Edit src/routes.rs?</span></div>
+                <pre>&gt; Add rate limiting to the public API
+<span class="more">
+  Plan: a token bucket per API key in src/limits.rs,
+  100 requests a minute, Retry-After on a 429.
+
+  Write src/limits.rs (64 lines)
+<span class="d">  + pub fn per_key(per_minute: u32) -&gt; Limits</span>
+  Ran the tests: 42 passed
+</span>
+  Edit src/routes.rs to add the middleware?
+<span class="more"><span class="d">  + .layer(limits::per_key(100))</span>
+</span>
+<span class="ask">  ❯ 1. Yes
+    2. Yes, and don't ask again for this file
+    3. No, and tell the agent what to do</span></pre>
+              </div>
+            </div>
+          </div>
+          <div class="float"><p><span>leon inbox</span>now</p><b>tests: 18 passed, 0 failed</b></div>
+        </div>
+      </div>
+    </div>
+  </section>

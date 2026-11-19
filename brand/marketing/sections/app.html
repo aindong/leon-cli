@@ -1,0 +1,82 @@
+  <section class="app-sec" id="app" aria-labelledby="app-h">
+    <div class="wrap">
+      <div class="grid">
+        <h2 class="c5" id="app-h">Every session in one leon window. <span class="muted">Agents, tests and servers side by side.</span></h2>
+        <div class="c6r stack">
+          <p class="lead">Sessions sit in the sidebar with their state beside them. Split a tab when you need two things at once; a server keeps them all running.</p>
+          <a class="link" href="shortcuts/">See the keyboard shortcuts</a>
+        </div>
+      </div>
+      <div class="lw lw-app" data-loop role="img" aria-label="The leon app: three sessions in the sidebar; an agent fixing a flaky test beside a test run, the git log and a server log">
+        <div class="lw-bar"><span class="lw-dots"><i></i><i></i><i></i></span></div>
+        <div class="lw-body">
+          <div class="lw-side">
+            <div class="lw-group">auth</div>
+            <div class="lw-row on"><b class="w">●</b>Fix the flaky login test<kbd>60%</kbd></div>
+            <div class="lw-row"><b class="b">!</b>Add rate limiting<kbd>⌘2</kbd></div>
+            <div class="lw-row"><b>$</b>dev server<kbd>⌘3</kbd></div>
+            <div class="lw-group">site</div>
+            <div class="lw-row"><b class="d">✓</b>Review the README<kbd>⌘4</kbd></div>
+            <div class="lw-row extra"><b>$</b>docs preview<kbd>⌘5</kbd></div>
+            <div class="lw-group">infra</div>
+            <div class="lw-row"><b class="e">×</b>deploy api v2.3.1<kbd>⌘6</kbd></div>
+            <div class="lw-row extra"><b class="b">?</b>Migrate the users table<kbd>⌘7</kbd></div>
+            <div class="lw-row extra"><b>$</b>devbox<kbd>⌘8</kbd></div>
+          </div>
+          <div class="lw-panes">
+            <div class="lw-pane focus tall">
+              <div class="lw-head"><span>Fix the flaky login test</span><span class="w">● 60% running the tests</span></div>
+              <pre>&gt; Fix the flaky login test in auth/session_test.rs
+<span class="more">
+  Read auth/session_test.rs (212 lines)
+  The test sleeps 50 ms, then checks the session expired.
+  On a busy machine the check runs before the timer fires.
+</span>
+  Ran the auth tests 20 times: 3 of 20 failed.
+
+  Update auth/session_test.rs
+<span class="e">  - std::thread::sleep(Duration::from_millis(50));</span>
+<span class="d">  + clock.advance(Duration::from_secs(61));</span>
+<span class="more">
+  Running the tests beside me:
+    leon split --label tests -- cargo test -p auth
+
+  The same sleep is in two more tests.</span></pre>
+            </div>
+            <div class="lw-pane wide">
+              <div class="lw-head"><span>tests</span><span class="d">✓ done</span></div>
+              <div class="run" data-run>
+                <div class="run-ln"><span class="cwd">~/src/auth %</span><span class="typed" data-cmd>cargo test -p auth</span></div>
+                <div class="run-ln meter" data-out><span class="bar"><i></i></span><span>3 of 3 suites</span></div>
+                <div class="run-ln step" data-out data-step><span>session::tests</span><span>6 tests</span><span>0.12s</span></div>
+                <div class="run-ln step" data-out data-step><span>token::tests</span><span>3 tests</span><span>0.04s</span></div>
+                <div class="run-ln step" data-out data-step><span>tests/session_test.rs</span><span>9 tests</span><span>0.11s</span></div>
+                <div class="run-ln gap" data-out></div>
+                <div class="run-ln sum" data-out><span>test result</span><span class="ok">ok. 18 passed</span><span>0 failed</span></div>
+                <div class="run-ln" data-out><span class="ok">● Done</span><span class="cwd">in 0.31s</span></div>
+                <div class="run-ln" data-out><span class="cwd">~/src/auth %</span><i class="caret"></i></div>
+              </div>
+            </div>
+            <div class="lw-pane">
+              <div class="lw-head"><span>zsh ~/src/auth</span></div>
+              <pre>auth % git log --oneline --graph
+<span class="b">* 2dd15a5</span> tokens: rotate keys weekly
+<span class="b">* 989b67a</span> logout clears the cookie
+<span class="b">* b0d3c65</span> a test clock, not sleeps
+auth % </pre>
+            </div>
+            <div class="lw-pane">
+              <div class="lw-head"><span>tail -f access.log</span></div>
+              <pre>GET    /health         200   1ms
+GET    /login          200   3ms
+POST   /session        201  12ms
+GET    /me             200   2ms
+GET    /orders         200   9ms
+POST   /orders         201  21ms
+GET    /orders/1042    200   4ms</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>

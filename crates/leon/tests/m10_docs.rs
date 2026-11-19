@@ -34,8 +34,13 @@ fn the_docs_say_programs_outlive_the_app() {
         "performance.md has the M10 numbers"
     );
 
-    let brand =
-        ["brand/README.md", "brand/marketing/index.html", "brand/marketing/copy.md"].map(|p| (p, flat(&doc(p))));
+    let brand = [
+        "brand/README.md",
+        "brand/marketing/index.html",
+        "brand/marketing/sections/questions.html",
+        "brand/marketing/copy.md",
+    ]
+    .map(|p| (p, flat(&doc(p))));
     let docs = [("README.md", &readme), ("docs/architecture.md", &arch), ("docs/cli.md", &cli)];
     for (path, text) in docs.into_iter().chain(brand.iter().map(|(p, t)| (*p, t))) {
         for stale in [
