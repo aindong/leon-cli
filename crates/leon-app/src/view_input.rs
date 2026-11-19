@@ -134,8 +134,9 @@ impl EntityInputHandler for Workspace {
         let key = self.ime.key.take();
         if marked.is_some() {
             cx.notify();
-        } else if std::mem::take(&mut self.ime.stale) && key.as_deref() != Some(text) {
-            return; // the commit of a composition no longer shown
+        } else if self.ime.stale && key.as_deref() != Some(text) {
+            self.ime.stale = false;
+            return; // the commit of a composition no longer shown (a typed key doesn't end it)
         }
         let Some((sid, id, _)) = self.target() else { return };
         let text = match (marked, range) {

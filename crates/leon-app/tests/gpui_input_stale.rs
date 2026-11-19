@@ -22,10 +22,9 @@ fn a_key_after_an_ended_composition_is_typed(cx: &mut TestAppContext) {
         cx.run_until_parked();
     };
     compose_and_cancel(&mut h, cx);
-    cx.simulate_keystrokes("e c h o space x y");
-    compose_and_cancel(&mut h, cx);
+    cx.simulate_keystrokes("e c h o space x");
     cx.update(|window, cx| h.replace_text_in_range(None, "日本", window, cx)); // its late commit
-    cx.simulate_keystrokes("z enter");
+    cx.simulate_keystrokes("y z enter");
     let printed = eventually(|| has_line(&t, "xyz"));
     s.app.stop();
     assert!(printed, "the keys typed after a cancel reached the pane, the late commit didn't:\n{}", t.text(false));
