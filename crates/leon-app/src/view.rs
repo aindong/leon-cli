@@ -136,6 +136,7 @@ pub struct Workspace {
     stats: Rc<RefCell<Stats>>,
     /// How many times the wake handler ran, and how many times the workspace was notified (tests).
     wakes: (u64, u64),
+    echo: echo::Echo,
     /// Each connected machine's model entity (view_feed.rs).
     models: Vec<(Rc<Remote>, feed::ModelSlot)>,
     /// What the root drew from the model and the wakes when last notified.
@@ -336,6 +337,7 @@ impl Workspace {
             focus,
             stats: Rc::new(RefCell::new(stats)),
             wakes: (0, 0),
+            echo: Default::default(),
             models: Vec::new(),
             root_seen: Default::default(),
             wake_seen: (0, 0),
@@ -427,6 +429,8 @@ mod copy;
 mod cursor_shader_view;
 #[path = "view_drawn.rs"]
 mod drawn_view;
+#[path = "view_echo.rs"]
+pub mod echo;
 #[path = "view_fade.rs"]
 mod fade_view;
 #[path = "view_feed.rs"]

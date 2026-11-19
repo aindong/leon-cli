@@ -94,6 +94,8 @@ jobs:
           tar -xzf "$RUNNER_TEMP/nextest.tar.gz" -C "$RUNNER_TEMP/nextest"
           echo "$RUNNER_TEMP/nextest" >> "$GITHUB_PATH"
       - run: cargo nextest run --profile ci --workspace
+        env:
+          LEON_GUI_TESTS: "1" # the tests that open a real window (gpui_display_link) run here
       # nextest doesn't run doc-tests; they run even when a test above failed, as under cargo test
       - if: ${{ !cancelled() }}
         run: cargo test --doc --no-fail-fast

@@ -200,6 +200,7 @@ impl Workspace {
             self.find_output(window, cx);
         }
         self.feed_cursor(window);
+        self.echo_arrived(ids, window);
         if scrolled {
             self.root_changed(cx);
         }
