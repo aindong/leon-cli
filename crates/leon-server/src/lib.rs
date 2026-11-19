@@ -5,6 +5,7 @@ mod agents;
 mod blocks;
 pub mod contract;
 pub mod events;
+mod focus_guard;
 mod layout;
 pub mod lua;
 pub mod methods;

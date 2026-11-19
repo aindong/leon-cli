@@ -236,6 +236,19 @@ pub enum Peer {
     Remote,
 }
 
+/// Whether `peer` is a person: another machine, or a local client outside every leon terminal.
+fn is_person(ctx: &Ctx, peer: Peer) -> bool {
+    match peer {
+        Peer::Remote => true,
+        Peer::Unknown => false,
+        Peer::Process(p) => {
+            let programs: Vec<_> =
+                ctx.state().sessions.iter().flat_map(|s| &s.blocks).map(|b| b.terminal.pid()).collect();
+            leon_core::process_tree::inside(p, &programs) == Some(false)
+        }
+    }
+}
+
 /// The block an input request types into: `block.event` but `focus`, `block.method` `write`, and
 /// `client.key` (to its block, else the session's focused one).
 fn input_target(ctx: &Ctx, method: &str, params: &Value) -> Option<String> {
@@ -266,6 +279,18 @@ fn typing(method: &str, params: &Value) -> bool {
 /// terminal (the app, `leon attach` or a shell in a terminal app) or on another machine; a local
 /// client whose process can't be told is taken to be inside.
 pub fn guard(ctx: &Ctx, peer: Peer, method: &str, params: &Value) -> Result<(), ApiError> {
+    // nor move the focus onto such a block, where a person's next keys would answer it
+    let steered = crate::focus_guard::onto_held(&ctx.state(), method, params);
+    if let Some(id) = steered.filter(|_| !is_person(ctx, peer)) {
+        return Err(ApiError::new(
+            403,
+            "permission_pending",
+            format!(
+                "{id} waits for a person to answer a permission prompt; until one types there, a program \
+                 inside a leon terminal can't move the focus onto it"
+            ),
+        ));
+    }
     let lua = matches!(method, "client.action" | "server.config_reload");
     let status = method == "block.method" && params["method"] == "dev.leon.terminal.report_status";
     let target = if status { params["block_id"].as_str().map(String::from) } else { input_target(ctx, method, params) };

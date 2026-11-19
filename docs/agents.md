@@ -203,8 +203,11 @@ When an agent's block reports `blocked` with kind `permission`, leon holds it fo
 person's keys reach that pane, no program running inside a leon terminal can type into it
 (`leon send`, `send-key`, `agent tell`, `api call` of `block.event`, `dev.leon.terminal.write` or
 `client.key`, a `leon attach` started in a pane, a socket client of its own), change its status
-from outside it, or run a config action or reload (`leon do ACTION`, `client.action`,
-`server.config_reload`). Each gets error `permission_pending`. Only the block's own program (its
+from outside it, run a config action or reload (`leon do ACTION`, `client.action`,
+`server.config_reload`), or move the focus onto it, where your next keys would land
+(`leon focus`, `session.focus_block`, `focus_window`, `zoom_block`, swapping it with the focused
+pane, or, while a session holds such a prompt, moving the focus by direction or closing what has
+it). Each gets error `permission_pending`. Only the block's own program (its
 hooks) may change its status meanwhile, and that doesn't end the hold: a person typing does. So an
 agent can't approve its own or another agent's prompt, even by writing a report to the terminal
 or starting a job that outlives it.

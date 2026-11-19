@@ -92,7 +92,7 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 #### Changed
 - A block whose program reports `blocked`/`permission` is held for a person: until a person's
   keys reach it, no program running inside a leon terminal can type into it, change its status from
-  outside it, or run config actions or reloads (error `permission_pending`). The app, and
+  outside it, move the focus onto it, or run config actions or reloads (error `permission_pending`). The app, and
   `leon attach` in a terminal app, type into it as before.
 - The state file is version 5: it keeps each worker's link and worktree, and up to 1024 unread
   reports.

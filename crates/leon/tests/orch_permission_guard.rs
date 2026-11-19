@@ -6,8 +6,6 @@
 
 mod support;
 
-use std::time::Duration;
-
 use serde_json::json;
 use support::host::{attach_then_stty, Host};
 use support::orch::{until, Orch};
@@ -68,10 +66,10 @@ fn an_agent_in_leon_cannot_answer_a_permission_prompt_but_a_person_can() {
 
     // nor through a `leon attach` it runs in a pane of its own
     let attached = o.env.ok(&["run", "--label", "attached", "--", "leon", "attach", &w]);
-    o.env.screen_until(&attached, "attach showing the worker", |t| t.contains("ready>"));
-    o.env.ok(&["send", "-b", &attached, "approve"]);
-    o.env.ok(&["send-key", "-b", &attached, "enter"]);
-    std::thread::sleep(Duration::from_millis(500));
+    // it can't even move the focus onto the held pane (refused too), so it never shows it: it
+    // shows its own tab, and nothing typed into it could reach the prompt
+    o.env.screen_until(&attached, "attach up", |t| t.contains("this terminal: leon attach"));
+    assert!(!o.env.capture(&attached).contains("ready>"), "attach showed the held pane");
     assert_eq!(o.count(&w, "GOT:"), 0, "nothing reached the pane:\n{}", o.env.capture(&w));
     o.env.ok(&["block", "close", &attached]);
 
