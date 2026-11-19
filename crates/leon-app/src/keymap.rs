@@ -21,6 +21,8 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("cmd+alt+down", "pane.focus.down"),
     ("cmd+shift+enter", "pane.zoom"),
     ("cmd+w", "pane.close"),
+    ("cmd+alt+w", "client.tab.close"),
+    ("cmd+alt+shift+w", "session.close"),
     ("cmd+alt+f", "pane.float"),
     ("cmd+alt+shift+f", "pane.unfloat"),
     ("cmd+j", "pane.scratch.toggle"),

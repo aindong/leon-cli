@@ -12,6 +12,8 @@ Leon.app's keys, from the [README](../README.md#app-shortcuts), and [how the app
 | ⌘⌥←, ⌘⌥→, ⌘⌥↑, ⌘⌥↓ | Focus the pane that way |
 | ⌘⇧↩ | Zoom the pane (again to undo) |
 | ⌘W | Close the pane |
+| ⌘⌥W | Close the tab (asks first when a program other than a shell runs in it) |
+| ⌘⌥⇧W | Close the session (asks first the same way) |
 | ⌘⌥F, ⌘⌥⇧F | Float the pane above the others, put it back in the tiles (drag its header to move it, an edge to resize it) |
 | ⌘J | Show or hide the scratch drawer: a shell at the bottom, opened in the focused pane's directory, that keeps running while hidden |
 | ⌘⌃←, ⌘⌃→, ⌘⌃↓ | Dock the pane as a drawer on the left, right or bottom (drag its edge to resize it) |
@@ -44,7 +46,8 @@ button names its action and shortcut on hover. The wheel scrolls a pane back thr
 scrollback; drag to select, option+drag for a rectangle; hold ⌘ over a link to open it with a click.
 Rest the mouse on a link, or right-click it, for a card with its full address, Copy and Open in
 Browser (`link_card` in [lua/settings.md](lua/settings.md#settings) turns it off); it closes on a key,
-a scroll, or the mouse leaving it. A program that asks for the mouse (an editor or `htop`) gets
+a scroll, or the mouse leaving it. Double-click a tab's or a session's name to rename it in
+place; right-click it for Rename and Close (a × on hover closes it too). A program that asks for the mouse (an editor or `htop`) gets
 clicks, right-clicks too, and the wheel; hold shift to select anyway.
 
 ## Know what needs you

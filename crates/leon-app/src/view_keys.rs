@@ -15,6 +15,10 @@ impl Workspace {
             Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
             None => ev.keystroke.clone(),
         };
+        if self.renaming_open() {
+            self.rename_key(ks, cx);
+            return cx.stop_propagation();
+        }
         let chord = keymap::chord(ks);
         // every key closes the repeat window; only a repeatable one opens it again
         let mut repeat = std::mem::take(&mut self.repeat);
@@ -128,6 +132,9 @@ impl Workspace {
             "client.host.add" => self.ask_host(args, cx),
             "client.theme.change" => self.theme_action(args, cx),
             "client.tab.new" => self.new_tab(&NewTab, window, cx),
+            "client.tab.close" | "session.close" | "client.tab.rename" | "session.rename" => {
+                self.row_action(name, window, cx)
+            }
             "client.tab.next" => self.step_tab(1, cx),
             "client.tab.previous" => self.step_tab(-1, cx),
             "client.tab.goto" => {

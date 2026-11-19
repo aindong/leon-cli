@@ -5,6 +5,10 @@
 
 use super::*;
 
+#[path = "view_rows.rs"]
+pub(super) mod rows;
+use rows::RowRef;
+
 /// The sidebar's tab rows and sessions-only rows, and a session label's height.
 const ROW: f32 = 30.;
 const LABEL: f32 = 24.;
@@ -30,23 +34,26 @@ impl Workspace {
             }
             let selected = input.selected.as_deref() == Some(row.id.as_str());
             if list == SidebarList::SessionsOnly {
-                items = items.child(self.session_row(i, row, selected, frame, cx));
+                items = items.child(self.session_row(i, row, selected, frame, input, cx));
                 continue;
             }
             let open = !input.collapsed.contains(&row.id);
-            items = items.child(self.session_label(i, row, open, frame, cx));
+            items = items.child(self.session_label(i, row, open, frame, input, cx));
             if !open {
                 continue;
             }
             for (w, win) in row.windows.iter().enumerate() {
                 let current = selected && w == row.active;
                 let sid = row.id.clone();
+                let tab = RowRef { host: row.host, session: row.id.clone(), window: Some(win.id.clone()) };
+                let (renamed, menu) = (tab.clone(), tab.clone());
                 let hovered = (row.host, row.id.clone(), win.id.clone());
                 items =
                     items.child(
                         div()
                             .id(SharedString::from(format!("row-{i}-{w}")))
                             .debug_selector(|| sel(format!("row-{i}-{w}")))
+                            .group(SharedString::from(format!("row-{i}-{w}")))
                             .on_hover(cx.listener(move |ws, on: &bool, window, cx| {
                                 ws.hover_tab(*on, hovered.clone(), true, window, cx)
                             }))
@@ -61,15 +68,7 @@ impl Workspace {
                             .when(current, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
                             .when(!current, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
                             .children(win.program.map(|k| program_mark(k, format!("row-program-{i}-{w}"), t.muted)))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .overflow_hidden()
-                                    .min_w(px(0.))
-                                    .line_clamp(1)
-                                    .text_ellipsis()
-                                    .child(win.title.clone()),
-                            )
+                            .child(self.name_or_field(input.renaming.as_ref(), &tab, win.title.clone(), t, cx))
                             .children(win.status.map(|s| {
                                 status_mark(s, frame, t).debug_selector(|| sel(format!("row-status-{i}-{w}")))
                             }))
@@ -81,9 +80,19 @@ impl Workspace {
                                         .child(format!("⌘{}", w + 1)),
                                 )
                             })
+                            .child(self.close_button(format!("row-close-{i}-{w}"), format!("row-{i}-{w}"), tab, t, cx))
                             .on_mouse_down(
                                 MouseButton::Left,
-                                cx.listener(move |ws, _, _, cx| ws.select(&sid, Some(w), cx)),
+                                cx.listener(move |ws, ev: &gpui::MouseDownEvent, _, cx| match ev.click_count {
+                                    2 => ws.start_rename(renamed.clone(), cx),
+                                    _ => ws.select(&sid, Some(w), cx),
+                                }),
+                            )
+                            .on_mouse_down(
+                                MouseButton::Right,
+                                cx.listener(move |ws, ev: &gpui::MouseDownEvent, window, cx| {
+                                    ws.open_row_menu(menu.clone(), ev.position, window, cx)
+                                }),
                             ),
                     );
             }
@@ -142,10 +151,13 @@ impl Workspace {
         row: &SessionRow,
         open: bool,
         frame: u64,
+        input: &SidebarInput,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let t = &self.theme;
         let (id, sid) = (row.id.clone(), row.id.clone());
+        let me = RowRef { host: row.host, session: row.id.clone(), window: None };
+        let (renamed, menu) = (me.clone(), me.clone());
         div()
             .id(SharedString::from(format!("session-{i}")))
             .debug_selector(|| sel(format!("session-{i}")))
@@ -161,9 +173,7 @@ impl Workspace {
             .text_size(px(SECONDARY_TEXT))
             .font_weight(FontWeight::MEDIUM)
             .text_color(rgb(t.muted))
-            .child(
-                div().flex_1().overflow_hidden().min_w(px(0.)).line_clamp(1).text_ellipsis().child(row.title.clone()),
-            )
+            .child(self.name_or_field(input.renaming.as_ref(), &me, row.title.clone(), t, cx))
             .when(!open, |d| {
                 d.children(
                     row.status.map(|s| status_mark(s, frame, t).debug_selector(|| sel(format!("session-status-{i}")))),
@@ -188,9 +198,20 @@ impl Workspace {
                         }),
                     ),
             )
+            .child(self.close_button(format!("session-close-{i}"), format!("session-{i}"), me, t, cx))
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |ws, ev: &gpui::MouseDownEvent, window, cx| {
+                    ws.open_row_menu(menu.clone(), ev.position, window, cx)
+                }),
+            )
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |ws, _, _, cx| {
+                cx.listener(move |ws, ev: &gpui::MouseDownEvent, _, cx| {
+                    if ev.click_count == 2 {
+                        ws.collapsed.remove(&renamed.session); // the first click may have folded it
+                        return ws.start_rename(renamed.clone(), cx);
+                    }
                     let collapsed = ws.collapsed.contains(&id);
                     if ws.session_id.as_deref() == Some(id.as_str()) && !collapsed {
                         ws.collapsed.insert(id.clone());
@@ -209,10 +230,13 @@ impl Workspace {
         row: &SessionRow,
         selected: bool,
         frame: u64,
+        input: &SidebarInput,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let t = &self.theme;
         let id = row.id.clone();
+        let me = RowRef { host: row.host, session: row.id.clone(), window: None };
+        let (renamed, menu) = (me.clone(), me.clone());
         div()
             .id(SharedString::from(format!("session-{i}")))
             .debug_selector(|| sel(format!("session-{i}")))
@@ -226,14 +250,26 @@ impl Workspace {
             .cursor_pointer()
             .when(selected, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
             .when(!selected, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
-            .child(
-                div().flex_1().overflow_hidden().min_w(px(0.)).line_clamp(1).text_ellipsis().child(row.title.clone()),
-            )
+            .group(SharedString::from(format!("session-{i}")))
+            .child(self.name_or_field(input.renaming.as_ref(), &me, row.title.clone(), t, cx))
             .when(!selected, |d| {
                 d.children(
                     row.status.map(|s| status_mark(s, frame, t).debug_selector(|| sel(format!("session-status-{i}")))),
                 )
             })
-            .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.select(&id, None, cx)))
+            .child(self.close_button(format!("session-close-{i}"), format!("session-{i}"), me, t, cx))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |ws, ev: &gpui::MouseDownEvent, _, cx| match ev.click_count {
+                    2 => ws.start_rename(renamed.clone(), cx),
+                    _ => ws.select(&id, None, cx),
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |ws, ev: &gpui::MouseDownEvent, window, cx| {
+                    ws.open_row_menu(menu.clone(), ev.position, window, cx)
+                }),
+            )
     }
 }

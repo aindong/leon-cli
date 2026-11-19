@@ -408,6 +408,7 @@ impl Render for Workspace {
             // last, so it paints over the panes: GPUI paints children in order
             .children(self.render_overlay(cx).filter(|_| !self.stopped))
             .children(self.render_card(cx).filter(|_| !self.stopped))
+            .children(self.render_row_menu(cx).filter(|_| !self.stopped))
             .child(self.frame_mark())
     }
 }

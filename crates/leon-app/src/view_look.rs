@@ -51,6 +51,9 @@ impl Workspace {
         self.check_for_updates = reply["settings"]["check_for_updates"].as_bool();
         // on unless the config turned it off (a server older than the setting doesn't report it)
         self.term.card.off = reply["settings"]["link_card"] == false;
+        if self.term.card.off {
+            self.card_cancel(); // a wait or a lookup already started shows nothing
+        }
         self.updates_looked = None; // a reload may have turned it on
         self.look_for_updates();
     }

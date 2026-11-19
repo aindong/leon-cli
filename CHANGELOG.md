@@ -30,6 +30,8 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **Closing and renaming tabs and sessions.** Close Tab (⌥⌘W), Close Session (⌥⇧⌘W), a × on hover,
+  right-click menus and double-click to rename ([detail](docs/changelog-detail.md#closing-and-renaming-tabs-and-sessions)).
 - **A link card.** Resting the mouse on a link, or right-clicking it, shows its address with Copy and
   Open in Browser; `link_card` turns it off, and `api_version` is `1.14.0` ([detail](docs/changelog-detail.md#the-link-card)).
 - **Agents orchestrating agents.** `leon agent start` runs Claude Code, Codex or any agent in a tab
