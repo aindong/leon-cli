@@ -48,3 +48,43 @@ fn notes_stop_at_the_next_section_and_a_missing_version_fails() {
         assert!(String::from_utf8_lossy(&o.stderr).contains(missing), "the error names {missing}: {}", text(&o));
     }
 }
+
+#[test]
+fn an_earlier_release_comes_from_the_archive_with_its_links_from_the_root() {
+    let archive = std::fs::read_to_string(repo().join("docs/changelog-archive.md")).unwrap();
+    assert!(section(&archive, "0.1.0").len() > 200, "the archive has 0.1.0's section");
+    let o = script("release-notes.sh", &["0.1.0"], &[]);
+    assert!(o.status.success(), "{}", text(&o));
+    let notes = String::from_utf8_lossy(&o.stdout);
+    let blob = "](https://github.com/aindong/leon-cli/blob/v0.1.0/";
+    assert!(notes.starts_with("The first release of leon"), "{notes}");
+    assert!(notes.contains(&format!("{blob}docs/changelog-milestones.md)")), "docs/ links: {notes}");
+    assert!(notes.contains(&format!("{blob}README.md#install)")), "../ links: {notes}");
+    assert!(!notes.contains("](changelog-") && !notes.contains("../"), "no link left relative: {notes}");
+}
+
+#[test]
+fn an_archived_sections_links_of_every_kind_come_back_from_the_root() {
+    // the script reads the archive beside it: a copy in a repo of its own
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(tmp.path().join("scripts")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("docs")).unwrap();
+    std::fs::copy(repo().join("scripts/release-notes.sh"), tmp.path().join("scripts/release-notes.sh")).unwrap();
+    std::fs::write(tmp.path().join("CHANGELOG.md"), "# Changelog\n\n## [1.1.0]\n\n- new\n").unwrap();
+    let archive = "## [1.0.0]\n\n[a](x.md) ![p](images/p.png) [r](../README.md#i) [u](https://e.x/y)\n\n\
+                   [d]: x.md\n[w]: https://keepachangelog.com/\n";
+    std::fs::write(tmp.path().join("docs/changelog-archive.md"), archive).unwrap();
+    let o = std::process::Command::new("bash")
+        .arg(tmp.path().join("scripts/release-notes.sh"))
+        .arg("1.0.0")
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o));
+    let (blob, raw) =
+        ("https://github.com/aindong/leon-cli/blob/v1.0.0", "https://github.com/aindong/leon-cli/raw/v1.0.0");
+    let want = format!(
+        "[a]({blob}/docs/x.md) ![p]({raw}/docs/images/p.png) [r]({blob}/README.md#i) [u](https://e.x/y)\n\n\
+         [d]: {blob}/docs/x.md\n[w]: https://keepachangelog.com/"
+    );
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), want);
+}
