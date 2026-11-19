@@ -239,6 +239,8 @@ impl Workspace {
 
     fn card_event(&mut self, ev: &PopoverEvent, window: &mut Window, cx: &mut Context<Self>) {
         let Some(card) = self.close_card(window, cx) else { return };
+        self.card_cancel(); // a rest still waiting opens no card after this one
+
         match ev {
             PopoverEvent::Chose(what) if what == "copy" => {
                 cx.write_to_clipboard(ClipboardItem::new_string(card.link.uri));
