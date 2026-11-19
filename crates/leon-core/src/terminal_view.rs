@@ -8,47 +8,63 @@ use alacritty_terminal::index::{Column, Line};
 use super::*;
 use crate::mouse;
 use crate::screen::{self, Frame, Lines, Row};
-use crate::search::{self, Found, Kind, Link, Pos, Query, Selected};
 use crate::theme::Theme;
 
-/// Output is counted this many bytes at a time: a byte pushes at most one line into the
-/// scrollback (short of `CSI n S`), so a slice rarely pushes the whole scrollback's worth, and
-/// finding the newest history row again takes at most a slice's pushes.
+/// Output is counted this many bytes at a time at most (`piece`), and finding the newest history
+/// row again takes at most a piece's pushes.
 const SLICE: usize = 4096;
-/// What the count moves by when a slice's pushes can't be known: past anything a client keeps,
+/// What the count moves by when a piece's pushes can't be known: past anything a client keeps,
 /// so no old number lands on a new line.
-const GAP: usize = SCROLLBACK + MAX_SIZE.0 as usize;
+const GAP: usize = MAX_SCROLLBACK + MAX_SIZE.0 as usize;
 /// The most rows one `lines` call returns.
 pub const MAX_LINES: usize = 1000;
 
 /// Feed output to the emulator, adding the lines it pushed into the scrollback to `scrolled`.
-pub(super) fn feed(
-    term: &mut Term<Listener>,
-    parser: &mut Processor,
-    escapes: &mut Escapes,
-    bytes: &[u8],
-    scrolled: &AtomicUsize,
-) {
-    for slice in bytes.chunks(SLICE) {
-        // a history clear with nothing pinned can't be seen afterwards
-        let clears = escapes.feed(slice);
+/// The store (terminal_history.rs) only drops what the cap no longer keeps; rows move into it
+/// when output pauses (`Store::settle`).
+pub(super) fn feed(emu: &mut Emu, parser: &mut Processor, escapes: &mut Escapes, bytes: &[u8], scrolled: &AtomicUsize) {
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        let Emu { term, store } = &mut *emu;
+        // a slice ends at a history clear, so the screen it cleared is the one showing after it
+        let len = rest.len().min(SLICE);
+        let (len, clears) = match escapes.feed_to_clear(&rest[..len]) {
+            Some(end) => (end, true),
+            None => (len, false),
+        };
+        let (slice, more) = rest.split_at(len);
+        rest = more;
         let guess = memchr::memchr_iter(b'\n', slice).count();
-        let pushed = counting(term, guess, |t| parser.advance(t, slice));
-        let pushed = if clears { GAP + term.grid().history_size() } else { pushed };
+        let mut pushed = counting(term, store.limit(), guess, |t| parser.advance(t, slice));
+        // `ESC c` resets both screens; `CSI 3 J` clears only the one showing
+        // the screen as the bytes have it: vte holds a synchronized update back, switches included
+        if escapes.take_reset() || clears && !escapes.alt() {
+            store.clear();
+        }
+        store.trim(term);
+        let history = emu.history();
+        if clears {
+            // a history clear with nothing pinned can't be seen afterwards
+            pushed = GAP + history;
+        }
         // never below the history, so the oldest kept line has a number
-        let n = (scrolled.load(Ordering::SeqCst) + pushed).max(term.grid().history_size());
+        let n = (scrolled.load(Ordering::SeqCst) + pushed).max(history);
         scrolled.store(n, Ordering::SeqCst);
     }
 }
 
 /// Follows, across reads, the escapes leon acts on that alacritty doesn't report: `CSI ? Pm h` /
-/// `CSI ? Pm l` for mode 9 (X10 mouse), which it doesn't parse, and the history clears (`CSI 3 J`,
-/// `ESC c`). Text is skipped to the next ESC with a vectorised search, so most of the output is
+/// `CSI ? Pm l` for mode 9 (X10 mouse), which it doesn't parse, and the history clears (`CSI 3 J`
+/// with any leading zeros or more parameters after the 3, and `ESC c`). Text is skipped to the next ESC with a vectorised search, so most of the output is
 /// looked at once. A sequence's parameters are kept up to `MAX_PARAMS` bytes; a longer one is
 /// dropped, so a program can't make it buffer without bound.
 #[derive(Debug, Default)]
 pub struct Escapes {
     x10: bool,
+    /// The alternate screen shows (`CSI ? 1049 h`), in the order the bytes came.
+    alt: bool,
+    /// An `ESC c` was seen since `take_reset`.
+    reset: bool,
     state: Scan,
     params: Vec<u8>,
 }
@@ -59,8 +75,8 @@ enum Scan {
     Text,
     Esc,
     Csi,
-    /// `CSI 3`: a `J` next clears the history.
-    Three,
+    /// A `CSI` with parameters: a `J` next clears the history when the first is 3.
+    Ansi,
     Params,
 }
 
@@ -72,27 +88,49 @@ impl Escapes {
         self.x10
     }
 
+    /// Whether the output so far left the alternate screen showing.
+    pub fn alt(&self) -> bool {
+        self.alt
+    }
+
+    /// Whether an `ESC c` (a reset of both screens) was seen since the last call.
+    pub fn take_reset(&mut self) -> bool {
+        std::mem::take(&mut self.reset)
+    }
+
     /// Follow `bytes`; true when a history clear ended in them.
     pub fn feed(&mut self, bytes: &[u8]) -> bool {
-        let (mut cleared, mut i) = (false, 0);
+        let (mut cleared, mut rest) = (false, bytes);
+        while let Some(end) = self.feed_to_clear(rest) {
+            (cleared, rest) = (true, &rest[end..]);
+        }
+        cleared
+    }
+
+    /// Follow `bytes` up to the end of the first history clear in them, and say where that is;
+    /// None when there is none (all of `bytes` was followed).
+    pub fn feed_to_clear(&mut self, bytes: &[u8]) -> Option<usize> {
+        let mut i = 0;
         while i < bytes.len() {
             // only an ESC leaves the text state; `ESC x` and `ESC [ x` that start nothing
             // followed here go back to it, so they are skipped as `step` would
             if self.state == Scan::Text {
                 loop {
-                    let Some(n) = memchr::memchr(0x1b, &bytes[i..]) else { return cleared };
+                    let n = memchr::memchr(0x1b, &bytes[i..])?;
                     i += n;
                     match (bytes.get(i + 1), bytes.get(i + 2)) {
-                        (Some(b'['), Some(x)) if !matches!(x, b'?' | b'3' | 0x1b) => i += 3,
+                        (Some(b'['), Some(x)) if !matches!(x, b'?' | b'0'..=b'9' | 0x1b) => i += 3,
                         (Some(b), _) if !matches!(b, b'[' | b'c' | 0x1b) => i += 2,
                         _ => break,
                     }
                 }
             }
-            cleared |= self.step(bytes[i]);
             i += 1;
+            if self.step(bytes[i - 1]) {
+                return Some(i);
+            }
         }
-        cleared
+        None
     }
 
     fn step(&mut self, b: u8) -> bool {
@@ -101,12 +139,25 @@ impl Escapes {
             (_, 0x1b) => Scan::Esc,
             (Scan::Esc, b'[') => Scan::Csi,
             (Scan::Esc, b'c') => {
-                (self.x10, cleared) = (false, true); // RIS
+                (self.x10, self.alt, cleared, self.reset) = (false, false, true, true); // RIS
                 Scan::Text
             }
-            (Scan::Csi, b'3') => Scan::Three,
-            (Scan::Three, b'J') => {
-                cleared = true;
+            (Scan::Csi | Scan::Ansi, b'0'..=b'9' | b';' | b':') => {
+                if self.state == Scan::Csi {
+                    self.params.clear();
+                }
+                // only the first parameter, without its leading zeros (vte reads `CSI 000…3 J`
+                // as 3): a clear is known in a few bytes however long the sequence
+                let first_done = self.params.iter().any(|&c| c == b';' || c == b':');
+                let leading_zero = b == b'0' && self.params.is_empty();
+                if !first_done && !leading_zero && self.params.len() < MAX_PARAMS {
+                    self.params.push(b);
+                }
+                Scan::Ansi
+            }
+            (Scan::Ansi, b'J') => {
+                let first = self.params.split(|&c| c == b';' || c == b':').next().unwrap_or_default();
+                cleared = first.iter().skip_while(|&&c| c == b'0').eq(b"3");
                 Scan::Text
             }
             (Scan::Csi, b'?') => {
@@ -120,8 +171,11 @@ impl Escapes {
             (Scan::Params, b'h' | b'l') => {
                 // the mouse modes replace each other (xterm): setting or resetting another ends X10
                 for p in self.params.split(|&c| c == b';') {
-                    match p {
+                    // as numbers, as vte reads them: `01049` is 1049
+                    let zeros = p.iter().take_while(|&&c| c == b'0').count().min(p.len().saturating_sub(1));
+                    match &p[zeros..] {
                         b"9" => self.x10 = b == b'h',
+                        b"1049" => self.alt = b == b'h',
                         b"1000" | b"1001" | b"1002" | b"1003" => self.x10 = false,
                         _ => {}
                     }
@@ -142,7 +196,7 @@ impl Escapes {
 /// alacritty's display offset, set to 1 first, grows with every scroll and caps at the
 /// scrollback's size, which says when that may have happened. It is put back to 0 whenever the
 /// primary screen is showing, so no frame sees it.
-fn counting(term: &mut Term<Listener>, guess: usize, f: impl FnOnce(&mut Term<Listener>)) -> usize {
+fn counting(term: &mut Term<Listener>, limit: usize, guess: usize, f: impl FnOnce(&mut Term<Listener>)) -> usize {
     let primary = !term.mode().contains(TermMode::ALT_SCREEN);
     let newest = |t: &Term<Listener>| &t.grid()[Line(-1)][Column(0)] as *const _;
     let before = term.grid().history_size();
@@ -156,11 +210,11 @@ fn counting(term: &mut Term<Listener>, guess: usize, f: impl FnOnce(&mut Term<Li
         return if primary { GAP } else { 0 };
     }
     let g = term.grid_mut();
-    let (overflowed, after) = (g.display_offset() >= SCROLLBACK, g.history_size());
+    let (overflowed, after) = (g.display_offset() >= limit, g.history_size());
     g.scroll_display(Scroll::Bottom);
     match anchor {
         _ if !primary || overflowed => GAP + after, // a switch hid what was pushed, or it overflowed
-        None if after < SCROLLBACK => after,        // filled from empty
+        None if after < limit => after,             // filled from empty
         None => GAP,
         Some(a) => {
             let g = term.grid();
@@ -181,10 +235,12 @@ impl Terminal {
     /// The screen a client paints, with its line numbering and mouse modes.
     pub fn frame(&self, theme: &Theme) -> Frame {
         // only the copy under the lock: the parse thread waits for that, not for the spans
-        let (shot, scrolled, x10) =
-            self.with_term(|term| (screen::Shot::of(term), self.scrolled(), self.x10.load(Ordering::SeqCst)));
+        let (shot, scrolled, history, x10) = {
+            let emu = lock(&self.term);
+            (screen::Shot::of(&emu.term), self.scrolled(), emu.history(), self.x10.load(Ordering::SeqCst))
+        };
         let mut f = screen::build(&shot, theme);
-        f.view.scrolled = scrolled;
+        (f.view.scrolled, f.view.history) = (scrolled, history);
         f.view.mouse = mouse::report(shot.mode, x10);
         f
     }
@@ -192,29 +248,30 @@ impl Terminal {
     /// Rows `from..from + count` by absolute number (at most `MAX_LINES`), history and screen;
     /// lines not kept are left out.
     pub fn lines(&self, from: usize, count: usize, theme: &Theme) -> Lines {
-        self.with_term(|term| {
-            let scrolled = self.scrolled();
-            let start = (from as i128 - scrolled as i128).clamp(i32::MIN as i128, i32::MAX as i128) as i32;
-            let rows = screen::grid_rows(term, theme, start, count.min(MAX_LINES));
-            let rows = rows.into_iter().map(|(l, spans, backgrounds)| Row {
-                line: (scrolled as i64 + l as i64) as usize,
-                spans,
-                backgrounds,
-            });
-            Lines { scrolled, history: term.grid().history_size(), rows: rows.collect() }
-        })
-    }
-
-    pub fn find(&self, q: &Query) -> Result<Found, String> {
-        self.with_term(|term| search::find(term, self.scrolled(), q))
-    }
-
-    pub fn selection(&self, kind: Kind, anchor: Pos, head: Pos, text: bool) -> Option<Selected> {
-        search::select(&mut lock(&self.term), self.scrolled(), kind, anchor, head, text)
-    }
-
-    pub fn link_at(&self, at: Pos) -> Option<Link> {
-        self.with_term(|term| search::link_at(term, self.scrolled(), at))
+        let emu = lock(&self.term);
+        let (scrolled, history, stored) = (self.scrolled(), emu.history(), emu.stored());
+        let end = from.saturating_add(count.min(MAX_LINES));
+        // the store's rows come first, then alacritty's history and screen
+        let first = scrolled.saturating_sub(history);
+        let mut rows: Vec<Row> = (from.max(first)..end.min(first + stored))
+            .map(|line| {
+                let cells = emu.store.cells(line - first);
+                let cols = emu.columns();
+                let (mut spans, backgrounds) = screen::row_spans(cells.iter().take(cols), emu.colors(), theme);
+                // a stored row isn't re-wrapped: what a narrower pane can't show is cut
+                spans.retain(|s| s.col + s.cells <= cols);
+                Row { line, spans, backgrounds }
+            })
+            .collect();
+        let from = from.max(first + stored);
+        let start = (from as i128 - scrolled as i128).clamp(i32::MIN as i128, i32::MAX as i128) as i32;
+        let grid = screen::grid_rows(&emu.term, theme, start, end.saturating_sub(from));
+        rows.extend(grid.into_iter().map(|(l, spans, backgrounds)| Row {
+            line: (scrolled as i64 + l as i64) as usize,
+            spans,
+            backgrounds,
+        }));
+        Lines { scrolled, history, rows }
     }
 
     /// Send `e` to the program as its mouse mode asks now; false when the mode doesn't want it.

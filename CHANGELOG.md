@@ -15,7 +15,7 @@ no section: the app on Linux (M15's second part; Linux has the server, the CLI a
 
 `api_version` is the version of the socket API, separate from the build's version. `help.all`
 and `server.version` both report it, and `leon api call server.version` prints it. The current
-one is `1.17.0`.
+one is `1.18.0`.
 
 - **MAJOR** goes up when a stable method changes in a way that can break a client: a field or a
   method removed or renamed, a type narrowed, a new required parameter, a different meaning.
@@ -32,6 +32,9 @@ fields it doesn't know. The full policy is in
 
 - **Leon.app never waits on its own server.** Keys, splits, copies and every other call to This
   Mac's server queue in order off the window's thread, and a config reload shows at once ([detail](docs/changelog-detail.md#leonapp-never-waits-on-its-own-server)).
+- **Scrollback that costs what its text costs.** A pane keeps its 10,000 lines in about a ninth of
+  the memory; `leon.set("scrollback", N)` sets how many, reported by `server.settings` (`api_version`
+  `1.18.0`) ([detail](docs/changelog-detail.md#scrollback-that-costs-what-its-text-costs)).
 - **leon in the browser, over your tailnet.** `serve_web` serves a view-only page of your sessions,
   tabs and panes to your own machines; `api_version` goes to `1.16.0` ([detail](docs/changelog-detail.md#leon-in-the-browser)).
 - **HTTPS for the browser page.** `serve_web_cert` and `serve_web_key` name the files `tailscale cert`
