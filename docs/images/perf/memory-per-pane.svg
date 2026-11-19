@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="196" viewBox="0 0 720 196" role="img" aria-labelledby="title desc">
+<title id="title">Memory per agent pane</title>
+<desc id="desc">Memory per agent pane: about 33 MiB before scrollback B and 3 MiB with leon's history store, 90% less.</desc>
+<style>
+  .bg { fill: #fcfcfb; } .t1 { fill: #0b0b0b; } .t2 { fill: #52514e; }
+  .grid { stroke: #e7e6e2; } .axis { stroke: #b9b8b1; } .ref { stroke: #52514e; }
+  .c1 { fill: #2a78d6; stroke: #2a78d6; } .c2 { fill: #eb6834; stroke: #eb6834; } .c0 { fill: #8f8d86; stroke: #8f8d86; }
+  .ring { stroke: #fcfcfb; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .t1 { fill: #f0efec; } .t2 { fill: #c3c2b7; }
+    .grid { stroke: #2f2f2c; } .axis { stroke: #57564f; } .ref { stroke: #c3c2b7; }
+    .c1 { fill: #3987e5; stroke: #3987e5; } .c2 { fill: #d95926; stroke: #d95926; } .c0 { fill: #76756f; stroke: #76756f; }
+    .ring { stroke: #1a1a19; }
+  }
+  text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+</style>
+<rect class="bg" width="720" height="196" rx="8"/>
+<text x="24.0" y="32.0" class="t1" font-size="16" text-anchor="start" font-weight="600">Memory per agent pane</text>
+<text x="24.0" y="52.0" class="t2" font-size="12" text-anchor="start">Each agent pane's share of the soak's server memory, over the 4.9 MiB of an idle server.</text>
+<text x="24.0" y="69.0" class="t2" font-size="12" text-anchor="start">Apple M6, release build, 2026-11-19.</text>
+<line x1="169.0" y1="88.0" x2="169.0" y2="146.0" class="axis" stroke-width="1"/>
+<text x="169.0" y="162.0" class="t2" font-size="11" text-anchor="middle">0</text>
+<line x1="280.8" y1="88.0" x2="280.8" y2="146.0" class="grid" stroke-width="1"/>
+<text x="280.8" y="162.0" class="t2" font-size="11" text-anchor="middle">10</text>
+<line x1="392.5" y1="88.0" x2="392.5" y2="146.0" class="grid" stroke-width="1"/>
+<text x="392.5" y="162.0" class="t2" font-size="11" text-anchor="middle">20</text>
+<line x1="504.2" y1="88.0" x2="504.2" y2="146.0" class="grid" stroke-width="1"/>
+<text x="504.2" y="162.0" class="t2" font-size="11" text-anchor="middle">30</text>
+<line x1="616.0" y1="88.0" x2="616.0" y2="146.0" class="grid" stroke-width="1"/>
+<text x="616.0" y="162.0" class="t2" font-size="11" text-anchor="middle">40</text>
+<text x="392.5" y="180.0" class="t2" font-size="12" text-anchor="middle">MiB per pane</text>
+<text x="159.0" y="105.0" class="t1" font-size="12" text-anchor="end">before scrollback B</text>
+<path class="c1" d="M169.0 94.0h365.8a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-365.8z"/>
+<text x="543.8" y="105.0" class="t1" font-size="11" text-anchor="start">33 MiB</text>
+<text x="159.0" y="133.0" class="t1" font-size="12" text-anchor="end">scrollback B</text>
+<path class="c1" d="M169.0 122.0h30.5a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-30.5z"/>
+<text x="208.5" y="133.0" class="t1" font-size="11" text-anchor="start">3 MiB</text>
+</svg>

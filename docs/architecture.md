@@ -4,6 +4,42 @@ leon is a terminal multiplexer: a long-lived server owns sessions, windows (tabs
 layouts and terminal panes ("blocks"); clients (the macOS app, the `leon` CLI, Lua scripts,
 agents) drive it through one self-describing API.
 
+## The big picture
+
+One server owns every terminal; everything else is a client of its API. Programs keep running when
+a client goes away.
+
+```mermaid
+flowchart LR
+  subgraph mac["This Mac"]
+    app["Leon.app"]
+    attach["leon attach"]
+    cli["the leon CLI and leon do scripts"]
+    agent["agents in panes, through the skill"]
+    server["leon server: owns the PTYs,<br/>sessions, windows and blocks"]
+  end
+  app & attach & cli & agent -->|"the socket API"| server
+  web["the web page, in a browser<br/>on another of your machines"] -->|"the tailnet listener"| server
+  app & cli -->|"a Link: ssh and leon server proxy,<br/>or tailnet://"| host["the leon server on a host"]
+```
+
+What the server holds: sessions, each with windows (the app's tabs); a window's tiles are a layout
+of splits, and floats and drawers sit over and beside them. Every pane is a block.
+
+```mermaid
+flowchart TD
+  server["server"] --> session["session"]
+  session --> window["window (a tab)"]
+  window --> layout["layout: a tree of splits"]
+  layout --> tile1["block"]
+  layout --> tile2["block"]
+  window --> float["floats, over the tiles"]
+  window --> drawer["drawers, docked left, right or bottom"]
+  float --> fb["block"]
+  drawer --> db["block"]
+  tile1 --> pty["a terminal: its PTY, screen and history"]
+```
+
 ## Crates (one Cargo workspace)
 
 | Crate | Job |

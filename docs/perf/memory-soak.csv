@@ -1,0 +1,16 @@
+build,commit,date,minute,server_mib,load,machine,source
+before scrollback B,a3edd74,2026-11-19,0,359,3.1,"Apple M6, release build",performance-memory.md#history-in-leons-store
+before scrollback B,a3edd74,2026-11-19,1,402,3.0,"Apple M6, release build",performance-memory.md#history-in-leons-store
+before scrollback B,a3edd74,2026-11-19,2,444,4.5,"Apple M6, release build",performance-memory.md#history-in-leons-store
+before scrollback B,a3edd74,2026-11-19,3,460,6.1,"Apple M6, release build",performance-memory.md#history-in-leons-store
+before scrollback B,a3edd74,2026-11-19,4,523,14.7,"Apple M6, release build",performance-memory.md#history-in-leons-store
+before scrollback B,a3edd74,2026-11-19,5,562,18.7,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,,2026-11-19,0,108,3.1 to 3.9,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,,2026-11-19,1,58,3.1 to 3.9,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,,2026-11-19,2,52,3.1 to 3.9,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,,2026-11-19,3,46,3.1 to 3.9,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,,2026-11-19,4,45,3.1 to 3.9,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,,2026-11-19,5,40,3.1 to 3.9,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,,2026-11-19,6,36,,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,,2026-11-19,7,36,,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,,2026-11-19,8,36,,"Apple M6, release build",performance-memory.md#history-in-leons-store

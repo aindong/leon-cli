@@ -37,9 +37,20 @@ fn mentions(text: &str, name: &str) -> bool {
         .any(|(i, _)| !word(text[..i].chars().next_back()) && !word(text[i + name.len()..].chars().next()))
 }
 
+/// Every file under docs/images/, its folders (the charts' perf/) included.
 fn images() -> Vec<PathBuf> {
-    let mut all: Vec<PathBuf> =
-        std::fs::read_dir(root().join("docs/images")).unwrap().map(|e| e.unwrap().path()).collect();
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).unwrap() {
+            let path = e.unwrap().path();
+            if path.is_dir() {
+                walk(&path, out)
+            } else {
+                out.push(path)
+            }
+        }
+    }
+    let mut all = Vec::new();
+    walk(&root().join("docs/images"), &mut all);
     all.sort();
     all
 }

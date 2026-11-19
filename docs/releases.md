@@ -39,6 +39,16 @@ Before the first release, do the one-time setup under [Secrets](#secrets).
 
 `.github/workflows/release.yml` then runs:
 
+```mermaid
+flowchart LR
+  tag["a tag vX.Y.Z<br/>on main"] --> version["version"]
+  version --> macos["macos:<br/>arm64, x86_64"]
+  version --> linux["linux:<br/>arm64, x86_64"]
+  macos & linux --> publish["publish: sign, latest.json,<br/>verify, draft, publish"]
+  publish --> homebrew["homebrew: the tap"]
+  homebrew --> site["site.yml:<br/>the website"]
+```
+
 - **version**: `scripts/release-version.sh --on-main` fails unless the tag is `v` plus the version
   in `Cargo.toml` and the tagged commit is on `main`. Each build also checks that `leon --version`
   prints that version.

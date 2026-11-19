@@ -30,6 +30,8 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **Diagrams and benchmark charts in the docs.** Mermaid diagrams of the architecture, agents, hosts,
+  the web page, releases and updates, and charts of leon's benchmarks ([detail](docs/changelog-detail.md#diagrams-and-benchmark-charts)).
 - **A website.** <https://aindong.github.io/leon-cli/> has the docs, a What's new page for each
   release and a demo, built from the latest release ([detail](docs/changelog-detail.md#the-website)).
 - **Scrollback that costs what its text costs.** A pane keeps its 10,000 lines in about a ninth of

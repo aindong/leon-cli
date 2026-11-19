@@ -9,9 +9,11 @@ The docs, README and changelog come from LEON_SITE_ROOT (the latest release's ch
 site.yml); the site's own files (website/, brand/) from the checkout this file is in.
 """
 
+import hashlib
 import os
 import posixpath
 import re
+import urllib.request
 from pathlib import Path
 
 from mkdocs.exceptions import PluginError
@@ -40,7 +42,13 @@ UNSAFE = re.compile(r"<(?:script|iframe|object|embed|frame)\b|<[a-z][^>]*\son[a-
 ATTR = re.compile(r"""<[a-z][^>]*>""", re.I)
 VALUE = re.compile(r"""=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""")
 # the files in docs/ the site serves: pages and pictures
-SERVED = (".md", ".png", ".gif", ".jpg", ".jpeg", ".webp")
+SERVED = (".md", ".png", ".gif", ".jpg", ".jpeg", ".webp", ".svg")
+# the diagrams' renderer, served from the site itself so a visitor's browser asks no other site for
+# it: fetched once at build time and taken only if it is this exact file (npm's mermaid-11.17.2.tgz
+# holds the same bytes); a new version is a new pin and hash
+MERMAID_VERSION = "11.17.2"
+MERMAID_SHA256 = "581ed7d74bd9048d0e3a91363927d72ef22942d7722546b27f7cc29e35390eb8"
+MERMAID_URL = f"https://cdn.jsdelivr.net/npm/mermaid@{MERMAID_VERSION}/dist/mermaid.min.js"
 
 state = {}
 
@@ -131,6 +139,27 @@ def rewrite(text, origin, page, staged, root, ref, urls):
     return "\n".join(t if code else LINK.sub(one, t) for code, t in split(text))
 
 
+def mermaid(cache, fetch=None):
+    """The pinned mermaid.min.js in `cache`, fetched when it isn't there or isn't the pinned file."""
+    path = Path(cache) / f"mermaid-{MERMAID_VERSION}.min.js"
+    if path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() == MERMAID_SHA256:
+        return path
+    fetch = fetch or (lambda url: urllib.request.urlopen(url, timeout=60).read())
+    try:
+        data = fetch(MERMAID_URL)
+    except OSError as e:
+        raise PluginError(f"fetching {MERMAID_URL}: {e}") from e
+    got = hashlib.sha256(data).hexdigest()
+    if got != MERMAID_SHA256:
+        path.unlink(missing_ok=True)
+        raise PluginError(f"{MERMAID_URL} has sha256 {got}, not the pinned {MERMAID_SHA256}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".part")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+    return path
+
+
 def on_config(config):
     root = Path(os.environ.get("LEON_SITE_ROOT") or TOOLS).resolve()
     config.docs_dir = str(root / "docs")
@@ -168,6 +197,7 @@ def on_files(files, config):
     add("og.png", abs_src_path=str(tools / "brand/marketing/og.png"))
     add("assets/leon.css", abs_src_path=str(tools / "website/leon.css"))
     add("assets/logo-mark.svg", abs_src_path=str(tools / "brand/logo-mark.svg"))
+    add("assets/mermaid.min.js", abs_src_path=str(mermaid(tools / "target/site-cache")))
     for name in ("instrument-sans-latin.woff2", "OFL.txt"):
         add(f"assets/fonts/{name}", abs_src_path=str(tools / "brand/fonts" / name))
 
@@ -298,7 +328,13 @@ def on_page_context(context, page, config, nav):
 
 
 def on_post_page(output, page, config):
-    return re.sub(r'\s*<meta name="generator"[^>]*>', "", output, count=1)
+    output = re.sub(r'\s*<meta name="generator"[^>]*>', "", output, count=1)
+    if page and '<pre class="mermaid">' in output:
+        # in the head, so it is defined before the theme's bundle looks for it (else the theme
+        # fetches its own from a CDN)
+        src = posixpath.relpath("assets/mermaid.min.js", page.url.rstrip("/") or ".")  # directory URLs
+        output = output.replace("</head>", f'<script src="{src}"></script></head>', 1)
+    return output
 
 
 def on_post_template(output, template_name, config):
