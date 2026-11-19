@@ -43,6 +43,7 @@ leon=$repo/target/release/leon
 d=$(mktemp -d)
 d=$(cd "$d" && pwd -P) # the real path, so the app writes HOME as ~
 chmod 700 "$d"
+trap 'rm -rf "${d:?}"' EXIT
 home=$d/home
 mkdir -p "$home/bin" "$home/src/shelf/src"
 : >"$home/src/shelf/src/main.rs"
@@ -58,11 +59,11 @@ ln -s "$leon" "$home/bin/leon"
 cp "$repo/scripts/demo-clips/trail.glsl" "$d/trail.glsl"
 b64() { printf %s "$1" | base64; }
 
-# worker TEXT RESULT: a scripted agent for `leon agent start`: it shows its task, works for a
-# moment and reports the result as done, as an agent's Stop hook would
+# worker PROMPT: a scripted agent for `leon agent start`, whose prompt is the task, then leon's
+# paragraph on reporting: it works for a moment and reports the task's first line as its result
 cat >"$home/bin/worker" <<EOF
 #!/usr/bin/perl
-my \$result = \$ARGV[0];
+my (\$result) = split /\n/, \$ARGV[-1];
 \$| = 1;
 print "\e]2;\$result\a";
 print "\e]7501;state=working:title=$(b64 Claude)\a";
@@ -88,7 +89,7 @@ system("leon agent start --split below --label docs worker 'The docs build, no b
 print "    leon agent start --label docs\n\n  ● I'll wait for their reports.\n\n> ";
 system("leon", "notify", "--state", "done", "--body", "waiting for the tests and docs agents");
 while (my $line = <STDIN>) {
-  print "\n  ● Both reported:\n";
+  print "\n  ● Reports from the agents:\n";
   open(my $inbox, "-|", "leon", "inbox") or last;
   print "    $_" while <$inbox>;
   print "\n> ";
