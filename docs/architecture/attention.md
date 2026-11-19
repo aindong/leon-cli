@@ -145,9 +145,22 @@ of [the architecture](../architecture.md).
 - **Only a person answers permission prompts.** A block whose program reported
   `blocked`/`permission` is held until a person's keys reach it; status changes alone don't end
   that, since any program can write a report to a terminal. Meanwhile the socket loop refuses
-  input to it, a status change from outside its own program, and config actions or reloads (Lua in
-  the server would type where the loop doesn't look) from any client inside a leon terminal: a
-  pane's program, anything under it, or anything in its session (an orphaned job keeps it). The
+  input to it, a status change from outside its own program, config actions or reloads (Lua in
+  the server would type where the loop doesn't look), and requests that focus it, from any
+  client inside a leon terminal: a pane's program, anything under it, or anything in its session
+  (an orphaned job keeps it, and so does a job left running after its pane closed). Where a
+  person's next keys land is a rule on the state, not a list of requests, since a pane exiting
+  moves them with no request at all: after every change, under the state lock, a session whose
+  keys moved onto a held block by anything but a person's own focus move, or whose keys a program
+  put on a block that then became held, has them moved to the block that had them, the nearest
+  pane that isn't held, or the nearest tab whose keys aren't on one (`held_keys.rs`;
+  `focus_guard.rs` tells it who asked, through to the Lua thread, and in-process calls made for
+  a program's request go through the guard as the program's own). A closed pane's session counts
+  as inside while its leader is gone or still the server's child: every terminal program is noted
+  when it starts and when the state lock is released, and never forgotten, and Linux and macOS
+  don't hand out a pid still in use as a session or group id. The server is a root too, so a
+  closed pane's program that outlives the close and what Lua runs (`leon.exec`) are inside. The
+  app's own calls, in-process, go through the guard as a person's, so its typing is noted. The
   peer's pid comes from the socket (`SO_PEERCRED`, `LOCAL_PEEREPID`); a client the check can't
   place counts as inside. Agents run in leon terminals; the app, a `leon attach` in a terminal
   app and another machine don't. A program that moves itself to a new session (`setsid`) gets

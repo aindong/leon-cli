@@ -3,9 +3,9 @@
 Open your sessions in a web browser on another of your own machines, over your
 [Tailscale](cli/hosts.md#serve-over-tailscale) network only. Part of [Remote hosts](remote-hosts.md).
 
-Today the page is **view only**: it lists your sessions and each session's tabs, and draws the
-chosen tab's panes live, in leon's colours and your `font.family` when the browser has that font.
-Typing, copy and paste, and a phone layout come next.
+The page lists your sessions and each session's tabs, draws the chosen tab's panes live in
+leon's colours and your `font` (when the browser has it), and you drive them as in the app: see
+[Using the page](#using-the-page). A phone layout comes next.
 
 ## Turn it on
 
@@ -23,6 +23,32 @@ Open that URL in a browser on another of your machines. `serve_web` does nothing
 
 Use the MagicDNS name or one of the machine's Tailscale addresses (`http://100.x.y.z:7297/`). The
 short name (`http://devbox:7297/`) is refused on purpose; see below.
+
+## Using the page
+
+- **Typing** goes to the focused pane (the one with the amber edge; click a pane to focus it).
+  Special keys go by name, and leon makes their bytes on the server as the app does, in the
+  program's own cursor-key mode. Text the keyboard composes (accents, other scripts, an input
+  method) is typed as text. On a Mac, Option with a letter types what it composes (`ß`), as in the
+  app; elsewhere Alt with a letter is Meta. ⌘ stays the browser's, and so do keys the browser keeps
+  for itself (such as ⌘W or ctrl+W). Tab goes to the program, so **Shift+Esc** leaves the pane for the
+  sidebar's buttons (Tab moves between them, Enter picks one and goes back to the pane).
+- **Paste** with ⌘V (ctrl+V elsewhere): it reaches the program as a paste, bracketed when the
+  program asked for that. **Copy**: drag over text (double-click a word, triple-click a line), then
+  ⌘C (ctrl+shift+C elsewhere). Both work over plain HTTP.
+- **The mouse** goes to a program that asked for it (vim, htop, a TUI): clicks, drags and the
+  wheel, at the cell under the pointer. Hold Shift to select instead.
+- **Sessions, tabs and panes**: + Session and + Tab add one; × closes a session, a tab or a pane
+  (click it again within 3 seconds to confirm); each pane's header splits it right or down.
+- **Size**: the page sizes each pane's terminal to what its box fits, when its own layout changes.
+  If the app shows the same tab it sets its own size back, and the page then draws that screen
+  smaller so it still fits.
+- **Activity** lists the panes, in every session, whose program said it is working, blocked, done
+  or failed; click one to go there.
+- **Notifications**: on an HTTPS page, Notify me asks the browser to allow them; then a page in the
+  background shows one when a pane becomes blocked, done or failed.
+- The page counts as a person at a keyboard: it answers a permission prompt an agent is blocked
+  on, as the app does. It sends input only from your keys, clicks and pastes.
 
 ## Who gets in
 
@@ -43,7 +69,7 @@ short name (`http://devbox:7297/`) is refused on purpose; see below.
   Pages also carry a strict Content-Security-Policy, can't be framed, and load nothing from
   anywhere else: every file is built into leon.
 - **What a page can do** is what a caller over the tailnet can do: the page speaks the same API as
-  the socket. The page itself only reads today.
+  the socket, and drives your sessions as the app does.
 
 A connection from the browser, step by step:
 

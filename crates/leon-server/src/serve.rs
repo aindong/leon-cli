@@ -380,7 +380,7 @@ async fn serve_lines(
                         } else if req.method == "block.watch" {
                             Box::pin(std::future::ready(screens.watch(&shared.ctx, req.params)))
                         } else {
-                            shared.ctx.call(&req.method, req.params)
+                            shared.ctx.call_as(guard.unwrap_or(false), &req.method, req.params)
                         };
                         pending = Some((req.id, req.method == "server.stop", later));
                     }

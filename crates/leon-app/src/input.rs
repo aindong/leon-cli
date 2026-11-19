@@ -10,11 +10,8 @@ pub fn key_bytes(ks: &Keystroke, app_cursor: bool) -> Option<Vec<u8>> {
     if m.platform {
         return None;
     }
-    let single = ks.key.chars().count() == 1;
-    if !m.control && (single || ks.key == "space") {
-        if let Some(typed) = ks.key_char.as_deref().filter(|c| !c.is_empty() && !c.chars().any(char::is_control)) {
-            return Some(typed.as_bytes().to_vec());
-        }
+    if let Some(text) = typed(ks) {
+        return Some(text.as_bytes().to_vec());
     }
     let mut name = String::new();
     for (on, prefix) in [(m.control, "ctrl+"), (m.alt, "alt+"), (m.shift, "shift+")] {
@@ -24,6 +21,17 @@ pub fn key_bytes(ks: &Keystroke, app_cursor: bool) -> Option<Vec<u8>> {
     }
     name.push_str(&ks.key);
     leon_core::keys::encode(&name, app_cursor).ok()
+}
+
+/// The text a key types as it is (a letter, a digit, space, an option composition), or None for
+/// one leon spells in binding syntax (ctrl and cmd chords, named keys).
+pub fn typed(ks: &Keystroke) -> Option<&str> {
+    let m = &ks.modifiers;
+    let single = ks.key.chars().count() == 1;
+    if m.platform || m.control || !(single || ks.key == "space") {
+        return None;
+    }
+    ks.key_char.as_deref().filter(|c| !c.is_empty() && !c.chars().any(char::is_control))
 }
 
 /// GPUI rebuilds a key's text from its key code through the keyboard layout, so an event with key

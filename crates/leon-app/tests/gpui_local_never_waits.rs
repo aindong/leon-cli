@@ -68,7 +68,7 @@ fn a_this_mac_server_that_never_answers_holds_nothing(cx: &mut TestAppContext) {
 fn no_view_code_waits_for_a_server() {
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let allowed = [
-        ("view.rs", "app.act(\"session.create\""),
+        ("view_new.rs", "app.act(\"session.create\""),
         ("view_poll.rs", "local().call(\"client.keymap\""),
         ("view_poll.rs", "local().call(\"server.settings\""),
         ("view_scroll.rs", "self.app.lines("),

@@ -77,3 +77,46 @@ runs of five opens on the machine above, at a load of 10.5 and 8.7 (an upper bou
 p50 16.1 / 17.1 ms, every card filled p50 32.5 / 33.8 ms (max 46.2 ms); frames while open take
 1 to 3 ms to build (max 7.5 ms), since each thumbnail is a cached view that draws again only when
 its screen changes.
+
+## GPUI phases 5 to 7: before and after
+
+[How leon uses GPUI](architecture/gpui.md) planned a refactor in phases; phases 5 to 7 moved the
+model into entities with queued server calls (R4, R8), gave each overlay its own focus (R3, R9)
+and sent text through an input handler (R9). Their cost or gain, as an A/B: `2e773bd` (dev just
+before phase 5) against `ae96f39` (after phase 7), the same scripts, alternating runs, in a Tart
+macOS VM with 6 cores on the Apple M6 (2026-11-20). The host was busy with other work all day
+(1-minute load 5 to 30), so the GUI runs went to the VM; the VM's own load was 1 to 4.4 for
+`keylat.sh` and `idle-cpu.sh` (beside each number in `.agent/perf/`). The VM's absolute numbers
+are not the host's (idle key to paint 26 ms against the host's 12): compare the two columns only.
+Medians of three runs (`keylat.sh`) or both of two (the rest), the range after:
+
+| Measurement | before (`2e773bd`) | after (`ae96f39`) |
+|---|---|---|
+| key to echo painted, in the app, p50: idle / one pane flooding / eight busy | 26.0 / 17.5 / 18.0 ms (25.5–26.6, 14.1–18.7, 17.8–18.7) | 28.3 / 20.8 / 18.0 ms (24.5–41.6, 17.5–26.3, 17.7–19.3) |
+| the same at p99 | 51.0 / 52.0 / 52.4 ms | 56.8 / 50.7 / 37.9 ms |
+| key to frame composited, outside, p50 | 96.1 / 103.7 / 98.7 ms (floor 20.8–31.9) | 99.9 / 88.0 / 81.3 ms (floor 22.5–32.4) |
+| key event to the key sent to the pane, p50 | 9.2 / 12.0 / 11.2 ms | 8.6 / 11.3 / 10.0 ms |
+| the app's CPU with 12 idle panes: still / one working / hidden | 1.50, 1.53 / 4.21, 4.72 / 0.08, 0.07% of a core | 0.82, 1.02 / 4.86, 2.07 / 0.02, 0.00% |
+| the app's wake-ups a second: still / hidden | 55.7, 55.9 / 0.8, 0.7 | 33.4, 55.7 / 0.0, 0.0 |
+| 100 panes printing: frames a second, frame build p50 | 58.8, 59.4; 2.82, 2.78 ms | 59.1, 58.1; 2.93, 3.30 ms |
+| `frame_bench` (on the host, load about 16), model build p50 | 0.184, 0.203, 0.193 ms | 0.184, 0.190, 0.185 ms |
+
+![Key to echo painted before and after GPUI refactor phases 5 to 7, in a VM: the same within the runs' spread, idle 26.0 against 28.3 ms, one pane flooding 17.5 against 20.8 ms, eight panes busy 18.0 against 18.0 ms](images/perf/gpui-refactor.svg)
+
+What it shows: key echo did not change beyond the runs' spread. A typed key now reaches the pane
+through the input handler (phase 7) no later than it did from `key_down`, and with eight panes
+busy the slowest echoes came down (p99 52 to 38 ms, outside p50 99 to 81 ms). The still app uses
+less CPU (about 1.5% to about 0.9% of a core in the VM) and nothing when hidden; one pane working
+still costs about as much, its pulse re-laying out the window. Frames under 100 printing panes
+are the same. `flood.sh` measured nothing useful in the VM: the capture's own reference window
+ran from 1.4 to 31 frames a second as the host's load went to 30, and frame build p50 stayed
+under 2 ms in both builds. `frame_bench` and the speed bench measure code these phases did not
+touch (the server, the CLI and the render model have no diff); `frame_bench` agrees.
+
+What still costs, and why the refactor left it: on the host a key's echo is painted about 12 ms
+after the key and reaches the screen about 50 ms after it (the table at the top), most of it
+waiting for GPUI's next display tick and then its presentation. The refactor's rule was to change
+nothing inside GPUI (R11). Drawing the echo at once, as a probe on a branch did, took the host's
+outside p50 from 49.8 to 36.3 ms, but GPUI 0.2.2 leaks a display link per immediate draw, so it
+needs a change inside GPUI. The ADR took one on 2026-11-20 ([Key echo at once](#key-echo-at-once));
+idle CPU (under 1% of a core shown, nothing hidden) was not a reason to.

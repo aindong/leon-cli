@@ -83,9 +83,37 @@ pub fn process(_pid: i32) -> Option<Process> {
     None
 }
 
+/// Whether `pid` runs in a session that one of `ended` led: what lives on of a closed terminal (a
+/// job, whatever process group it moves to, even handed to pid 1). Its leader is gone, or is
+/// still this process's child (it ignored the hang-up, and the kill comes later). Linux and macOS
+/// don't hand out a pid still in use as a session or group id, so a live leader with that pid and
+/// another parent leads a new session, not this one.
+pub fn in_ended_session(pid: i32, ended: &[i32]) -> bool {
+    // SAFETY: getsid has no preconditions; -1 for a pid that is gone.
+    let session = unsafe { libc::getsid(pid) };
+    session > 0 && ended.contains(&session) && (!lives(session) || parent(session) == Some(std::process::id() as i32))
+}
+
+/// Whether process `pid` exists.
+fn lives(pid: i32) -> bool {
+    // SAFETY: signal 0 only checks; EPERM means it lives but isn't ours.
+    let sent = unsafe { libc::kill(pid, 0) } == 0;
+    sent || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn our_own_session_has_not_ended() {
+        // SAFETY: getsid(0) asks about this process.
+        let sid = unsafe { libc::getsid(0) };
+        let me = std::process::id() as i32;
+        // its leader lives and isn't our child (or it is us): a session that hasn't ended
+        assert_eq!(in_ended_session(me, &[sid]), sid != me && !lives(sid));
+        assert!(!in_ended_session(me, &[]));
+    }
 
     #[test]
     fn a_child_is_inside_us_and_we_not_inside_it() {

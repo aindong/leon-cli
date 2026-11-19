@@ -3,6 +3,7 @@
 pub mod agents;
 pub mod error;
 pub mod events;
+pub mod held_keys;
 pub mod hints;
 pub mod keys;
 pub mod layout;

@@ -6,8 +6,17 @@ use std::process::Command;
 
 mod help_walk;
 
-const CHARTS: [&str; 8] =
-    ["throughput", "keystroke", "key-to-pixel", "memory-soak", "memory-per-pane", "idle-cpu", "frame-build", "flood"];
+const CHARTS: [&str; 9] = [
+    "throughput",
+    "keystroke",
+    "key-to-pixel",
+    "memory-soak",
+    "memory-per-pane",
+    "idle-cpu",
+    "frame-build",
+    "flood",
+    "gpui-refactor",
+];
 
 fn doc(path: &str) -> String {
     std::fs::read_to_string(help_walk::repo().join(path)).unwrap_or_else(|e| panic!("{path}: {e}"))

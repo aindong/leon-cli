@@ -33,6 +33,12 @@ fields it doesn't know. The full policy is in
 ## [Unreleased]
 
 - **A key's echo is shown at once** in Leon.app, not at the next display tick ([detail](docs/changelog-detail.md#a-keys-echo-shown-at-once)).
+- **Leon.app doesn't wait on its own server once its window is up.** Keys, splits, copies and the
+  window's other calls to This Mac's server queue in order off its thread, and a config reload shows at once ([detail](docs/changelog-detail.md#leonapp-doesnt-wait-on-its-own-server)).
+- **Input methods and the emoji picker in Leon.app's panes.** Japanese, Chinese and other input
+  methods compose at the cursor ([detail](docs/changelog-detail.md#input-methods-and-the-emoji-picker)).
+- **Overlays give the keys back.** The palette, switcher, find bar, overview and rename field each
+  take the focus while open and, however they close, give it to the overlay still open, else the pane ([detail](docs/changelog-detail.md#overlays-give-the-keys-back)).
 - **Diagrams and benchmark charts in the docs** ([detail](docs/changelog-detail.md#diagrams-and-benchmark-charts)).
 - **A website.** <https://aindong.github.io/leon-cli/>: the docs, What's new per release and a demo
   ([detail](docs/changelog-detail.md#the-website)).
@@ -41,6 +47,8 @@ fields it doesn't know. The full policy is in
 - **Scrollback that costs what its text costs.** A pane keeps its 10,000 lines in about a ninth of
   the memory; `leon.set("scrollback", N)` sets how many, reported by `server.settings` (`api_version`
   `1.18.0`) ([detail](docs/changelog-detail.md#scrollback-that-costs-what-its-text-costs)).
+- **Drive leon from the browser.** The tailnet web page types, pastes, copies, sends the mouse,
+  opens and closes sessions, tabs and panes, and lists Activity ([detail](docs/changelog-detail.md#drive-leon-from-the-browser)).
 - **leon in the browser, over your tailnet.** `serve_web` serves a view-only page of your sessions,
   tabs and panes to your own machines; `api_version` goes to `1.16.0` ([detail](docs/changelog-detail.md#leon-in-the-browser)).
 - **HTTPS for the browser page.** `serve_web_cert` and `serve_web_key` name the files `tailscale cert`
@@ -66,6 +74,9 @@ fields it doesn't know. The full policy is in
   ([detail](docs/changelog-detail.md#agents-orchestrating-agents)).
 
   ![An agent starts two agents and hears back through its inbox](docs/images/whats-new/0.2.0/agents.gif)
+- **Permission prompts stay yours.** An agent in leon can't type into a pane that waits on one,
+  or move your keys onto it; only your own focus move puts them there. It keeps agents from
+  answering; it is not a sandbox ([detail](docs/changelog-detail.md#agents-orchestrating-agents)).
 
 ## [0.1.1] - 2026-11-19
 

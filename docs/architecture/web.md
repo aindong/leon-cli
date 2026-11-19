@@ -22,8 +22,7 @@ leon's page in a browser, served over the tailnet listener to the owner's own ma
   machine as one. The web client is always another machine (`admit` refuses this machine's own
   address), so both its WebSocket and the API on the same port reach `serve::connection` as
   `Peer::Remote`, as `tailnet://` callers do. That fits what the page is: it sends only what a
-  person's keys and clicks in the browser make (this view-only page sends no input at all), never
-  input of its own. Something that drives a browser on another of the owner's machines counts as a
+  person's keys, clicks and pastes in the browser make, never input of its own. Something that drives a browser on another of the owner's machines counts as a
   person too: the same residual as `tailnet://`.
 - **HTTP, a small subset** (`web.rs`): `GET` only (else 405), a head of at most 8 KiB read within
   5 s (else closed) and 64 headers with token names (else 400), one request per connection
@@ -86,12 +85,33 @@ leon's page in a browser, served over the tailnet listener to the owner's own ma
     targets, NASM, and is bigger. No default features: rustls `ring, std, tls12`, tokio-rustls
     `ring, tls12`, `rustls-webpki` `std` (the name check only). The release headless binary grew
     by 1.30 MiB, 11% (12,323,952 → 13,687,984 bytes, `--release --no-default-features`, macOS arm64).
-- **The page** (view only): sessions, the chosen session's tabs and the chosen tab's panes (the
-  split tree, a zoomed pane, visible floats; not drawers yet), a refetch of `session.list`,
-  `session.view` and `session.list_blocks` 50 ms after a burst of `session.attach_all` events,
-  and `block.watch` for the panes shown. It never resizes a terminal: it scales the font to fit.
-  On a closed connection it asks for `/` with a backoff up to 30 s and reloads once it answers,
-  which fetches the new token.
+- **The page** drives leon as the app does, with no method of its own:
+  - **Keys**: `web/keys.js` maps a `KeyboardEvent` to a binding name (one `NAMES` table, which a
+    test checks against the encoder), sent as `block.event {type: "key"}`; the server makes the
+    bytes with `leon_core::keys::encode`, the app's and `leon attach`'s mapping, in the program's
+    cursor-key mode at that moment. Text the keyboard composes goes through a hidden textarea's
+    `input`/`compositionend` as `dev.leon.terminal.write`, so a key is sent once, never also as text.
+    As in the app, a Mac's Option with a character types what it composes; elsewhere Alt is Meta;
+    ctrl takes the key's place (`KeyboardEvent.code`), so it works on any layout.
+  - **Paste and copy**: the textarea's `paste` event is `block.event paste` (bracketed by the
+    program's mode); a drag selects through `dev.leon.terminal.selection` (absolute lines) and the
+    `copy` event sets its text. Neither needs a secure context.
+  - **Mouse**: `block.event mouse`/`wheel` at the cell, when the screen's `mouse` says the program
+    asked and Shift isn't held; else the drag selects.
+  - **Actions**: `session.create`/`destroy`, `new_window`/`close_window`/`focus_window`,
+    `new_split`, `focus_block`, `block.close`; a × asks once.
+  - **Size**: each shown pane's terminal is set to what its box fits at `font.size` through
+    `dev.leon.terminal.resize`, only when the page's own layout of it changes, never because another
+    client resized it (`leon attach`'s rule); the app, which re-fits whenever a screen's size
+    differs from its pane, then wins, and the page draws that screen scaled down to its box.
+  - **Activity**: `session.list_blocks` and `dev.leon.terminal.program_status` per block, in every
+    session, at most once a second after events, ordered by when the page first saw each state;
+    a click goes there and sends `block.event focus` (clears `done`/`error`). **Notifications** use
+    the browser's API, only in a secure context and after the person allows them, for a hidden page.
+  - The model is refetched (`session.list`, `session.view`, `session.list_blocks`) 50 ms after a
+    burst of `session.attach_all` events (at least every 500 ms while they continue), with
+    `block.watch` for the panes shown. On a closed connection it asks for `/` with a backoff up to
+    30 s and reloads once it answers, which fetches the new token.
 
 ## Threat model
 

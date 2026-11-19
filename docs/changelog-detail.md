@@ -17,6 +17,39 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   ([architecture/gpui-patch.md](architecture/gpui-patch.md)); every build now also fetches
   github.com/aindong/gpui.
 
+### Leon.app doesn't wait on its own server
+
+#### Changed
+- The window's calls to This Mac's server (a key, a paste, a split and the directory it opens in,
+  a copy, a cmd-click, End All Sessions) go through one ordered queue off the window's thread, as
+  a host's calls already did: a stuck server no longer freezes the window for the 5 s call timeout.
+  Lua key bindings, config actions and a config reload still run on a connection of their own,
+  and the first session is still made before the window shows.
+- The window's copy of each machine's model changes only on its own thread, and only the views a
+  change touches are told to draw again ([How leon uses GPUI](architecture/gpui.md), R4).
+- A config reload reaches the window through the server's `keymap_changed` event, at once,
+  instead of the app asking for the keymap every second.
+
+### Input methods and the emoji picker
+
+#### Added
+- A pane takes text from an input method (Japanese, Chinese and others), the emoji picker
+  (⌃⌘Space) and Option's dead keys (⌥E, then E: é): what is being composed shows underlined at
+  the cursor and only the chosen text reaches the program. A held letter still repeats.
+- The palette, find bar and rename field take typed keys only, not composed text. While text is
+  being composed, every key goes to the input method first, ⌘ shortcuts too: Escape ends the
+  composition.
+
+### Overlays give the keys back
+
+#### Changed
+- The palette (and its switcher, theme list and Add Host prompt), the find bar, the overview and
+  the inline rename field each take the window's focus and their own keys while open. Escape, a
+  pick, the palette's, switcher's or overview's key again, or what they belong to going out of
+  sight closes them, and the focus goes to the overlay still open (the find bar under the
+  palette), else the pane. A key the find bar doesn't take (⌘D) still runs its binding.
+- A click outside the palette closes it, as one outside the rename field already set the name.
+
 ### Diagrams and benchmark charts
 
 #### Added
@@ -50,6 +83,15 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   hand; `website/build.sh` builds it, and CI builds it strictly on every change but one to
   translations, images or `brand/` alone (they start no run)
   ([releases.md](releases.md#the-website)).
+
+### Drive leon from the browser
+
+#### Added
+- The web page (`serve_web`) is no longer view only: keys go to the focused pane (encoded on the
+  server by the app's mapping), composed text and pastes as the program asked, copy of a selection,
+  mouse reports for programs that want them, + Session, + Tab, splits and ×, Activity across every
+  session, and browser notifications on HTTPS ([web.md](web.md#using-the-page)). No API change.
+- The page counts as a person for the permission guard, as the app does.
 
 ### HTTPS for the browser page
 
@@ -135,8 +177,10 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 #### Changed
 - A block whose program reports `blocked`/`permission` is held for a person: until a person's
   keys reach it, no program running inside a leon terminal can type into it, change its status from
-  outside it, or run config actions or reloads (error `permission_pending`). The app, and
-  `leon attach` in a terminal app, type into it as before.
+  outside it, focus it, or run config actions or reloads (error `permission_pending`). The app, and
+  `leon attach` in a terminal app, type into it as before. The keys never land on it as a side
+  effect, such as a pane closing or exiting, or a program moving panes: only a person's own
+  focus move puts them there.
 - The state file is version 5: it keeps each worker's link and worktree, and up to 1024 unread
   reports.
 - The guide says when not to use leon, documents `-H`, what to do on exit 4, and looking before

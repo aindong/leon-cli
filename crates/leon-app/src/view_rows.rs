@@ -186,13 +186,15 @@ impl Workspace {
         }
     }
 
-    /// Whether the inline field is open; one whose row went (closed elsewhere) lets go of the keys.
-    pub(in crate::view) fn renaming_open(&mut self) -> bool {
-        let gone = self.term.rows.renaming.as_ref().is_some_and(|r| self.row_name(&r.row).is_none());
-        if gone {
+    /// End, changing nothing, a rename whose row went (closed elsewhere) or that the overview
+    /// covers. One hidden otherwise (the sidebar, another session's tabs) ends when a frame draws
+    /// without its field (`focus_lost`).
+    pub(in crate::view) fn end_hidden_rename(&mut self) {
+        let overview = self.overview_shown();
+        let hidden = |r: &Renaming| overview || self.row_name(&r.row).is_none();
+        if self.term.rows.renaming.as_ref().is_some_and(hidden) {
             self.term.rows.renaming = None;
         }
-        self.term.rows.renaming.is_some()
     }
 
     /// A key while the inline field is open: it edits the name, and goes nowhere else.
@@ -222,6 +224,9 @@ impl Workspace {
         let text = div().when(r.fresh, |d| d.bg(rgb(t.selected))).child(r.text.clone());
         div()
             .debug_selector(|| sel("rename-field".into()))
+            .track_focus(&self.overlays.rename_focus)
+            .key_context("RenameField")
+            .on_key_down(cx.listener(Self::rename_key_down))
             .flex()
             .flex_1()
             .min_w(px(0.))

@@ -179,6 +179,7 @@ impl Workspace {
             self.root_changed(cx); // the observer gives the views their inputs
         } else {
             self.sync_views(window, cx);
+            self.sync_focus(window, cx);
         }
     }
 
