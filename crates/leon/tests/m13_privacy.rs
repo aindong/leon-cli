@@ -37,25 +37,28 @@ fn mentions(text: &str, name: &str) -> bool {
         .any(|(i, _)| !word(text[..i].chars().next_back()) && !word(text[i + name.len()..].chars().next()))
 }
 
+/// Every file under `dir`, in its folders too.
+fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+    for e in std::fs::read_dir(dir).into_iter().flatten() {
+        let p = e.unwrap().path();
+        if p.is_dir() {
+            walk(&p, out)
+        } else {
+            out.push(p)
+        }
+    }
+}
+
+/// Every picture under docs/images, a release's clips in docs/images/whats-new/<version>/ too.
 fn images() -> Vec<PathBuf> {
-    let mut all: Vec<PathBuf> =
-        std::fs::read_dir(root().join("docs/images")).unwrap().map(|e| e.unwrap().path()).collect();
+    let mut all = vec![];
+    walk(&root().join("docs/images"), &mut all);
     all.sort();
     all
 }
 
 /// Every file under docs/i18n/ (none before the first translation lands).
 fn translations() -> Vec<PathBuf> {
-    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-        for e in std::fs::read_dir(dir).into_iter().flatten() {
-            let p = e.unwrap().path();
-            if p.is_dir() {
-                walk(&p, out)
-            } else {
-                out.push(p)
-            }
-        }
-    }
     let mut out = vec![];
     walk(&root().join("docs/i18n"), &mut out);
     out
@@ -94,7 +97,9 @@ fn no_screenshot_shows_the_user_or_machine() {
     // a recording's every distinct frame (mpdecimate drops repeats), when ffmpeg is here to split it
     let frames = tempfile::tempdir().unwrap();
     for gif in images().into_iter().filter(|p| p.extension().is_some_and(|e| e == "gif")) {
-        let name = gif.file_stem().unwrap().to_string_lossy().to_string();
+        // by its path: two releases' clips can share a name
+        let rel = gif.strip_prefix(root().join("docs/images")).unwrap().with_extension("");
+        let name = rel.to_string_lossy().replace('/', "_");
         let pattern = frames.path().join(format!("{name}-%04d.png"));
         let split = Command::new("ffmpeg")
             .args(["-loglevel", "error", "-i"])

@@ -1,0 +1,13 @@
+#!/usr/bin/perl
+# worker PROMPT: a scripted agent for `leon agent start`, whose last argument is the task and then
+# leon's paragraph on reporting: it works for a moment and reports the task's first line as done
+my ($result) = split /\n/, $ARGV[-1];
+$| = 1;
+use MIME::Base64;
+print "\e]2;$result\a";
+print "\e]7501;state=working:title=" . encode_base64("Working", "") . "\a";
+print "\n  ● Working on it…\n";
+sleep 4;
+print "  ● $result\n";
+system("leon", "notify", "--state", "done", "--body", $result);
+sleep while 1;

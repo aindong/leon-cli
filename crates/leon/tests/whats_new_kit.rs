@@ -34,22 +34,26 @@ fn the_clips_shader_compiles() {
 }
 
 #[test]
-fn the_clips_come_from_the_neutral_demo() {
-    let s = read("scripts/demo-clips.sh");
-    for scene in ["scene_agents", "scene_link-card", "scene_tabs", "scene_cursor-shader"] {
-        assert!(s.contains(&format!("{scene}() {{")), "{scene}");
+fn the_clips_come_from_the_neutral_demo_in_the_vm() {
+    let guest = read("scripts/demo-clips/guest.sh");
+    for scene in ["agents)", "link-card)", "tabs)", "cursor-shader)"] {
+        assert!(guest.matches(&format!("    {scene}")).count() == 2, "{scene} is staged and played");
     }
     for must in [
-        "PROMPT='$ '",                    // the neutral prompt
-        "LEON_RUNTIME_DIR=\"$run/run\"",  // a server of its own
-        "lock=/tmp/leon-gui.lock",        // one taker of the screen at a time
-        "is not $app_pid then error",     // keys only for the app it started
-        "deskshot\" record \"$app_pid\"", // leon's window only
-        "-le 1500000",                    // a GIF small enough for git
-        "env -i HOME=\"$home\"",          // nothing of this machine's environment
+        "PROMPT='\\$ '",      // the neutral prompt
+        "d=$HOME/leon-clips", // leon dirs of its own, never the take's
+        "export LEON_RUNTIME_DIR=$d/run",
+        "k() { keypost \"$@\"; }", // keys and clicks posted inside the VM
     ] {
-        assert!(s.contains(must), "demo-clips.sh: {must}");
+        assert!(guest.contains(must), "guest.sh: {must}");
     }
+    let host = read("scripts/demo-clips.sh");
+    // nothing on this Mac's screen: no keys, clicks or recording here, only in the VM over ssh
+    for never in ["osascript", "System Events", "CGEvent", "deskshot"] {
+        assert!(!host.contains(never), "demo-clips.sh uses {never} on the host");
+    }
+    assert!(host.contains("ssh_vm \"rm -f ~/clip.mov; screencapture"), "the recorder runs in the VM");
+    assert!(host.contains("max=${3:-1500000}"), "a clip's GIF is at most 1.5 MB");
 }
 
 #[test]

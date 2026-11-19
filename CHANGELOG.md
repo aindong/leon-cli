@@ -40,10 +40,16 @@ fields it doesn't know. The full policy is in
   wrote; leon reads and reloads them; `api_version` goes to `1.17.0` ([detail](docs/changelog-detail.md#https-for-the-browser-page)).
 - **Cursor shaders.** Leon.app draws a Shadertoy-style cursor shader file you name with
   `cursor_shader` over its window, on macOS; `api_version` goes to `1.15.0` ([detail](docs/changelog-detail.md#cursor-shaders)).
+
+  ![A cursor trail from a cursor shader, following the cursor along a command line](docs/images/whats-new/0.2.0/cursor-shader.gif)
 - **Closing and renaming tabs and sessions.** Close Tab (⌥⌘W), Close Session (⌥⇧⌘W), a × on hover,
   right-click menus and double-click to rename ([detail](docs/changelog-detail.md#closing-and-renaming-tabs-and-sessions)).
+
+  ![Renaming a tab and a session from the command palette, closing a tab, then closing a session](docs/images/whats-new/0.2.0/tabs.gif)
 - **A link card.** Resting the mouse on a link, or right-clicking it, shows its address with Copy and
   Open in Browser; `link_card` turns it off, and `api_version` is `1.14.0` ([detail](docs/changelog-detail.md#the-link-card)).
+
+  ![The pointer resting on a link shows its card; a right-click shows it with Copy and Open in Browser](docs/images/whats-new/0.2.0/link-card.gif)
 - **Agents orchestrating agents.** `leon agent start` runs Claude Code, Codex or any agent in a tab
   or pane, working for you; its hooks report to your `leon inbox`, and leon types a notice into
   your prompt when your turn ends. New experimental methods `agent.link`, `agent.list`,
@@ -51,6 +57,8 @@ fields it doesn't know. The full policy is in
   `leon agent start --worktree` gives a worker its own git worktree, which `leon agent close`
   removes only when that loses no work
   ([detail](docs/changelog-detail.md#agents-orchestrating-agents)).
+
+  ![An agent starts two agents in panes beside it; as each reports, leon types a notice into its prompt and it reads its inbox](docs/images/whats-new/0.2.0/agents.gif)
 
 ## [0.1.1] - 2026-11-19
 
