@@ -49,6 +49,25 @@ function place(code) {
 /** The characters ctrl makes a control code of (leon_core::keys's `control`); JSON-shaped. */
 export const CTRL = "abcdefghijklmnopqrstuvwxyz@2[\\]^6_-/?";
 
+/**
+ * The phone's key row (phone.js): what a phone's keyboard lacks. Each is a key by name, a character
+ * typed as text, or the sticky Ctrl, which makes the next key or character `ctrl+` it. JSON-shaped:
+ * crates/leon/tests/web_phone_keys.rs reads it.
+ */
+export const ROW = [
+  {"label": "Esc", "key": "escape"},
+  {"label": "Ctrl", "ctrl": true},
+  {"label": "Tab", "key": "tab"},
+  {"label": "←", "key": "left"},
+  {"label": "↑", "key": "up"},
+  {"label": "↓", "key": "down"},
+  {"label": "→", "key": "right"},
+  {"label": "|", "text": "|"},
+  {"label": "~", "text": "~"},
+  {"label": "/", "text": "/"},
+  {"label": "-", "text": "-"}
+];
+
 export const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /**

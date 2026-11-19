@@ -48,6 +48,8 @@ fields it doesn't know. The full policy is in
   `1.18.0`) ([detail](docs/changelog-detail.md#scrollback-that-costs-what-its-text-costs)).
 - **Drive leon from the browser.** The tailnet web page types, pastes, copies, sends the mouse,
   opens and closes sessions, tabs and panes, and lists Activity ([detail](docs/changelog-detail.md#drive-leon-from-the-browser)).
+- **The web page on a phone.** Activity first, one pane at a time, a drawer for sessions and tabs,
+  and a key row with Esc, a sticky Ctrl, Tab and the arrows ([detail](docs/changelog-detail.md#the-web-page-on-a-phone)).
 - **leon in the browser, over your tailnet.** `serve_web` serves a view-only page of your sessions,
   tabs and panes to your own machines; `api_version` goes to `1.16.0` ([detail](docs/changelog-detail.md#leon-in-the-browser)).
 - **HTTPS for the browser page.** `serve_web_cert` and `serve_web_key` name the files `tailscale cert`

@@ -8,6 +8,7 @@ import { Conn } from "./conn.js";
 import { Grid, setFont } from "./grid.js";
 import { wire } from "./input.js";
 import { Activity } from "./activity.js";
+import { keyRow, narrow, phoneFont } from "./phone.js";
 
 const $ = (id) => document.getElementById(id);
 const token = document.querySelector('meta[name="leon-token"]').content;
@@ -19,6 +20,9 @@ let watched = "";
 let refetch = null;
 let burst = null; // when the events waiting for a refetch began
 let shown = null; // the window drawn now
+let view = "home"; // on a phone: Home (Activity and the sessions) or the shown tab's one pane
+let font = 13; // the server's font size; a phone's is kept readable (phone.js)
+const phone = () => narrow.matches;
 
 const scheme = location.protocol === "https:" ? "wss" : "ws";
 const conn = new Conn(`${scheme}://${location.host}/ws?token=${encodeURIComponent(token)}`, {
@@ -77,8 +81,28 @@ const target = () => {
   const b = mine && shown.block_ids.includes(mine) && (!zoomed || mine === zoomed) ? mine : zoomed ?? shown.focused_block_id;
   return b ? { s: chosen.session, b } : null;
 };
-// Shift+Escape leaves the pane for the sidebar, where Tab moves between the buttons
-const pointer = wire(conn, $("keys"), target, failed, () => $("sessions").querySelector("button")?.focus());
+// Shift+Escape leaves the pane for the sidebar (on a phone, the drawer), where Tab moves between the buttons
+const leave = () => {
+  if (phone() && view === "pane") drawer(true);
+  $("sessions").querySelector("button")?.focus();
+};
+let showCtrl = () => {};
+const input = wire(conn, $("keys"), target, failed, leave, (on) => showCtrl(on));
+showCtrl = keyRow($("keyrow"), (entry) => input.press(entry));
+
+/** The drawer: on a phone, the sidebar over the pane. */
+function drawer(open) {
+  document.body.classList.toggle("drawer", open);
+  $("menu").setAttribute("aria-expanded", String(open));
+}
+
+/** The layout for the page's width: a phone's (Home or one pane) or the desktop's. */
+function layout() {
+  document.body.classList.toggle("phone", phone());
+  document.body.dataset.view = view;
+  if (!phone()) drawer(false);
+  setFont(phone() ? phoneFont(font) : font);
+}
 const activity = new Activity(conn, $("activity"), $("notify"), (e) => {
   picked.set(e.w, e.b);
   choose(e.s, e.w);
@@ -106,7 +130,8 @@ async function start() {
   const { settings } = await conn.call("server.settings");
   const family = settings.font.family.replace(/["\\]/g, "");
   document.documentElement.style.setProperty("--font", `"${family}", ui-monospace, Menlo, monospace`);
-  setFont(settings.font.size);
+  font = settings.font.size;
+  layout();
   await conn.call("session.attach_all", { event_scope: "all" });
   await refresh();
   $("keys").focus({ preventScroll: true });
@@ -137,6 +162,9 @@ async function refresh() {
 function choose(session, window) {
   chosen.session = session;
   chosen.window = window;
+  view = "pane"; // on a phone, what was chosen opens
+  drawer(false);
+  document.body.dataset.view = view;
   history.replaceState(null, "", `#${encodeURIComponent(session)}${window ? "/" + encodeURIComponent(window) : ""}`);
   refresh().catch(failed);
 }
@@ -151,6 +179,24 @@ function render() {
   }
   renderSidebar(win);
   renderPanes(win);
+  renderStrip(win);
+}
+
+/** On a phone, the strip over the pane: its name, and the tab's other panes to switch to. */
+function renderStrip(win) {
+  if (!phone()) return;
+  const now = target()?.b;
+  $("strip-title").textContent = paneName(model.blocks.get(now)) || (win ? tabName(win) : "");
+  const others = (win?.block_ids ?? []).filter((id) => id !== now);
+  $("chips").replaceChildren(
+    ...others.map((id) =>
+      button(paneName(model.blocks.get(id)) || "pane", false, () => {
+        picked.set(win.window_id, id);
+        call("session.focus_block", { session_id: chosen.session, block_id: id });
+        render();
+      }),
+    ),
+  );
 }
 
 function button(text, current, onclick, title) {
@@ -272,7 +318,7 @@ function pane(id) {
     };
     const watch = new ResizeObserver(() => size(id));
     watch.observe(body);
-    const unwire = pointer(body, s, id, grid, focus);
+    const unwire = input.pane(body, s, id, grid, focus);
     p = { el, grid, title, body, s, unwire: () => (unwire(), watch.disconnect()), asked: "" };
     panes.set(id, p);
   }
@@ -318,13 +364,17 @@ function tree(node, focused) {
 function renderPanes(win) {
   const ids = [];
   const out = [];
-  if (win?.zoomed_block_id) {
+  if (phone()) {
+    // Home shows no pane; a pane view, the one the keys go to, filling the screen
+    const t = view === "pane" ? target() : null;
+    if (t) out.push(tree({ block: { block_id: t.b } }, t.b));
+  } else if (win?.zoomed_block_id) {
     out.push(tree({ block: { block_id: win.zoomed_block_id } }, win.focused_block_id));
   } else if (win?.layout) {
     out.push(tree(win.layout, win.focused_block_id));
   }
   for (const f of win?.floating ?? []) {
-    if (f.hidden || win.zoomed_block_id) continue;
+    if (f.hidden || win.zoomed_block_id || phone()) continue;
     const el = tree({ block: { block_id: f.block_id } }, win.focused_block_id);
     el.classList.add("float");
     Object.assign(el.style, {
@@ -353,6 +403,17 @@ function renderPanes(win) {
 $("new-session").onclick = () =>
   conn.call("session.create", {}).then((r) => choose(r.session_id, r.window_id), failed);
 $("panes").addEventListener("mousedown", () => $("keys").focus({ preventScroll: true }));
+$("home").onclick = () => {
+  view = "home";
+  layout();
+  render();
+};
+$("menu").onclick = () => drawer(!document.body.classList.contains("drawer"));
+$("scrim").onclick = () => drawer(false);
+narrow.addEventListener("change", () => {
+  layout();
+  render();
+});
 
 window.addEventListener("hashchange", () => {
   fromHash();

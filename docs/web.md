@@ -50,6 +50,29 @@ short name (`http://devbox:7297/`) is refused on purpose; see below.
 - The page counts as a person at a keyboard: it answers a permission prompt an agent is blocked
   on, as the app does. It sends input only from your keys, clicks and pastes.
 
+## On a phone
+
+Under 700 px wide the page is laid out for a phone:
+
+- **Home** shows Activity first, then the sessions with their tabs. Tap an Activity entry, a
+  session or a tab to open it.
+- **One pane** fills the screen: the one the keys go to in that tab. The strip above it names it,
+  has ‹ to go back Home and ☰ for the drawer, and lists the tab's other panes to switch to. Its
+  terminal is sized to the screen, as on a desktop.
+- **The drawer** (☰) holds the sessions, tabs, + Session, + Tab and Activity over the pane;
+  choosing one, or tapping beside it, closes it.
+- **The key row** under the pane has what a phone's keyboard lacks: Esc, Ctrl, Tab, the arrows,
+  and `|`, `~`, `/`, `-`. Ctrl is sticky: it lights up, and the next key from the row or the
+  keyboard goes with Ctrl (Ctrl, then `c`, is ctrl+C), then it turns off.
+- **The phone's keyboard** types into the pane; tap the pane to bring it up. Backspace and Enter
+  reach the program as they do from a desktop keyboard.
+- The font is the server's `font.size`, kept between 11 and 14 px, so about 40 columns fit a
+  portrait phone.
+
+This was checked in Chromium's iPhone emulation, with the soft keyboard's Backspace and Enter
+sent as the edit events a phone sends, not on a real phone. If the app shows the same tab, it
+sets the size, and the phone draws that screen smaller to fit.
+
 ## Who gets in
 
 - **Only your own machines**, by the rules in [cli/hosts.md](cli/hosts.md#serve-over-tailscale):

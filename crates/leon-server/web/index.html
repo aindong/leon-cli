@@ -21,9 +21,17 @@
   <button id="notify" class="add" hidden>Notify me</button>
 </nav>
 <main id="main">
+  <div id="strip">
+    <button id="home" title="Home: Activity and the sessions">‹</button>
+    <button id="menu" title="Sessions and tabs" aria-expanded="false">☰</button>
+    <span id="strip-title"></span>
+    <span id="chips"></span>
+  </div>
   <p id="note" role="status"></p>
   <div id="panes"></div>
+  <div id="keyrow" role="toolbar" aria-label="Keys a phone's keyboard lacks"></div>
   <textarea id="keys" aria-label="Keys to the focused pane" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
 </main>
+<div id="scrim"></div>
 </body>
 </html>
