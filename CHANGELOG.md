@@ -30,6 +30,8 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **Leon.app never waits on its own server.** Keys, splits, copies and every other call to This
+  Mac's server queue in order off the window's thread, and a config reload shows at once ([detail](docs/changelog-detail.md#leonapp-never-waits-on-its-own-server)).
 - **Cursor shaders.** Leon.app draws a Shadertoy-style cursor shader file you name with
   `cursor_shader` over its window, on macOS; `api_version` goes to `1.15.0` ([detail](docs/changelog-detail.md#cursor-shaders)).
 - **Closing and renaming tabs and sessions.** Close Tab (⌥⌘W), Close Session (⌥⇧⌘W), a × on hover,

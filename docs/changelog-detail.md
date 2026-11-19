@@ -8,6 +8,16 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### Leon.app never waits on its own server
+
+- Every call the window makes to This Mac's server (a key, a paste, a split and the directory it
+  opens in, a copy, a cmd-click, End All Sessions) goes through one ordered queue thread, as a
+  host's calls already did: a stuck server no longer freezes the window for the 5 s call timeout.
+- The window's copy of each machine's model changes only on its own thread, and only what a
+  change touches is drawn again (docs/architecture/gpui.md, R4).
+- A config reload reaches the window through the server's `keymap_changed` event, at once,
+  instead of the app asking for the keymap every second.
+
 ### Cursor shaders
 
 #### Added

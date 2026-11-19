@@ -66,9 +66,10 @@ in [State, packaging and hosts](state-and-hosts.md). Part of [the architecture](
   calls that nobody waits for (keys, resizes, mouse and wheel reports, the focus event, pastes) and
   layout changes (`act_later`: the call, the refetch, then a callback) run in order on one queue
   thread over the call connection, so a slow, stalled or hostile link never holds the thread that
-  asked; while the link is down they fail at once. The app's calls whose reply it uses (history
-  rows, `find`, `link_at`, a word selection's ends) go through that queue too, one of each kind out
-  at a time, and the next poll applies the reply (a copy-mode motion into rows not fetched yet sees
+  asked; while the link is down they fail at once. The app sends This Mac's calls through such a
+  queue too (`Remote::queue_calls`; `leon attach` calls This Mac directly). The app's calls whose
+  reply it uses (history rows, `find`, `link_at`, a word selection's ends) go through that queue
+  too, one of each kind out at a time, and the next wake applies the reply (a copy-mode motion into rows not fetched yet sees
   them on its next try); other selections are worked out in the app. Every call has one deadline
   for its write and its reply (5 s; a Lua call 35 s), which lines that aren't the reply don't
   extend, and a watch line waits at most 100 ms. A copy from a host's pane is the text of the cells
