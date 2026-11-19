@@ -17,6 +17,8 @@ pub const CASK: &str = "brew upgrade --cask aindong/leon/leon";
 /// System Settings, Privacy & Security, App Management.
 pub const APP_MANAGEMENT: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles";
 pub use leon_update::RELEASES;
+/// The website's page for a version's changes is this, the version, and `/`.
+pub const WHATS_NEW: &str = "https://aindong.github.io/leon-cli/whats-new/";
 
 /// Where this app is installed, asked each time (the app's: `Target::running`).
 pub type Find = Arc<dyn Fn() -> Result<Target, String> + Send + Sync>;
@@ -59,6 +61,8 @@ pub enum Phase {
     Done {
         version: String,
     },
+    /// The first launch of this version after another one ran: what it brings is on the website.
+    Updated(String),
     /// A look the user asked for, or an install, failed: why, as `leon_update` says it.
     Failed(String),
 }
@@ -69,6 +73,8 @@ pub enum Act {
     Install,
     /// Open the release notes.
     Notes(String),
+    /// Open the website's What's new page for a version.
+    WhatsNew(String),
     /// Put this command on the clipboard.
     Copy(String),
     Restart,
@@ -114,6 +120,9 @@ impl Phase {
                 notice(text, first.into_iter().chain(notes).chain([Act::Dismiss]).collect())
             }
             Phase::Working { version, step } => notice(format!("Updating to leon {version}: {step}…"), vec![]),
+            Phase::Updated(v) => {
+                notice(format!("Updated to leon {v}."), vec![Act::WhatsNew(format!("{WHATS_NEW}{v}/")), Act::Dismiss])
+            }
             Phase::Done { version } => notice(
                 format!("leon {version} is installed. It runs from the next launch."),
                 vec![Act::Restart, Act::Dismiss],
@@ -144,6 +153,8 @@ struct Saved {
     checked_at: Option<u64>,
     /// The version whose notice was dismissed.
     dismissed: Option<String>,
+    /// The version that last ran: a launch of another one says it was updated.
+    seen: Option<String>,
 }
 
 struct Inner {
@@ -183,10 +194,21 @@ fn may_look_unasked() -> bool {
 impl Updater {
     /// An updater whose `updates.json` is `store`, for the install `find` gives.
     pub fn new(store: Option<PathBuf>, find: Find, wake: Wake) -> Updater {
-        let saved = store.as_deref().and_then(|p| std::fs::read(p).ok());
-        let saved = saved.and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        let file = store.as_deref().and_then(|p| std::fs::read(p).ok());
+        let existed = file.is_some();
+        let mut saved: Saved = file.and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        let mut phase = Phase::Idle;
+        let version = env!("CARGO_PKG_VERSION");
+        if store.is_some() && saved.seen.as_deref() != Some(version) {
+            // no file: a first install, which has nothing to say yet
+            if existed {
+                phase = Phase::Updated(version.to_string());
+            }
+            saved.seen = Some(version.to_string());
+            save(store.as_deref(), &saved);
+        }
         let inner = Inner {
-            phase: Phase::Idle,
+            phase,
             release: None,
             saved,
             busy: false,
