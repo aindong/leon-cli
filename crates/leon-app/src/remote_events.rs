@@ -9,9 +9,16 @@ use super::*;
 #[derive(Deserialize)]
 struct Incoming {
     screen: Option<Pushed>,
-    event: Option<serde::de::IgnoredAny>,
+    event: Option<EventBody>,
     seq: Option<u64>,
     error: Option<Refusal>,
+}
+
+/// An event: only its type is kept, to see the keymap's changes.
+#[derive(Deserialize)]
+struct EventBody {
+    #[serde(rename = "type")]
+    kind: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -121,7 +128,10 @@ pub(super) fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
                     let f = m.screens.entry(p.block_id.clone()).or_default();
                     screen::apply(Arc::make_mut(f), p.update());
                 }
-            } else if v.event.is_some() {
+            } else if let Some(e) = v.event {
+                if matches!(e.kind.as_deref(), Some("keymap_changed" | "settings_changed")) {
+                    shared.keymap_news.store(true, Ordering::SeqCst);
+                }
                 if let Some(seq) = v.seq {
                     shared.saw(seq);
                 }
@@ -167,6 +177,7 @@ fn reattach(shared: &Shared) -> Option<BufReader<UnixStream>> {
         return None;
     }
     lock(&shared.model).screens.clear(); // the new connection starts with whole screens
+    shared.keymap_news.store(true, Ordering::SeqCst); // a reload while it was down sent no event here
     shared.send_watch(&watched).ok()?;
     Some(r)
 }

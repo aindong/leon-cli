@@ -111,9 +111,9 @@ impl Workspace {
         }
     }
 
-    /// The poll's share: pick up hosts that connected or gave up, and select a session made over
-    /// a link once its host's model has it.
-    pub(super) fn poll_hosts(&mut self) {
+    /// On a wake: pick up hosts that connected or gave up, and select a session made over a link
+    /// once its host's model has it. True when a host gained or lost its remote.
+    pub(super) fn poll_hosts(&mut self) -> bool {
         let changed = self.hosts.poll();
         if changed {
             self.send_palette(); // a host that connected gets the theme's colours
@@ -130,6 +130,7 @@ impl Workspace {
                 self.session_id = Some(sid);
             }
         }
+        changed
     }
 
     /// Create a session on machine `host` (This Mac when unknown) and select it, at once on This

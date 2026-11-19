@@ -89,7 +89,7 @@ impl Workspace {
         self.hosts.tailnet_reads().hash(&mut h);
         self.shown().map(|(_, ids)| ids).hash(&mut h); // a drawer's slide ends on the clock
         if self.activity {
-            let now = Instant::now();
+            let now = self.clock_now();
             self.attention.rows().iter().for_each(|r| attention::waited(r.since, now).hash(&mut h));
         }
         h.finish()

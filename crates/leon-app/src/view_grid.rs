@@ -14,10 +14,6 @@ pub(super) struct GridInput {
     marks: Vec<CellMark>,
     /// Its cursor is the one taking keys: the pane focused in the key window.
     active: bool,
-    /// It hands the cursor it paints to the window's cursor shader overlay: the active pane,
-    /// unless it is a tile under a shown float (the overlay draws above everything).
-    feeds: bool,
-    overlay: Option<Arc<crate::cursor_shader::Overlay>>,
     family: SharedString,
     font_size: f32,
     theme: Theme,
@@ -31,28 +27,21 @@ pub struct GridDrawn {
     pub text: String,
     pub marks: usize,
     pub active: bool,
-    /// It hands its cursor to the cursor shader overlay.
-    pub feeds: bool,
     pub font_size: f32,
     pub theme: Theme,
     /// It fits its PTY to its bounds (not a closing pane's, whose block is gone).
     pub fits: bool,
 }
 
-/// A shown pane's grid view, what it was last given (when it had rendered `given` times), the
-/// pushed screen that was from, and the session and machine it fits the PTY on.
+/// A shown pane's grid view, what it was last given (when it had rendered `given` times), and
+/// the session and machine it fits the PTY on.
 pub(super) struct GridSlot {
     view: gpui::Entity<PaneGrid>,
     input: GridInput,
     given: u64,
-    screen: Option<u64>,
     sid: String,
     app: Rc<Remote>,
 }
-
-/// Each pane's pushed-screen count, read before what it is drawn from: a push that lands after
-/// the read is one the poll still sees (`poll_grids`).
-pub(super) type Screens = HashMap<String, u64>;
 
 /// A pane's grid: one canvas that fits the PTY in prepaint and paints the frame (view_paint.rs).
 pub(super) struct PaneGrid {
@@ -83,7 +72,7 @@ fn canvas_of(
         app,
         ids,
         (i.frame.clone(), i.marks.clone()),
-        (i.active, i.feeds.then(|| i.overlay.clone()).flatten()),
+        i.active,
         (i.family.clone(), i.font_size, i.theme),
         (stats.clone(), painted.clone()),
         i.fits,
@@ -97,18 +86,10 @@ impl Workspace {
         let focused = self.target().is_some_and(|(_, t, _)| t == id);
         let view = self.drawn(id);
         let marks = self.pane_marks(id, &view);
-        let active = self.window_active && focused;
-        // a float shown over it: only the top one feeds (the overlay draws over every float)
-        let under_float = |w: &leon_core::Window| {
-            let o = self.overlays_of(w);
-            o.floating.iter().rev().find(|f| !f.hidden).is_some_and(|top| top.block_id != id)
-        };
         GridInput {
             frame: crate::fade::frame(view.frame, theme.chrome, self.pane_fade(id)),
             marks,
-            active,
-            feeds: active && !self.active_window().is_some_and(|w| under_float(&w)),
-            overlay: self.shader.overlay.clone(),
+            active: self.window_active && focused,
             family: self.font_family.clone(),
             font_size: self.font_size,
             theme,
@@ -128,14 +109,14 @@ impl Workspace {
     /// Give every shown pane's grid what it draws now, notifying the ones that changed; make the
     /// grids of panes that came on screen and drop those of panes that left. After `prepare`, on
     /// every notify of the workspace; it notifies only grids, never the workspace.
-    pub(super) fn sync_grids(&mut self, seen: &Screens, cx: &mut Context<Self>) {
+    pub(super) fn sync_grids(&mut self, cx: &mut Context<Self>) {
         let shown = self.grid_panes();
         // a closing pane's grid, and those a zoom covers, stay as they were until their motion ends
         let ghosts = self.layout_ghosts().to_vec();
         self.grids.retain(|id, _| shown.contains(id) || ghosts.contains(id));
         self.grid_renders.borrow_mut().retain(|id, _| shown.contains(id) || ghosts.contains(id));
         for id in &shown {
-            self.sync_grid(id, seen.get(id).copied(), cx);
+            self.sync_grid(id, cx);
         }
         for id in &ghosts {
             let Some(slot) = self.grids.get_mut(id).filter(|s| s.input.fits) else { continue };
@@ -148,12 +129,7 @@ impl Workspace {
         }
     }
 
-    /// The pushed-screen counts now, read before `sync_pane` and the grids' inputs.
-    pub(super) fn screens_seen(&self) -> Screens {
-        self.app.model().screen_updates.clone()
-    }
-
-    fn sync_grid(&mut self, id: &str, screen: Option<u64>, cx: &mut Context<Self>) {
+    pub(super) fn sync_grid(&mut self, id: &str, cx: &mut Context<Self>) {
         let input = self.grid_input(id);
         let sid = self.session_id.clone().unwrap_or_default();
         // a pane gone to another session or machine fits its PTY there: a new grid
@@ -162,7 +138,6 @@ impl Workspace {
         }
         match self.grids.get_mut(id) {
             Some(slot) => {
-                slot.screen = screen;
                 if slot.input != input {
                     slot.input = input.clone();
                     slot.given = self.grid_renders.borrow().get(id).copied().unwrap_or(0);
@@ -184,31 +159,21 @@ impl Workspace {
                 };
                 let view = cx.new(|_| grid);
                 let app = self.app.clone();
-                self.grids.insert(id.to_string(), GridSlot { view, input, given: 0, screen, sid, app });
+                self.grids.insert(id.to_string(), GridSlot { view, input, given: 0, sid, app });
             }
         }
     }
 
-    /// From the poll: the grids of panes whose pushed screen moved, brought up to date (the
-    /// screen is the workspace's no longer: `signature` leaves it out). Returns whether one of
-    /// them is scrolled back, whose new lines the root's pill counts.
-    pub(super) fn poll_grids(&mut self, cx: &mut Context<Self>) -> bool {
-        let now = self.screens_seen();
-        // another machine's grids, until the notify after a host switch drops them
-        let here = |s: &GridSlot| Rc::ptr_eq(&s.app, &self.app);
-        let moved: Vec<String> = self
-            .grids
-            .iter()
-            .filter(|(id, s)| here(s) && s.screen != now.get(*id).copied() && s.input.fits)
-            .map(|(id, _)| id.clone())
-            .collect();
-        let mut scrolled = false;
-        for id in moved {
-            self.sync_pane(&id);
-            self.sync_grid(&id, now.get(&id).copied(), cx);
-            scrolled |= self.view_top(&id).is_some();
-        }
-        scrolled
+    /// Whether pane `id` has a grid on the selected machine that fits its PTY (not a closing
+    /// pane's): a pushed screen brings that one up to date (view_feed.rs).
+    pub(super) fn grid_fits(&self, id: &str) -> bool {
+        self.grids.get(id).is_some_and(|s| s.input.fits && Rc::ptr_eq(&s.app, &self.app))
+    }
+
+    /// What pane `id`'s grid was last given: its frame, whether its cursor is the active one, and
+    /// the cursor's colour (the cursor shader's feed).
+    pub(super) fn grid_given(&self, id: &str) -> Option<(&Frame, bool, u32)> {
+        self.grids.get(id).map(|s| (&s.input.frame, s.input.active, s.input.theme.cursor))
     }
 
     /// Pane `id`'s grid, shown cached; the plain canvas when it has none yet (a frame before any
@@ -245,7 +210,6 @@ impl Workspace {
             text: i.frame.text(),
             marks: i.marks.len(),
             active: i.active,
-            feeds: i.feeds,
             font_size: i.font_size,
             theme: i.theme,
             fits: i.fits,

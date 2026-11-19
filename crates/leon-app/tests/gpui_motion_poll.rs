@@ -19,15 +19,15 @@ fn a_fade_runs_no_poll_clock(cx: &mut TestAppContext) {
     }
     act(&ws, cx, "pane.focus.left");
     assert!(ws.read_with(cx, |ws, _| ws.fading()), "a fade moves");
-    let polls = ws.read_with(cx, |ws, _| ws.polls().0);
+    let polls = ws.read_with(cx, |ws, _| ws.wakes());
     let mut frames = 0;
     while ws.read_with(cx, |ws, _| ws.frame_asked()) {
         frame(&ws, cx, Duration::from_millis(8));
         frames += 1;
         assert!(frames < 100, "the fade never ended");
     }
-    let polls = ws.read_with(cx, |ws, _| ws.polls().0) - polls;
+    let polls = ws.read_with(cx, |ws, _| ws.wakes()) - polls;
     s.app.stop();
     assert!(frames >= 5, "the fade drew {frames} frames");
-    assert!(polls <= 2, "the poll ran {polls} times over {frames} frames: it keeps an animation clock");
+    assert!(polls <= 2, "the wake handler ran {polls} times over {frames} frames: it keeps an animation clock");
 }

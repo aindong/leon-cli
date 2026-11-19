@@ -10,6 +10,8 @@ use crate::notify;
 /// The width an Activity row's text loses to the list's and the row's padding, the status mark
 /// and the waited time (`12s`), with a little to spare.
 const ACTIVITY_INSET: f32 = 96.;
+/// How many posted notifications the window keeps a record of.
+const POSTED_KEPT: usize = 32;
 
 impl Workspace {
     pub fn activity_visible(&self) -> bool {
@@ -31,11 +33,15 @@ impl Workspace {
         self.dock.clone()
     }
 
-    /// The poll's share: go where a clicked notification points, look at every machine's status,
-    /// post what is news, and keep the Dock badge on the blocked count.
-    pub(super) fn poll_attention(&mut self, cx: &mut Context<Self>) {
-        // a click is this window's when one of its machines has the pane or session (a storm's
-        // notice names no pane: any window shows Activity)
+    /// The notifications posted, newest last (the last `POSTED_KEPT`; tests).
+    pub fn notices_posted(&self) -> Vec<attention::Notice> {
+        self.posted.clone()
+    }
+
+    /// On a wake: go where a clicked notification points (a click is this window's when one of
+    /// its machines has the pane or session; a storm's notice names no pane: any window shows
+    /// Activity).
+    pub(super) fn take_clicks(&mut self, cx: &mut Context<Self>) {
         let hosts = &self.hosts;
         let knows = |c: &notify::Click| {
             let remote = hosts.index_of(&c.host_label).and_then(|i| hosts.machines()[i].remote().cloned());
@@ -50,39 +56,47 @@ impl Workspace {
             }
             cx.notify();
         }
-        let now = Instant::now();
+    }
+
+    /// The sessions moved: look at every machine's status, post what is news, keep the Dock
+    /// badge on the blocked count, and time the summary of what a storm held back.
+    pub(super) fn poll_attention(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let now = self.clock_now();
         let tracker = &mut self.attention;
         let changes = with_models(&self.hosts, |models| tracker.update(models, now));
         let shown = self.shown().map(|(_, ids)| ids).unwrap_or_default();
         self.notifier.settings = self.keymap.notify;
-        let mut notices: Vec<_> = changes
+        let notices: Vec<_> = changes
             .iter()
             .filter_map(|t| {
                 let on_screen = t.host == self.host && shown.contains(&t.block_id);
                 self.notifier.offer(t, now, self.window_active, on_screen)
             })
             .collect();
-        notices.extend(self.notifier.flush(now));
+        self.post(notices);
+        self.flush_notices(window, cx);
+    }
+
+    /// Post the summary of what a storm held back once there is room, and time the next look.
+    pub(super) fn flush_notices(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let held = self.notifier.flush(self.clock_now());
+        self.post(held.into_iter().collect());
+        self.arm_notices(window, cx);
+    }
+
+    fn post(&mut self, notices: Vec<attention::Notice>) {
         if self.platform {
             notices.iter().for_each(notify::post);
         }
+        self.posted.extend(notices);
+        let over = self.posted.len().saturating_sub(POSTED_KEPT);
+        self.posted.drain(..over);
         let badge = self.activity_badge();
         if badge != self.dock {
             if self.platform {
                 notify::set_badge(badge.as_deref());
             }
             self.dock = badge;
-        }
-    }
-
-    /// What the Activity list and the badge draw, for the redraw check.
-    pub(super) fn activity_signature(&self, h: &mut DefaultHasher) {
-        (self.activity, self.attention.blocked()).hash(h);
-        if self.activity {
-            let now = Instant::now();
-            for r in self.attention.rows() {
-                (&r.block_id, r.status, &r.place, &r.title, &r.caption, attention::waited(r.since, now)).hash(h);
-            }
         }
     }
 

@@ -6,7 +6,7 @@ use crate::palette::Item;
 use crate::updates::{Act, Find, Updater, APP_MANAGEMENT, RELEASES};
 
 /// How often a running app asks whether its daily look is due (it is, once a day).
-const LOOK_EVERY: Duration = Duration::from_secs(60 * 60);
+pub(super) const LOOK_EVERY: Duration = Duration::from_secs(60 * 60);
 
 impl Workspace {
     /// Have this workspace look for updates on its own (the app's, never a test's unless it asks),

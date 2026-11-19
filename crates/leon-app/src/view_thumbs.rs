@@ -246,9 +246,9 @@ impl Workspace {
         }
     }
 
-    /// How long until a refresh `THUMB_EVERY` held back may run, for the poll's next look.
-    pub(in crate::view) fn thumbs_due(&self) -> Option<Duration> {
-        self.overview.held.map(|t| t.saturating_duration_since(Instant::now()))
+    /// When a refresh `THUMB_EVERY` held back may run (its own deadline, view_feed.rs).
+    pub(in crate::view) fn thumbs_held(&self) -> Option<Instant> {
+        self.overview.held
     }
 
     /// Have every machine push the screens drawn now: `shown` (the active window's panes, on the

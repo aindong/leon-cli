@@ -56,7 +56,7 @@ pub fn model(sessions: Vec<(&str, Vec<Tab>)>) -> Model {
                 status,
             });
         }
-        m.sessions.push(s);
+        std::sync::Arc::make_mut(&mut m.sessions).push(s);
     }
     m
 }

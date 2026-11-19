@@ -39,9 +39,9 @@ impl Workspace {
         self.session_id.clone()
     }
 
-    /// How many times the poll has run, and how many of those asked for a redraw.
-    pub fn polls(&self) -> (u64, u64) {
-        self.polls
+    /// How many connection attempts machine `i` started (tests).
+    pub fn host_attempts(&self, i: usize) -> u32 {
+        self.hosts.machines().get(i).map_or(0, |m| m.attempts())
     }
 
     /// How many times the window rendered.

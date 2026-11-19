@@ -1,7 +1,8 @@
 //! The workspace's side of cursor shaders (docs/architecture/cursor-shaders.md): the file
 //! init.lua names, loaded on GPUI's background executor when the setting or the file changes;
-//! the window's overlay given the compiled shader, turned on only while it should draw; and a
-//! failure shown in the notice. The overlay itself is `crate::cursor_shader`.
+//! the window's overlay given the compiled shader, turned on only while it should draw; the
+//! focused pane's cursor handed to it; and a failure shown in the notice. The overlay itself is
+//! `crate::cursor_shader`.
 
 use std::path::Path;
 use std::time::SystemTime;
@@ -116,6 +117,36 @@ impl Workspace {
             overlay.enable(on);
             self.shader.told = Some(on);
         }
+    }
+
+    /// The pane whose cursor the overlay draws: the focused pane of the active window, unless it
+    /// is a tile under a shown float (the overlay draws over every float, so only the top one).
+    pub fn cursor_feeder(&self) -> Option<String> {
+        let (_, id, _) = self.target().filter(|_| self.window_active)?;
+        let w = self.active_window()?;
+        let o = self.overlays_of(&w);
+        let under = o.floating.iter().rev().find(|f| !f.hidden).is_some_and(|top| top.block_id != id);
+        (!under).then_some(id)
+    }
+
+    /// Hand the overlay the cursor the feeding pane's grid draws: after a pushed screen brought
+    /// that grid up to date (its model event, view_feed.rs) and after each drawn frame (where the
+    /// grid now sits: a slide, a tab switch), never from paint. Placed where the grid last
+    /// painted (its hit-test record); a grid not painted yet feeds nothing until it is.
+    pub(super) fn feed_cursor(&self, window: &Window) {
+        let Some(overlay) = &self.shader.overlay else { return };
+        let Some(id) = self.cursor_feeder() else { return };
+        let Some((frame, active, rgb)) = self.grid_given(&id) else { return };
+        let Some(p) = self.term.painted.borrow().get(&id).copied() else { return };
+        let drawn = cursor_drawn(frame, p.origin, p.cell, active).map(|(b, style, cell)| shader::Drawn {
+            block: id.clone(),
+            rect: [b.origin.x, b.origin.y, b.size.width, b.size.height].map(f32::from),
+            scale: window.scale_factor(),
+            style,
+            cell,
+            rgb,
+        });
+        overlay.feed(window, drawn.as_ref());
     }
 
     /// The window's size or display changed: the overlay follows (resize, full screen, Retina).

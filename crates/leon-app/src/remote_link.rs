@@ -1,7 +1,8 @@
 //! What a `Remote` does over a host's link (`connect_retrying`) and not on this machine's socket:
 //! the event stream is resumable and a drop is resumed after the last seq seen; a watchdog pings
 //! a quiet event connection and ends it when nothing answers (a half-dead link); and the window's
-//! calls go through one ordered queue thread, so a slow link never holds the UI thread.
+//! calls go through one ordered queue thread, so a slow link never holds the UI thread (This
+//! Mac's go through one too once the window asks, `Remote::queue_calls`).
 
 use std::io::{self, BufReader};
 use std::os::unix::net::UnixStream;
@@ -32,9 +33,15 @@ pub enum LinkState {
 /// The reply a queued call hands back, on the queue thread.
 pub(super) type Done = Box<dyn FnOnce(Result<Value, ApiError>) + Send>;
 
+/// Makes the call to run next from the reply of the first, on the queue thread (`act_after`).
+pub(super) type Next = Box<dyn FnOnce(Result<Value, ApiError>) -> (String, Value) + Send>;
+
 pub(super) struct Job {
     pub method: String,
     pub params: Value,
+    /// Then this call, made from the first's reply, before any job queued after: its reply is
+    /// the one `done` gets.
+    pub next: Option<Next>,
     /// Refetch the model after the call (a layout change).
     pub refresh: bool,
     pub done: Option<Done>,
@@ -46,8 +53,21 @@ pub(super) struct Job {
 pub(super) fn run_queue(shared: Weak<Shared>, jobs: Receiver<Job>) {
     for job in jobs {
         let Some(shared) = shared.upgrade() else { return };
-        let up = *lock(&shared.link) == LinkState::Up; // not held over the call: the UI reads it
-        let r = if up { shared.call(&job.method, job.params) } else { Err(unreachable("the link is down")) };
+        let up = || *lock(&shared.link) == LinkState::Up; // not held over the call: the UI reads it
+        let call = |method: &str, params| {
+            if up() {
+                shared.call(method, params)
+            } else {
+                Err(unreachable("the link is down"))
+            }
+        };
+        let mut r = call(&job.method, job.params);
+        let mut method = job.method;
+        if let Some(next) = job.next {
+            let (m, params) = next(r);
+            r = call(&m, params);
+            method = m;
+        }
         if job.refresh {
             let _ = shared.refresh();
         }
@@ -55,7 +75,7 @@ pub(super) fn run_queue(shared: Weak<Shared>, jobs: Receiver<Job>) {
             Some(done) => done(r),
             None => {
                 if let Err(e) = r {
-                    eprintln!("leon: {} failed: {}", job.method, e.message);
+                    eprintln!("leon: {method} failed: {}", e.message);
                 }
             }
         }
@@ -160,34 +180,57 @@ fn resume_or_attach(shared: &Shared) -> Option<(BufReader<UnixStream>, UnixStrea
 }
 
 impl Remote {
-    /// Whether this is a host's link (`connect_retrying`), where calls from the window queue.
+    /// Whether this is a host's link (`connect_retrying`).
     pub fn is_link(&self) -> bool {
-        self.queue.is_some()
+        self.shared.retry.is_some()
     }
 
-    /// Call a method whose reply nobody waits for: over a link it queues behind the window's other
-    /// calls, here it runs now. A failure is logged.
+    /// Call a method whose reply nobody waits for: once calls queue (`queue_calls`, always over a
+    /// link) it goes behind the window's other calls, else it runs now. A failure is logged.
     pub fn send(&self, method: &str, params: Value) {
-        self.enqueue(method, params, false, None);
+        self.enqueue(Job { method: method.into(), params, next: None, refresh: false, done: None });
     }
 
-    /// `send`, with the reply for `done` (on the queue thread over a link).
+    /// `send`, with the reply for `done` (on the queue thread once calls queue).
     pub fn send_then(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
-        self.enqueue(method, params, false, Some(Box::new(done)));
+        self.enqueue(Job { method: method.into(), params, next: None, refresh: false, done: Some(Box::new(done)) });
     }
 
-    /// `act` without waiting over a link: the call and the refetch run on the queue thread, then
-    /// `done` gets the reply there. Here it runs now, `done` too.
+    /// `act` without waiting once calls queue: the call and the refetch run on the queue thread,
+    /// then `done` gets the reply there. Else it runs now, `done` too.
     pub fn act_later(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
-        self.enqueue(method, params, true, Some(Box::new(done)));
+        self.enqueue(Job { method: method.into(), params, next: None, refresh: true, done: Some(Box::new(done)) });
     }
 
-    fn enqueue(&self, method: &str, params: Value, refresh: bool, done: Option<Done>) {
-        if let Some(queue) = &self.queue {
+    /// `act_later` of the call `next` makes from the reply to `method`: both run as one job, so a
+    /// call queued meanwhile can't come between them (a split asks its pane's cwd first).
+    pub fn act_after(
+        &self,
+        (method, params): (&str, Value),
+        next: impl FnOnce(Result<Value, ApiError>) -> (String, Value) + Send + 'static,
+        done: impl FnOnce(Result<Value, ApiError>) + Send + 'static,
+    ) {
+        let next: Next = Box::new(next);
+        self.enqueue(Job {
+            method: method.into(),
+            params,
+            next: Some(next),
+            refresh: true,
+            done: Some(Box::new(done)),
+        });
+    }
+
+    fn enqueue(&self, job: Job) {
+        if let Some(queue) = self.queue.get() {
             self.asks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let _ = queue.send(Job { method: method.to_string(), params, refresh, done });
+            let _ = queue.send(job);
             return;
         }
+        let Job { mut method, mut params, next, refresh, done } = job;
+        if let Some(next) = next {
+            (method, params) = next(self.call(&method, params));
+        }
+        let method = method.as_str();
         let r = if refresh { self.act(method, params) } else { self.call(method, params) };
         match (done, r) {
             (Some(done), r) => done(r),
