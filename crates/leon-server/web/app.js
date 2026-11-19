@@ -19,7 +19,6 @@ let watched = "";
 let refetch = null;
 let burst = null; // when the events waiting for a refetch began
 let shown = null; // the window drawn now
-let activityAt = 0;
 
 const scheme = location.protocol === "https:" ? "wss" : "ws";
 const conn = new Conn(`${scheme}://${location.host}/ws?token=${encodeURIComponent(token)}`, {
@@ -34,6 +33,7 @@ const conn = new Conn(`${scheme}://${location.host}/ws?token=${encodeURIComponen
   },
   onScreen: (s) => panes.get(s.block_id)?.grid.apply(s),
   onClose: () => {
+    closed = true;
     note("Disconnected from the server. Reconnecting…");
     reconnect(2000);
   },
@@ -51,8 +51,10 @@ function reconnect(wait) {
   }, wait);
 }
 
+let closed = false; // the socket closed: its pending calls' errors don't replace that note
+
 function failed(e) {
-  note(`${e.message || e}`);
+  if (!closed) note(`${e.message || e}`);
 }
 
 function note(text) {
@@ -62,10 +64,22 @@ function note(text) {
 
 const call = (method, params) => conn.call(method, params).catch(failed);
 
-/** The pane that gets the keys: the shown tab's focused one. */
-const target = () => (chosen.session && shown?.focused_block_id ? { s: chosen.session, b: shown.focused_block_id } : null);
+/**
+ * The pane that gets the keys: the one the person chose on this page in the shown tab, else the
+ * tab's focused one. A focus move the page didn't make (another client, or a program calling
+ * session.focus_block) doesn't redirect what the person is typing.
+ */
+const picked = new Map(); // window id → block id the person clicked or went to here
+const target = () => {
+  if (!chosen.session || !shown) return null;
+  const mine = picked.get(shown.window_id);
+  const zoomed = shown.zoomed_block_id;
+  const b = mine && shown.block_ids.includes(mine) && (!zoomed || mine === zoomed) ? mine : zoomed ?? shown.focused_block_id;
+  return b ? { s: chosen.session, b } : null;
+};
 const pointer = wire(conn, $("keys"), target, failed);
 const activity = new Activity(conn, $("activity"), $("notify"), (e) => {
+  picked.set(e.w, e.b);
   choose(e.s, e.w);
   call("session.focus_block", { session_id: e.s, block_id: e.b });
   call("block.event", { session_id: e.s, block_id: e.b, event: { type: "focus" } }); // clears done/error
@@ -114,10 +128,8 @@ async function refresh() {
     model.view = null;
   }
   render();
-  if (Date.now() - activityAt > 1000) {
-    activityAt = Date.now();
-    activity.refresh(model.sessions).catch(failed);
-  }
+  note(model.sessions.length ? "" : "No sessions. + Session starts one.");
+  activity.refresh(model.sessions);
 }
 
 function choose(session, window) {
@@ -132,29 +144,37 @@ function render() {
   shown = win ?? null;
   renderSidebar(win);
   renderPanes(win);
-  if (!model.sessions.length) note("No sessions. + Session starts one.");
 }
 
 function button(text, current, onclick, title) {
   const b = document.createElement("button");
   b.textContent = text;
-  b.onclick = onclick;
+  b.onclick = () => {
+    onclick();
+    $("keys").focus({ preventScroll: true }); // typing goes on to the pane
+  };
   if (current) b.setAttribute("aria-current", "true");
   if (title) b.title = b.ariaLabel = title;
   return b;
 }
 
-/** A × that closes on a second click within 3 s (the first one asks). */
-function closer(what, close) {
+const armed = new Map(); // what a × asked to close → until when, kept across re-renders
+
+/** A × that closes `key` on a second click within 3 s (the first one asks). */
+function closer(what, key, close) {
   const b = button("×", false, () => {
-    if (b.dataset.armed) return close();
-    b.dataset.armed = "1";
-    b.textContent = "close?";
-    setTimeout(() => {
-      delete b.dataset.armed;
-      b.textContent = "×";
-    }, 3000);
+    if ((armed.get(key) ?? 0) > Date.now()) return armed.delete(key), close();
+    armed.set(key, Date.now() + 3000);
+    show();
+    setTimeout(show, 3000);
   }, `Close ${what}`);
+  const show = () => {
+    const on = (armed.get(key) ?? 0) > Date.now();
+    if (on) b.dataset.armed = "1";
+    else delete b.dataset.armed;
+    b.textContent = on ? "close?" : "×";
+  };
+  show();
   b.classList.add("close");
   return b;
 }
@@ -172,7 +192,7 @@ function renderSidebar(win) {
     const name = s.label || `session ${i + 1}`;
     const b = button(name, s.session_id === chosen.session, () => choose(s.session_id, null));
     b.classList.add("session");
-    li.append(row(b, closer(`session ${name}`, () => call("session.destroy", { session_id: s.session_id }))));
+    li.append(row(b, closer(`session ${name}`, s.session_id, () => call("session.destroy", { session_id: s.session_id }))));
     if (s.session_id === chosen.session && model.view) {
       const tabs = document.createElement("ul");
       tabs.className = "tabs";
@@ -183,7 +203,7 @@ function renderSidebar(win) {
           call("session.focus_window", { session_id: s.session_id, window_id: w.window_id });
         };
         const close = () => call("session.close_window", { session_id: s.session_id, window_id: w.window_id });
-        t.append(row(button(tabName(w), w === win, open), closer(`tab ${tabName(w)}`, close)));
+        t.append(row(button(tabName(w), w === win, open), closer(`tab ${tabName(w)}`, w.window_id, close)));
         tabs.append(t);
       }
       const add = document.createElement("li");
@@ -226,7 +246,7 @@ function pane(id) {
     tools.append(
       button("◫", false, () => split(id, "horizontal"), "Split right"),
       button("⊟", false, () => split(id, "vertical"), "Split down"),
-      closer("pane", () => call("block.close", { session_id: s, block_id: id })),
+      closer("pane", id, () => call("block.close", { session_id: s, block_id: id })),
     );
     head.append(title, tools);
     const body = document.createElement("div");
@@ -235,10 +255,15 @@ function pane(id) {
     body.append(grid.el);
     el.append(head, body);
     const focus = () => {
-      if (target()?.b !== id) call("session.focus_block", { session_id: s, block_id: id });
+      if (shown) picked.set(shown.window_id, id); // at once: the next key goes here, not to the last pane
+      p.el.parentElement && document.querySelectorAll(".pane.focused").forEach((x) => x.classList.toggle("focused", x === p.el));
+      p.el.classList.add("focused");
+      call("session.focus_block", { session_id: s, block_id: id });
     };
-    p = { el, grid, title, body, unwire: pointer(body, s, id, grid, focus), asked: "" };
-    new ResizeObserver(() => size(id)).observe(body);
+    const watch = new ResizeObserver(() => size(id));
+    watch.observe(body);
+    const unwire = pointer(body, s, id, grid, focus);
+    p = { el, grid, title, body, s, unwire: () => (unwire(), watch.disconnect()), asked: "" };
     panes.set(id, p);
   }
   p.title.textContent = paneName(model.blocks.get(id));
@@ -259,12 +284,12 @@ function size(id) {
   const key = fit ? `${fit.cols}x${fit.rows}` : "";
   if (!fit || key === p.asked) return;
   p.asked = key;
-  const s = chosen.session;
-  call("block.method", { session_id: s, block_id: id, method: "dev.leon.terminal.resize", args: { rows: fit.rows, cols: fit.cols } });
+  call("block.method", { session_id: p.s, block_id: id, method: "dev.leon.terminal.resize", args: { rows: fit.rows, cols: fit.cols } });
 }
 
 /** A layout node as nested boxes: `horizontal` splits side by side, `ratio` the first side's share. */
 function tree(node, focused) {
+  if (node === shown?.layout || node.block?.block_id === shown?.zoomed_block_id) focused = target()?.b ?? focused;
   if (node.block) {
     const p = pane(node.block.block_id);
     p.el.classList.toggle("focused", node.block.block_id === focused);

@@ -22,14 +22,39 @@ export class Activity {
     };
   }
 
-  /** Read every session's blocks and their states, and draw the list. */
-  async refresh(sessions) {
+  /**
+   * Read every session's blocks and their states, and draw the list: at most once a second, one at
+   * a time, and never skipped: a call while one runs, or within the second, comes after it.
+   */
+  refresh(sessions) {
+    this.wanted = sessions;
+    if (this.running) this.again = true;
+    if (this.timer || this.running) return;
+    const wait = Math.max(0, (this.at ?? 0) + 1000 - Date.now());
+    this.timer = setTimeout(async () => {
+      this.timer = null;
+      this.running = true;
+      this.at = Date.now();
+      try {
+        await this.read(this.wanted);
+      } catch {
+        // the next refresh tries again
+      } finally {
+        this.running = false;
+        if (this.again) (this.again = false), this.refresh(this.wanted);
+      }
+    }, wait);
+  }
+
+  async read(sessions) {
     const entries = [];
     for (const s of sessions) {
-      const [{ blocks }, view] = await Promise.all([
+      const both = await Promise.all([
         this.conn.call("session.list_blocks", { session_id: s.session_id }),
         this.conn.call("session.view", { session_id: s.session_id }),
-      ]);
+      ]).catch(() => null); // closed while this was read
+      if (!both) continue;
+      const [{ blocks }, view] = both;
       const tab = new Map(view.windows.map((w) => [w.window_id, w]));
       const states = await Promise.all(
         blocks.map((b) =>
@@ -85,7 +110,8 @@ export class Activity {
   notify(e) {
     if (!NOTIFY.has(e.state) || !document.hidden || !window.isSecureContext) return;
     if (!("Notification" in window) || Notification.permission !== "granted") return;
-    const n = new Notification(`${e.name} is ${e.state}`, { body: e.msg || e.where, tag: e.b });
+    // leon's own words first: the rest is what a program said about itself
+    const n = new Notification(`leon: ${e.where}`, { body: `${e.name} is ${e.state}${e.msg ? `: ${e.msg}` : ""}`, tag: e.b, renotify: true });
     n.onclick = () => {
       window.focus();
       this.go(e);

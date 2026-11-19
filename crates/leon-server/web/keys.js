@@ -46,6 +46,9 @@ function place(code) {
   return PLACES[code] ?? null;
 }
 
+/** The characters ctrl makes a control code of (leon_core::keys's `control`); JSON-shaped. */
+export const CTRL = "abcdefghijklmnopqrstuvwxyz@2[\\]^6_-/?";
+
 export const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /**
@@ -57,12 +60,17 @@ export const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAg
  */
 export function keyName(e) {
   if (e.metaKey || e.isComposing || e.keyCode === 229 || e.getModifierState?.("AltGraph")) return null;
+  // outside macOS, shift+Insert pastes and ctrl+Insert copies, as in other terminals: the browser's
+  if (!MAC && e.key === "Insert" && (e.shiftKey || e.ctrlKey)) return null;
   const named = NAMES[e.key];
   const mods = (shift) => (e.ctrlKey ? "ctrl+" : "") + (e.altKey ? "alt+" : "") + (shift && e.shiftKey ? "shift+" : "");
   if (named) return mods(true) + named;
   if (!e.ctrlKey && !(e.altKey && !MAC)) return null; // text (Option's too), or a lone modifier
-  const c = e.ctrlKey ? place(e.code) ?? e.key.toLowerCase() : e.key.length === 1 ? e.key.toLowerCase() : null;
-  if (!c || c.length !== 1) return null;
+  // ctrl: the layout's own Latin letter (Dvorak's C is ctrl+c), else the key's place (other scripts)
+  const latin = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : null;
+  const c = e.ctrlKey ? latin ?? place(e.code) : e.key.length === 1 ? e.key.toLowerCase() : null;
+  if (!c || c.length !== 1 || c === "+" || (e.ctrlKey && !CTRL.includes(c))) return null;
   if (!MAC && e.ctrlKey && !e.altKey && (c === "v" || (c === "c" && e.shiftKey))) return null;
-  return mods(false) + c;
+  const shift = !e.ctrlKey && /^[A-Z]$/.test(e.key) ? "shift+" : ""; // alt+B is ESC B, not ESC b
+  return mods(false) + shift + c;
 }

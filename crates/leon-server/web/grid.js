@@ -88,6 +88,7 @@ export class Grid {
 
   /** Highlight a selection (absolute lines, both ends inclusive), or none. */
   mark(sel) {
+    this.sel = sel;
     const parts = [];
     for (let abs = sel?.start.line ?? 1; sel && abs <= sel.end.line; abs++) {
       const line = abs - this.scrolled;
@@ -121,6 +122,7 @@ export class Grid {
       this.style();
     }
     for (const row of u.rows) if (row.line < this.lines) this.draw(this.rows[row.line], row);
+    if (this.sel && u.scrolled !== undefined) this.mark(this.sel); // it is on absolute lines
     this.place(u.cursor);
   }
 
