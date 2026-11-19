@@ -185,10 +185,42 @@ fn config_check(path: Option<std::path::PathBuf>) -> Result<(), Fail> {
     for l in &cfg.logs {
         println!("{}: log.{}: {}", l.at, l.level.as_str(), l.message);
     }
-    match cfg.diagnostics.iter().filter(|d| d.level == leon_lua::Level::Error).count() {
+    let shader = !cfg.settings.cursor_shader.trim().is_empty();
+    let shader_failed = shader && !check_shader(&cfg.settings.cursor_shader, &path);
+    match cfg.diagnostics.iter().filter(|d| d.level == leon_lua::Level::Error).count() + shader_failed as usize {
         0 => Ok(()),
         errors => Err(Fail::Other(format!("{} in {}", n(errors, "error"), path.display()))),
     }
+}
+
+/// Translate the `cursor_shader` file as Leon.app will and say how it went; false if it fails.
+#[cfg(target_os = "macos")]
+fn check_shader(setting: &str, config: &std::path::Path) -> bool {
+    let home = leon_core::paths::home();
+    let Some(file) = leon_lua::settings::shader_path(setting, config, home.as_deref()) else { return true };
+    // with the app built in, Metal compiles it too, as the app will (when this Mac has a GPU)
+    #[cfg(feature = "app")]
+    let compiled = |msl: String| match leon_app::cursor_shader::compiles(&msl) {
+        Some(Err(e)) => Err(format!("{}: {e}", file.file_name().unwrap_or_default().to_string_lossy())),
+        _ => Ok(()),
+    };
+    #[cfg(not(feature = "app"))]
+    let compiled = |_: String| Ok::<(), String>(());
+    match leon_app::cursor_shader::load(&file).and_then(compiled) {
+        Ok(()) => println!("cursor_shader: {}: ok", file.display()),
+        Err(e) => {
+            println!("cursor_shader: {e}");
+            return false;
+        }
+    }
+    true
+}
+
+/// Off macOS the setting is kept and shown, not drawn.
+#[cfg(not(target_os = "macos"))]
+fn check_shader(_: &str, _: &std::path::Path) -> bool {
+    println!("cursor_shader: cursor shaders are macOS only for now");
+    true
 }
 
 fn window(c: &mut Client, cli: &Cli, cmd: &WindowCmd) -> Result<(), Fail> {

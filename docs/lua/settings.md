@@ -11,7 +11,7 @@ them in place; a running app follows them on a reload. A bad value is a skipped 
 
 The Settings window has a control for every setting in the table below, in sections: General
 (`resume`, `check_for_updates`), Appearance (`theme`, `translucency`, `fade_inactive_panes`,
-`font`), Terminal (`copy_on_select`, `link_card`, `repeat_time`, `hint_patterns`, `scrollback`) and Notifications. Its search
+`font`, `cursor_shader`), Terminal (`copy_on_select`, `link_card`, `repeat_time`, `hint_patterns`, `scrollback`) and Notifications. Its search
 field finds a setting by its label or by its name here (`fade_inactive_panes`). A setting init.lua
 sets by code, not with a literal value, shows read-only there, with the line to change. Two more
 sections are read-only: Shortcuts lists every key the app binds, with Edit in init.lua to change
@@ -39,6 +39,8 @@ since every program in every session ends.
 | `serve_tailscale` | `true` or `false` ([cli/hosts.md](../cli/hosts.md#serve-over-tailscale)) | `false` |
 | `serve_tailscale_port` | a port, 1 to 65535 | `7297` |
 | `serve_tailscale_tags` | a list of tags such as `"tag:ci"`, at most 16 | `{}` |
+| `cursor_shader` | a Shadertoy-style cursor shader file, or `""` for none ([cursor-shaders.md](../cursor-shaders.md)) | `""` |
+| `cursor_shader_duration` | seconds the cursor shader draws after the cursor changes, 0.1 to 5 | `1` |
 | `scrollback` | lines of history a pane keeps, 0 to 100000 | `10000` |
 
 `theme` names a theme `leon theme list` shows (built in or imported); an unknown name is an error.
@@ -78,6 +80,15 @@ Reduce Transparency and full screen are opaque, as is `leon.set("translucency", 
 `serve_tailscale` makes the server also listen on this machine's Tailscale addresses, on
 `serve_tailscale_port`, for your own other machines only (and tagged ones with a tag in
 `serve_tailscale_tags`); [cli/hosts.md](../cli/hosts.md#serve-over-tailscale) has the rest.
+
+`cursor_shader` names a GLSL file Leon.app draws over its window as the cursor moves, macOS only;
+`~/` is your home and a relative path is next to init.lua. [cursor-shaders.md](../cursor-shaders.md)
+has the uniforms and what works.
+
+```lua
+leon.set("cursor_shader", "")
+leon.set("cursor_shader_duration", 0.5)
+```
 
 `repeat_time` is how long a repeatable binding's keys work without the prefix ([keys.md](keys.md#repeat-keys)).
 

@@ -90,7 +90,7 @@ impl Workspace {
     /// The palette's rows for what the notice offers now, past Install (always a row): the
     /// keyboard's way to every button on it.
     pub(super) fn update_items(&self) -> Vec<Item> {
-        let acts = self.updates.notice().map(|n| n.actions).unwrap_or_default();
+        let acts = self.notice().map(|n| n.actions).unwrap_or_default();
         let item = |(name, title): (&str, &str)| Item {
             name: name.into(),
             title: title.into(),
@@ -104,7 +104,7 @@ impl Workspace {
     /// `client.update.<what>` for one of the notice's buttons: what that button does, if the
     /// notice has it now.
     pub(super) fn update_named(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let acts = self.updates.notice().map(|n| n.actions).unwrap_or_default();
+        let acts = self.notice().map(|n| n.actions).unwrap_or_default();
         if let Some(act) = acts.into_iter().find(|a| palette_row(a).is_some_and(|(n, _)| n == name)) {
             self.update_act(&act, window, cx);
         }
@@ -118,7 +118,7 @@ impl Workspace {
             Act::Copy(text) => cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.clone())),
             Act::AppManagement => cx.open_url(APP_MANAGEMENT),
             Act::ReleasePage => cx.open_url(RELEASES),
-            Act::Dismiss => self.updates.dismiss(),
+            Act::Dismiss => self.dismiss_notice(),
         }
         cx.notify();
     }

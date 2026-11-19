@@ -15,12 +15,12 @@ pub(super) const RESUME: [(&str, &str); 3] = [("ask", "Ask"), ("always", "Always
 /// A number's control: its step, its range, whether init.lua takes it whole, and how it reads.
 #[derive(Clone, Copy)]
 pub(super) struct Steps {
-    step: f64,
-    min: f64,
-    max: f64,
-    whole: bool,
-    show: fn(f64) -> String,
-    range: &'static str,
+    pub(super) step: f64,
+    pub(super) min: f64,
+    pub(super) max: f64,
+    pub(super) whole: bool,
+    pub(super) show: fn(f64) -> String,
+    pub(super) range: &'static str,
 }
 
 fn ms(v: f64) -> String {

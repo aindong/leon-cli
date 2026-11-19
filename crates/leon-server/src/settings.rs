@@ -45,6 +45,11 @@ pub struct Effective {
     pub serve_tailscale_port: u16,
     /// Tagged machines it lets in too, by tag (`tag:ci`).
     pub serve_tailscale_tags: Vec<String>,
+    /// A Shadertoy-style cursor shader file Leon.app draws over its window, as init.lua wrote it
+    /// (`~` and a path relative to init.lua's folder are resolved by the app); empty: none.
+    pub cursor_shader: String,
+    /// Seconds the cursor shader animates after the cursor changes, from 0.1 to 5.
+    pub cursor_shader_duration: f64,
     /// Lines of history each terminal keeps, from 0 to 100000; a change applies to running
     /// terminals at once, and a lower value drops their oldest lines.
     pub scrollback: usize,

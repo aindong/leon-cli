@@ -8,6 +8,19 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### Cursor shaders
+
+#### Added
+- `leon.set("cursor_shader", PATH)` names a Shadertoy-style cursor shader file; Leon.app draws it
+  over its window while the cursor's move animates, for `cursor_shader_duration` seconds (0.1 to
+  5, default 1), on a layer of its own that draws nothing while idle. macOS only;
+  [cursor-shaders.md](cursor-shaders.md) has the uniforms and what works.
+- `leon config check` translates the file and prints the shader's own line on an error; the app
+  shows the same in its notice and reloads the shader when the file is saved. The Settings
+  window has it under Appearance.
+- `server.settings` reports both: new result fields on a stable method, so `api_version` goes
+  from `1.14.0` to `1.15.0`.
+
 ### Closing and renaming tabs and sessions
 
 #### Added
@@ -51,7 +64,7 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   `working`, a permission prompt `blocked`/`permission` with what it asks, Claude Code's questions
   `blocked`/`question`, the end of a turn `done` with its last message, Codex's interrupt `idle`.
   Run `leon skill setup` again to get them; every agent pane then shows its state.
-- leon types "You have N leon messages. Run leon inbox to read them." into an orchestrator's
+- leon types "You have 2 leon messages. Run leon inbox to read them." into an orchestrator's
   prompt once the program in front of its pane reports its turn ended and nobody typed there for
   3 s: one notice for every report that came meanwhile, never into a shell.
 - `leon notify --kind permission|question|auth`; `leon skill show orchestration`.
@@ -90,7 +103,7 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   lines of history each pane keeps ([lua/settings.md](lua/settings.md)). A change applies to
   running panes at once, and a lower value drops their oldest lines.
 - `server.settings` reports `scrollback`: a new result field on a stable method, so `api_version`
-  goes from `1.14.0` to `1.15.0`.
+  goes from `1.15.0` to `1.16.0`.
 
 ### Contributing and translations
 

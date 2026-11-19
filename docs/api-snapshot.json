@@ -1,5 +1,5 @@
 {
-  "api_version": "1.15.0",
+  "api_version": "1.16.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -2970,6 +2970,13 @@
                   "type": "string"
                 }
               },
+              "cursor_shader": {
+                "type": "string"
+              },
+              "cursor_shader_duration": {
+                "type": "number",
+                "format": "double"
+              },
               "scrollback": {
                 "type": "integer",
                 "format": "uint",
@@ -2991,6 +2998,8 @@
               "serve_tailscale",
               "serve_tailscale_port",
               "serve_tailscale_tags",
+              "cursor_shader",
+              "cursor_shader_duration",
               "scrollback"
             ]
           },

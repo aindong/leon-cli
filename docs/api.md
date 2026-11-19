@@ -3,7 +3,7 @@
 <!-- Generated from `help.all` by crates/leon-server/tests/m18_api_docs.rs; don't edit by hand.
      Change the registry, then run `LEON_BLESS=1 cargo test -p leon-server --test m18_api_docs`. -->
 
-API version **1.15.0**. Every method is marked:
+API version **1.16.0**. Every method is marked:
 
 - *stable*: covered by the [compatibility policy](integrators.md#compatibility). It only gains
   optional fields until the next major version.
@@ -480,7 +480,7 @@ same facts for the server you run.
 
 ```json
 {"id":1,"method":"server.version","params":{}}
-{"id":1,"result":{"version":"0.1.0","api_version":"1.15.0"}}
+{"id":1,"result":{"version":"0.1.0","api_version":"1.16.0"}}
 ```
 
 <details><summary>JSON Schemas</summary>
@@ -593,6 +593,8 @@ same facts for the server you run.
 | `serve_tailscale` | boolean | yes | The server also listens on this machine's Tailscale addresses, letting in only your own machines (`server.status`'s `tailnet` says how it went). |
 | `serve_tailscale_port` | integer (uint16) | yes | The port it listens on there. |
 | `serve_tailscale_tags` | [string] | yes | Tagged machines it lets in too, by tag (`tag:ci`). |
+| `cursor_shader` | string | yes | A Shadertoy-style cursor shader file Leon.app draws over its window, as init.lua wrote it (`~` and a path relative to init.lua's folder are resolved by the app); empty: none. |
+| `cursor_shader_duration` | number | yes | Seconds the cursor shader animates after the cursor changes, from 0.1 to 5. |
 | `scrollback` | integer (uint) | yes | Lines of history each terminal keeps, from 0 to 100000; a change applies to running terminals at once, and a lower value drops their oldest lines. |
 
 **`ThemeChoice`:** A theme name for each OS appearance (the same one for both unless init.lua gives two).
@@ -719,6 +721,15 @@ same facts for the server you run.
               "type": "string"
             }
           },
+          "cursor_shader": {
+            "description": "A Shadertoy-style cursor shader file Leon.app draws over its window, as init.lua wrote it\n(`~` and a path relative to init.lua's folder are resolved by the app); empty: none.",
+            "type": "string"
+          },
+          "cursor_shader_duration": {
+            "description": "Seconds the cursor shader animates after the cursor changes, from 0.1 to 5.",
+            "type": "number",
+            "format": "double"
+          },
           "scrollback": {
             "description": "Lines of history each terminal keeps, from 0 to 100000; a change applies to running\nterminals at once, and a lower value drops their oldest lines.",
             "type": "integer",
@@ -741,6 +752,8 @@ same facts for the server you run.
           "serve_tailscale",
           "serve_tailscale_port",
           "serve_tailscale_tags",
+          "cursor_shader",
+          "cursor_shader_duration",
           "scrollback"
         ]
       },
