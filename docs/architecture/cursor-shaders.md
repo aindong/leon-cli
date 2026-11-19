@@ -1,7 +1,7 @@
 # Cursor shaders: an overlay of leon's own above GPUI
 
 Part of [docs/architecture.md](../architecture.md), and an amendment to
-[How leon uses GPUI](gpui.md) (its R2, R5 and "Allowed outside GPUI"). Written 2026-11-19, for
+[How leon uses GPUI](gpui.md) (its R2, R4, R5 and "Allowed outside GPUI"). Written 2026-11-19, for
 GPUI 0.2.2. How to use the feature is in [docs/cursor-shaders.md](../cursor-shaders.md).
 
 ## Context
@@ -45,18 +45,22 @@ the picture under it (it can't work here, below).
 - **Off the main thread.** The overlay draws on the link's thread; the main thread never waits
   on `nextDrawable`. The spike drew the first frame from GPUI's paint instead, to land the trail
   in the same frame as GPUI's cursor: key to echo went from 8.5 ms to 31.9 ms at p50
-  (`nextDrawable` blocked up to 31 ms). So the trail is one display frame behind GPUI's cursor
-  (16 ms at 60 Hz), visible only as the first frame of a long jump. A debug assertion in
+  (`nextDrawable` blocked up to 31 ms). So the trail is drawn on the overlay's own link, up to a
+  display frame apart from GPUI's cursor (16 ms at 60 Hz), visible only as the first frame of a
+  long jump. A debug assertion in
   `overlay.rs` holds it.
-- **The cursor comes from the grid's paint: R5's second exception.** The focused pane's grid,
-  right after it paints its cursor, hands the overlay that rect, style and cell (a value written
-  under a lock; the link started if it was stopped). Paint is the only place that knows where
-  the cursor is on screen while a pane slides or a float moves; working it out again from the
-  layout, the motion's clock and the cell size would duplicate paint. It is like the grid
-  fitting its PTY from prepaint: the element reports what it drew, and nothing else. Only the
-  focused pane of the active window feeds, and a focused tiled pane doesn't while a float is
-  shown (the overlay is above everything GPUI draws). A cursor in another pane is a jump, not a
-  move, and so is the same cell drawn somewhere else (the pane sliding).
+- **The cursor comes from the model's events, placed where the grid painted** (amended
+  2026-11-19, GPUI phase 5). The workspace hands the overlay the focused pane's cursor (a value
+  written under a lock; the link started if it was stopped) after a pushed screen brought that
+  pane's grid up to date (its model event) and after each frame drawn (`drew_frame`, R5's frame
+  bookkeeping: a slide, a tab switch, a float moved). The cell, style and colour come from the
+  grid's input, through the same function paint draws the cursor with (`cursor_drawn`); the
+  rect from where the grid last painted, the record paint keeps for hit tests. So nothing is fed
+  from paint, and the overlay can start a frame before GPUI draws the moved cursor, where it
+  started a frame after. A grid not painted yet feeds nothing until it is. Only the focused pane
+  of the active window feeds (`cursor_feeder`), and a focused tiled pane doesn't while a float
+  is shown (the overlay is above everything GPUI draws). A cursor in another pane is a jump,
+  not a move, and so is the same cell drawn somewhere else (the pane sliding).
 - **The matte.** The overlay never sees GPUI's picture, so `mainImage` runs twice per pixel, over
   flat opaque black and over flat opaque white; for a shader that blends over the picture
   (`mix(base, c, a)`), black is `c·a` and white is `c·a + 1 − a`, which give the premultiplied

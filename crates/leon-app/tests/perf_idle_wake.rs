@@ -1,5 +1,5 @@
-//! Finding 3 of the performance baseline: the workspace's poll runs when woken or when something
-//! timed is due, never on a fixed 8 ms clock. GPUI's test clock only moves when asked, so `run_for`
+//! Finding 3 of the performance baseline: the workspace's wake handler runs only when woken, never
+//! on a fixed 8 ms clock (GPUI phase 5: each timed thing is a task of its own). GPUI's test clock only moves when asked, so `run_for`
 //! moves it with the real one, drawing only the animation frames the app asks for.
 mod m20b_support;
 
@@ -13,18 +13,18 @@ use serde_json::json;
 const WORKING: &str = r"printf '\033]7501;state=working\007'; echo w-sent; sleep 60";
 const BLOCKED: &str = r"printf '\033]7501;state=blocked:kind=permission\007'; echo b-sent; sleep 60";
 
-/// Let `d` of real time pass, the test clock with it; returns how many times the poll ran and how
-/// many of those asked for a redraw.
+/// Let `d` of real time pass, the test clock with it; returns how many times the wake handler ran
+/// and how many times the root was told it draws something new.
 fn run_for(ws: &Entity<Workspace>, cx: &mut VisualTestContext, d: Duration) -> (u64, u64) {
     cx.run_until_parked();
-    let before = ws.read_with(cx, |ws, _| ws.polls());
+    let before = ws.read_with(cx, |ws, _| (ws.wakes(), ws.root_redraws()));
     let end = Instant::now() + d;
     while Instant::now() < end {
         let t = Instant::now();
         std::thread::sleep(Duration::from_millis(5));
         tick(ws, cx, t.elapsed()); // and the animation frames the app asks for, which the test window never runs
     }
-    let after = ws.read_with(cx, |ws, _| ws.polls());
+    let after = ws.read_with(cx, |ws, _| (ws.wakes(), ws.root_redraws()));
     (after.0 - before.0, after.1 - before.1)
 }
 
@@ -37,7 +37,7 @@ fn an_idle_window_does_not_poll_on_a_clock(cx: &mut TestAppContext) {
     let (n, _) = run_for(&ws, cx, Duration::from_secs(2));
     s.app.stop();
     // the old poll ran about 250 times; a late line from the shell can add a wake or two
-    assert!(n <= 5, "the poll ran {n} times in 2 s with nothing changing");
+    assert!(n <= 5, "the wake handler ran {n} times in 2 s with nothing changing");
 }
 
 #[gpui::test]
@@ -54,7 +54,7 @@ fn a_working_indicator_ticks_the_pulse_not_the_poll(cx: &mut TestAppContext) {
     // the spinner's clock is the Pulse's (GPUI phase 3), 8 ticks a second; the poll runs only
     // when woken. Under load a slow step moves the test clock in one jump, and the timer can
     // come round a few times within it.
-    assert!(n <= 5, "the poll ran {n} times in 1 s with a working indicator");
+    assert!(n <= 5, "the wake handler ran {n} times in 1 s with a working indicator");
     assert!((5..=40).contains(&ticks), "the Pulse ticked {ticks} times in 1 s");
 }
 
@@ -73,7 +73,7 @@ fn find_and_activity_waiting_do_not_spin(cx: &mut TestAppContext) {
     let (n, _) = run_for(&ws, cx, Duration::from_secs(2));
     s.app.stop();
     // the waited times tick once a second; the old poll ran about 250 times
-    assert!(n <= 8, "the poll ran {n} times in 2 s with find and Activity open and nothing new");
+    assert!(n <= 8, "the wake handler ran {n} times in 2 s with find and Activity open and nothing new");
 }
 
 #[gpui::test]
@@ -117,7 +117,7 @@ fn find_runs_again_on_output_that_came_just_after_it(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("cmd-f z q -");
     let before = ws.read_with(cx, |ws, _| ws.find_status()).map_or(0, |f| f.1);
     assert_eq!(before, 1, "the first line is found");
-    // within RERUN (250 ms) of that search: only a timed poll finds it
+    // within RERUN (250 ms) of that search: only a timed look finds it
     t.write(br"printf 'z\161-2\n'".as_slice()).unwrap();
     t.write(b"\r").unwrap();
     assert!(eventually(|| has_line(&t, "zq-2")));

@@ -99,6 +99,8 @@ pub struct Machine {
     failed: Option<HostState>,
     retry_at: Option<Instant>,
     backoff: Duration,
+    /// Connection attempts started (tests).
+    attempts: u32,
 }
 
 impl Machine {
@@ -112,11 +114,17 @@ impl Machine {
             failed: None,
             retry_at: None,
             backoff: BACKOFF.0,
+            attempts: 0,
         }
     }
 
     pub fn remote(&self) -> Option<&Rc<Remote>> {
         self.remote.as_ref()
+    }
+
+    /// How many connection attempts were started.
+    pub fn attempts(&self) -> u32 {
+        self.attempts
     }
 
     pub fn is_local(&self) -> bool {
@@ -198,7 +206,7 @@ impl Hosts {
         self.tailnet.lock().unwrap_or_else(PoisonError::into_inner).clone()
     }
 
-    /// How many tailnet reads have come in (the window's signature: a new one is drawn).
+    /// How many tailnet reads have come in (a new one is drawn).
     pub fn tailnet_reads(&self) -> u64 {
         self.tailnet_reads.load(Ordering::SeqCst)
     }
@@ -244,7 +252,7 @@ impl Hosts {
         self.machines.iter().enumerate().filter_map(|(i, m)| m.remote.as_ref().map(|r| (i, r)))
     }
 
-    /// When the next host's retry is due (the poll's clock).
+    /// When the next host's retry is due (the window's deadline task).
     pub fn next_retry(&self) -> Option<Instant> {
         self.machines.iter().filter(|m| m.remote.is_none()).filter_map(|m| m.retry_at).min()
     }
@@ -286,6 +294,7 @@ impl Hosts {
     /// One attempt on a thread of its own: open a link (ssh in BatchMode) and attach through it.
     fn spawn(m: &mut Machine, wake: Arc<dyn Fn() + Send + Sync>) {
         let Some(host) = m.host.clone() else { return };
+        m.attempts += 1;
         let attempt = m.attempt.clone();
         attempt.lock().unwrap_or_else(PoisonError::into_inner).running = true;
         let run = move || {

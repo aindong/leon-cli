@@ -1,5 +1,5 @@
 //! ADR R4 (docs/architecture/gpui.md), phase 2: a pushed screen notifies its pane's grid, not the
-//! whole workspace (`Workspace::signature` has no screens); a pane scrolled back is the exception,
+//! whole workspace (its model event reaches the grid alone, view_feed.rs); a pane scrolled back is the exception,
 //! since the root's "↓ N new lines" pill counts its new lines.
 mod grid_support;
 
@@ -29,7 +29,7 @@ fn output_in_a_pane_at_the_bottom_does_not_notify_the_workspace(cx: &mut TestApp
     let id = tab_running(&s, &ws, cx, BUSY, "busy-ready");
     close_first_tab(&s, &ws, cx);
     // the pane settles first (its fit, its title becoming the program): until the redraws stop
-    let redraws = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.polls().1);
+    let redraws = |cx: &mut gpui::VisualTestContext| ws.read_with(cx, |ws, _| ws.root_redraws());
     let settled = (0..20).any(|_| {
         let was = redraws(cx);
         run_for(cx, Duration::from_millis(300));
@@ -37,7 +37,7 @@ fn output_in_a_pane_at_the_bottom_does_not_notify_the_workspace(cx: &mut TestApp
     });
     assert!(settled, "the window kept redrawing");
     let counts = |cx: &mut gpui::VisualTestContext| {
-        let (p, r) = ws.read_with(cx, |ws, _| (ws.prepares(), ws.polls().1));
+        let (p, r) = ws.read_with(cx, |ws, _| (ws.prepares(), ws.root_redraws()));
         (p, r, grid_renders(&ws, cx, &id))
     };
     let before = counts(cx);

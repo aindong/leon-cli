@@ -111,9 +111,9 @@ impl Workspace {
         }
     }
 
-    /// The poll's share: pick up hosts that connected or gave up, and select a session made over
-    /// a link once its host's model has it.
-    pub(super) fn poll_hosts(&mut self) {
+    /// On a wake: pick up hosts that connected or gave up. True when a host gained or lost its
+    /// remote.
+    pub(super) fn poll_hosts(&mut self) -> bool {
         let changed = self.hosts.poll();
         if changed {
             self.send_palette(); // a host that connected gets the theme's colours
@@ -121,6 +121,12 @@ impl Workspace {
         if changed && !self.hosts.machines()[self.host].remote().is_some_and(|r| Rc::ptr_eq(r, &self.app)) {
             self.use_host(0); // the selected host went away
         }
+        changed
+    }
+
+    /// After the models' commit: select a session made with New Session once its machine's model
+    /// has it. True when it did.
+    pub(super) fn select_made(&mut self) -> bool {
         let later = lock(&self.select_later).clone();
         if let Some((host, sid)) = later {
             let there = self.hosts.machines().get(host).and_then(Machine::remote);
@@ -128,22 +134,25 @@ impl Workspace {
                 *lock(&self.select_later) = None;
                 self.use_host(host);
                 self.session_id = Some(sid);
+                return true;
             }
         }
+        false
     }
 
-    /// Create a session on machine `host` (This Mac when unknown) and select it, at once on This
-    /// Mac, once it shows over a link.
+    /// Create a session on machine `host` (This Mac when unknown) and select it once its model
+    /// has it (`select_made`).
     pub(super) fn new_session_on(&mut self, host: usize, cx: &mut Context<Self>) {
         let Some(remote) = self.hosts.machines().get(host).and_then(Machine::remote).cloned() else { return };
         let (later, wake) = (self.select_later.clone(), self.wake.clone());
         remote.act_later("session.create", json!({}), move |r| {
             if let Some(sid) = r.ok().and_then(|r| r["session_id"].as_str().map(String::from)) {
                 *lock(&later) = Some((host, sid));
-                wake(); // over a link the refetch's wake came first
+                wake(); // the refetch's wake came first
             }
         });
         self.poll_hosts();
+        self.select_made();
         cx.notify();
     }
 

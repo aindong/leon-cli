@@ -236,7 +236,7 @@ impl Workspace {
         let target = self.target().map(|(_, id, _)| id);
         let overlay = target.as_deref().is_some_and(|id| self.is_overlay(id));
         match (name, target) {
-            ("pane.new_floating", _) => self.call("session.new_floating", json!({ "layout": self.here() }), cx),
+            ("pane.new_floating", _) => self.call_here("session.new_floating", json!({}), cx),
             ("pane.scratch.toggle", _) => {
                 self.call("session.toggle", json!({ "label": "scratch", "create": true }), cx)
             }

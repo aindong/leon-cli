@@ -22,12 +22,12 @@ fn the_pulse_runs_only_while_something_works(cx: &mut TestAppContext) {
     let t = term(&s.app, &id);
     t.write(b"\n").unwrap();
     assert!(shows(cx, |cx| pulse(cx).0), "working: the clock runs");
-    let polls = ws.read_with(cx, |ws, _| ws.polls().0);
+    let polls = ws.read_with(cx, |ws, _| ws.wakes());
     let ticks = pulse(cx).1;
     run_for(cx, Duration::from_secs(1));
-    let (polls, ticks) = (ws.read_with(cx, |ws, _| ws.polls().0) - polls, pulse(cx).1 - ticks);
+    let (polls, ticks) = (ws.read_with(cx, |ws, _| ws.wakes()) - polls, pulse(cx).1 - ticks);
     assert!(ticks >= 5, "the Pulse ticked {ticks} times in 1 s");
-    assert!(polls <= 3, "the poll ran {polls} times in 1 s: it keeps no spinner clock");
+    assert!(polls <= 3, "the wake handler ran {polls} times in 1 s: it keeps no spinner clock");
     t.write(b"\n").unwrap();
     let stopped = shows(cx, |cx| !pulse(cx).0);
     s.app.stop();

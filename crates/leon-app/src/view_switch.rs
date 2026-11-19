@@ -118,7 +118,7 @@ impl Workspace {
             let here = self.target().and_then(|(sid, b, _)| {
                 let m = self.app.model();
                 let s = m.session(&sid)?;
-                let l = s.windows.get(s.active)?.layout.as_ref()?;
+                let l = s.windows.get(self.active_of(s))?.layout.as_ref()?;
                 Some(if l.contains(&b) { b } else { l.leaves().first()?.to_string() })
             });
             if let (Some(moved), Some(here)) = (moved, here) {
@@ -149,9 +149,8 @@ impl Workspace {
         let sid = block.and_then(|b| self.app.model().block(b).map(|(s, _)| s.id.clone()));
         self.session_id = Some(sid.unwrap_or_else(|| sid_given.to_string()));
         match (block, window) {
-            (Some(b), _) => self.call("session.focus_block", json!({ "block_id": b }), cx),
-            (None, Some(w)) => self.call("session.focus_window", json!({ "window_id": w }), cx),
             (None, None) => cx.notify(),
+            (b, w) => self.ask_focus(w.map(String::from), b, cx),
         }
     }
 }

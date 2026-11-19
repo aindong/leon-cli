@@ -87,8 +87,8 @@ impl Workspace {
         true
     }
 
-    /// Ask the server for the matches; the newest is current at first, else the one that was (over
-    /// a link they come on a later poll, and only for the query still typed).
+    /// Ask the server for the matches; the newest is current at first, else the one that was (they
+    /// come on a later wake, and only for the query still typed).
     pub(super) fn run_find(&mut self) {
         let Some(f) = self.term.find.as_ref() else { return };
         let id = f.block.clone();
@@ -129,13 +129,11 @@ impl Workspace {
         })
     }
 
-    /// How long until a find with output it hasn't searched may run again (the poll's clock).
-    pub(super) fn find_rerun_in(&self) -> Option<Duration> {
+    /// When a find with output it hasn't searched may run again (its deadline task).
+    pub(super) fn find_rerun_at(&self) -> Option<Instant> {
         let f = self.term.find.as_ref().filter(|f| !f.query.is_empty())?;
         let unseen = self.app.model().screen_updates.get(&f.block).copied() != f.seen;
-        // already due: the next poll redraws, and `prepare` runs it before that frame (a hidden
-        // window stops asking, `next_poll`); one clock read, so the subtraction can't underflow
-        unseen.then(|| RERUN.saturating_sub(f.ran.elapsed()))
+        unseen.then_some(f.ran + RERUN)
     }
 
     fn step_find(&mut self, forward: bool) {

@@ -1,8 +1,8 @@
 //! The window: a sidebar of sessions (with their tabs as rows, or in top tab style only the
 //! sessions, the tabs then in the titlebar), and the active window's split layout as tiles, each a
-//! pane header over a terminal painted from the screen the server pushes. A task
-//! on the GPUI executor redraws when the model or a screen changed, woken by the reader thread
-//! or at a deadline while something timed is pending (view_poll.rs).
+//! pane header over a terminal painted from the screen the server pushes. Each machine's model is
+//! an entity the reader thread's wake commits on the main thread; the workspace subscribes and
+//! notifies only the views whose drawing changed (view_feed.rs).
 
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
@@ -75,15 +75,11 @@ const LINE_HEIGHT: f32 = 1.3;
 const TITLEBAR: f32 = 38.;
 /// Room for the traffic lights at the left of the titlebar row.
 const TRAFFIC_LIGHTS: f32 = 78.;
-/// The poll's pace while something moves on screen (a slide, a fade): about 120 Hz.
-const POLL: Duration = Duration::from_millis(8);
 /// The spinner's frame time: at most 8 redraws a second for it.
 const SPIN: Duration = Duration::from_millis(125);
 /// The largest paste sent: one request line is at most 1 MiB (`serve::MAX_LINE`), and JSON can
 /// double a text's size.
 const MAX_PASTE: usize = 400 << 10;
-/// How often the app asks the server for its keymap (a reload elsewhere shows up this late).
-const KEYMAP_POLL: Duration = Duration::from_secs(1);
 
 /// The block input goes to.
 use crate::floats::target;
@@ -125,7 +121,7 @@ pub struct Workspace {
     /// This Mac and the hosts; `host` is the one `app` belongs to.
     hosts: Hosts,
     host: usize,
-    /// A session to select once it shows in its host's model (New Session over a link).
+    /// A session to select once it shows in its machine's model (New Session).
     select_later: Arc<Mutex<Option<(usize, String)>>>,
     drag: Option<Drag>,
     session_id: Option<String>,
@@ -138,22 +134,30 @@ pub struct Workspace {
     collapsed: HashSet<String>,
     focus: FocusHandle,
     stats: Rc<RefCell<Stats>>,
-    /// Hash of everything drawn last time; the poll redraws when it moves.
-    seen: u64,
-    /// How many times the poll has run, and asked for a redraw (tests: it runs when woken or when
-    /// something timed is due).
-    polls: (u64, u64),
+    /// How many times the wake handler ran, and how many times the workspace was notified (tests).
+    wakes: (u64, u64),
+    /// Each connected machine's model entity (view_feed.rs).
+    models: Vec<(Rc<Remote>, feed::ModelSlot)>,
+    /// What the root drew from the model and the wakes when last notified.
+    root_seen: feed::RootInput,
+    wake_seen: feed::WakeInput,
+    /// The timed things, each a task of its own.
+    deadlines: feed::Deadlines,
+    /// Frames drawn (a clock that pauses while none are drawn compares it).
+    frames: u64,
+    /// The notifications posted, newest last.
+    posted: Vec<crate::attention::Notice>,
+    /// A tab or pane picked whose call is on its way (view_state.rs).
+    asked: state::Asked,
     /// How many times the window rendered, and `prepare` ran (tests: what a frame did, R5).
     renders: u64,
     prepares: u64,
-    /// Redraws the poll asked for since the last frame was drawn: a window that is hidden or
-    /// covered draws none, and from the second the poll stops the clocks only a frame shows.
-    undrawn: u8,
-    /// When the poll looks next without a wake (None: only a wake).
-    planned: Option<Instant>,
     keymap: Keymap,
     inbox: Arc<Mutex<poll_view::KeymapInbox>>,
     keymap_asked: Option<Instant>,
+    /// Apply the next keymap reply (and fetch its settings) even if its generation didn't move:
+    /// the last try failed.
+    keymap_again: bool,
     /// The chords of a sequence typed so far (`ctrl+b`).
     pending: Vec<Chord>,
     /// The window after a repeatable binding ran (tmux `bind -r`).
@@ -199,8 +203,6 @@ pub struct Workspace {
     /// The pane last seen with the focus, and whether the window was active: a change is the user
     /// arriving at a pane, which clears its done/error.
     seen_focus: Option<(String, bool)>,
-    /// The focus event `note_focus` found after a frame, for the poll to send, on its pane's machine.
-    focus_event: Option<(Rc<Remote>, Value)>,
     /// Scrollback, selection, find and links per pane.
     term: scroll::TermUi,
     floats: floats_view::FloatUi,
@@ -231,10 +233,10 @@ pub struct Workspace {
     updates_looked: Option<Instant>,
     /// The cursor shader init.lua names, and the window's overlay for it.
     shader: cursor_shader_view::ShaderUi,
-    /// Wakes the poll from another thread.
+    /// Wakes the window from another thread (view_feed.rs).
     wake: Arc<dyn Fn() + Send + Sync>,
-    _poll: Task<()>,
-    _tick: Task<()>,
+    _wakes: Task<()>,
+    _clocks: (Task<()>, Option<Task<()>>),
     _activation: Subscription,
     _bounds: Subscription,
     _quit: Subscription,
@@ -252,12 +254,19 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        // shortcut: the first session is made before the window draws, waiting for the server
+        // (the window has nothing to show without one); every call after it queues. Make it
+        // through the queue, drawing the empty state meanwhile, if a slow start is ever seen
         if app.model().sessions.is_empty() {
             let _ = app.act("session.create", json!({}));
         }
+        if let Some(queue) = app.call_queue() {
+            cx.background_executor().spawn(queue).detach();
+        }
+        app.commit(); // the window's copy of the model, moved on only by the wake task
         let focus = cx.focus_handle();
         window.focus(&focus);
-        // the reader thread wakes the poll at once; one pending wake is enough (one sender, so the
+        // the reader thread wakes the window at once; one pending wake is enough (one sender, so the
         // channel's bound holds: each clone would bring a slot of its own)
         let (wake, woken) = futures::channel::mpsc::channel::<()>(0);
         let wake = Mutex::new(wake);
@@ -270,7 +279,8 @@ impl Workspace {
         let updates =
             Arc::new(crate::updates::Updater::new(None, Arc::new(leon_update::Target::running), wake.clone()));
         let hosts = Hosts::new(app.clone(), hosts, wake.clone());
-        let (poll, tick) = Self::start_poll(woken, cx);
+        let wakes = Self::start_wakes(woken, window, cx);
+        let clocks = Self::start_clocks(window, cx);
         let stats = Stats::new();
         let session_id = app.model().sessions.first().map(|s| s.id.clone());
         let activation = cx.observe_window_activation(window, |ws, window, cx| {
@@ -301,13 +311,14 @@ impl Workspace {
             ws.set_appearance(look_view::is_dark(window.appearance()), cx);
             ws.update_glass(window, cx)
         });
-        // shortcut: every notify of the workspace brings what render draws from up to date (R5),
-        // and gives each grid and section its input; a pushed screen reaches its grid from the poll
-        // instead (`poll_grids`). Phase 5 (the model as entities) removes this observer
+        // every notify of the workspace (its own state, or what the root draws from a model
+        // event, view_feed.rs) brings what render draws from up to date (R5), and gives each grid
+        // and section its input; a pushed screen reaches its grid from its model event instead
         let prepare = cx.observe_in(&cx.entity(), window, |ws, _, window, cx| {
-            let seen = ws.screens_seen();
+            ws.wakes.1 += 1;
             ws.prepare();
-            ws.sync_views(&seen, window, cx);
+            ws.root_seen = ws.root_input();
+            ws.sync_views(window, cx);
         });
         let (look, dark) = (Look::default(), look_view::is_dark(window.appearance()));
         let mut ws = Workspace {
@@ -324,15 +335,20 @@ impl Workspace {
             collapsed: HashSet::new(),
             focus,
             stats: Rc::new(RefCell::new(stats)),
-            seen: 0,
-            polls: (0, 0),
+            wakes: (0, 0),
+            models: Vec::new(),
+            root_seen: Default::default(),
+            wake_seen: (0, 0),
+            deadlines: Default::default(),
+            frames: 0,
+            posted: Vec::new(),
+            asked: Default::default(),
             renders: 0,
             prepares: 0,
-            undrawn: 0,
-            planned: None,
             keymap: Keymap::app(&json!({})),
             inbox: Arc::default(),
             keymap_asked: None,
+            keymap_again: false,
             pending: Vec::new(),
             repeat: keymap::Repeat::default(),
             palette: None,
@@ -357,7 +373,6 @@ impl Workspace {
             settings_window: None,
             epoch: Instant::now(),
             seen_focus: None,
-            focus_event: None,
             term,
             floats: Default::default(),
             grids: HashMap::new(),
@@ -379,8 +394,8 @@ impl Workspace {
             updates_looked: None,
             shader: Default::default(),
             wake,
-            _poll: poll,
-            _tick: tick,
+            _wakes: wakes,
+            _clocks: clocks,
             _activation: activation,
             _bounds: bounds,
             _quit: quit,
@@ -388,10 +403,10 @@ impl Workspace {
             _appearance: appearance,
             _prepare: prepare,
         };
-        let seen = ws.screens_seen();
         ws.prepare(); // the first frame comes before any notify
+        ws.root_seen = ws.root_input();
         ws.note_layout(window);
-        ws.sync_grids(&seen, cx);
+        ws.sync_grids(cx);
         ws.note_reduce_transparency();
         ws.note_reduce_motion();
         ws.update_glass(window, cx);
@@ -414,6 +429,8 @@ mod cursor_shader_view;
 mod drawn_view;
 #[path = "view_fade.rs"]
 mod fade_view;
+#[path = "view_feed.rs"]
+mod feed;
 #[path = "view_find.rs"]
 mod find;
 #[path = "view_floats.rs"]
@@ -465,6 +482,8 @@ mod menus;
 #[path = "view_model.rs"]
 mod model;
 use model::{SessionRow, WindowRow};
+#[path = "view_links.rs"]
+mod links;
 #[path = "view_overlay.rs"]
 mod overlay;
 #[path = "view_overview.rs"]

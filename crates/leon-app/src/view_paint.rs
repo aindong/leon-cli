@@ -53,7 +53,7 @@ pub(super) fn terminal_canvas(
     app: Rc<Remote>,
     (sid, block_id): (String, String),
     (frame, marks): (Frame, Vec<CellMark>),
-    (active, overlay): (bool, Option<Arc<crate::cursor_shader::Overlay>>),
+    active: bool,
     (family, font_size, theme): (SharedString, f32, Theme),
     (stats, painted): (Rc<RefCell<Stats>>, scroll::PaintedMap),
     fits: bool,
@@ -70,21 +70,7 @@ pub(super) fn terminal_canvas(
         },
         move |bounds, (frame, cell_w, line_h, size, id), window, cx| {
             let p = scroll::Painted { origin: bounds.origin, cell: (cell_w, line_h), size };
-            let cursor =
-                paint_frame(&frame, &marks, &theme, bounds, (cell_w, line_h), (&family, font_size), active, window, cx);
-            if let Some(overlay) = &overlay {
-                // what was just painted, for the cursor shader overlay (R5's second exception,
-                // docs/architecture/cursor-shaders.md): a value handed over, nothing else
-                let drawn = cursor.map(|(b, style, cell)| crate::cursor_shader::Drawn {
-                    block: id.clone(),
-                    rect: [b.origin.x, b.origin.y, b.size.width, b.size.height].map(f32::from),
-                    scale: window.scale_factor(),
-                    style,
-                    cell,
-                    rgb: theme.cursor,
-                });
-                overlay.feed(window, drawn.as_ref());
-            }
+            paint_frame(&frame, &marks, &theme, bounds, (cell_w, line_h), (&family, font_size), active, window, cx);
             if stats.borrow().enabled {
                 let cursor = frame.cursor.as_ref().map(|c| (c.line, c.col));
                 let text =
@@ -108,7 +94,7 @@ pub(super) fn paint_frame(
     active: bool,
     window: &mut Window,
     cx: &mut App,
-) -> Option<(Bounds<Pixels>, crate::cursor_shader::Style, (usize, usize))> {
+) {
     let at =
         |line: usize, col: usize| point(bounds.origin.x + cell_w * col as f32, bounds.origin.y + line_h * line as f32);
     for r in &f.backgrounds {
@@ -118,18 +104,7 @@ pub(super) fn paint_frame(
     for m in marks.iter().filter(|m| matches!(m.mark, Mark::Selection | Mark::Found | Mark::Current)) {
         window.paint_quad(fill(span(m), rgb(if m.mark == Mark::Selection { t.selection } else { t.found })));
     }
-    let mark = f.cursor.as_ref().map(|c| {
-        let w = cell_w * if c.wide { 2. } else { 1. };
-        let origin = at(c.line, c.col);
-        match c.shape {
-            CursorShape::Beam => CursorMark::Bar(Bounds::new(origin, size(px(2.), line_h))),
-            CursorShape::Underline => {
-                CursorMark::Bar(Bounds::new(point(origin.x, origin.y + line_h - px(2.)), size(w, px(2.))))
-            }
-            CursorShape::Block if active => CursorMark::Block(Bounds::new(origin, size(w, line_h))),
-            _ => CursorMark::Hollow(Bounds::new(origin, size(w, line_h))), // also any block in an inactive window
-        }
-    });
+    let mark = cursor_mark(f, bounds.origin, (cell_w, line_h), active);
     let mut paint_text =
         |text: &str, line: usize, col: usize, color: u32, s: Option<&render::Span>, window: &mut Window| {
             let (bold, italic, underline, strike) =
@@ -176,10 +151,39 @@ pub(super) fn paint_frame(
         (Some(CursorMark::Hollow(b)), _) => window.paint_quad(outline(b, rgb(t.cursor), gpui::BorderStyle::Solid)),
         _ => {}
     }
-    // the cursor painted, as cursor shaders name its style
+}
+
+/// How `f`'s cursor is drawn by a grid at `origin` with cells `cell` in size: paint draws it, and
+/// the cursor shader's feed hands it to the overlay (`cursor_drawn`).
+fn cursor_mark(
+    f: &Frame,
+    origin: gpui::Point<Pixels>,
+    (cell_w, line_h): (Pixels, Pixels),
+    active: bool,
+) -> Option<CursorMark> {
+    let c = f.cursor.as_ref()?;
+    let w = cell_w * if c.wide { 2. } else { 1. };
+    let origin = point(origin.x + cell_w * c.col as f32, origin.y + line_h * c.line as f32);
+    Some(match c.shape {
+        CursorShape::Beam => CursorMark::Bar(Bounds::new(origin, size(px(2.), line_h))),
+        CursorShape::Underline => {
+            CursorMark::Bar(Bounds::new(point(origin.x, origin.y + line_h - px(2.)), size(w, px(2.))))
+        }
+        CursorShape::Block if active => CursorMark::Block(Bounds::new(origin, size(w, line_h))),
+        _ => CursorMark::Hollow(Bounds::new(origin, size(w, line_h))), // also any block in an inactive window
+    })
+}
+
+/// The cursor a grid drawn at `origin` paints for `f`, as cursor shaders name its style, and its cell.
+pub(super) fn cursor_drawn(
+    f: &Frame,
+    origin: gpui::Point<Pixels>,
+    cell: (Pixels, Pixels),
+    active: bool,
+) -> Option<(Bounds<Pixels>, crate::cursor_shader::Style, (usize, usize))> {
     use crate::cursor_shader::Style;
     let c = f.cursor.as_ref()?;
-    Some(match mark? {
+    Some(match cursor_mark(f, origin, cell, active)? {
         CursorMark::Block(b) => (b, Style::Block, (c.line, c.col)),
         CursorMark::Bar(b) if c.shape == CursorShape::Underline => (b, Style::Underline, (c.line, c.col)),
         CursorMark::Bar(b) => (b, Style::Bar, (c.line, c.col)),
