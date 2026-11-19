@@ -82,7 +82,7 @@ Reduce Transparency and full screen are opaque, as is `leon.set("translucency", 
 `serve_tailscale` makes the server also listen on this machine's Tailscale addresses, on
 `serve_tailscale_port`, for your own other machines only (and tagged ones with a tag in
 `serve_tailscale_tags`); [cli/hosts.md](../cli/hosts.md#serve-over-tailscale) has the rest.
-`serve_web` also serves a view-only web page there, to the same machines ([web.md](../web.md)),
+`serve_web` also serves a web page that drives your sessions there, to the same machines ([web.md](../web.md)),
 over HTTPS when `serve_web_cert` and `serve_web_key` name the files `tailscale cert` wrote.
 
 `cursor_shader` names a GLSL file Leon.app draws over its window as the cursor moves, macOS only;

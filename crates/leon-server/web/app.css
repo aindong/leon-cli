@@ -28,15 +28,22 @@ button { font: inherit; color: inherit; }
   font-weight: 600;
 }
 .mark { width: 10px; height: 10px; border-radius: 3px; background: var(--accent); }
-.chip {
-  margin-left: auto;
-  padding: 1px 6px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+.row-actions { display: flex; align-items: center; gap: 2px; }
+.row-actions > button:first-child { flex: 1; min-width: 0; }
+#sidebar button.close, .pane .tools button {
+  flex: none;
+  width: auto;
+  padding: 2px 6px;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 400;
+  font-size: 12px;
 }
+#sidebar button.close { opacity: 0; }
+#sidebar li:hover > .row-actions > button.close,
+#sidebar button.close:focus-visible,
+#sidebar button.close[data-armed] { opacity: 1; }
+#sidebar button.close[data-armed], .pane .tools button[data-armed] { color: var(--error); }
+#sidebar button.add, #sidebar header button.add { color: var(--muted); }
+#sidebar header button.add { margin-left: auto; width: auto; padding: 2px 8px; font-weight: 400; }
 #sidebar ul { list-style: none; margin: 0; padding: 0; }
 #sidebar button {
   display: block;
@@ -78,7 +85,15 @@ button { font: inherit; color: inherit; }
 }
 .pane.focused { border-color: var(--accent); }
 .pane.float { position: absolute; z-index: 1; box-shadow: 0 8px 24px rgb(0 0 0 / 0.45); }
+.pane > header .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pane .tools { display: flex; gap: 2px; opacity: 0; }
+.pane:hover .tools, .pane.focused .tools, .pane .tools:focus-within { opacity: 1; }
+.pane .tools button { border: 0; border-radius: 4px; background: none; cursor: pointer; }
+.pane .tools button:hover { background: var(--hover); color: var(--title); }
 .pane > header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: none;
   padding: 3px 10px;
   border-bottom: 1px solid var(--border);
@@ -119,3 +134,31 @@ button { font: inherit; color: inherit; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* the field keys and text go through: on the page, not shown */
+#keys {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  resize: none;
+}
+
+.marks > span { position: absolute; z-index: 0; height: var(--lh, 16px); background: var(--selected); }
+
+#activity-box { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+#activity-box[hidden], #notify[hidden] { display: none; }
+#activity-box h2 { margin: 0 6px 6px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+#activity .entry { display: grid; grid-template-columns: 10px 1fr; column-gap: 8px; white-space: normal; }
+#activity .dot { grid-row: span 2; align-self: center; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+#activity .working .dot { background: var(--working); }
+#activity .blocked .dot { background: var(--blocked); }
+#activity .done .dot { background: var(--done); }
+#activity .error .dot { background: var(--error); }
+#activity .name { color: var(--title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#activity .where { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#notify { margin-top: 8px; }

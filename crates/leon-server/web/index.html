@@ -12,12 +12,18 @@
 </head>
 <body>
 <nav id="sidebar" aria-label="Sessions">
-  <header><span class="mark" aria-hidden="true"></span>leon <span class="chip">view only</span></header>
+  <header><span class="mark" aria-hidden="true"></span>leon <button id="new-session" class="add" title="New session">+ Session</button></header>
   <ul id="sessions"></ul>
+  <section id="activity-box" hidden>
+    <h2>Activity</h2>
+    <ul id="activity"></ul>
+  </section>
+  <button id="notify" class="add" hidden>Notify me</button>
 </nav>
 <main id="main">
   <p id="note" role="status"></p>
   <div id="panes"></div>
+  <textarea id="keys" aria-label="Keys to the focused pane" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
 </main>
 </body>
 </html>
