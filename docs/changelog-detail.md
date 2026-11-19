@@ -144,6 +144,8 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   attach` are unchanged ([architecture/scrollback.md](architecture/scrollback.md)).
 - Stored lines aren't re-wrapped when a pane is resized: a narrower pane cuts them at its edge
   (their whole text stays in `capture`).
+- A pane made taller or wider fills its new rows from history as before, whether the history is
+  still alacritty's or already stored: the newest stored lines go back to alacritty first.
 - Find, selection, copy and links in the app reach the stored lines too, with the same results as
   when alacritty held them all.
 

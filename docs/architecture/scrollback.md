@@ -49,6 +49,16 @@ A row keeps its line number when it moves, and `history` counts the rows on both
 - **Resize.** alacritty re-wraps its own rows (at most the newest 1,000), within the cap like any
   push; the store's are never re-wrapped. A narrower pane cuts a stored row at its edge in `lines`
   (`text` keeps it whole); a wider one shows it as it was.
+- **A taller or wider pane.** alacritty fills the rows a resize adds, and the rows its reflow
+  joins on a widening, from its own history, which is empty at rest. So `Store::lend` first moves
+  the store's newest lines back to it: whole lines, at least the rows added and, on a widening, the
+  new height in lines (each is at least a row at the new width). It writes them through
+  `Grid::scroll_up` (the screen put back from a copy) and alacritty's grow and reflow do the rest,
+  as alone: what the pane shows doesn't depend on whether output paused. Moving rows between the
+  store and alacritty renumbers nothing; a row kept whole from a wider pane comes back wrapped at
+  the pane's width, as alacritty wraps it. A resize's numbers are alacritty's alone, as before
+  (`scrolled` stays at least `history`; a client starts over on a new size). `b1_store_grow.rs`
+  compares each case with alacritty keeping the whole history.
 - **The cap.** `leon.set("scrollback", N)` (0 to 100,000, default 10,000) caps the store and
   alacritty's rows together. The server applies it to every terminal on a reload and to each new
   one (a restored block's saved text included), and a lower value drops the oldest lines at once;
