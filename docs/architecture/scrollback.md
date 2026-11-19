@@ -3,6 +3,19 @@
 How a terminal keeps its history (`crates/leon-core/src/terminal_history.rs`). The numbering
 clients see is in [Protocol and clients](protocol-and-clients.md), "Scrollback in the app".
 
+```mermaid
+flowchart RL
+  subgraph term["alacritty: full-width cells"]
+    screen["the screen"] --- newer["history rows: at rest,<br/>at most the newest 1,000"]
+  end
+  subgraph store["leon's store: text and style runs"]
+    older["older rows"] --- oldest["line scrolled - history:<br/>the oldest kept"]
+  end
+  newer -->|"settle, once there are more than 1,000: after 100 ms<br/>without output, or once a second, moves them all"| older
+```
+
+A row keeps its line number when it moves, and `history` counts the rows on both sides.
+
 - **Why a store.** alacritty keeps every history row at the pane's full width, 24 bytes a cell:
   10,000 lines at 80 columns hold 19.7 MB whatever they say, 48 MB at 200 columns. leon moves
   history into a store of its own, as each row's characters and runs of style (colours and flags,

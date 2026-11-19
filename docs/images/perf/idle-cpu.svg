@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="294" viewBox="0 0 720 294" role="img" aria-labelledby="title desc">
+<title id="title">The app's CPU at rest</title>
+<desc id="desc">The app's CPU with 12 idle panes: 0.74% of a core when still and 0.06% when hidden, down from 2.3% and 1.9%, since it stopped polling every 8 ms and sleeps until woken.</desc>
+<style>
+  .bg { fill: #fcfcfb; } .t1 { fill: #0b0b0b; } .t2 { fill: #52514e; }
+  .grid { stroke: #e7e6e2; } .axis { stroke: #b9b8b1; } .ref { stroke: #52514e; }
+  .c1 { fill: #2a78d6; stroke: #2a78d6; } .c2 { fill: #eb6834; stroke: #eb6834; } .c0 { fill: #8f8d86; stroke: #8f8d86; }
+  .ring { stroke: #fcfcfb; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .t1 { fill: #f0efec; } .t2 { fill: #c3c2b7; }
+    .grid { stroke: #2f2f2c; } .axis { stroke: #57564f; } .ref { stroke: #c3c2b7; }
+    .c1 { fill: #3987e5; stroke: #3987e5; } .c2 { fill: #d95926; stroke: #d95926; } .c0 { fill: #76756f; stroke: #76756f; }
+    .ring { stroke: #1a1a19; }
+  }
+  text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+</style>
+<rect class="bg" width="720" height="294" rx="8"/>
+<text x="24.0" y="32.0" class="t1" font-size="16" text-anchor="start" font-weight="600">The app's CPU at rest</text>
+<text x="24.0" y="52.0" class="t2" font-size="12" text-anchor="start">Leon.app with 12 idle panes (idle-cpu.sh). The server stays under 0.1% of a core in each.</text>
+<text x="24.0" y="69.0" class="t2" font-size="12" text-anchor="start">60 Hz display, release build.</text>
+<line x1="148.0" y1="110.0" x2="148.0" y2="244.0" class="axis" stroke-width="1"/>
+<text x="148.0" y="260.0" class="t2" font-size="11" text-anchor="middle">0</text>
+<line x1="265.0" y1="110.0" x2="265.0" y2="244.0" class="grid" stroke-width="1"/>
+<text x="265.0" y="260.0" class="t2" font-size="11" text-anchor="middle">2</text>
+<line x1="382.0" y1="110.0" x2="382.0" y2="244.0" class="grid" stroke-width="1"/>
+<text x="382.0" y="260.0" class="t2" font-size="11" text-anchor="middle">4</text>
+<line x1="499.0" y1="110.0" x2="499.0" y2="244.0" class="grid" stroke-width="1"/>
+<text x="499.0" y="260.0" class="t2" font-size="11" text-anchor="middle">6</text>
+<line x1="616.0" y1="110.0" x2="616.0" y2="244.0" class="grid" stroke-width="1"/>
+<text x="616.0" y="260.0" class="t2" font-size="11" text-anchor="middle">8</text>
+<text x="382.0" y="278.0" class="t2" font-size="12" text-anchor="middle">% of one core</text>
+<rect x="24.0" y="95.0" width="10" height="10" rx="2" class="c0"/>
+<text x="39.0" y="104.0" class="t2" font-size="12" text-anchor="start">polling every 8 ms</text>
+<rect x="183.0" y="95.0" width="10" height="10" rx="2" class="c1"/>
+<text x="198.0" y="104.0" class="t2" font-size="12" text-anchor="start">woken only by a change</text>
+<text x="138.0" y="135.0" class="t1" font-size="12" text-anchor="end">still</text>
+<path class="c0" d="M148.0 116.0h131.5a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-131.5z"/>
+<text x="288.5" y="127.0" class="t1" font-size="11" text-anchor="start">2.3 %</text>
+<path class="c1" d="M148.0 132.0h40.3a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-40.3z"/>
+<text x="197.3" y="143.0" class="t1" font-size="11" text-anchor="start">0.74 %</text>
+<text x="138.0" y="179.0" class="t1" font-size="12" text-anchor="end">one pane working</text>
+<path class="c0" d="M148.0 160.0h383.1a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-383.1z"/>
+<text x="540.1" y="171.0" class="t1" font-size="11" text-anchor="start">6.6 %</text>
+<path class="c1" d="M148.0 176.0h254.4a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-254.4z"/>
+<text x="411.4" y="187.0" class="t1" font-size="11" text-anchor="start">4.4 %</text>
+<text x="138.0" y="223.0" class="t1" font-size="12" text-anchor="end">app hidden</text>
+<path class="c0" d="M148.0 204.0h108.1a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-108.1z"/>
+<text x="265.1" y="215.0" class="t1" font-size="11" text-anchor="start">1.9 %</text>
+<path class="c1" d="M148.0 220.0h1.8a1.8 1.8 0 0 1 1.8 1.8v10.5a1.8 1.8 0 0 1 -1.8 1.8h-1.8z"/>
+<text x="157.5" y="231.0" class="t1" font-size="11" text-anchor="start">0.06 %</text>
+</svg>

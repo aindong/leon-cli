@@ -28,16 +28,40 @@ Before the first release, do the one-time setup under [Secrets](#secrets).
 1. Set the version in `Cargo.toml`. Give `CHANGELOG.md` a `## [X.Y.Z]` section and move what is
    under `[Unreleased]` into it: the release notes are that section's text and nothing else, its
    relative links made absolute to the tag on GitHub.
-2. Try it on your Mac: `scripts/release-dry-run.sh` builds the release (`scripts/release.sh`),
+2. Show what it brings. `scripts/demo-clips.sh` records a short clip of each new feature in the
+   launch video's macOS VM ([scripts/demo-video/README.md](../scripts/demo-video/README.md): its
+   one-time setup), so nothing touches your own screen; first edit its scenes
+   (`scripts/demo-clips/guest.sh`) for this release's features. It writes `target/clips/NAME.gif`
+   (at most 1.5 MB), `NAME.mp4` and its poster `NAME.jpg` for each. Copy the GIFs to
+   `docs/images/whats-new/X.Y.Z/` and put each one under its bullet in the changelog section, as
+   an image linking `docs/images/whats-new/X.Y.Z/NAME.gif` from the repository's root: the release
+   notes make that link absolute to the tag, so the clip shows on the GitHub release and on the
+   website's What's new. The README's GIF (`docs/images/demo-app.gif`) stays a first visit's tour
+   of the basics; give the README one line under it, "New in X.Y: …", linking that version's page
+   on the website. Then `cargo test -p leon --test m13_privacy`, and look at every frame.
+3. Upload the MP4s and their posters to the media release, for the website's demo page
+   ([Demo videos](#demo-videos)): `gh release upload media target/clips/*.mp4 target/clips/*.jpg --clobber`.
+   Never add them to the `vX.Y.Z` release.
+4. Try it on your Mac: `scripts/release-dry-run.sh` builds the release (`scripts/release.sh`),
    signs it with a key made for the run, checks it, and then changes a byte to see the check fail.
    It needs Docker for the Linux packages; `--linux none` skips them.
-3. Work lands on `dev`. A release is a pull request from `dev` to `main`: merge it, and wait for
+5. Work lands on `dev`. A release is a pull request from `dev` to `main`: merge it, and wait for
    CI to pass on that commit of `main`. The release workflow builds and packages; it does not run
    the test suite again.
-4. Tag that commit of `main` and push the tag:
+6. Tag that commit of `main` and push the tag:
    `git checkout main && git pull && git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 `.github/workflows/release.yml` then runs:
+
+```mermaid
+flowchart LR
+  tag["a tag vX.Y.Z<br/>on main"] --> version["version"]
+  version --> macos["macos:<br/>arm64, x86_64"]
+  version --> linux["linux:<br/>arm64, x86_64"]
+  macos & linux --> publish["publish: sign, latest.json,<br/>verify, draft, publish"]
+  publish --> homebrew["homebrew: the tap"]
+  homebrew --> site["site.yml:<br/>the website"]
+```
 
 - **version**: `scripts/release-version.sh --on-main` fails unless the tag is `v` plus the version
   in `Cargo.toml` and the tagged commit is on `main`. Each build also checks that `leon --version`
@@ -51,6 +75,9 @@ Before the first release, do the one-time setup under [Secrets](#secrets).
   release is created as a draft with `scripts/release-notes.sh`'s text, and only then published,
   so the latest release never has files missing.
 - **homebrew**: `scripts/release-homebrew.sh` rewrites the tap's cask and formula.
+
+When the run succeeds, `.github/workflows/site.yml` deploys [the website](#the-website) from the
+new release.
 
 A version with a `-` in it (`0.2.0-rc.1`) becomes a pre-release and leaves the tap alone.
 
@@ -265,3 +292,50 @@ The workflow has a step where Developer ID signing and notarization will go. It 
 Without the `APPLE_DEVELOPER_ID` secret it prints a notice and the release goes on; with the
 secret set it fails, so nobody takes an ad-hoc build for a notarized one. Building it means
 signing inside `scripts/release.sh`, between the bundle and the zip.
+
+## The website
+
+<https://aindong.github.io/leon-cli/> shows the latest release: its README, `docs/` and
+`CHANGELOG.md` at that release's tag, built with the `website/` and `brand/` files of the commit
+the workflow runs on, so a fix to the site itself needs no release. It has the landing page
+(`brand/marketing/index.html`), the README as its overview, a page for each doc and translation,
+What's new (a page for each `## [X.Y.Z]` section of the changelog, the text its GitHub release has)
+and the demo. Links into the source go to GitHub at the release's tag.
+
+`.github/workflows/site.yml` runs after a Release run that a tag push started and that succeeded,
+and by hand (Actions, Site, Run workflow), which is also the way after publishing a release by
+hand. It always runs from the default branch, the only ref allowed to deploy to Pages. It asks GitHub for
+`releases/latest`, which is never a draft or a pre-release, checks that its tag is `vX.Y.Z`
+(`website/latest-tag.sh`), builds, and deploys with GitHub's own Pages actions. Its token can read
+the repository and write only to Pages.
+
+To build it yourself, `website/build.sh` (it needs `python3`, and installs the pinned, hashed
+`website/requirements.txt` into `target/site-venv`), `website/build.sh serve` to preview it, and
+`target/site-venv/bin/python website/test_site.py` for its tests. CI's `site` job runs both on
+every change but one to translations, images or `brand/` alone, which starts no CI run: after
+changing only the landing page or the font, run them yourself.
+
+### Demo videos
+
+Videos are too large for git, and a versioned release takes no extra files:
+`release-verify.sh --complete` fails on one, and the updater reads those releases. They live in one release of their
+own, tagged `media`, made once as a pre-release so that `releases/latest` never picks it
+(`website/fetch-media.sh` refuses to use it otherwise):
+
+```sh
+gh release create media --prerelease --latest=false --title "leon media" --notes "Videos for the website's demo page. Not a release of leon."
+gh release upload media demo.mp4 demo.jpg --clobber
+```
+
+`NAME.mp4` shows on the demo page with `NAME.jpg` (or `.png`) as its poster, and `demo.mp4`, the
+narrated tour, comes first. Names use lower-case letters, digits, `.`, `_` and `-`; other files
+are left out. The next run of the site shows them: run Site by hand after an upload.
+
+### Setting it up once
+
+These are the repository's settings, for its owner:
+
+- Settings, Pages, Source: **GitHub Actions** (or `gh api -X POST repos/aindong/leon-cli/pages -f build_type=workflow`).
+- Settings, Environments, `github-pages`: leave its rule as GitHub makes it, the default branch
+  only. Don't add tags: a run from a tag runs that tag's files, so anyone who can push a tag could
+  publish site code nobody reviewed.

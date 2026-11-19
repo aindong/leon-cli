@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# memory.sh: RSS and phys_footprint (KiB) of the server and the app (docs/performance.md).
+# memory.sh: RSS and phys_footprint (KiB) of the server and the app (docs/performance-app.md).
 #   scripts/perf/memory.sh [--gb 1]
 # 1. idle, one session with one shell pane, the app showing it
 # 2. 1, 10 and 50 more panes (each a new tab running /bin/sh: the server holds every one, the app

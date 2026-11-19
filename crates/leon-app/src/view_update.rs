@@ -52,6 +52,7 @@ impl Workspace {
             let (name, label, primary) = match &act {
                 Act::Install => ("update-install", "Install", true),
                 Act::Notes(_) => ("update-notes", "Release Notes", false),
+                Act::WhatsNew(_) => ("update-whats-new", "What's New", true),
                 Act::Copy(_) => ("update-copy", "Copy", true),
                 Act::Restart => ("update-restart", "Restart", true),
                 Act::AppManagement => ("update-settings", "Open System Settings", true),
@@ -114,7 +115,7 @@ impl Workspace {
         match act {
             Act::Install => self.run_action("client.update.install", None, "update_notice", window, cx),
             Act::Restart => self.run_action("client.update.restart", None, "update_notice", window, cx),
-            Act::Notes(url) => cx.open_url(url),
+            Act::Notes(url) | Act::WhatsNew(url) => cx.open_url(url),
             Act::Copy(text) => cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.clone())),
             Act::AppManagement => cx.open_url(APP_MANAGEMENT),
             Act::ReleasePage => cx.open_url(RELEASES),
@@ -137,6 +138,7 @@ fn palette_row(act: &Act) -> Option<(&'static str, &'static str)> {
     Some(match act {
         Act::Install => return None,
         Act::Notes(_) => ("client.update.notes", "Open the Release Notes"),
+        Act::WhatsNew(_) => ("client.update.whats_new", "Open What's New"),
         Act::Copy(_) => ("client.update.copy", "Copy the Update Command"),
         Act::Restart => ("client.update.restart", "Restart to Finish the Update"),
         Act::AppManagement => ("client.update.settings", "Open App Management Settings"),

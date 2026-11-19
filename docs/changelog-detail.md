@@ -8,16 +8,39 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
-### Leon.app never waits on its own server
+### Diagrams and benchmark charts
 
-#### Changed
-- Every call the window makes to This Mac's server (a key, a paste, a split and the directory it
-  opens in, a copy, a cmd-click, End All Sessions) goes through one ordered queue off the window's
-  thread, as a host's calls already did: a stuck server no longer freezes the window for the 5 s call timeout.
-- The window's copy of each machine's model changes only on its own thread, and only what a
-  change touches is drawn again (docs/architecture/gpui.md, R4).
-- A config reload reaches the window through the server's `keymap_changed` event, at once,
-  instead of the app asking for the keymap every second.
+#### Added
+- Mermaid diagrams, which GitHub and the website both draw: the big picture and the object model
+  ([architecture.md](architecture.md)), an orchestrator and its worker and the permission hold
+  ([agents.md](agents.md)), links to a host ([remote-hosts.md](remote-hosts.md)), the tailnet
+  listener's admission ([architecture/tailnet.md](architecture/tailnet.md)), the web page's checks
+  ([web.md](web.md)), scrollback's store ([architecture/scrollback.md](architecture/scrollback.md)),
+  the release run ([releases.md](releases.md)) and the update check ([updates.md](updates.md)).
+  The website serves its own copy of Mermaid, pinned and checked against a recorded hash.
+- Charts of leon's benchmarks, drawn from data files in `docs/perf/` by
+  `scripts/perf-charts.py`, which a test runs so a chart never drifts from its data; a Performance
+  section on the website opens with them ([performance.md](performance.md)). The app's own
+  measurements moved to [performance-app.md](performance-app.md).
+
+### What's new in the app
+
+#### Added
+- Leon.app's first launch of a new version shows "Updated to leon X.Y.Z." once in the update
+  notice, with What's New (and Open What's New in the palette), which opens the website's page for
+  that version. `updates.json` keeps the version that last ran; a first install shows nothing
+  ([updates.md](updates.md#in-leonapp)).
+
+### The website
+
+#### Added
+- <https://aindong.github.io/leon-cli/>: the landing page, the README and every doc and
+  translation, with search, a language switcher and light and dark; What's new, a page for each
+  release from its changelog section; and a demo page for the videos in the `media` pre-release.
+- `.github/workflows/site.yml` deploys it from the latest release's tag after each release, or by
+  hand; `website/build.sh` builds it, and CI builds it strictly on every change but one to
+  translations, images or `brand/` alone (they start no run)
+  ([releases.md](releases.md#the-website)).
 
 ### HTTPS for the browser page
 

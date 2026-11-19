@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="422" viewBox="0 0 720 422" role="img" aria-labelledby="title desc">
+<title id="title">cat of 100 MB, run by run, at each step</title>
+<desc id="desc">cat throughput at each step from the reader thread to scrollback B: with each change leon's runs sit near the macOS PTY's own limit of about 115 MB/s; the runs far below it were on a loaded machine.</desc>
+<style>
+  .bg { fill: #fcfcfb; } .t1 { fill: #0b0b0b; } .t2 { fill: #52514e; }
+  .grid { stroke: #e7e6e2; } .axis { stroke: #b9b8b1; } .ref { stroke: #52514e; }
+  .c1 { fill: #2a78d6; stroke: #2a78d6; } .c2 { fill: #eb6834; stroke: #eb6834; } .c0 { fill: #8f8d86; stroke: #8f8d86; }
+  .ring { stroke: #fcfcfb; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .t1 { fill: #f0efec; } .t2 { fill: #c3c2b7; }
+    .grid { stroke: #2f2f2c; } .axis { stroke: #57564f; } .ref { stroke: #c3c2b7; }
+    .c1 { fill: #3987e5; stroke: #3987e5; } .c2 { fill: #d95926; stroke: #d95926; } .c0 { fill: #76756f; stroke: #76756f; }
+    .ring { stroke: #1a1a19; }
+  }
+  text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+</style>
+<rect class="bg" width="720" height="422" rx="8"/>
+<text x="24.0" y="32.0" class="t1" font-size="16" text-anchor="start" font-weight="600">cat of 100 MB, run by run, at each step</text>
+<text x="24.0" y="52.0" class="t2" font-size="12" text-anchor="start">Each dot is one run of cargo bench's speed bench: cat of 100 MB, MB/s of program output.</text>
+<text x="24.0" y="69.0" class="t2" font-size="12" text-anchor="start">Apple M6, release build. The runs far below the rest ran while the machine was busy.</text>
+<line x1="204.0" y1="124.0" x2="204.0" y2="372.0" class="axis" stroke-width="1"/>
+<text x="204.0" y="388.0" class="t2" font-size="11" text-anchor="middle">0</text>
+<line x1="282.7" y1="124.0" x2="282.7" y2="372.0" class="grid" stroke-width="1"/>
+<text x="282.7" y="388.0" class="t2" font-size="11" text-anchor="middle">25</text>
+<line x1="361.3" y1="124.0" x2="361.3" y2="372.0" class="grid" stroke-width="1"/>
+<text x="361.3" y="388.0" class="t2" font-size="11" text-anchor="middle">50</text>
+<line x1="440.0" y1="124.0" x2="440.0" y2="372.0" class="grid" stroke-width="1"/>
+<text x="440.0" y="388.0" class="t2" font-size="11" text-anchor="middle">75</text>
+<line x1="518.7" y1="124.0" x2="518.7" y2="372.0" class="grid" stroke-width="1"/>
+<text x="518.7" y="388.0" class="t2" font-size="11" text-anchor="middle">100</text>
+<line x1="597.3" y1="124.0" x2="597.3" y2="372.0" class="grid" stroke-width="1"/>
+<text x="597.3" y="388.0" class="t2" font-size="11" text-anchor="middle">125</text>
+<line x1="676.0" y1="124.0" x2="676.0" y2="372.0" class="grid" stroke-width="1"/>
+<text x="676.0" y="388.0" class="t2" font-size="11" text-anchor="middle">150</text>
+<text x="440.0" y="406.0" class="t2" font-size="12" text-anchor="middle">MB/s</text>
+<line x1="565.9" y1="118.0" x2="565.9" y2="372.0" class="ref" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="561.9" y="116.0" class="t2" font-size="11" text-anchor="end">the macOS PTY's own limit, about 115</text>
+<rect x="24.0" y="95.0" width="10" height="10" rx="2" class="c0"/>
+<text x="39.0" y="104.0" class="t2" font-size="12" text-anchor="start">before a change</text>
+<rect x="162.0" y="95.0" width="10" height="10" rx="2" class="c1"/>
+<text x="177.0" y="104.0" class="t2" font-size="12" text-anchor="start">with it</text>
+<text x="194.0" y="142.0" class="t1" font-size="12" text-anchor="end">before the reader thread</text>
+<circle cx="507.0" cy="138.0" r="5" class="c0 ring" stroke-width="2"/>
+<circle cx="514.9" cy="138.0" r="5" class="c0 ring" stroke-width="2"/>
+<circle cx="522.8" cy="138.0" r="5" class="c0 ring" stroke-width="2"/>
+<text x="194.0" y="164.0" class="t1" font-size="12" text-anchor="end">the reader thread</text>
+<circle cx="565.2" cy="160.0" r="5" class="c1 ring" stroke-width="2"/>
+<circle cx="570.9" cy="160.0" r="5" class="c1 ring" stroke-width="2"/>
+<circle cx="576.3" cy="160.0" r="5" class="c1 ring" stroke-width="2"/>
+<text x="194.0" y="186.0" class="t1" font-size="12" text-anchor="end">before M10</text>
+<circle cx="592.9" cy="182.0" r="5" class="c0 ring" stroke-width="2"/>
+<text x="194.0" y="208.0" class="t1" font-size="12" text-anchor="end">M10</text>
+<circle cx="599.2" cy="204.0" r="5" class="c1 ring" stroke-width="2"/>
+<circle cx="592.6" cy="204.0" r="5" class="c1 ring" stroke-width="2"/>
+<circle cx="586.3" cy="204.0" r="5" class="c1 ring" stroke-width="2"/>
+<text x="194.0" y="230.0" class="t1" font-size="12" text-anchor="end">before M11 (two rounds)</text>
+<circle cx="495.7" cy="226.0" r="5" class="c0 ring" stroke-width="2"/>
+<circle cx="525.3" cy="226.0" r="5" class="c0 ring" stroke-width="2"/>
+<circle cx="555.5" cy="226.0" r="5" class="c0 ring" stroke-width="2"/>
+<circle cx="426.8" cy="226.0" r="5" class="c0 ring" stroke-width="2"/>
+<circle cx="434.7" cy="226.0" r="5" class="c0 ring" stroke-width="2"/>
+<circle cx="467.4" cy="226.0" r="5" class="c0 ring" stroke-width="2"/>
+<text x="194.0" y="252.0" class="t1" font-size="12" text-anchor="end">M11</text>
+<circle cx="530.3" cy="248.0" r="5" class="c1 ring" stroke-width="2"/>
+<circle cx="555.2" cy="248.0" r="5" class="c1 ring" stroke-width="2"/>
+<circle cx="573.7" cy="248.0" r="5" class="c1 ring" stroke-width="2"/>
+<text x="194.0" y="274.0" class="t1" font-size="12" text-anchor="end">M16b</text>
+<circle cx="446.9" cy="270.0" r="5" class="c1 ring" stroke-width="2"/>
+<text x="194.0" y="296.0" class="t1" font-size="12" text-anchor="end">before the flood fix</text>
+<circle cx="553.3" cy="292.0" r="5" class="c0 ring" stroke-width="2"/>
+<text x="194.0" y="318.0" class="t1" font-size="12" text-anchor="end">the flood fix</text>
+<circle cx="576.3" cy="314.0" r="5" class="c1 ring" stroke-width="2"/>
+<text x="194.0" y="340.0" class="t1" font-size="12" text-anchor="end">before scrollback B</text>
+<circle cx="578.5" cy="336.0" r="5" class="c0 ring" stroke-width="2"/>
+<circle cx="568.4" cy="336.0" r="5" class="c0 ring" stroke-width="2"/>
+<circle cx="496.0" cy="336.0" r="5" class="c0 ring" stroke-width="2"/>
+<text x="194.0" y="362.0" class="t1" font-size="12" text-anchor="end">scrollback B</text>
+<circle cx="603.6" cy="358.0" r="5" class="c1 ring" stroke-width="2"/>
+<circle cx="387.1" cy="358.0" r="5" class="c1 ring" stroke-width="2"/>
+<circle cx="592.3" cy="358.0" r="5" class="c1 ring" stroke-width="2"/>
+</svg>

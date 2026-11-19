@@ -44,6 +44,11 @@ load is given with each:
   made and killed every minute) cost about 33 MiB each on dev and 3 MiB on the branch: 90% less.
   At minute 0 the agents are still printing their first 10,000 lines, which alacritty holds at
   full width until they pause.
+
+![Server memory in a 12-agent soak: before scrollback B it climbed from 359 to 562 MiB in 5 minutes; with leon's history store it fell to 36 MiB and stayed there](images/perf/memory-soak.svg)
+
+![Memory per agent pane in the soak: about 33 MiB before scrollback B and 3 MiB with leon's history store, 90% less](images/perf/memory-per-pane.svg)
+
 - In process, 10,000 lines of 70 characters at 80 columns (`b1_store_memory.rs`, a counting
   allocator): 19.7 MB in alacritty alone, 2.2 MB with the store (89% less).
 - `cargo bench -p leon --bench speed`, three rounds each, alternating: `cat` of 100 MB at 119.0,

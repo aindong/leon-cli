@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# soak.sh: a long agent workload, sampling memory to find leaks (docs/performance.md).
+# soak.sh: a long agent workload, sampling memory to find leaks (docs/performance-app.md).
 #   scripts/perf/soak.sh [MINUTES]   (default 120)
 # 4 sessions of 3 panes, each pane an agent (scripts/perf/agent.py soak: a full scrollback first,
 # then ANSI bursts and OSC 7501 working/blocked/done every 5 s) that exits after 1 to 5 minutes

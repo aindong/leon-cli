@@ -1,0 +1,22 @@
+{#- Material's language switcher, but each link goes to this page's own translation when there is
+    one (website/hooks.py sets page.leon_alternates), and to the language's home otherwise. -#}
+<div class="md-header__option">
+  <div class="md-select">
+    {% set icon = config.theme.icon.alternate or "material/translate" %}
+    <button class="md-header__button md-icon" aria-label="{{ lang.t('select.language') }}">
+      {% include ".icons/" ~ icon ~ ".svg" %}
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        {% for alt in config.extra.alternate %}
+          {% set here = page.leon_alternates if page and page.leon_alternates else {} %}
+          <li class="md-select__item">
+            <a href="{{ here.get(alt.lang, alt.link) | url }}" hreflang="{{ alt.lang }}" class="md-select__link">
+              {{ alt.name }}
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>

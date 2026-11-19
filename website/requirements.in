@@ -1,0 +1,3 @@
+# The site generator and its theme; website/requirements.txt pins them and every dependency, with hashes:
+#   uv pip compile --universal --generate-hashes --exclude-newer <two weeks ago> website/requirements.in -o website/requirements.txt
+mkdocs-material

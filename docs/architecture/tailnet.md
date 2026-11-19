@@ -66,6 +66,22 @@ of [the architecture](../architecture.md); the ssh path it sits beside is in [Ho
   contain the name. The fake's socket must be ours. CI has no tailnet; the real path was checked by
   hand against the Mac app (status and whois only).
 
+## Who gets in, step by step
+
+```mermaid
+flowchart TD
+  conn["a connection to the tailnet listener"] --> range{"from a tailnet address?"}
+  range -->|no| quiet["closed, no whois"]
+  range -->|yes| limits{"under the limits? 5 refusals a minute,<br/>32 waiting, 8 per address"}
+  limits -->|no| unasked["refused unasked"]
+  limits -->|yes| ask["status, whois of the caller, status again:<br/>within 3 s, before a byte is read"]
+  ask --> self{"this machine itself?"}
+  self -->|yes| refused["closed unread and unanswered,<br/>one log line and last_refusal"]
+  self -->|no| owner{"untagged and the pinned owner,<br/>or a tag in serve_tailscale_tags?"}
+  owner -->|no| refused
+  owner -->|yes| first["let in: the first byte picks the API<br/>or the web page (web.md)"]
+```
+
 ## Threat model
 
 Before this, the only ways in were the Unix socket (peer uid checked) and ssh as the user. A

@@ -1,0 +1,29 @@
+step,kind,commit,date,run,mbps,load,machine,source
+before the reader thread,before,,,1,96.3,about 7,"Apple M6 (12 cores), macOS 27, release build",performance.md#the-change-before-and-after
+before the reader thread,before,,,2,98.8,about 7,"Apple M6 (12 cores), macOS 27, release build",performance.md#the-change-before-and-after
+before the reader thread,before,,,3,101.3,about 7,"Apple M6 (12 cores), macOS 27, release build",performance.md#the-change-before-and-after
+the reader thread,after,,,1,114.8,about 7,"Apple M6 (12 cores), macOS 27, release build",performance.md#the-change-before-and-after
+the reader thread,after,,,2,116.6,about 7,"Apple M6 (12 cores), macOS 27, release build",performance.md#the-change-before-and-after
+the reader thread,after,,,3,118.3,about 7,"Apple M6 (12 cores), macOS 27, release build",performance.md#the-change-before-and-after
+before M10,before,00e956d,,1,123.6,,"Apple M6 (12 cores), macOS 27, release build",performance.md#m10-the-attached-app
+M10,after,,,1,125.6,,"Apple M6 (12 cores), macOS 27, release build",performance.md#m10-the-attached-app
+M10,after,,,2,123.5,tests running alongside,"Apple M6 (12 cores), macOS 27, release build",performance.md#m10-the-attached-app
+M10,after,,,3,121.5,after the review fixes,"Apple M6 (12 cores), macOS 27, release build",performance.md#m10-the-attached-app
+before M11 (two rounds),before,9aa91e0,,1,92.7,12 to 18,"Apple M6 (12 cores), macOS 27, release build",performance.md#m11-scrollback-selection-and-find
+before M11 (two rounds),before,9aa91e0,,2,102.1,12 to 18,"Apple M6 (12 cores), macOS 27, release build",performance.md#m11-scrollback-selection-and-find
+before M11 (two rounds),before,9aa91e0,,3,111.7,12 to 18,"Apple M6 (12 cores), macOS 27, release build",performance.md#m11-scrollback-selection-and-find
+before M11 (two rounds),before,9aa91e0,,4,70.8,12 to 18,"Apple M6 (12 cores), macOS 27, release build",performance.md#m11-scrollback-selection-and-find
+before M11 (two rounds),before,9aa91e0,,5,73.3,12 to 18,"Apple M6 (12 cores), macOS 27, release build",performance.md#m11-scrollback-selection-and-find
+before M11 (two rounds),before,9aa91e0,,6,83.7,12 to 18,"Apple M6 (12 cores), macOS 27, release build",performance.md#m11-scrollback-selection-and-find
+M11,after,,,1,103.7,12 to 18,"Apple M6 (12 cores), macOS 27, release build",performance.md#m11-scrollback-selection-and-find
+M11,after,,,2,111.6,12 to 18,"Apple M6 (12 cores), macOS 27, release build",performance.md#m11-scrollback-selection-and-find
+M11,after,,,3,117.5,12 to 18,"Apple M6 (12 cores), macOS 27, release build",performance.md#m11-scrollback-selection-and-find
+M16b,after,,,1,77.2,7 to 12,"Apple M6 (12 cores), macOS 27, release build",performance.md#m16b-hosts-through-a-link
+before the flood fix,before,9b56116,,1,111.0,2.95,"Apple M6, release build",performance-cat.md#before-and-after
+the flood fix,after,fac56ca,,1,118.3,3.44,"Apple M6, release build",performance-cat.md#before-and-after
+before scrollback B,before,a3edd74,2026-11-19,1,119.0,2.8,"Apple M6, release build",performance-memory.md#history-in-leons-store
+before scrollback B,before,a3edd74,2026-11-19,2,115.8,3.1,"Apple M6, release build",performance-memory.md#history-in-leons-store
+before scrollback B,before,a3edd74,2026-11-19,3,92.8,5.1,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,after,,2026-11-19,1,127.0,3.0,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,after,,2026-11-19,2,58.2,3.1 rising to 6.9,"Apple M6, release build",performance-memory.md#history-in-leons-store
+scrollback B,after,,2026-11-19,3,123.4,9.2,"Apple M6, release build",performance-memory.md#history-in-leons-store
