@@ -135,44 +135,73 @@ fn pos(scrolled: usize, p: Point) -> Pos {
 }
 
 pub fn find<T>(term: &Term<T>, scrolled: usize, q: &Query) -> Result<Found, String> {
-    let mut found = Found::default();
-    if q.query.is_empty() {
-        return Ok(found);
+    let Some(mut f) = Finder::new(q)? else { return Ok(Found::default()) };
+    f.run(term, scrolled, Point::new(term.topmost_line(), Column(0)));
+    Ok(f.found)
+}
+
+/// A find over one grid or several in reading order (the store's lines, then alacritty's), with
+/// one limit and one CPU budget for all of them.
+pub struct Finder {
+    regex: RegexSearch,
+    pattern: bool,
+    limit: usize,
+    started: Duration,
+    pub found: Found,
+}
+
+impl Finder {
+    /// None for an empty query: it finds nothing.
+    pub fn new(q: &Query) -> Result<Option<Finder>, String> {
+        if q.query.is_empty() {
+            return Ok(None);
+        }
+        let text = if q.regex { blank_ends(&q.query) } else { regex_syntax::escape(&q.query) };
+        // alacritty ignores case unless the query has a capital; the flag decides instead
+        let flag = if q.case_sensitive { "(?-i)" } else { "(?i)" };
+        let regex = RegexSearch::new(&format!("{flag}{text}")).map_err(|e| e.to_string())?;
+        let limit = q.limit.min(MAX_MATCHES);
+        Ok(Some(Finder { regex, pattern: q.regex, limit, started: thread_cpu(), found: Found::default() }))
     }
-    let text = if q.regex { blank_ends(&q.query) } else { regex_syntax::escape(&q.query) };
-    // alacritty ignores case unless the query has a capital; the flag decides instead
-    let flag = if q.case_sensitive { "(?-i)" } else { "(?i)" };
-    let mut regex = RegexSearch::new(&format!("{flag}{text}")).map_err(|e| e.to_string())?;
-    let limit = q.limit.min(MAX_MATCHES);
-    let end = Point::new(term.bottommost_line(), term.last_column());
-    let mut from = Point::new(term.topmost_line(), Column(0));
-    let started = thread_cpu();
-    while let Some(m) = term.regex_search_right(&mut regex, from, end) {
-        if *m.start() < from {
-            break; // it wrapped around to the top
+
+    /// Whether more may be found: neither the limit nor the budget is spent (once it is, the
+    /// find is `truncated`).
+    pub fn going(&mut self) -> bool {
+        if thread_cpu().saturating_sub(self.started) > MAX_FIND_TIME {
+            self.found.truncated = true;
         }
-        // the terminal's lock is held: a pattern that rescans long lines gets cut off
-        if found.matches.len() == limit || thread_cpu().saturating_sub(started) > MAX_FIND_TIME {
-            found.truncated = true;
-            break;
-        }
-        // the blanks `$` was allowed to cross (`blank_ends`) aren't part of the match
-        let mut last = *m.end();
-        while q.regex && last > *m.start() && term.grid()[last].c == ' ' && last.column == term.last_column() {
-            last = last.sub(term, Boundary::Grid, 1);
-            while last > *m.start() && term.grid()[last].c == ' ' {
-                last = last.sub(term, Boundary::Grid, 1);
+        !self.found.truncated
+    }
+
+    /// Find in `term` (whose top line is numbered by `scrolled`) from `from` to its end.
+    pub fn run<T>(&mut self, term: &Term<T>, scrolled: usize, mut from: Point) {
+        let end = Point::new(term.bottommost_line(), term.last_column());
+        while let Some(m) = self.going().then(|| term.regex_search_right(&mut self.regex, from, end)).flatten() {
+            if *m.start() < from {
+                break; // it wrapped around to the top
             }
+            // the terminal's lock is held: a pattern that rescans long lines gets cut off
+            if self.found.matches.len() == self.limit || thread_cpu().saturating_sub(self.started) > MAX_FIND_TIME {
+                self.found.truncated = true;
+                break;
+            }
+            // the blanks `$` was allowed to cross (`blank_ends`) aren't part of the match
+            let mut last = *m.end();
+            while self.pattern && last > *m.start() && term.grid()[last].c == ' ' && last.column == term.last_column() {
+                last = last.sub(term, Boundary::Grid, 1);
+                while last > *m.start() && term.grid()[last].c == ' ' {
+                    last = last.sub(term, Boundary::Grid, 1);
+                }
+            }
+            self.found.matches.push(Range { start: pos(scrolled, *m.start()), end: pos(scrolled, last) });
+            // past the match, and at least a cell on, so a pattern that matches nothing still ends
+            let next = (*m.end()).max(from).add(term, Boundary::Grid, 1);
+            if *m.end() >= end || next == from {
+                break;
+            }
+            from = next;
         }
-        found.matches.push(Range { start: pos(scrolled, *m.start()), end: pos(scrolled, last) });
-        // past the match, and at least a cell on, so a pattern that matches nothing still ends
-        let next = (*m.end()).max(from).add(term, Boundary::Grid, 1);
-        if *m.end() >= end || next == from {
-            break;
-        }
-        from = next;
     }
-    Ok(found)
 }
 
 /// A row runs to the screen's width, padded with blanks, and alacritty ends its input there; so
@@ -242,6 +271,18 @@ pub fn select<T>(
         t.split('\n').map(crate::program_status::strip_hidden).collect::<Vec<_>>().join("\n")
     });
     Some(Selected { start: pos(scrolled, range.start), end: pos(scrolled, range.end), text })
+}
+
+/// The text alacritty copies from `start` to `end` (a rectangle when `block`), with nothing more:
+/// a word or a line selection's ends already widened (`select`).
+pub(crate) fn text_of<T>(term: &mut Term<T>, block: bool, start: Point, end: Point) -> String {
+    let ty = if block { SelectionType::Block } else { SelectionType::Simple };
+    let mut sel = Selection::new(ty, start, Side::Left);
+    sel.update(end, Side::Right);
+    let kept = term.selection.replace(sel);
+    let t = term.selection_to_string().unwrap_or_default();
+    term.selection = kept;
+    t
 }
 
 /// Detected links: a scheme and `://`, or `mailto:`, then anything up to a space or a character

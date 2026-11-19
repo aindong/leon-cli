@@ -66,6 +66,8 @@ The decisions, in nine parts:
   the socket path, terminal emulation, Lua (config, runtime, bounds), the app, the screen transport,
   scrollback, selection, find, links and mouse reporting, `leon attach`, the app keymap and look,
   and the agent skill.
+- [Scrollback](architecture/scrollback.md): alacritty's rows and leon's store behind them: when
+  rows move, why none is lost or renumbered, styles, clears, resize and the cap.
 - [Switching and attention](architecture/attention.md): the session switcher, Activity, the
   badges, notifications, the fade of the panes without the focus, the translucent window, and
   `leon notify`.

@@ -55,6 +55,7 @@ fn the_change_decides_the_jobs() {
     assert_eq!(kind(&["docs/install.md", "docs/i18n/ja/install.md"]), "docs");
     assert_eq!(kind(&["README.md"]), "docs");
     assert_eq!(kind(&["docs/lua/keys.md", "CLAUDE.md"]), "docs");
+    assert_eq!(kind(&["website/hooks.py", "website/requirements.txt"]), "docs");
     assert_eq!(kind(&["docs/install.md", "crates/leon/src/main.rs"]), "full");
     // Markdown that is code: the skill's guide is compiled in, scripts and workflows are code
     assert_eq!(kind(&["crates/leon/src/skill/guide.md"]), "full");

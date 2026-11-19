@@ -78,6 +78,8 @@ pub struct Ctx {
     geometry: Mutex<std::collections::HashMap<String, leon_core::overlays::Geometry>>,
     /// Closed terminals' sessions, for the permission guard (agents.rs).
     pub(crate) gone: agents::Gone,
+    /// The `scrollback` setting: lines of history a terminal keeps (lua.rs sets it on a reload).
+    scrollback: std::sync::atomic::AtomicUsize,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -136,6 +138,7 @@ impl Ctx {
             pane_env: Vec::new(),
             geometry: Mutex::default(),
             gone: agents::Gone::default(),
+            scrollback: leon_core::terminal::SCROLLBACK.into(),
         }
     }
 

@@ -1,5 +1,5 @@
 {
-  "api_version": "1.17.0",
+  "api_version": "1.18.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -2998,6 +2998,11 @@
               },
               "serve_web_key": {
                 "type": "string"
+              },
+              "scrollback": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
               }
             },
             "required": [
@@ -3019,7 +3024,8 @@
               "cursor_shader_duration",
               "serve_web",
               "serve_web_cert",
-              "serve_web_key"
+              "serve_web_key",
+              "scrollback"
             ]
           },
           "sources": {
