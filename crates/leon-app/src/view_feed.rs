@@ -139,7 +139,10 @@ impl Workspace {
         self.refresh_keymap(cx);
         self.stats.borrow_mut().report(); // the last frames before a quiet spell
         let seen = (self.updates.generation(), self.hosts.tailnet_reads());
-        if replied || hosts || made || seen != self.wake_seen {
+        // a machine's state (an attempt failed, a link reconnecting) is drawn by the root and the
+        // sidebar, and brings no model event
+        let moved = self.root_input() != self.root_seen;
+        if replied || hosts || made || moved || seen != self.wake_seen {
             self.wake_seen = seen;
             self.root_changed(cx);
         }
