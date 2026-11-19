@@ -10,7 +10,12 @@ pub(super) struct KeymapInbox {
     reply: Option<Value>,
     /// The `server.settings` reply asked for when the keymap's generation moved to the one given.
     settings: Option<(u64, Value)>,
+    /// An ask failed (the keymap's or the settings'): asked again after `KEYMAP_RETRY`.
+    failed: bool,
 }
+
+/// How long after a failed keymap or settings ask the window asks again.
+const KEYMAP_RETRY: Duration = Duration::from_secs(1);
 
 impl Workspace {
     /// After a frame was drawn (render defers it): the pane it showed noted as seen, and the
@@ -33,6 +38,17 @@ impl Workspace {
     /// reply whose generation moved, and then the settings of that reload (every reload moves the
     /// generation, and `settings_changed` only comes with one).
     pub(super) fn refresh_keymap(&mut self, cx: &mut Context<Self>) {
+        if std::mem::take(&mut lock(&self.inbox).failed) && self.deadlines.keymap.is_none() {
+            self.deadlines.keymap = Some(cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(KEYMAP_RETRY).await;
+                let _ = this.update(cx, |ws, cx| {
+                    ws.deadlines.keymap = None;
+                    // asked again, and applied (with its settings) whatever its generation
+                    (ws.keymap_asked, ws.keymap_again) = (None, true);
+                    ws.refresh_keymap(cx);
+                });
+            }));
+        }
         let settings = lock(&self.inbox).settings.take();
         // one asked for under an older generation may come after a newer one: it is dropped
         if let Some((_, settings)) = settings.filter(|(g, _)| *g == self.keymap.generation) {
@@ -50,6 +66,7 @@ impl Workspace {
                 self.hosts.local().spawn("client.keymap", json!({}), move |r| {
                     let mut inbox = lock(&back);
                     inbox.asking = false;
+                    inbox.failed |= r.is_err();
                     inbox.reply = r.ok();
                     drop(inbox);
                     wake(); // and a `keymap_changed` that came while this was out asks again then
@@ -57,17 +74,20 @@ impl Workspace {
             }
             inbox.reply.take()
         };
-        if let Some(km) = reply.filter(|km| km["generation"].as_u64() != Some(self.keymap.generation)) {
+        let again = reply.is_some() && std::mem::take(&mut self.keymap_again);
+        if let Some(km) = reply.filter(|km| again || km["generation"].as_u64() != Some(self.keymap.generation)) {
             self.use_keymap(&km);
             let (back, generation, wake) = (self.inbox.clone(), self.keymap.generation, self.wake.clone());
             self.hosts.local().spawn("server.settings", json!({}), move |r| {
                 let mut inbox = lock(&back);
                 // a slow reply asked for under an older generation never replaces a newer one
-                if let (Ok(s), true) = (r, inbox.settings.as_ref().is_none_or(|(g, _)| *g <= generation)) {
-                    inbox.settings = Some((generation, s));
-                    drop(inbox);
-                    wake();
+                match (r, inbox.settings.as_ref().is_none_or(|(g, _)| *g <= generation)) {
+                    (Ok(s), true) => inbox.settings = Some((generation, s)),
+                    (Err(_), _) => inbox.failed = true,
+                    (Ok(_), false) => return,
                 }
+                drop(inbox);
+                wake();
             });
             cx.notify();
         }

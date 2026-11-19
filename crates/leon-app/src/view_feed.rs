@@ -247,6 +247,8 @@ pub(super) struct Deadlines {
     find: Option<(Instant, Task<()>)>,
     thumbs: Option<(Instant, Task<()>)>,
     pub(super) activity: Option<Task<()>>,
+    /// A failed keymap or settings ask, asked again (view_poll.rs).
+    pub(super) keymap: Option<Task<()>>,
 }
 
 /// Arm `slot` for `at` with the task `task` makes, unless it already is; None disarms it.

@@ -155,6 +155,9 @@ pub struct Workspace {
     keymap: Keymap,
     inbox: Arc<Mutex<poll_view::KeymapInbox>>,
     keymap_asked: Option<Instant>,
+    /// Apply the next keymap reply (and fetch its settings) even if its generation didn't move:
+    /// the last try failed.
+    keymap_again: bool,
     /// The chords of a sequence typed so far (`ctrl+b`).
     pending: Vec<Chord>,
     /// The window after a repeatable binding ran (tmux `bind -r`).
@@ -344,6 +347,7 @@ impl Workspace {
             keymap: Keymap::app(&json!({})),
             inbox: Arc::default(),
             keymap_asked: None,
+            keymap_again: false,
             pending: Vec::new(),
             repeat: keymap::Repeat::default(),
             palette: None,
