@@ -1,0 +1,89 @@
+  <section class="section" id="app" aria-labelledby="app-h">
+    <div class="wrap">
+      <div class="grid">
+        <div class="span-5"><h2 id="app-h">Keep your work in view. <span class="muted">Every session in one leon window.</span></h2></div>
+        <div class="span-6 start-7 stack-4">
+          <p class="t-lead">Sessions sit in the sidebar with their state beside them. Split a tab when you need two things at once; a server keeps them all running.</p>
+          <a class="link" href="shortcuts/">See the keyboard shortcuts</a>
+        </div>
+      </div>
+      <div class="ui app lw fill" role="img" aria-label="The leon app: three sessions in the sidebar; an agent fixing a flaky test beside a test run, the git log and a server log" data-ui-pause-host>
+        <div class="lw__bar"><span class="lw__dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="lw__tools" aria-hidden="true">▢ ⊞ ⓘ ⌘ +</span><span class="lw__title">auth · 4 panes</span></div>
+        <div class="lw__body">
+          <div class="lw__side">
+            <div class="lw__group">auth</div>
+            <div class="lw__row is-on"><span class="lw__g lw--working">●</span>Fix the flaky login test<span class="lw__k">60%</span></div>
+            <div class="lw__row"><span class="lw__g lw--blocked">!</span>Add rate limiting<span class="lw__k">⌘2</span></div>
+            <div class="lw__row"><span class="lw__g">$</span>dev server<span class="lw__k">⌘3</span></div>
+            <div class="lw__group">site</div>
+            <div class="lw__row"><span class="lw__g lw--done">✓</span>Review the README<span class="lw__k">⌘4</span></div>
+            <div class="lw__row lw__extra"><span class="lw__g">$</span>docs preview<span class="lw__k">⌘5</span></div>
+            <div class="lw__group">infra</div>
+            <div class="lw__row"><span class="lw__g lw--error">×</span>deploy api v2.3.1<span class="lw__k">⌘6</span></div>
+            <div class="lw__row lw__extra"><span class="lw__g lw--blocked">?</span>Migrate the users table<span class="lw__k">⌘7</span></div>
+            <div class="lw__row lw__extra"><span class="lw__g">$</span>devbox<span class="lw__k">⌘8</span></div>
+          </div>
+          <div class="lw__panes">
+            <div class="lw__pane is-focus lw__pane--tall">
+              <div class="lw__head"><span>Fix the flaky login test</span><span class="lw--working">● 60% running the tests</span></div>
+              <pre class="lw__screen">&gt; Fix the flaky login test in auth/session_test.rs
+<span class="lw__more">
+  Read auth/session_test.rs (212 lines)
+  The test sleeps 50 ms, then checks the session expired.
+  On a busy machine the check runs before the timer fires.
+</span>
+  Ran the auth tests 20 times: 3 of 20 failed.
+
+  Update auth/session_test.rs
+<span class="lw--del">  - std::thread::sleep(Duration::from_millis(50));</span>
+<span class="lw--add">  + clock.advance(Duration::from_secs(61));</span>
+<span class="lw__more">
+  Running the tests beside me:
+    leon split --label tests -- cargo test -p auth
+
+  The same sleep is in two more tests.</span></pre>
+            </div>
+            <div class="ui ui-panel ui-term lw__pane lw__pane--run" data-ui="terminal-run" data-ui-loop>
+              <div class="ui-term__head">
+                <span class="ui-term__title">tests</span>
+                <span class="ui-meta lw--done">✓ done</span>
+                <span class="ui-spacer"></span>
+                <span class="ui-chip ui-chip--plain ui-term__branch">fix-flaky-login</span>
+              </div>
+              <div class="ui-term__screen" data-term-screen>
+                  <div class="ui-term__track" data-term-track>
+                    <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/<span class="ui-term__up">src/</span>auth</span><span class="ui-term__sig">%</span><span class="ui-term__typed" data-term-cmd>cargo test -p auth</span></div>
+                    <div class="ui-term__ln ui-term__meter" data-term-out data-term-meter><span class="ui-term__bar" style="--p:1"><i></i></span><span class="ui-term__count" data-term-count>3 of 3 suites</span></div>
+                    <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">session::tests</span><span class="ui-term__n">6 tests</span><span class="ui-term__t">0.12s</span></div>
+                    <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">token::tests</span><span class="ui-term__n">3 tests</span><span class="ui-term__t">0.04s</span></div>
+                    <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">tests/session_test.rs</span><span class="ui-term__n">9 tests</span><span class="ui-term__t">0.11s</span></div>
+                    <div class="ui-term__ln ui-term__gap" data-term-out aria-hidden="true"></div>
+                    <div class="ui-term__ln ui-term__sum" data-term-out><span class="ui-term__key">test result</span><span class="ui-term__val">ok. 18 passed</span><span class="ui-term__dim">0 failed</span></div>
+                    <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 8.3 2.4 2.4 4.6-5"/></svg></span><b>Done</b><span class="ui-term__dim">in 0.31s</span></div>
+                    <div class="ui-term__ln ui-term__cmd" data-term-next><span class="ui-term__cwd">~/<span class="ui-term__up">src/</span>auth</span><span class="ui-term__sig">%</span><span class="ui-term__typed"></span><i class="ui-term__caret" aria-hidden="true"></i></div>
+                  </div>
+                </div>
+            </div>
+            <div class="lw__pane">
+              <div class="lw__head"><span>zsh ~/src/auth</span></div>
+              <pre class="lw__screen">auth % git log --oneline --graph
+<span class="lw--hash">* 2dd15a5</span> tokens: rotate keys weekly
+<span class="lw--hash">* 989b67a</span> logout clears the cookie
+<span class="lw--hash">* b0d3c65</span> a test clock, not sleeps
+auth % </pre>
+            </div>
+            <div class="lw__pane">
+              <div class="lw__head"><span>tail -f access.log</span></div>
+              <pre class="lw__screen">GET    /health         200   1ms
+GET    /login          200   3ms
+POST   /session        201  12ms
+GET    /me             200   2ms
+GET    /orders         200   9ms
+POST   /orders         201  21ms
+GET    /orders/1042    200   4ms</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>

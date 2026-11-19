@@ -1,0 +1,62 @@
+  <section class="section bg-halo" id="agents" style="--hm: 2" aria-labelledby="agents-h">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="agents-h">Coding agents in leon report and delegate. <span class="muted">Claude Code and Codex work in panes beside you.</span></h2>
+        <p><a class="link" href="agents/">Read the agents guide</a></p>
+      </div>
+      <div class="grid">
+        <article class="card card--row card--open span-4 m-nolift">
+          <h3>Reports working, blocked or done</h3>
+          <p>The state shows on the tab, in the Activity list, on the Dock and in a notification.</p>
+          <div class="panel">
+            <div class="stage stage--fade-b"><div class="at-rise fit" style="--fit-max: 380px; --ax: 24px; --ay: calc(100% - 196px); --ay-sm: calc(100% - 196px)" data-ui-loop>
+              <div class="ui ui-notify" data-ui="notify">
+                <ul class="ui-notify__list" data-notify-list>
+                  <li class="ui-note"><span class="ui-note__ico lw--blocked-ico" aria-hidden="true">!</span><span class="ui-note__text"><span class="ui-note__title">Rate limiting is blocked<time>now</time></span><span class="ui-note__body">Edit src/routes.rs?</span></span><span class="ui-btn ui-btn--sm ui-note__btn">Open</span></li>
+                  <li class="ui-note"><span class="ui-note__ico" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 16 16"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg></span><span class="ui-note__text"><span class="ui-note__title">README review is done<time>2m</time></span><span class="ui-note__body">This Mac › site</span></span></li>
+                  <li class="ui-note"><span class="ui-note__ico" aria-hidden="true">●</span><span class="ui-note__text"><span class="ui-note__title">Flaky test: working<time>5m</time></span><span class="ui-note__body">60%, running the tests</span></span></li>
+                </ul>
+              </div>
+            </div></div>
+          </div>
+        </article>
+        <article class="card card--row card--open span-4 m-nolift">
+          <h3>Opens a pane for your tests</h3>
+          <p>The agent runs them beside itself, waits for the exit and reads the last lines.</p>
+          <div class="panel">
+            <div class="stage"><div class="at-rise fit" style="--fit-max: 340px; --ay: 40px; --ay-sm: 24px">
+              <div class="ui lw lw--card" role="img" aria-label="An agent's commands: leon split opens a tests pane, leon wait waits for it, leon capture reads the result">
+                <pre class="lw__screen"><span class="lw--dim"># a pane for the tests</span>
+id=$(leon split --label tests \
+  --keep-open -- cargo test)
+
+<span class="lw--dim"># wait, then read the end</span>
+leon wait "$id"
+leon capture -b "$id" --trim | tail -2
+<span class="lw--done">test result: ok. 18 passed; 0 failed</span></pre>
+              </div>
+            </div></div>
+          </div>
+        </article>
+        <article class="card card--row card--open span-4 m-nolift">
+          <h3>Starts agents and hears back</h3>
+          <p>Workers get their own tab or worktree. Their reports land in your inbox.</p>
+          <div class="panel">
+            <div class="stage"><div class="at-rise fit" style="--fit-max: 340px; --ay: 40px; --ay-sm: 24px">
+              <div class="ui lw lw--card" role="img" aria-label="An agent starts two agents with leon agent start; leon types a notice into its prompt when a report arrives">
+                <pre class="lw__screen">leon agent start --label tests
+leon agent start --label docs
+<span class="lw--dim">I'll wait for their reports.</span>
+
+<span class="lw__notice">&gt; You have 1 leon message.
+  Run leon inbox to read it.</span>
+
+leon inbox
+<span class="lw--done">tests: 18 tests pass</span></pre>
+              </div>
+            </div></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>

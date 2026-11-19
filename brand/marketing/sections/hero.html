@@ -1,0 +1,51 @@
+  <section class="hero hero--split" data-enter aria-labelledby="hero-h">
+    <div class="wrap"><div class="hero-text grid hero__grid">
+      <div class="hero__text span-5">
+        <h1 id="hero-h">A terminal multiplexer for coding agents</h1>
+        <p class="hero__lead">Your shells, tests and agents keep running when you close the window, and each agent says when it is working, blocked or done. Free for macOS and Linux.</p>
+        <div class="btn-row"><a class="btn btn--primary" href="install/">Install leon<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a><a class="btn btn--secondary" href="overview/">Read the docs</a></div>
+      </div>
+      <div class="hero__media span-6 start-7" data-visual data-fx="silk-folds" data-fx-seed="11" data-fx-palette='{"accent":"#b64c32"}' data-fx-params='{"tone":1,"calmX":0.3,"calmY":0.75}'>
+        <div class="stage stage--fade-br">
+          <div class="at-corner" style="--ax: 40px; --ay: 48px">
+            <div class="ui lw lw--hero" role="img" aria-label="The leon app: an agent in the auth session waits for permission to edit src/routes.rs, beside sessions that are working and done">
+              <div class="lw__bar"><span class="lw__dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="lw__tools" aria-hidden="true">▢ ⊞ ⓘ ⌘ +</span></div>
+              <div class="lw__body">
+                <div class="lw__side">
+                  <div class="lw__group">auth</div>
+                  <div class="lw__row is-on"><span class="lw__g lw--blocked">!</span>Add rate limiting</div>
+                  <div class="lw__row"><span class="lw__g lw--working">●</span>Fix the flaky test</div>
+                  <div class="lw__group">site</div>
+                  <div class="lw__row"><span class="lw__g lw--done">✓</span>Review the README</div>
+                  <div class="lw__group">infra</div>
+                  <div class="lw__row"><span class="lw__g">$</span>dev server</div>
+                </div>
+                <div class="lw__pane is-focus">
+                  <div class="lw__head"><span>Add rate limiting</span><span class="lw--blocked">! Edit src/routes.rs?</span></div>
+                  <pre class="lw__screen">&gt; Add rate limiting to the public API
+<span class="lw__more">
+  Plan: a token bucket per API key in src/limits.rs,
+  100 requests a minute, Retry-After on a 429.
+</span>
+  Write src/limits.rs (64 lines)
+<span class="lw--add">  + pub fn per_key(per_minute: u32) -&gt; Limits</span>
+  Ran the tests: 42 passed
+
+  Edit src/routes.rs to add the middleware?
+<span class="lw--add">  + .layer(limits::per_key(100))</span>
+
+<span class="lw__ask">  ❯ 1. Yes
+    2. Yes, and don't ask again for this file
+    3. No, and tell the agent what to do</span></pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ly-float">
+          <div class="ly-float__row"><span class="ly-live">leon inbox</span><span>now</span></div>
+          <div class="ly-float__title">tests: 18 passed, 0 failed</div>
+        </div>
+      </div>
+    </div></div>
+  </section>
