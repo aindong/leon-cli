@@ -296,8 +296,15 @@ pub(crate) fn person_typing(ctx: &Ctx, method: &str, params: &Value) {
     st.person_typed_at(&id);
 }
 
+/// Whether a person's input request reaches the terminal as typing, which ends a hold there. Not
+/// `client.key` itself: a binding may take the key; the `block.event` that types it when none
+/// does is its own call (`Ctx::call`, as the person's).
 fn typing(method: &str, params: &Value) -> bool {
-    method != "block.event" || matches!(params["event"]["type"].as_str(), Some("key" | "paste"))
+    match method {
+        "client.key" => false,
+        "block.event" => matches!(params["event"]["type"].as_str(), Some("key" | "paste")),
+        _ => true,
+    }
 }
 
 /// Keep agents from answering permission prompts. A block whose program reported one is held

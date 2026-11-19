@@ -333,3 +333,30 @@ fn a_close_moves_the_keys_to_a_free_float_rather_than_a_held_prompt() {
     assert_ne!(keys_go_to(&v), h, "FLOAT_SKIPPED: a free float was left, yet the keys stayed on held H: {v}");
     assert_eq!(keys_go_to(&v), f, "{v}");
 }
+
+#[test]
+fn a_persons_key_a_binding_takes_does_not_end_the_hold() {
+    let o = Orch::new();
+    let (s, w) = held_reader(&o);
+    focus(&o, &s, &w);
+    std::fs::write(o.env.dir.path().join("no-init.lua"), "leon.bind(\"ctrl+g\", function(ctx)\n  return true\nend)\n")
+        .unwrap();
+    o.env.ok(&["api", "call", "server.config_reload", "{}"]);
+    // the person's key goes to a binding, not to the prompt
+    let r = o.env.json(&["api", "call", "client.key", &json!({ "session_id": s, "key": "ctrl+g" }).to_string()]);
+    assert_eq!(r["handled"], true, "{r}");
+    // its status moves on (any program can write a report): only a person's keys end the hold
+    o.env.ok(&["notify", "-b", &w, "--state", "working"]);
+    let code = o.env.dir.path().join("code");
+    let agent = o.script(
+        "agent",
+        &format!("leon send -b {w} yes >/dev/null 2>&1; echo $? > '{}'; exec sleep 300", code.display()),
+    );
+    let own = o.env.ok(&["new", "agents"]);
+    o.env.ok(&["run", "-s", &own, "--", agent.to_str().unwrap()]);
+    assert_ne!(
+        tried(&code),
+        "0",
+        "KEY_TAKEN_ENDS_HOLD: a key no terminal saw ended the hold, and a program typed into the prompt"
+    );
+}
