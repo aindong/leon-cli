@@ -32,6 +32,7 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **A key's echo is shown at once** in Leon.app, not at the next display tick ([detail](docs/changelog-detail.md#a-keys-echo-shown-at-once)).
 - **Diagrams and benchmark charts in the docs** ([detail](docs/changelog-detail.md#diagrams-and-benchmark-charts)).
 - **A website.** <https://aindong.github.io/leon-cli/>: the docs, What's new per release and a demo
   ([detail](docs/changelog-detail.md#the-website)).

@@ -52,6 +52,20 @@ than in alacritty's parser (fixed since: docs/performance-cat.md). A keystroke's
 display tick), then shown about two display frames later: GPUI draws on the display link and
 presents through a three-drawable Metal layer.
 
+## Key echo at once
+
+Since 2026-11-20 the app shows a key's echo when the pane's screen arrives, not at GPUI's next
+display tick: it asks AppKit to display GPUI's view, and GPUI draws and presents that frame in
+the same run-loop pass (`view_echo.rs`). GPUI 0.2.2 leaked a display link each time; leon builds
+it with one fix ([architecture/gpui-patch.md](architecture/gpui-patch.md)), and
+`crates/leon-app/tests/gpui_display_link.rs` counts the links: 500 shows at once leave 1 link
+with the fix, and 109 without it.
+
+The first measurement (#21's probe on the host, crates.io GPUI, 200 keys, `keylat.sh --loads
+idle`): key to frame composited from outside p50 49.8 to 36.3 ms, p99 67.3 to 55.0 ms; in the
+app, key to echo painted p50 11.1 to 6.8 ms; `flood.sh` unchanged (the display link's pace).
+At 120 Hz the saving is about half.
+
 ## The overview with 50 tabs
 
 `scripts/perf/overview.sh [--runs N] [--tabs N]` makes 50 tabs in 10 sessions, opens the
