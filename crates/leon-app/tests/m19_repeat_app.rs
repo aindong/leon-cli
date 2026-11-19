@@ -59,6 +59,14 @@ fn prefix_then_the_key_again(cx: &mut TestAppContext) {
     cx.executor().advance_clock(std::time::Duration::from_millis(2001));
     cx.simulate_keystrokes("k");
     let typed = shows(cx, |_| term(&s.app, &panes[1]).text(false).trim_end().ends_with('k'));
-    assert!(typed && label(cx) == "runs 3", "k went to the pane: {:?}", label(cx));
+    // where k went if not there: the pane the app types into, and each pane's last line
+    let app_target = ws.read_with(cx, |ws, _| ws.target_block());
+    let ends: Vec<String> =
+        panes.iter().map(|p| term(&s.app, p).text(false).trim_end().lines().last().unwrap_or("").to_string()).collect();
+    assert!(
+        typed && label(cx) == "runs 3",
+        "k went to the pane: {:?}; the app typed into {app_target:?} of {panes:?}, whose last lines are {ends:?}",
+        label(cx)
+    );
     s.app.stop();
 }
