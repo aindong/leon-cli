@@ -44,8 +44,8 @@ These are defaults. A `leon.bind` in your `init.lua` replaces one key by key, an
 removes one (⌘Q stays). Key sequences such as `ctrl+b>c` show a hint of what can follow. Every
 button names its action and shortcut on hover. The wheel scrolls a pane back through its
 scrollback; drag to select, option+drag for a rectangle; hold ⌘ over a link to open it with a click.
-Rest the mouse on a link, or right-click it, for a card with its full address, Copy and Open in
-Browser (`link_card` in [lua/settings.md](lua/settings.md#settings) turns it off); it closes on a key,
+Rest the mouse on a link, or right-click it, for a card with its address (a long one cut short;
+Copy copies all of it), Copy and Open in Browser (`link_card` in [lua/settings.md](lua/settings.md#settings) turns it off); it closes on a key,
 a scroll, or the mouse leaving it. Double-click a tab's or a session's name to rename it in
 place; right-click it for Rename and Close (a × on hover closes it too). A program that asks for the mouse (an editor or `htop`) gets
 clicks, right-clicks too, and the wheel; hold shift to select anyway.
