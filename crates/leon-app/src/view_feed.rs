@@ -207,7 +207,7 @@ impl Workspace {
         for (host, remote) in self.hosts.remotes() {
             for s in remote.model().sessions.iter() {
                 let tabs = s.windows.iter().map(|w| (w.id.clone(), w.label.clone())).collect();
-                sessions.push((host, s.id.clone(), s.label.clone(), s.active, s.revision, tabs));
+                sessions.push((host, s.id.clone(), s.label.clone(), self.active_of(s), s.revision, tabs));
             }
         }
         let listing = (self.palette.is_some() || self.overview_shown() || self.row_menu().is_some())

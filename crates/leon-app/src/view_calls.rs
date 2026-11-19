@@ -75,6 +75,14 @@ impl Workspace {
         self.app.send_then("block.method", self.term_params(id, method, args), move |r| reply.deliver(r));
     }
 
+    /// `act_later` of `method` on the selected machine, then `then` once its reply came (on the
+    /// next wake, after the refetch the call made).
+    pub(super) fn act_then(&self, method: &str, params: Value, then: impl FnOnce(&mut Workspace) + Send + 'static) {
+        let then: ThenReply = Box::new(move |ws, _| then(ws));
+        let reply = OnReply { replies: self.term.replies.clone(), wake: self.term.wake.clone(), then: Some(then) };
+        self.app.act_later(method, params, move |r| reply.deliver(r));
+    }
+
     /// `term_call_then` with one call of kind `key` out at a time: a newer one waits for the reply
     /// (replacing any older one waiting), so a stalled server holds one call per kind, not one
     /// per mouse move or key.

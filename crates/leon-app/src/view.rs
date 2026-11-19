@@ -147,6 +147,8 @@ pub struct Workspace {
     frames: u64,
     /// The notifications posted, newest last.
     posted: Vec<crate::attention::Notice>,
+    /// A tab or pane picked whose call is on its way (view_state.rs).
+    asked: state::Asked,
     /// How many times the window rendered, and `prepare` ran (tests: what a frame did, R5).
     renders: u64,
     prepares: u64,
@@ -336,6 +338,7 @@ impl Workspace {
             deadlines: Default::default(),
             frames: 0,
             posted: Vec::new(),
+            asked: Default::default(),
             renders: 0,
             prepares: 0,
             keymap: Keymap::app(&json!({})),

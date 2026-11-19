@@ -2,7 +2,7 @@
 //! the event stream is resumable and a drop is resumed after the last seq seen; a watchdog pings
 //! a quiet event connection and ends it when nothing answers (a half-dead link); and the window's
 //! calls go through one ordered queue thread, so a slow link never holds the UI thread (This
-//! Mac's go through one too once the window asks, `Remote::queue_calls`).
+//! Mac's go through one too once the window runs it, `Remote::call_queue`).
 
 use std::io::{self, BufReader};
 use std::os::unix::net::UnixStream;
@@ -205,7 +205,7 @@ impl Remote {
         self.shared.retry.is_some()
     }
 
-    /// Call a method whose reply nobody waits for: once calls queue (`queue_calls`, always over a
+    /// Call a method whose reply nobody waits for: once calls queue (`call_queue`, always over a
     /// link) it goes behind the window's other calls, else it runs now. A failure is logged.
     pub fn send(&self, method: &str, params: Value) {
         self.enqueue(Job { method: method.into(), params, next: None, refresh: false, done: None });

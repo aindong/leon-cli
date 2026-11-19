@@ -28,7 +28,7 @@ impl Workspace {
                 let p = json!({ "session_id": sid, "block_id": id, "method": "dev.leon.terminal.pwd" });
                 let method = method.to_string();
                 let next = move |r: Result<Value, leon_core::ApiError>| {
-                    // on the calls' thread: a path of This Mac's, so it is checked here
+                    // on the queue, off the window's thread: a path of This Mac's, so it is checked here
                     let cwd = r.ok().and_then(|v| v["path"].as_str().map(String::from));
                     params["layout"] = shell_in(cwd.filter(|d| std::path::Path::new(d).is_dir()));
                     (method, params)
@@ -95,7 +95,7 @@ impl Workspace {
         if self.hidden_overlay(id) {
             return; // a drawer sliding out: focusing it would show it again
         }
-        self.call("session.focus_block", json!({ "block_id": id }), cx);
+        self.ask_focus(None, Some(id), cx);
     }
 
     pub(super) fn start_drag(&mut self, divider: Divider, at: gpui::Point<Pixels>, cx: &mut Context<Self>) {
@@ -185,20 +185,19 @@ impl Workspace {
         let sid = self.session_id.clone()?;
         let m = self.app.model();
         let s = m.session(&sid)?;
-        let wid = s.windows.get(index.unwrap_or(s.active))?.id.clone();
+        let wid = s.windows.get(index.unwrap_or(self.active_of(s)))?.id.clone();
         Some((sid, wid))
     }
 
     pub(super) fn focus_window(&mut self, index: usize, cx: &mut Context<Self>) {
-        if let Some((sid, wid)) = self.window_ref(Some(index)) {
-            self.app.act_later("session.focus_window", json!({ "session_id": sid, "window_id": wid }), drop);
-            cx.notify();
+        if let Some((_, wid)) = self.window_ref(Some(index)) {
+            self.ask_focus(Some(wid), None, cx);
         }
     }
 
     pub(super) fn step_tab(&mut self, by: isize, cx: &mut Context<Self>) {
         let Some(sid) = self.session_id.clone() else { return };
-        let Some((n, active)) = self.app.model().session(&sid).map(|s| (s.windows.len(), s.active)) else {
+        let Some((n, active)) = self.app.model().session(&sid).map(|s| (s.windows.len(), self.active_of(s))) else {
             return;
         };
         if n > 0 {
@@ -260,7 +259,7 @@ impl Workspace {
                 // through the queue, awaited here: the window goes on drawing meanwhile
                 let (tx, stopped) = futures::channel::oneshot::channel();
                 app.send_then("server.stop", json!({}), move |r| drop(tx.send(r)));
-                let gone = || leon_core::ApiError::new(503, "unreachable", "the calls' thread went away");
+                let gone = || leon_core::ApiError::new(503, "unreachable", "the call queue went away");
                 if let Err(e) = stopped.await.unwrap_or_else(|_| Err(gone())) {
                     let _ = this.update(cx, |ws, _| ws.ending = false);
                     eprintln!("leon: can't stop the server: {}", e.message);

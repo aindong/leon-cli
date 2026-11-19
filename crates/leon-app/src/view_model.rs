@@ -30,12 +30,12 @@ impl Workspace {
     pub(super) fn rows(&self) -> Vec<SessionRow> {
         let mut out = Vec::new();
         for (host, remote) in self.hosts.remotes() {
-            out.extend(Self::host_rows_of(host, &remote.model()));
+            out.extend(self.host_rows_of(host, &remote.model()));
         }
         out
     }
 
-    fn host_rows_of(host: usize, m: &crate::remote::Model) -> Vec<SessionRow> {
+    fn host_rows_of(&self, host: usize, m: &crate::remote::Model) -> Vec<SessionRow> {
         m.sessions
             .iter()
             .enumerate()
@@ -57,7 +57,7 @@ impl Workspace {
                     title: switcher::session_title(s, i),
                     status: status::aggregate(windows.iter().map(|w| w.status)),
                     windows,
-                    active: s.active,
+                    active: self.active_of(s),
                 }
             })
             .collect()
