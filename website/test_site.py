@@ -230,14 +230,27 @@ class Links(unittest.TestCase):
 
 
 class Guard(unittest.TestCase):
-    def test_scripts_in_a_doc_stop_the_build(self):
+    def html(self, text):
+        # the page's HTML as the build makes it, with the site's own Markdown extensions
+        import markdown
+
+        return markdown.markdown(text, extensions=["attr_list", "md_in_html", "tables", "pymdownx.superfences"])
+
+    def test_scripts_in_a_page_stop_the_build(self):
         page = type("P", (), {"file": type("F", (), {"src_uri": "i18n/ja/install.md"})()})()
-        hooks.state.update(context={}, staged={}, root=ROOT, ref="v9.9.9", refs={}, urls={})
-        for bad in ['<script>alert(1)</script>', '<img src="x" onerror="alert(1)">', "[x](javascript:alert(1))", "<iframe src=x>"]:
+        for bad in [
+            "<script>alert(1)</script>",
+            '<img src="x" onerror="alert(1)">',
+            "[x](javascript:alert(1))",
+            "<iframe src=x></iframe>",
+            '![x](data:,){onerror="alert(1)"}',  # attr_list puts the handler on the image
+            "```\n<script>alert(1)</script>",  # a fence never closed is not code
+        ]:
             with self.assertRaises(hooks.PluginError, msg=bad):
-                hooks.on_page_markdown(f"# t\n\n{bad}\n", page, None, None)
+                hooks.on_page_content(self.html(f"# t\n\n{bad}\n"), page, None, None)
         # in code it is text, as the docs about leon's own web page show
-        hooks.on_page_markdown("# t\n\n`<script>`\n\n```html\n<script src=x></script>\n```\n", page, None, None)
+        ok = "# t\n\n`<script>`\n\n```html\n<script src=x></script>\n<a onclick=x>\n```\n"
+        hooks.on_page_content(self.html(ok), page, None, None)
 
 
 class Notes(unittest.TestCase):
