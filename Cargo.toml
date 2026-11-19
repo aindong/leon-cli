@@ -69,3 +69,7 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.crc32fast]
 opt-level = 3
+
+# GPUI 0.2.2 plus one display-link fix (docs/architecture/gpui-patch.md; ADR R11 as amended)
+[patch.crates-io]
+gpui = { git = "https://github.com/aindong/gpui", rev = "24807306dcc0c90072c4cfa80e1da3f6f11228b8" }

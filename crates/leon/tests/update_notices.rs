@@ -18,4 +18,12 @@ fn the_notices_list_the_updaters_crates() {
         assert!(line.contains("MIT") || line.contains("Apache-2.0"), "{name} has its license: {line}");
     }
     assert!(notices.contains("Frank Denis"), "minisign-verify's license text is there, not only its name");
+    // macOS only: GPUI is the app's, built from a git fork (docs/architecture/gpui-patch.md)
+    if cfg!(target_os = "macos") {
+        assert!(notices.lines().any(|l| l == "- gpui 0.2.2: Apache-2.0"), "GPUI's fork is listed with its license");
+        assert!(
+            notices.contains("\n  gpui-0.2.2 (LICENSE-APACHE)\n"),
+            "and its license file, from cargo's git checkout"
+        );
+    }
 }

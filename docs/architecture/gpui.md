@@ -4,7 +4,8 @@ Part of [docs/architecture.md](../architecture.md). The app (`leon-app`, the `gu
 GPUI client of the server; this is how it uses GPUI, as rules a contributor can check, and why.
 Written 2026-11-17. A GPUI upgrade amends this file first (the doc test reads `Cargo.lock`):
 
-Built against: GPUI 0.2.2 from crates.io.
+Built against: GPUI 0.2.2 from crates.io plus one fix, aindong/gpui at 24807306dcc0c90072c4cfa80e1da3f6f11228b8
+(amended 2026-11-20: [gpui-patch.md](gpui-patch.md)).
 
 ## Context
 
@@ -43,8 +44,10 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   a test counts what a spinner tick renders.
 - **R2. Never schedule or force a frame through AppKit** (`setNeedsDisplay:`, `displayLayer:`, the
   NSView or layer behind the window handle). Use `cx.notify()` for changed state and
-  `window.request_animation_frame()` for animation. Why: GPUI's `displayLayer:` path rebuilds the
-  display link and 0.2.2 leaks one per call (500 keys left 501 links); frames are GPUI's job. Check: test.
+  `window.request_animation_frame()` for animation. One exception (amended 2026-11-20,
+  [gpui-patch.md](gpui-patch.md)): `view_echo.rs` asks AppKit to display GPUI's view once per
+  key's echo. Why: GPUI's `displayLayer:` rebuilt the display link and 0.2.2 leaks one per call
+  (500 keys left 501 links; fixed by R11's patch); frames are GPUI's job. Check: test.
 - **R3. A part of the window that changes on its own clock is its own view**, shown from its
   parent with `AnyView::from(entity).cached(style)`: each pane, the sidebar, the title bar, the
   status indicator, and each overlay (palette, switcher, find bar, notice, overview). Why: a
@@ -131,9 +134,11 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   has no display link, so a test can say "this view did not render again", the property R3 and
   R4 are for. Motion tests advance the clock and draw the frames the app asked for (R5). Check: review.
 - **R11. GPUI is used as published.** crates.io GPUI 0.2.2: no fork, patch, vendored copy or
-  `[patch]` entry, unless an amendment here names it. Why: a patch is paid for again at every
-  upgrade, and the GPUI-side costs the baseline found are fixed upstream (below). Check: test (the Built against line matches `Cargo.lock`, and no
-  `[patch]` names gpui).
+  `[patch]` entry, unless an amendment here names it. Named: one display-link fix, in a fork
+  pinned by commit (amended 2026-11-20, [gpui-patch.md](gpui-patch.md), with how it goes away).
+  Why: a patch is paid for again at every upgrade, and the GPUI-side costs the baseline found
+  are fixed upstream (below). Check: test (the Built against line matches `Cargo.lock`, and the
+  only `[patch]` is that fork at a full commit).
 - **R12. Read GPUI before using it.** Before writing or changing GPUI code, read the source or
   an example (`gpui-0.2.2/src`, `gpui-0.2.2/examples`) for each API used, and Zed at 69e2130 for
   the pattern; no names from memory, blog posts or another version (`View`, `Model`,
@@ -144,8 +149,8 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
 
 Raw AppKit through objc2 is allowed in these files and for these reasons only; the doc test
 (`crates/leon/tests/gpui_adr.rs`) fails when another file calls `msg_send!` or `objc2::`. No
-entry touches GPUI's window, view or layer, but `view_glass.rs`'s and `cursor_shader/overlay.rs`'s,
-which say why.
+entry touches GPUI's window, view or layer, but `view_glass.rs`'s, `cursor_shader/overlay.rs`'s and
+`view_echo.rs`'s, which say why.
 
 - `input.rs`: `[NSApp currentEvent]` during GPUI's own key dispatch, for the key code and
   characters (GPUI rebuilds a key-code-0 event's text from the layout, so automation's keys
@@ -168,8 +173,12 @@ which say why.
   sets `UnderWindowBackground`.
 - `cursor_shader/overlay.rs`: users' cursor shaders (amended 2026-11-19; why, and how it goes, in
   [cursor-shaders.md](cursor-shaders.md)). GPUI 0.2.2 has no custom Metal
-  pass, so a `CAMetalLayer` sublayer of GPUI's view's layer (via `raw-window-handle`, here only)
+  pass, so a `CAMetalLayer` sublayer of GPUI's view's layer (via `raw-window-handle`)
   draws them on its own display link, off the main thread, only while one animates (R2 holds).
+- `view_echo.rs`: a key's echo shown at once (amended 2026-11-20, [gpui-patch.md](gpui-patch.md)).
+  GPUI 0.2.2 draws only on its display link's tick, `displayLayer:` and activation. Once per
+  key, when that pane's screen arrives and the window is on screen, `setNeedsDisplay:` on GPUI's
+  view (via `raw-window-handle`): GPUI's own `displayLayer:` draws and presents the frame.
 
 To add one: show in GPUI's source that it has no way to do it, keep it to reads or system calls
 on the main thread, list the file here with its reason, and never use it to drive frames (R2).
@@ -180,15 +189,15 @@ on the main thread, list the file here with its reason, and never use it to driv
   fewer spinner frames). Rejected as the plan: the root still renders and lays out the whole
   window on every frame anything moves; each trick is local.
 - **Patch GPUI 0.2.2** (draw at once after input, `presentsWithTransaction`, two drawables, pause
-  the idle display link). Not now: the refactor removes leon's own share first, and Zed has
-  changed the rest upstream (a per-display link registry; a link that pauses when nothing is dirty). Revisit with numbers from `scripts/perf/keylat.sh` and
-  `idle-cpu.sh` after the refactor, as an amendment here.
+  the idle display link). Not then: the refactor removed leon's own share first, and Zed has
+  changed the rest upstream (a per-display link registry; a link that pauses when nothing is
+  dirty). After the refactor's numbers, one diff adopted (2026-11-20, gpui-patch.md).
 - **Move to Zed's main GPUI** (a mirror of its crates). Not now: 22 crates and 6 git
   dependencies, a pinned Rust, and a test scheduler that panics when another thread wakes the
   executor, as leon's reader thread does in its tests. Revisit when a crates.io GPUI carries
   the display-link changes, or a measured gap remains after the refactor.
-- **AppKit tricks for frames** (`setNeedsDisplay:` on GPUI's view). Rejected: a display link
-  leaked per key, and it fights GPUI for the frame schedule (R2).
+- **AppKit tricks for frames** (`setNeedsDisplay:` on GPUI's view). Rejected as a way to drive
+  frames (R2); one per key's echo adopted with the leak fixed (gpui-patch.md).
 
 ## Consequences
 
@@ -209,10 +218,10 @@ on the main thread, list the file here with its reason, and never use it to driv
   `session.create`, before the window draws, and a watch line's write (a socket write, bounded).
 - Already in line: panes paint through `canvas` (R7); std threads only in GPUI-free modules,
   reaching the UI through a wake channel (R8); tests on `TestAppContext` (R10); GPUI from
-  crates.io unpatched (R11).
+  crates.io, with one patch since 2026-11-20 (R11).
 - The refactor costs more types (an entity per pane, sidebar, title bar, machine, overlay).
 - The root renders on every frame GPUI draws (`draw_roots`), a header's or a grid's too: what a
   model event saves is the root's notify, whose observer runs `prepare` and works out every
   child's input again; the cached children are reused either way unless their input moved.
 - What GPUI itself costs stays until an upgrade: the display link's idle ticks while the window
-  is visible, and a key's echo waiting for the next tick. Neither is patched (R11).
+  is visible. A key's echo no longer waits for the next tick (gpui-patch.md).
