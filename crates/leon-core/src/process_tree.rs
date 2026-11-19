@@ -83,9 +83,62 @@ pub fn process(_pid: i32) -> Option<Process> {
     None
 }
 
+/// The process groups of every process in session `sid` (getsid), each once: what lives on of a
+/// terminal whose program, the session's leader, is gone. Empty when none does, or on a system
+/// with no way to list processes.
+pub fn session_groups(sid: i32) -> Vec<i32> {
+    let mut groups: Vec<i32> = all_pids()
+        .into_iter()
+        // SAFETY: getsid and getpgid have no preconditions; -1 for a pid that is gone.
+        .filter(|&p| p > 0 && unsafe { libc::getsid(p) } == sid)
+        .map(|p| unsafe { libc::getpgid(p) })
+        .filter(|&g| g > 0)
+        .collect();
+    groups.sort_unstable();
+    groups.dedup();
+    groups
+}
+
+/// Whether any process is left in process group `pgid`.
+pub fn group_lives(pgid: i32) -> bool {
+    // SAFETY: signal 0 only checks that the group exists; EPERM means it lives but isn't ours.
+    let sent = unsafe { libc::kill(-pgid, 0) } == 0;
+    sent || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+#[cfg(target_os = "macos")]
+fn all_pids() -> Vec<i32> {
+    // SAFETY: a null buffer asks how many there are; then at most that many (and room to grow) are written.
+    let n = unsafe { libc::proc_listallpids(std::ptr::null_mut(), 0) };
+    if n <= 0 {
+        return vec![];
+    }
+    let mut pids = vec![0i32; n as usize + 64];
+    let bytes = (pids.len() * std::mem::size_of::<i32>()) as libc::c_int;
+    let got = unsafe { libc::proc_listallpids(pids.as_mut_ptr() as *mut libc::c_void, bytes) };
+    pids.truncate(got.max(0) as usize);
+    pids
+}
+
+#[cfg(not(target_os = "macos"))]
+fn all_pids() -> Vec<i32> {
+    std::fs::read_dir("/proc")
+        .map(|d| d.filter_map(|e| e.ok()?.file_name().to_str()?.parse().ok()).collect())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn our_own_session_lists_our_group() {
+        // SAFETY: getsid(0) and getpgid(0) ask about this process.
+        let (sid, pgid) = unsafe { (libc::getsid(0), libc::getpgid(0)) };
+        let groups = session_groups(sid);
+        assert!(groups.contains(&pgid), "session {sid}: {groups:?} has our group {pgid}");
+        assert!(group_lives(pgid));
+    }
 
     #[test]
     fn a_child_is_inside_us_and_we_not_inside_it() {

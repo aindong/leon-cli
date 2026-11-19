@@ -215,8 +215,9 @@ or starting a job that outlives it.
 A person answers where they are: the app's keys reach the pane (the Activity list and the
 notification take them there), and so do `leon attach` in a terminal app and `leon send` from a
 shell outside leon. leon tells where a client runs from its process: the peer of the socket, its
-parents up to pid 1, and its session, which a job keeps after its parent exits. A client it can't
-place counts as inside.
+parents up to pid 1, and its session, which a job keeps after its parent exits, and after its
+pane closes for as long as anything in that session still runs. A client it can't place counts as
+inside.
 
 This keeps agents from answering. It is not a sandbox:
 

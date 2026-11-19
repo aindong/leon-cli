@@ -76,6 +76,8 @@ pub struct Ctx {
     /// Each window's geometry as a client last drew it (`client.geometry`): the most recent report
     /// wins when several apps are attached. Runtime only, never saved.
     geometry: Mutex<std::collections::HashMap<String, leon_core::overlays::Geometry>>,
+    /// Closed terminals' sessions, for the permission guard (agents.rs).
+    pub(crate) gone: agents::Gone,
 }
 
 /// The locked state. Dropping it hands the events the holder caused to every subscriber while the
@@ -132,6 +134,7 @@ impl Ctx {
             tailnet: tailnet::Tailnet::default(),
             pane_env: Vec::new(),
             geometry: Mutex::default(),
+            gone: agents::Gone::default(),
         }
     }
 
