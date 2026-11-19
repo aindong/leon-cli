@@ -32,16 +32,16 @@ Before the first release, do the one-time setup under [Secrets](#secrets).
    launch video's macOS VM ([scripts/demo-video/README.md](../scripts/demo-video/README.md): its
    one-time setup), so nothing touches your own screen; first edit its scenes
    (`scripts/demo-clips/guest.sh`) for this release's features. It writes `target/clips/NAME.gif`
-   (at most 1.5 MB) and `NAME.mp4` for each, and `demo-app.gif`, all of them in a row. Copy the GIFs
-   to `docs/images/whats-new/X.Y.Z/` and put each one under its bullet in the changelog section, as
+   (at most 1.5 MB), `NAME.mp4` and its poster `NAME.jpg` for each. Copy the GIFs to
+   `docs/images/whats-new/X.Y.Z/` and put each one under its bullet in the changelog section, as
    an image linking `docs/images/whats-new/X.Y.Z/NAME.gif` from the repository's root: the release
    notes make that link absolute to the tag, so the clip shows on the GitHub release and on the
-   website's What's new. Copy `demo-app.gif` to `docs/images/`, and give the README one line under
-   it, "New in X.Y: …", linking that version's page on the website. Then
-   `cargo test -p leon --test m13_privacy`, and look at every frame.
-3. Upload the MP4s to the media release, for the website's demo page
-   ([Demo videos](#demo-videos)): `gh release upload media target/clips/*.mp4 --clobber`. Never add
-   them to the `vX.Y.Z` release.
+   website's What's new. The README's GIF (`docs/images/demo-app.gif`) stays a first visit's tour
+   of the basics; give the README one line under it, "New in X.Y: …", linking that version's page
+   on the website. Then `cargo test -p leon --test m13_privacy`, and look at every frame.
+3. Upload the MP4s and their posters to the media release, for the website's demo page
+   ([Demo videos](#demo-videos)): `gh release upload media target/clips/*.mp4 target/clips/*.jpg --clobber`.
+   Never add them to the `vX.Y.Z` release.
 4. Try it on your Mac: `scripts/release-dry-run.sh` builds the release (`scripts/release.sh`),
    signs it with a key made for the run, checks it, and then changes a byte to see the check fail.
    It needs Docker for the Linux packages; `--linux none` skips them.

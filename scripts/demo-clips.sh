@@ -2,8 +2,8 @@
 # demo-clips.sh [--only NAME] [OUT_DIR]: record one short clip per feature of the next release in
 # the demo VM, each as NAME.gif (at most 1.5 MB, for the changelog and the release notes) and
 # NAME.mp4 (for the website's demo page, through the media release: docs/releases.md#cutting-a-release).
-# OUT_DIR is target/clips by default; with every scene it also writes demo-app.gif, the four in a
-# row, for the README. The scenes (scripts/demo-clips/guest.sh):
+# OUT_DIR is target/clips by default, with NAME.jpg beside each MP4: its poster on the demo page.
+# The scenes (scripts/demo-clips/guest.sh):
 #   agents         an agent starts two agents, and leon tells it when they report
 #   link-card      resting the pointer on a link, and right-clicking it, shows its card
 #   tabs           closing and renaming tabs and sessions
@@ -119,12 +119,9 @@ for s in "${scenes[@]}"; do
     echo "demo-clips: $s: recording it again"
   done
   width=$(gif "$out/$s.mp4" "$out/$s.gif")
+  # its poster on the website's demo page: the frame two thirds in, where each scene shows its
+  # feature (the reports, the card, a rename, the trail)
+  long=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out/$s.mp4")
+  ffmpeg -loglevel error -y -ss "$(python3 -c "print(round($long * 0.65, 2))")" -i "$out/$s.mp4" -frames:v 1 -q:v 3 "$out/$s.jpg"
   echo "demo-clips: $s.gif ($(($(wc -c <"$out/$s.gif") / 1024)) KB, ${width}px) and $s.mp4"
 done
-# the README's GIF: every clip, one after the other (as large as the one it replaced)
-if [ ${#scenes[@]} -eq 4 ]; then
-  for s in "${scenes[@]}"; do echo "file '$out/$s.mp4'"; done >"$work/clips.txt"
-  ffmpeg -loglevel error -y -f concat -safe 0 -i "$work/clips.txt" -c copy "$work/demo-app.mp4"
-  width=$(gif "$work/demo-app.mp4" "$out/demo-app.gif" 2500000)
-  echo "demo-clips: demo-app.gif ($(($(wc -c <"$out/demo-app.gif") / 1024)) KB, ${width}px)"
-fi

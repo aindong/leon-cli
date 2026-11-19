@@ -11,7 +11,7 @@ or through your coding agent, which can open a pane beside itself, run your test
 the result. Programs can report whether they are working, blocked or done, so you can see which
 one needs you. It runs on macOS and Linux (the app is macOS only for now) and is written in Rust.
 
-![The leon app: an agent starting two agents and hearing back from them, the link card, renaming and closing tabs and sessions, and a cursor trail](docs/images/demo-app.gif)
+![The leon app: splitting a tab, switching tabs, splitting from the command palette, a git popup, switching sessions with ⌘K, and an agent working, then blocked](docs/images/demo-app.gif)
 
 ![The leon command: a new session, a run that waits, typing into Python and waiting for its answer, then leon attach and a split](docs/images/demo-cli.gif)
 
