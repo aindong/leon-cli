@@ -177,7 +177,8 @@ impl Workspace {
     }
 
     /// Pane `id`'s grid, shown cached; the plain canvas when it has none yet (a frame before any
-    /// notify, or a pane the model shows before the poll ran): never a view made while drawing.
+    /// notify, or a pane the model shows before the workspace's next notify): never a view made
+    /// while drawing.
     pub(super) fn grid_element(&self, id: &str) -> gpui::AnyElement {
         let grid = match self.grids.get(id) {
             Some(s) => gpui::AnyView::from(s.view.clone())

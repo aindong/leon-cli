@@ -74,8 +74,8 @@ impl Workspace {
     pub(super) fn mouse_down(&mut self, id: &str, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         if ev.modifiers.platform && ev.button == MouseButton::Left {
             // the link cmd+hover found here; on This Mac, asked if it hasn't, and opened when the
-            // answer comes (over a link the hover's reply may still be on its way, and nothing
-            // waits for one)
+            // answer comes (a host's link only from its hover: a link it names is checked against
+            // the text drawn, which a late answer may no longer match)
             let pos = self.pos_at(id, ev.position);
             let hovered = self
                 .term
@@ -293,7 +293,8 @@ impl Workspace {
         cx.notify();
     }
 
-    /// The range the server made of pane `id`'s selection, once it answered (tests).
+    /// The range pane `id`'s selection covers now: worked out here at once, replaced by This
+    /// Mac's answer (tests).
     pub fn selection_range(&self, id: &str) -> Option<(Pos, Pos)> {
         let r = self.term.panes.get(id)?.selection.as_ref()?.range?;
         Some((r.start, r.end))

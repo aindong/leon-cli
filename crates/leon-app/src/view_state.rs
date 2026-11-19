@@ -95,17 +95,19 @@ impl Workspace {
     pub(super) fn ask_focus(&mut self, window: Option<String>, block: Option<&str>, cx: &mut Context<Self>) {
         let Some(sid) = self.session_id.clone() else { return };
         let window = window.or_else(|| self.app.model().block(block?).map(|(_, b)| b.window_id.clone()));
-        let asked =
-            Asked { tab: window.clone().map(|w| (sid.clone(), w)), pane: block.map(|b| (sid.clone(), b.into())) };
+        let tab = window.clone().map(|w| (sid.clone(), w));
+        let asked = Asked { tab, pane: block.map(|b| (sid.clone(), b.into())), seq: self.asked.seq + 1 };
         let (method, params) = match (block, window) {
             (Some(b), _) => ("session.focus_block", json!({ "session_id": sid, "block_id": b })),
             (None, Some(w)) => ("session.focus_window", json!({ "session_id": sid, "window_id": w })),
             (None, None) => return,
         };
-        self.asked = asked.clone();
+        let seq = asked.seq;
+        self.asked = asked;
         self.act_then(method, params, move |ws| {
-            if ws.asked == asked {
-                ws.asked = Asked::default(); // the model has it now, or the server said no
+            // the model has it now, or the server said no; a newer pick waits for its own reply
+            if ws.asked.seq == seq {
+                (ws.asked.tab, ws.asked.pane) = (None, None);
             }
         });
         self.called(cx);
@@ -165,4 +167,6 @@ pub(super) struct Asked {
     tab: Option<(String, String)>,
     /// (session, block)
     pane: Option<(String, String)>,
+    /// Which pick it is: only its own reply clears it.
+    seq: u64,
 }

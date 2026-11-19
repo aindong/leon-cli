@@ -73,7 +73,7 @@ fn no_poll_clock_is_left() {
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     for e in std::fs::read_dir(&src).unwrap().flatten() {
         let text = std::fs::read_to_string(e.path()).unwrap_or_default();
-        for gone in ["fn signature", "fn next_poll", "planned:", "KEYMAP_POLL"] {
+        for gone in ["fn signature", "next_poll", "planned:", "KEYMAP_POLL"] {
             assert!(!text.contains(gone), "{} still has {gone}", e.file_name().to_string_lossy());
         }
     }

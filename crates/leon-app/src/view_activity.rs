@@ -18,7 +18,7 @@ impl Workspace {
         self.activity
     }
 
-    /// The Activity list as of the last poll, in order.
+    /// The Activity list as of the last model change, in order.
     pub fn activity_rows(&self) -> Vec<Row> {
         self.attention.rows()
     }

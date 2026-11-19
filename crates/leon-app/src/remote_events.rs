@@ -18,7 +18,7 @@ struct Incoming {
 #[derive(Deserialize)]
 struct EventBody {
     #[serde(rename = "type")]
-    kind: Option<String>,
+    kind: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -129,7 +129,7 @@ pub(super) fn read_events(shared: Arc<Shared>, mut r: BufReader<UnixStream>) {
                     screen::apply(Arc::make_mut(f), p.update());
                 }
             } else if let Some(e) = v.event {
-                if matches!(e.kind.as_deref(), Some("keymap_changed" | "settings_changed")) {
+                if matches!(e.kind.as_ref().and_then(Value::as_str), Some("keymap_changed" | "settings_changed")) {
                     shared.keymap_news.store(true, Ordering::SeqCst);
                 }
                 if let Some(seq) = v.seq {

@@ -35,21 +35,22 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         let Some(pos) = self.pos_at(id, at) else { return };
-        let (got, id) = (self.term_ask(id, "link_at", json!(pos)), id.to_string());
+        let (got, asked) = (self.term_ask(id, "link_at", json!(pos)), self.app.clone());
         cx.spawn_in(window, async move |this, cx| {
             let Ok(Ok(v)) = got.await else { return };
             let Some(link) = serde_json::from_value::<Option<Link>>(v).ok().flatten() else { return };
             let _ = this.update_in(cx, |ws, window, cx| {
-                let checked = ws.link_checked(&id, &link);
-                ws.open_link(link.uri, checked, window, cx)
+                // a late answer after the window moved to another machine opens nothing
+                if Rc::ptr_eq(&ws.app, &asked) {
+                    ws.open_link(link.uri, true, window, cx) // This Mac's links are trusted (`link_checked`)
+                }
             });
         })
         .detach();
     }
 
     /// With cmd held the link under the mouse is underlined; asked again only when the mouse
-    /// leaves the link it is on (over a link the answer comes on a later poll, for where the
-    /// mouse was then).
+    /// leaves the link it is on (the answer comes on a later wake, for where the mouse was then).
     pub(super) fn hover(&mut self, id: &str, at: gpui::Point<Pixels>, cmd: bool, cx: &mut Context<Self>) {
         let pos = self.pos_at(id, at);
         let on = |(b, l): &(String, Link)| b == id && pos.is_some_and(|p| (l.start..=l.end).contains(&p));

@@ -38,18 +38,18 @@ pub(super) struct TermUi {
     /// Copy mode and hints, on the pane they started on (`view_copy.rs`).
     pub(super) copy: Option<crate::copy_mode::CopyMode>,
     pub(super) hints: Option<super::copy::Hints>,
-    /// Replies that came over a link, waiting for the poll (`term_call_then`), and what wakes it.
+    /// Replies to queued calls, waiting for the next wake (`term_call_then`), and what wakes it.
     pub(super) replies: Arc<Mutex<Vec<Reply>>>,
     pub(super) wake: Option<Arc<dyn Fn() + Send + Sync>>,
-    /// Over a link, the kinds of call with one out, and the newest call of each kind waiting for it
+    /// The kinds of call with one out, and the newest call of each kind waiting for it
     /// (`term_call_latest`).
     pub(super) in_flight: HashSet<String>,
     pub(super) waiting: HashMap<String, Waiting>,
-    /// Text a copy over a link built, for the poll to put on the clipboard, and how many copies
-    /// started (a newer one drops an older one still fetching).
+    /// A copy's text, for the next wake to put on the clipboard, and how many copies started (a
+    /// newer one drops an older one still fetching).
     pub(super) clip: Option<String>,
     pub(super) copies: u64,
-    /// Over a link, the cell cmd+hover last asked about (a late answer for another is dropped).
+    /// The cell cmd+hover last asked about (a late answer for another is dropped).
     pub(super) hover_at: Option<(String, Pos)>,
     /// Numbers each history fetch, so a reply only fills the pane that asked.
     pub(super) fetches: u64,
@@ -146,7 +146,7 @@ impl Workspace {
     }
 
     /// Fetch `count` history rows of pane `id` from `from` into its cache, one fetch per pane at a
-    /// time (over a link the rows come on a later poll). A reply trimmed to its byte cap can end
+    /// time (the rows come on a later wake). A reply trimmed to its byte cap can end
     /// before `need`: then it asks from there, or that row never comes.
     fn fetch(&mut self, id: &str, from: usize, count: usize, need: usize) {
         self.term.fetches += 1;

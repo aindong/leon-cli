@@ -79,7 +79,7 @@ impl Block {
     }
 }
 
-/// The server's sessions and the watched blocks' screens, as last received.
+/// The server's sessions and the watched blocks' screens: as received, or the window's copy.
 #[derive(Default)]
 pub struct Model {
     /// Shared with the window's copy, which a commit only points at (no record is copied).

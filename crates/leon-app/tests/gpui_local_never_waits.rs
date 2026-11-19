@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 use fake_support::{open_fake, serve, Answer};
 use gpui::{Keystroke, TestAppContext, VisualTestContext};
 use leon_app::view::{QuitAndEndAll, Workspace};
+use leon_core::search::Pos;
 use m10b_support::*;
 
 /// Each handler's limit: generous for a loaded machine, well under the 5 s a call waited.
@@ -35,10 +36,12 @@ fn a_this_mac_server_that_never_answers_holds_nothing(cx: &mut TestAppContext) {
     let fake = serve(Answer::Model);
     let (ws, cx) = open_fake(cx, &fake);
     assert!(drawn(cx, "terminal-block:0"), "the pane is drawn");
-    // first, while the queue is clear (a selection's range is answered)
+    // first, while the queue is clear: the server's range (0:0 to 0:3, not the app's own guess of
+    // the whole screen) replaces the one the app put on at once, so the reply came
     act(&ws, cx, "pane.select_all");
-    let ranged = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.selection_range("block:0").is_some()));
-    assert!(ranged, "the selection has its range: {:?}", fake.log.lock().unwrap());
+    let theirs = Some((Pos { line: 0, col: 0 }, Pos { line: 0, col: 3 }));
+    let answered = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.selection_range("block:0")) == theirs;
+    assert!(shows(cx, answered), "the selection's range came back: {:?}", fake.log.lock().unwrap());
 
     let mut typed = false;
     let key = took(|| typed = cx.update(|window, cx| window.dispatch_keystroke(Keystroke::parse("a").unwrap(), cx)));

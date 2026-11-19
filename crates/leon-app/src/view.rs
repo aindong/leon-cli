@@ -121,7 +121,7 @@ pub struct Workspace {
     /// This Mac and the hosts; `host` is the one `app` belongs to.
     hosts: Hosts,
     host: usize,
-    /// A session to select once it shows in its host's model (New Session over a link).
+    /// A session to select once it shows in its machine's model (New Session).
     select_later: Arc<Mutex<Option<(usize, String)>>>,
     drag: Option<Drag>,
     session_id: Option<String>,
@@ -255,7 +255,8 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> Self {
         // shortcut: the first session is made before the window draws, waiting for the server
-        // (the window has nothing to show without one); every call after it queues
+        // (the window has nothing to show without one); every call after it queues. Make it
+        // through the queue, drawing the empty state meanwhile, if a slow start is ever seen
         if app.model().sessions.is_empty() {
             let _ = app.act("session.create", json!({}));
         }

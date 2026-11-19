@@ -330,8 +330,8 @@ impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         drawing(cx);
         self.renders += 1;
-        // after the frame: undrawn redraws back to none, the pane it showed noted as seen, and the
-        // poll woken if that is news or something timed is due sooner (ADR R5, frame bookkeeping)
+        // after the frame: the pane it showed noted as seen, the clocks that pause without frames
+        // going on, and the cursor shader fed where the grids now sit (ADR R5, frame bookkeeping)
         let showed = Shown {
             target: self.target().map(|(sid, id, _)| (sid, id)),
             active: window.is_window_active(),

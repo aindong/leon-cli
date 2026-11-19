@@ -226,7 +226,7 @@ impl Workspace {
         }
     }
 
-    /// How many times the wake handler ran (tests: it runs only when woken).
+    /// How many times the wake handler ran: once at start, then once per wake (tests).
     pub fn wakes(&self) -> u64 {
         self.wakes.0
     }
@@ -238,8 +238,8 @@ impl Workspace {
     }
 }
 
-/// The window's timed things, each a task of its own on GPUI's executor (R6, R8): it runs once at
-/// its time and is replaced when the time moves.
+/// The window's timed things, each a task of its own on GPUI's executor (R6, R8), replaced when
+/// its time moves (the Activity list's ticks each second while it lists something).
 #[derive(Default)]
 pub(super) struct Deadlines {
     notices: Option<(Instant, Task<()>)>,
@@ -309,7 +309,7 @@ impl Workspace {
             self.run_find();
             return;
         }
-        let due = self.find_rerun_in().map(|d| Instant::now() + d);
+        let due = self.find_rerun_at();
         let mut slot = self.deadlines.find.take();
         arm(&mut slot, due, |at| {
             self.after(at.saturating_duration_since(Instant::now()), window, cx, |ws, window, cx| {

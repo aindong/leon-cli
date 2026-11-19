@@ -36,7 +36,7 @@ pub(super) enum Queue {
     Task(futures::channel::mpsc::UnboundedSender<Job>),
 }
 
-/// The reply a queued call hands back, on the queue thread.
+/// The reply a queued call hands back, off the window's thread.
 pub(super) type Done = Box<dyn FnOnce(Result<Value, ApiError>) + Send>;
 
 /// Makes the call to run next from the reply of the first, on the queue thread (`act_after`).
@@ -211,13 +211,13 @@ impl Remote {
         self.enqueue(Job { method: method.into(), params, next: None, refresh: false, done: None });
     }
 
-    /// `send`, with the reply for `done` (on the queue thread once calls queue).
+    /// `send`, with the reply for `done` (off the window's thread once calls queue).
     pub fn send_then(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
         self.enqueue(Job { method: method.into(), params, next: None, refresh: false, done: Some(Box::new(done)) });
     }
 
-    /// `act` without waiting once calls queue: the call and the refetch run on the queue thread,
-    /// then `done` gets the reply there. Else it runs now, `done` too.
+    /// `act` without waiting once calls queue: the call, the refetch and then `done` run on the
+    /// queue, off the window's thread. Else it runs now, `done` too.
     pub fn act_later(&self, method: &str, params: Value, done: impl FnOnce(Result<Value, ApiError>) + Send + 'static) {
         self.enqueue(Job { method: method.into(), params, next: None, refresh: true, done: Some(Box::new(done)) });
     }

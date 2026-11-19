@@ -178,12 +178,12 @@ impl Workspace {
     }
 
     /// Make the thumbnails the overview and the preview show, and drop the rest. With `update`
-    /// (the poll), refresh one whose tab changed, at most every `THUMB_EVERY` once it has its
+    /// (a model event, or its held refresh's deadline), refresh one whose tab changed, at most every `THUMB_EVERY` once it has its
     /// screens; render only makes the missing ones.
     pub(in crate::view) fn refresh_thumbs(&mut self, update: bool, cx: &mut Context<Self>) {
         let tabs = self.thumb_tabs();
         if tabs.is_empty() && self.overview.thumbs.is_empty() {
-            self.overview.held = None; // nothing left to refresh: no due time for the poll either
+            self.overview.held = None; // nothing left to refresh: no deadline either
             return;
         }
         let look = self.look_stamp();
@@ -224,7 +224,7 @@ impl Workspace {
             self.overview.thumbs.insert(wid.clone(), slot);
             drew |= update;
         }
-        // from the poll: the window draws the new views (render makes its own as it goes)
+        // from a model event: the window draws the new views (render makes its own as it goes)
         if drew {
             cx.notify();
         }

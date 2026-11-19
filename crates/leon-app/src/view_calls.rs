@@ -9,8 +9,8 @@ pub(super) type Reply = Box<dyn FnOnce(&mut Workspace) + Send>;
 /// A call waiting for the one of its kind that is out.
 pub(super) type Waiting = Box<dyn FnOnce(&mut Workspace)>;
 
-/// A call's reply on its way to the poll. One dropped unanswered (its link went away with the call
-/// still queued) answers "unreachable", so nothing waits for it for ever (`term_call_latest`).
+/// A call's reply on its way to the next wake. One dropped unanswered (its queue went away with
+/// the call in it) answers "unreachable", so nothing waits for it for ever (`term_call_latest`).
 struct OnReply {
     replies: Arc<Mutex<Vec<Reply>>>,
     wake: Option<Arc<dyn Fn() + Send + Sync>>,
@@ -35,14 +35,14 @@ impl OnReply {
 impl Drop for OnReply {
     fn drop(&mut self) {
         if self.then.is_some() {
-            let gone = leon_core::ApiError::new(503, "unreachable", "the link went away");
+            let gone = leon_core::ApiError::new(503, "unreachable", "the call queue went away");
             OnReply { replies: self.replies.clone(), wake: self.wake.take(), then: self.then.take() }
                 .deliver(Err(gone));
         }
     }
 }
 impl Workspace {
-    /// Send an input event (mouse, wheel, paste) to block `id`; over a link it queues like a key.
+    /// Send an input event (mouse, wheel, paste) to block `id`; it queues like a key.
     pub(super) fn block_event(&self, id: &str, event: Value) {
         let p = json!({ "session_id": self.session_of(id), "block_id": id, "event": event });
         self.app.send("block.event", p);
