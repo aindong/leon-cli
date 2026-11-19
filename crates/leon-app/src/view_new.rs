@@ -168,6 +168,7 @@ impl Workspace {
             _prepare: prepare,
             _refocus: refocus,
             _lost: lost,
+            ime: Default::default(),
         };
         ws.prepare(); // the first frame comes before any notify
         ws.root_seen = ws.root_input();

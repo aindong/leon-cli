@@ -34,6 +34,8 @@ fields it doesn't know. The full policy is in
 
 - **Leon.app doesn't wait on its own server once its window is up.** Keys, splits, copies and the
   window's other calls to This Mac's server queue in order off its thread, and a config reload shows at once ([detail](docs/changelog-detail.md#leonapp-doesnt-wait-on-its-own-server)).
+- **Input methods and the emoji picker in Leon.app's panes.** Japanese, Chinese and other input
+  methods compose at the cursor ([detail](docs/changelog-detail.md#input-methods-and-the-emoji-picker)).
 - **Overlays give the keys back.** The palette, switcher, find bar, overview and rename field each
   take the focus while open and, however they close, give it to the overlay still open, else the pane ([detail](docs/changelog-detail.md#overlays-give-the-keys-back)).
 - **Diagrams and benchmark charts in the docs** ([detail](docs/changelog-detail.md#diagrams-and-benchmark-charts)).

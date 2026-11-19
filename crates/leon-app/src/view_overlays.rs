@@ -108,8 +108,7 @@ impl Workspace {
         let o = &self.overlays;
         // copy mode and hints are the pane's: they take its keys before a find bar open there
         let target = self.target_block();
-        let mode = self.term.copy.as_ref().is_some_and(|c| Some(&c.block) == target.as_ref())
-            || self.term.hints.as_ref().is_some_and(|h| Some(&h.block) == target.as_ref());
+        let mode = target.as_deref().is_some_and(|id| self.pane_mode(id));
         let finding = !mode && self.term.find.as_ref().is_some_and(|f| Some(&f.block) == target.as_ref());
         let wanted = match () {
             _ if self.stopped => &self.focus, // nothing else is drawn
@@ -119,11 +118,12 @@ impl Workspace {
             _ if finding => &o.find_focus,
             _ => &self.focus,
         };
+        let wanted = wanted.clone();
         let free = self.focus_owner(window, cx).is_none_or(|o| o != "popover");
         if free && !wanted.is_focused(window) {
-            let wanted = wanted.clone();
             window.focus(&wanted);
         }
+        self.end_stale_marked(window);
     }
 
     /// Who has the window's focus (tests): `pane` (the workspace's handle), an overlay's name, or
