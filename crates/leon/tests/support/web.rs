@@ -71,23 +71,45 @@ pub fn token(port: u16) -> String {
     page.body[at..].split('"').next().unwrap().to_string()
 }
 
+/// A stream a WebSocket runs over: plain TCP, or TLS (support/tls.rs).
+pub trait Io: Read + Write {
+    fn timeout(&self, d: Duration);
+}
+
+impl Io for TcpStream {
+    fn timeout(&self, d: Duration) {
+        self.set_read_timeout(Some(d)).unwrap();
+    }
+}
+
+impl Io for rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
+    fn timeout(&self, d: Duration) {
+        self.sock.set_read_timeout(Some(d)).unwrap();
+    }
+}
+
 pub struct Ws {
-    s: TcpStream,
+    s: Box<dyn Io>,
     buf: Vec<u8>,
 }
 
 impl Ws {
     /// Upgrade with these `Origin` and `token` (None leaves each out). Err: the server's reply.
     pub fn open(port: u16, origin: Option<&str>, token: Option<&str>) -> Result<Ws, Reply> {
-        let mut s = TcpStream::connect(("127.0.0.1", port)).expect("the listener accepts");
-        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let s = TcpStream::connect(("127.0.0.1", port)).expect("the listener accepts");
+        Ws::upgrade(Box::new(s), &host(port), origin, token)
+    }
+
+    /// `open`, over a stream already connected (TLS, say).
+    pub fn upgrade(mut s: Box<dyn Io>, host: &str, origin: Option<&str>, token: Option<&str>) -> Result<Ws, Reply> {
+        s.timeout(Duration::from_secs(5));
         let path = match token {
             Some(t) => format!("/ws?token={t}"),
             None => "/ws".into(),
         };
         let origin = origin.map(|o| format!("Origin: {o}\r\n")).unwrap_or_default();
         let req = format!(
-            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
+            "GET {path} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
              Sec-WebSocket-Key: {KEY}\r\nSec-WebSocket-Version: 13\r\n{origin}\r\n"
         );
         s.write_all(req.as_bytes()).unwrap();
@@ -149,7 +171,7 @@ impl Ws {
             if left.is_zero() {
                 return None;
             }
-            self.s.set_read_timeout(Some(left)).unwrap();
+            self.s.timeout(left);
             let mut b = [0u8; 65536];
             match self.s.read(&mut b) {
                 Ok(0) | Err(_) => return None,

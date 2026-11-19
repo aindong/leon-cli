@@ -15,7 +15,8 @@ let watched = "";
 let refetch = null;
 let burst = null; // when the events waiting for a refetch began
 
-const conn = new Conn(`ws://${location.host}/ws?token=${encodeURIComponent(token)}`, {
+const scheme = location.protocol === "https:" ? "wss" : "ws";
+const conn = new Conn(`${scheme}://${location.host}/ws?token=${encodeURIComponent(token)}`, {
   onEvent: () => {
     // one refetch per burst of events, and at least one every half second while they keep coming
     clearTimeout(refetch);

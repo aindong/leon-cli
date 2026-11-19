@@ -136,6 +136,9 @@ pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                         if let Some(url) = t["web"].as_array().and_then(|w| w.first()) {
                             println!("web      {}", text(url));
                         }
+                        if t["web_error"].is_string() {
+                            println!("web      {}", leon_hosts::shown_text(t["web_error"].as_str().unwrap_or(""), 600));
+                        }
                     }
                     "stopped" => println!("tailnet  stopped: {}", text(&t["reason"])),
                     _ => {}

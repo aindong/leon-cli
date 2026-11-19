@@ -17,6 +17,7 @@ use tokio::sync::watch;
 
 use crate::serve::{Open, Shared};
 use crate::web::Site;
+use crate::web_tls::Tls;
 
 mod gate;
 use gate::{Gate, Outcome, Turned, WINDOW};
@@ -41,8 +42,13 @@ pub struct TailnetStatus {
     pub reason: Option<String>,
     /// The last connection turned away.
     pub last_refusal: Option<Refusal>,
-    /// The web page's URLs while serving with `serve_web` on (the MagicDNS name first), else empty.
+    /// The web page's URLs while serving with `serve_web` on (the MagicDNS name first), else empty;
+    /// with HTTPS, only the hosts its certificate covers.
     pub web: Vec<String>,
+    /// Why HTTPS serves nothing, or will serve an older certificate: the certificate files named by
+    /// `serve_web_cert` and `serve_web_key` are missing, unreadable, expired or wrong, and the command
+    /// that makes them.
+    pub web_error: Option<String>,
 }
 
 #[derive(Serialize, JsonSchema, Clone, Debug)]
@@ -64,6 +70,7 @@ impl Default for TailnetStatus {
             reason: None,
             last_refusal: None,
             web: vec![],
+            web_error: None,
         }
     }
 }
@@ -129,8 +136,9 @@ struct Serving {
     port: u16,
     tags: Vec<String>,
     owner: Owner,
-    /// `serve_web`, and the MagicDNS name the page answers to.
-    web: (bool, Option<String>),
+    web: Web,
+    /// The web page, while `serve_web` is on: its certificate files are looked at on each tick.
+    site: Option<Arc<Site>>,
     accepts: Vec<tokio::task::JoinHandle<()>>,
     /// Let-in connections end when this drops.
     _alive: watch::Sender<()>,
@@ -157,7 +165,13 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
         tick.tick().await;
         let (s, generation) = shared.ctx.settings().await;
         let (on, port, tags) = (s.serve_tailscale, s.serve_tailscale_port, s.serve_tailscale_tags);
-        let serve_web = s.serve_web;
+        let web = |dns: Option<String>| Web {
+            on: s.serve_web,
+            dns: dns.filter(|_| s.serve_web),
+            // only while the page is on: a path set with it off changes nothing served
+            cert: if s.serve_web { s.serve_web_cert.clone() } else { String::new() },
+            key: if s.serve_web { s.serve_web_key.clone() } else { String::new() },
+        };
         if !on {
             stop(&shared, &mut serving, port, None).await;
             pin = None;
@@ -185,7 +199,7 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
                 match owner.check(&me) {
                     Err(e) => Err(e),
                     Ok(()) if addrs.is_empty() => Err("this machine has no Tailscale address to serve on".into()),
-                    Ok(()) => Ok((addrs, owner, (serve_web, me.dns.clone().filter(|_| serve_web)))),
+                    Ok(()) => Ok((addrs, owner, web(me.dns.clone()))),
                 }
             }
         };
@@ -198,18 +212,25 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
         };
         let same =
             |s: &Serving| s.addrs == addrs && s.port == port && s.tags == tags && s.owner == owner && s.web == web;
-        if serving.as_ref().is_some_and(same) {
+        if let Some(s) = serving.as_ref().filter(|s| same(s)) {
+            if let Some(site) = &s.site {
+                show_web(&shared, site); // the certificate files may have changed
+            }
             continue;
         }
         stop(&shared, &mut serving, port, Some("rebinding".into())).await;
         match bind(&shared, &addrs, port, &tags, &owner, web).await {
-            Ok((s, at, urls)) => {
+            Ok((s, at)) => {
                 eprintln!("leon: tailnet: serving on {} for {}", at.join(", "), shown_text(&owner.login, 128));
-                if let Some(url) = urls.first() {
-                    eprintln!("leon: tailnet: the web page is at {url}");
+                match &s.site {
+                    Some(site) => show_web(&shared, site),
+                    None => {
+                        let mut st = crate::events::lock(&shared.ctx.tailnet.status);
+                        (st.web, st.web_error) = (vec![], None); // serve_web went off with this rebind
+                    }
                 }
                 let mut st = crate::events::lock(&shared.ctx.tailnet.status);
-                (st.state, st.port, st.addresses, st.web) = ("serving".into(), port, at, urls);
+                (st.state, st.port, st.addresses) = ("serving".into(), port, at);
                 (st.login, st.reason) = (Some(owner.login.clone()), None);
                 serving = Some(s);
             }
@@ -241,25 +262,49 @@ async fn stop(shared: &Shared, serving: &mut Option<Serving>, port: u16, reason:
             None => {}
         }
     }
-    (st.state, st.port, st.addresses, st.reason, st.web) = (state.into(), port, vec![], reason, vec![]);
+    (st.state, st.port, st.addresses, st.reason) = (state.into(), port, vec![], reason);
+    (st.web, st.web_error) = (vec![], None);
     if st.state == "off" {
         st.login = None;
     }
 }
 
+/// What the web page is served as: `serve_web`, the MagicDNS name it answers to, and the
+/// certificate files for HTTPS. A change rebinds.
+#[derive(Clone, PartialEq, Debug)]
+struct Web {
+    on: bool,
+    dns: Option<String>,
+    cert: String,
+    key: String,
+}
+
+/// The web page's URLs and HTTPS problem in the status, a new problem once in the log.
+fn show_web(shared: &Shared, site: &Site) {
+    let (urls, error) = site.status();
+    let mut st = crate::events::lock(&shared.ctx.tailnet.status);
+    if error.is_some() && st.web_error != error {
+        eprintln!("leon: tailnet: web: {}", shown_text(error.as_deref().unwrap_or_default(), 600));
+    }
+    if st.web.is_empty() && !urls.is_empty() {
+        eprintln!("leon: tailnet: the web page is at {}", urls[0]);
+    }
+    (st.web, st.web_error) = (urls, error);
+}
+
 /// Listen on `port` at each of `addrs` (never another address: they are on the tailnet). One that
 /// can't be bound (IPv6 turned off, say) is logged and left out; none bound is an error. Returns
-/// what serves, where it listens, and the web page's URLs (none with `serve_web` off).
+/// what serves and where it listens.
 async fn bind(
     shared: &Arc<Shared>,
     addrs: &[IpAddr],
     port: u16,
     tags: &[String],
     owner: &Owner,
-    web: (bool, Option<String>),
-) -> Result<(Serving, Vec<String>, Vec<String>), String> {
+    web: Web,
+) -> Result<(Serving, Vec<String>), String> {
     let (alive, ended) = watch::channel(());
-    let (mut listeners, mut at, mut failed) = (Vec::new(), Vec::new(), None);
+    let (mut listeners, mut at, mut bound, mut failed) = (Vec::new(), Vec::new(), Vec::new(), None);
     for ip in addrs {
         debug_assert!(direct::on_tailnet(*ip));
         let addr = SocketAddr::new(*ip, port);
@@ -267,6 +312,7 @@ async fn bind(
             Ok(listener) => {
                 listeners.push(listener);
                 at.push(addr.to_string());
+                bound.push(*ip);
             }
             Err(e) => {
                 let why = format!("can't listen on {addr}: {e}");
@@ -276,17 +322,27 @@ async fn bind(
         }
     }
     // a new token each time serving starts: turning serve_web off and on revokes the old one
-    let site = web.0.then(|| Arc::new(Site::new(&at, web.1.as_deref(), port, crate::web::new_token())));
-    let urls = site.as_ref().map(|s| s.urls.clone()).unwrap_or_default();
+    let site = web.on.then(|| {
+        let tls = Tls::new(&web.cert, &web.key, web.dns.as_deref(), &bound);
+        Arc::new(Site::new(&at, web.dns.as_deref(), port, crate::web::new_token(), tls))
+    });
     let accepts = listeners
         .into_iter()
         .map(|l| tokio::spawn(accept(l, shared.clone(), tags.to_vec(), owner.clone(), site.clone(), ended.clone())))
         .collect();
-    let s =
-        Serving { addrs: addrs.to_vec(), port, tags: tags.to_vec(), owner: owner.clone(), web, accepts, _alive: alive };
+    let s = Serving {
+        addrs: addrs.to_vec(),
+        port,
+        tags: tags.to_vec(),
+        owner: owner.clone(),
+        web,
+        site,
+        accepts,
+        _alive: alive,
+    };
     match (at.is_empty(), failed) {
         (true, Some(why)) => Err(why),
-        _ => Ok((s, at, urls)),
+        _ => Ok((s, at)),
     }
 }
 

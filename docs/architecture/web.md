@@ -62,12 +62,30 @@ leon's page in a browser, served over the tailnet listener to the owner's own ma
   through `uuid`) and `base64`.
 - **Status.** `server.status`'s `tailnet.web` lists the page's URLs while serving with
   `serve_web` (the MagicDNS one first), and `leon server status` prints the first.
-- **HTTP only, for now.** tailscaled's LocalAPI `cert/<domain>` endpoint *issues* a certificate
-  (an ACME order, which also puts the name in public Certificate Transparency logs) when none
-  valid is cached, so leon must not call it. A cert file the user makes with `tailscale cert`
-  and names in a setting would work, at the cost of a TLS library on Linux (rustls is in the tree
-  only through GPUI) and a renewal every 90 days by hand; that waits on the user's call. Over
-  HTTP the clipboard API and notifications are unavailable (the page isn't a secure context).
+- **HTTPS from the user's own `tailscale cert` files** (`web_tls.rs`). tailscaled's LocalAPI
+  `cert/<domain>` endpoint *issues* a certificate (an ACME order, which also puts the name in
+  public Certificate Transparency logs), so leon never calls it and never runs `tailscale cert`:
+  the user makes the files and names them in `serve_web_cert` and `serve_web_key`. Over plain
+  HTTP the clipboard API and notifications are unavailable (not a secure context).
+  - **The same port:** after admission a first byte `0x16` (a TLS handshake) is TLS when HTTPS is
+    set and a valid certificate is loaded, else closed; the handshake gets the head's 5 s. Inside,
+    the same HTTP code runs; the Origin must be `https://HOST`, the CSP's socket source `wss:`.
+    With HTTPS set, plain HTTP gets `308` to `https://HOST/…` after the Host check, whatever state
+    the files are in: never the page, a token or a WebSocket.
+  - **The files** (at most 1 MiB each) are looked at on the supervisor's 2 s tick: a stat (size,
+    inode, modification and change times to the nanosecond) taken before reading, and a change
+    reloads. Checks: a PEM chain and key, the key the user's own and not readable by others (on the
+    open file), the key matching the certificate, the leaf covering the MagicDNS name
+    (`rustls-webpki`), and its dates (a bounded DER walk to TBSCertificate's validity). A bad
+    reload keeps the last good certificate while it is valid; expiry, checked on every tick, drops
+    it. `server.status`'s `tailnet.web_error` says what is wrong and names the command, with
+    `sudo` and `chown` on Linux, where only root or the operator may ask for a certificate.
+    `tailnet.web` then lists only the hosts the certificate covers.
+  - **rustls with ring.** rustls 0.23 and `ring` were already in Cargo.lock through GPUI's HTTP
+    client on macOS; `ring` needs only a C compiler, where aws-lc-rs needs cmake and, on some
+    targets, NASM, and is bigger. No default features: rustls `ring, std, tls12`, tokio-rustls
+    `ring, tls12`, `rustls-webpki` `std` (the name check only). The release headless binary grew
+    by 1.30 MiB, 11% (12,323,952 → 13,687,984 bytes, `--release --no-default-features`, macOS arm64).
 - **The page** (view only): sessions, the chosen session's tabs and the chosen tab's panes (the
   split tree, a zoomed pane, visible floats; not drawers yet), a refetch of `session.list`,
   `session.view` and `session.list_blocks` 50 ms after a burst of `session.attach_all` events,

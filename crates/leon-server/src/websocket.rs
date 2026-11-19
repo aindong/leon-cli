@@ -5,8 +5,7 @@
 use std::sync::Arc;
 
 use base64::Engine;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpStream;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 
 use crate::agents::Peer;
@@ -143,8 +142,11 @@ enum Ctl {
 /// upgrade's head. As on the socket, a client that goes away lets the call being answered finish:
 /// the reader ends the API's input, `serve::connection` returns after that call, and the writer
 /// drains what it wrote (to the client while it reads, else nowhere) so it never blocks on the pipe.
-pub(crate) async fn bridge(stream: TcpStream, rest: Vec<u8>, shared: &Arc<Shared>) {
-    let (mut tcp_r, mut tcp_w) = stream.into_split();
+pub(crate) async fn bridge<S>(stream: S, rest: Vec<u8>, shared: &Arc<Shared>)
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let (mut tcp_r, mut tcp_w) = tokio::io::split(stream);
     let (ours, theirs) = tokio::io::duplex(PIPE);
     let (api_r, api_w) = tokio::io::split(theirs);
     let (our_r, mut our_w) = tokio::io::split(ours);
@@ -194,7 +196,7 @@ pub(crate) async fn bridge(stream: TcpStream, rest: Vec<u8>, shared: &Arc<Shared
                     Some(Ctl::Close(code)) => {
                         let f = frame(0x8, &code.to_be_bytes());
                         if open {
-                            let _ = tcp_w.write_all(&f).await;
+                            let _ = send(&mut tcp_w, &f).await;
                         }
                         open = false;
                         continue;
@@ -203,7 +205,7 @@ pub(crate) async fn bridge(stream: TcpStream, rest: Vec<u8>, shared: &Arc<Shared
                 n = lines.read_until(b'\n', &mut line) => {
                     if !matches!(n, Ok(n) if n > 0) {
                         if open {
-                            let _ = tcp_w.write_all(&frame(0x8, &1000u16.to_be_bytes())).await; // the API side ended
+                            let _ = send(&mut tcp_w, &frame(0x8, &1000u16.to_be_bytes())).await; // the API side ended
                         }
                         return;
                     }
@@ -213,7 +215,7 @@ pub(crate) async fn bridge(stream: TcpStream, rest: Vec<u8>, shared: &Arc<Shared
                     f
                 }
             };
-            if open && tcp_w.write_all(&out).await.is_err() {
+            if open && send(&mut tcp_w, &out).await.is_err() {
                 open = false;
             }
         }
@@ -222,6 +224,13 @@ pub(crate) async fn bridge(stream: TcpStream, rest: Vec<u8>, shared: &Arc<Shared
         _ = async { tokio::join!(crate::serve::connection(api_r, api_w, shared, Peer::Remote), outbound) } => {}
         _ = inbound => {}
     }
+}
+
+/// Write a frame and flush it: over TLS a write can leave the records in rustls's buffer until
+/// the next one, and the last reply of a burst would wait for a frame that may never come.
+async fn send(w: &mut (impl AsyncWrite + Unpin), frame: &[u8]) -> std::io::Result<()> {
+    w.write_all(frame).await?;
+    w.flush().await
 }
 
 #[cfg(test)]

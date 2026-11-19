@@ -36,11 +36,15 @@ name = "speed"
 harness = false
 
 [dev-dependencies]
+# the HTTPS tests make a test CA and certificates, and speak TLS to the server
+rustls.workspace = true
 alacritty_terminal.workspace = true
 # the update tests build archives with bad entries, and hash what was installed
 flate2.workspace = true
+rcgen = "0.14.10"
 sha2.workspace = true
 tar.workspace = true
+time = "0.3"
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

@@ -52,6 +52,10 @@ pub struct Effective {
     pub cursor_shader_duration: f64,
     /// With serve_tailscale on, the tailnet listener also serves the web page.
     pub serve_web: bool,
+    /// The certificate file `tailscale cert` wrote, for HTTPS ("" for plain HTTP).
+    pub serve_web_cert: String,
+    /// Its private key file.
+    pub serve_web_key: String,
 }
 
 /// A theme name for each OS appearance (the same one for both unless init.lua gives two).
