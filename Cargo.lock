@@ -3389,6 +3389,7 @@ dependencies = [
 name = "leon-server"
 version = "0.1.1"
 dependencies = [
+ "base64",
  "leon-core",
  "leon-hosts",
  "leon-lua",
@@ -3396,6 +3397,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sha1_smol",
  "tempfile",
  "tokio",
 ]

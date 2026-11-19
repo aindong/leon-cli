@@ -58,6 +58,9 @@ pub struct Me {
     /// Its Tailscale addresses (at most 8), unchecked: `direct::on_tailnet` picks.
     pub ips: Vec<IpAddr>,
     pub tagged: bool,
+    /// Its MagicDNS name (`Self.DNSName`), lower case, without the trailing dot; None when there is
+    /// none or it isn't a plain DNS name (letters, digits, `-` and `.`, at most 253).
+    pub dns: Option<String>,
 }
 
 /// A caller or a destination, from `whois`.
@@ -132,7 +135,11 @@ pub fn parse_status(body: &[u8]) -> Result<Me, String> {
         _ => Vec::new(),
     };
     let tagged = !tags(me.get("Tags")).ok_or_else(|| bad("Self.Tags isn't a list"))?.is_empty();
-    Ok(Me { node: node.to_string(), user, login: login.to_string(), ips, tagged })
+    let dns = me.get("DNSName").and_then(Value::as_str).map(|d| d.trim_end_matches('.').to_ascii_lowercase());
+    let dns = dns.filter(|d| {
+        !d.is_empty() && d.len() <= 253 && d.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.')
+    });
+    Ok(Me { node: node.to_string(), user, login: login.to_string(), ips, tagged, dns })
 }
 
 pub fn parse_whois(body: &[u8]) -> Result<Peer, String> {
@@ -314,7 +321,7 @@ mod tests {
     use super::*;
 
     fn me() -> Me {
-        Me { node: "nself".into(), user: 7, login: "me@example.com".into(), ips: vec![], tagged: false }
+        Me { node: "nself".into(), user: 7, login: "me@example.com".into(), ips: vec![], tagged: false, dns: None }
     }
 
     fn peer(node: &str, user: Option<u64>, login: Option<&str>, tags: &[&str]) -> Peer {
@@ -357,6 +364,17 @@ mod tests {
         let m = parse_status(st).unwrap();
         assert_eq!((m.node.as_str(), m.user, m.login.as_str(), m.tagged), ("nself", 7, "me@example.com", false));
         assert_eq!(m.ips, ["100.64.0.1".parse::<IpAddr>().unwrap()]);
+        assert_eq!(m.dns, None);
+        let named = |d: &str| {
+            let st = format!(
+                r#"{{"BackendState":"Running","Self":{{"ID":"n","UserID":7,"DNSName":"{d}"}},"User":{{"7":{{"LoginName":"a"}}}}}}"#
+            );
+            parse_status(st.as_bytes()).unwrap().dns
+        };
+        assert_eq!(named("Box.Example-Tailnet.ts.net."), Some("box.example-tailnet.ts.net".into()));
+        for odd in ["", ".", "box:80.ts.net", "box ts.net", "bôx.ts.net", "a/b"] {
+            assert_eq!(named(odd), None, "{odd:?}");
+        }
         for bad in [
             &b"{}"[..],
             b"[]",

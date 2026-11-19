@@ -133,6 +133,9 @@ pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                     "serving" => {
                         let at: Vec<String> = t["addresses"].as_array().into_iter().flatten().map(text).collect();
                         println!("tailnet  serving on {} for {}", at.join(", "), text(&t["login"]));
+                        if let Some(url) = t["web"].as_array().and_then(|w| w.first()) {
+                            println!("web      {}", text(url));
+                        }
                     }
                     "stopped" => println!("tailnet  stopped: {}", text(&t["reason"])),
                     _ => {}

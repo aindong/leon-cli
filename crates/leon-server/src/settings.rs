@@ -50,6 +50,8 @@ pub struct Effective {
     pub cursor_shader: String,
     /// Seconds the cursor shader animates after the cursor changes, from 0.1 to 5.
     pub cursor_shader_duration: f64,
+    /// With serve_tailscale on, the tailnet listener also serves the web page.
+    pub serve_web: bool,
 }
 
 /// A theme name for each OS appearance (the same one for both unless init.lua gives two).

@@ -102,7 +102,15 @@ pub(super) const ENTRIES: [Entry; 18] = [
         Server,
         "tailscale",
         "Tailscale",
-        &["tailscale", "tailnet", "serve", "serve_tailscale", "serve_tailscale_port", "serve_tailscale_tags"],
+        &[
+            "tailscale",
+            "tailnet",
+            "serve",
+            "serve_tailscale",
+            "serve_tailscale_port",
+            "serve_tailscale_tags",
+            "serve_web",
+        ],
     ),
 ];
 

@@ -8,6 +8,12 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### leon in the browser
+
+#### Added
+- `serve_web`: a view-only page over the tailnet ([web.md](web.md)); `server.settings` and
+  `server.status` gain fields, so `api_version` goes from `1.15.0` to `1.16.0`.
+
 ### Cursor shaders
 
 #### Added

@@ -26,8 +26,8 @@ pub enum ConfigCmd {
     Get {
         /// theme, font.family, font.size, notifications.done|blocked|error, copy_on_select,
         /// link_card, repeat_time, hint_patterns, resume, fade_inactive_panes, check_for_updates,
-        /// translucency, serve_tailscale, serve_tailscale_port, serve_tailscale_tags, cursor_shader or
-        /// cursor_shader_duration.
+        /// translucency, serve_tailscale, serve_tailscale_port, serve_tailscale_tags, cursor_shader,
+        /// cursor_shader_duration or serve_web.
         key: Option<String>,
     },
     /// Set a setting in init.lua, keeping the rest of the file, and reload a running server.

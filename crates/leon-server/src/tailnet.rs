@@ -2,9 +2,9 @@
 //! also listens on this machine's Tailscale addresses, and lets a connection in only once the
 //! local tailscaled says it comes from another of the owner's untagged machines (or a tag the
 //! config lists). Nothing is read from a connection before that; a refusal closes it unanswered.
-//! A let-in connection is served by the same code as the Unix socket.
+//! A let-in connection that starts with `{` is served by the same code as the Unix socket; one that
+//! starts like HTTP by the web page (`web.rs`) with `serve_web` on; anything else is closed.
 
-use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
@@ -16,19 +16,15 @@ use tokio::net::TcpListener;
 use tokio::sync::watch;
 
 use crate::serve::{Open, Shared};
+use crate::web::Site;
+
+mod gate;
+use gate::{Gate, Outcome, Turned, WINDOW};
 
 /// How often the settings and Tailscale's status are looked at.
 const POLL: Duration = Duration::from_secs(2);
 /// A connection's whole decision: two status reads and a whois.
 const DECIDE: Duration = Duration::from_secs(3);
-/// Refusals an address may have in `WINDOW` before its connections are closed unasked.
-const FAILS: u32 = 5;
-const WINDOW: Duration = Duration::from_secs(60);
-/// Addresses the refusal count remembers; when full, a new address is refused unasked.
-const MOST_ADDRS: usize = 4096;
-/// Connections waiting for a decision, in all and from one address.
-const PENDING: usize = 32;
-const PENDING_PER: usize = 4;
 
 /// What `server.status` says about serving over Tailscale.
 #[derive(Serialize, JsonSchema, Clone, Debug)]
@@ -45,6 +41,8 @@ pub struct TailnetStatus {
     pub reason: Option<String>,
     /// The last connection turned away.
     pub last_refusal: Option<Refusal>,
+    /// The web page's URLs while serving with `serve_web` on (the MagicDNS name first), else empty.
+    pub web: Vec<String>,
 }
 
 #[derive(Serialize, JsonSchema, Clone, Debug)]
@@ -65,6 +63,7 @@ impl Default for TailnetStatus {
             login: None,
             reason: None,
             last_refusal: None,
+            web: vec![],
         }
     }
 }
@@ -104,17 +103,6 @@ impl Tailnet {
     }
 }
 
-/// What a decision means for an address's refusal count.
-#[derive(Clone, Copy, PartialEq, Debug)]
-enum Outcome {
-    /// Let in: the count is cleared.
-    In,
-    /// The caller was refused: it counts.
-    Refused,
-    /// tailscaled failed, not the caller: the count stays as it is.
-    Unsure,
-}
-
 /// The account serving started for: a changed one stops serving.
 #[derive(Clone, PartialEq, Debug)]
 struct Owner {
@@ -135,69 +123,14 @@ impl Owner {
     }
 }
 
-/// Refusal counts and connections waiting, by address.
-#[derive(Default)]
-struct Gate {
-    /// Refusals since a time, and whether the limit was logged.
-    fails: HashMap<IpAddr, (u32, Instant, bool)>,
-    pending: HashMap<IpAddr, usize>,
-}
-
-enum Turned {
-    /// Too many refusals lately; `first` when this is the first connection turned for it.
-    Limited {
-        first: bool,
-    },
-    Busy,
-}
-
-impl Gate {
-    fn enter(&mut self, ip: IpAddr) -> Result<(), Turned> {
-        if self.fails.len() >= MOST_ADDRS {
-            self.fails.retain(|_, f| f.1.elapsed() < WINDOW);
-        }
-        let full = self.fails.len() >= MOST_ADDRS;
-        match self.fails.get_mut(&ip) {
-            Some(f) if f.1.elapsed() >= WINDOW => {
-                self.fails.remove(&ip);
-            }
-            Some(f) if f.0 >= FAILS => return Err(Turned::Limited { first: !std::mem::replace(&mut f.2, true) }),
-            Some(_) => {}
-            None if full => return Err(Turned::Limited { first: false }),
-            None => {}
-        }
-        let mine = self.pending.get(&ip).copied().unwrap_or(0);
-        if mine >= PENDING_PER || self.pending.values().sum::<usize>() >= PENDING {
-            return Err(Turned::Busy);
-        }
-        self.pending.insert(ip, mine + 1);
-        Ok(())
-    }
-
-    /// The decision is made: a refusal counts against the address, a let-in clears its count.
-    fn leave(&mut self, ip: IpAddr, outcome: Outcome) {
-        match self.pending.get_mut(&ip) {
-            Some(n) if *n > 1 => *n -= 1,
-            _ => {
-                self.pending.remove(&ip);
-            }
-        }
-        match outcome {
-            Outcome::Refused => self.fails.entry(ip).or_insert((0, Instant::now(), false)).0 += 1,
-            Outcome::In => {
-                self.fails.remove(&ip);
-            }
-            Outcome::Unsure => {}
-        }
-    }
-}
-
 /// Listening now: dropping it closes the listeners and every connection it let in.
 struct Serving {
     addrs: Vec<IpAddr>,
     port: u16,
     tags: Vec<String>,
     owner: Owner,
+    /// `serve_web`, and the MagicDNS name the page answers to.
+    web: (bool, Option<String>),
     accepts: Vec<tokio::task::JoinHandle<()>>,
     /// Let-in connections end when this drops.
     _alive: watch::Sender<()>,
@@ -224,6 +157,7 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
         tick.tick().await;
         let (s, generation) = shared.ctx.settings().await;
         let (on, port, tags) = (s.serve_tailscale, s.serve_tailscale_port, s.serve_tailscale_tags);
+        let serve_web = s.serve_web;
         if !on {
             stop(&shared, &mut serving, port, None).await;
             pin = None;
@@ -251,26 +185,31 @@ pub(crate) async fn supervise(shared: Arc<Shared>) {
                 match owner.check(&me) {
                     Err(e) => Err(e),
                     Ok(()) if addrs.is_empty() => Err("this machine has no Tailscale address to serve on".into()),
-                    Ok(()) => Ok((addrs, owner)),
+                    Ok(()) => Ok((addrs, owner, (serve_web, me.dns.clone().filter(|_| serve_web)))),
                 }
             }
         };
-        let (addrs, owner) = match want {
+        let (addrs, owner, web) = match want {
             Ok(w) => w,
             Err(reason) => {
                 stop(&shared, &mut serving, port, Some(reason)).await;
                 continue;
             }
         };
-        if serving.as_ref().is_some_and(|s| s.addrs == addrs && s.port == port && s.tags == tags && s.owner == owner) {
+        let same =
+            |s: &Serving| s.addrs == addrs && s.port == port && s.tags == tags && s.owner == owner && s.web == web;
+        if serving.as_ref().is_some_and(same) {
             continue;
         }
         stop(&shared, &mut serving, port, Some("rebinding".into())).await;
-        match bind(&shared, &addrs, port, &tags, &owner).await {
-            Ok((s, at)) => {
+        match bind(&shared, &addrs, port, &tags, &owner, web).await {
+            Ok((s, at, urls)) => {
                 eprintln!("leon: tailnet: serving on {} for {}", at.join(", "), shown_text(&owner.login, 128));
+                if let Some(url) = urls.first() {
+                    eprintln!("leon: tailnet: the web page is at {url}");
+                }
                 let mut st = crate::events::lock(&shared.ctx.tailnet.status);
-                (st.state, st.port, st.addresses) = ("serving".into(), port, at);
+                (st.state, st.port, st.addresses, st.web) = ("serving".into(), port, at, urls);
                 (st.login, st.reason) = (Some(owner.login.clone()), None);
                 serving = Some(s);
             }
@@ -302,7 +241,7 @@ async fn stop(shared: &Shared, serving: &mut Option<Serving>, port: u16, reason:
             None => {}
         }
     }
-    (st.state, st.port, st.addresses, st.reason) = (state.into(), port, vec![], reason);
+    (st.state, st.port, st.addresses, st.reason, st.web) = (state.into(), port, vec![], reason, vec![]);
     if st.state == "off" {
         st.login = None;
     }
@@ -310,23 +249,23 @@ async fn stop(shared: &Shared, serving: &mut Option<Serving>, port: u16, reason:
 
 /// Listen on `port` at each of `addrs` (never another address: they are on the tailnet). One that
 /// can't be bound (IPv6 turned off, say) is logged and left out; none bound is an error. Returns
-/// what serves and where it listens.
+/// what serves, where it listens, and the web page's URLs (none with `serve_web` off).
 async fn bind(
     shared: &Arc<Shared>,
     addrs: &[IpAddr],
     port: u16,
     tags: &[String],
     owner: &Owner,
-) -> Result<(Serving, Vec<String>), String> {
+    web: (bool, Option<String>),
+) -> Result<(Serving, Vec<String>, Vec<String>), String> {
     let (alive, ended) = watch::channel(());
-    let (mut accepts, mut at, mut failed) = (Vec::new(), Vec::new(), None);
+    let (mut listeners, mut at, mut failed) = (Vec::new(), Vec::new(), None);
     for ip in addrs {
         debug_assert!(direct::on_tailnet(*ip));
         let addr = SocketAddr::new(*ip, port);
         match TcpListener::bind(addr).await {
             Ok(listener) => {
-                let (shared, tags, owner, ended) = (shared.clone(), tags.to_vec(), owner.clone(), ended.clone());
-                accepts.push(tokio::spawn(accept(listener, shared, tags, owner, ended)));
+                listeners.push(listener);
                 at.push(addr.to_string());
             }
             Err(e) => {
@@ -336,10 +275,18 @@ async fn bind(
             }
         }
     }
-    let s = Serving { addrs: addrs.to_vec(), port, tags: tags.to_vec(), owner: owner.clone(), accepts, _alive: alive };
+    // a new token each time serving starts: turning serve_web off and on revokes the old one
+    let site = web.0.then(|| Arc::new(Site::new(&at, web.1.as_deref(), port, crate::web::new_token())));
+    let urls = site.as_ref().map(|s| s.urls.clone()).unwrap_or_default();
+    let accepts = listeners
+        .into_iter()
+        .map(|l| tokio::spawn(accept(l, shared.clone(), tags.to_vec(), owner.clone(), site.clone(), ended.clone())))
+        .collect();
+    let s =
+        Serving { addrs: addrs.to_vec(), port, tags: tags.to_vec(), owner: owner.clone(), web, accepts, _alive: alive };
     match (at.is_empty(), failed) {
         (true, Some(why)) => Err(why),
-        _ => Ok((s, at)),
+        _ => Ok((s, at, urls)),
     }
 }
 
@@ -348,6 +295,7 @@ async fn accept(
     shared: Arc<Shared>,
     tags: Vec<String>,
     owner: Owner,
+    site: Option<Arc<Site>>,
     ended: watch::Receiver<()>,
 ) {
     loop {
@@ -380,7 +328,8 @@ async fn accept(
                 continue;
             }
         }
-        let (shared, tags, owner, mut ended) = (shared.clone(), tags.clone(), owner.clone(), ended.clone());
+        let (shared, tags, owner, site, mut ended) =
+            (shared.clone(), tags.clone(), owner.clone(), site.clone(), ended.clone());
         tokio::spawn(async move {
             let mut job = tokio::task::spawn_blocking(move || decide(peer, &owner, &tags));
             let decided = tokio::time::timeout(DECIDE, &mut job).await;
@@ -407,15 +356,7 @@ async fn accept(
             tokio::select! {
                 biased; // serving stopped while this was decided: not one request is served
                 _ = ended.changed() => {}
-                _ = async {
-                    // only the API is served: a connection that starts otherwise (an HTTP request,
-                    // say) is closed unread, so none of its lines is taken for a request
-                    let mut first = [0u8; 1];
-                    if matches!(stream.peek(&mut first).await, Ok(1)) && first[0] == b'{' {
-                        let (read, write) = stream.into_split();
-                        let _ = crate::serve::connection(read, write, &guard.0, crate::agents::Peer::Remote).await;
-                    }
-                } => {}
+                _ = crate::web::route(stream, &guard.0, site.as_deref()) => {}
             }
         });
     }
@@ -442,37 +383,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_gate_limits_refusals_and_waiting() {
-        let mut g = Gate::default();
-        let ip: IpAddr = "100.64.0.9".parse().unwrap();
-        for _ in 0..FAILS {
-            assert!(g.enter(ip).is_ok());
-            g.leave(ip, Outcome::Refused);
-        }
-        assert!(matches!(g.enter(ip), Err(Turned::Limited { first: true })));
-        assert!(matches!(g.enter(ip), Err(Turned::Limited { first: false })), "logged once");
-        let other: IpAddr = "100.64.0.10".parse().unwrap();
-        for _ in 0..PENDING_PER {
-            assert!(g.enter(other).is_ok());
-        }
-        assert!(matches!(g.enter(other), Err(Turned::Busy)), "per address");
-        g.leave(other, Outcome::Refused);
-        g.leave(other, Outcome::Unsure);
-        assert_eq!(g.fails[&other].0, 1, "tailscaled failing doesn't clear or add to a count");
-        assert!(g.enter(other).is_ok());
-        g.leave(other, Outcome::In);
-        assert!(!g.fails.contains_key(&other), "a let-in clears its count");
-        let mut full = Gate::default();
-        for i in 0..MOST_ADDRS as u32 {
-            full.fails.insert(IpAddr::from((0x6440_0000 + i).to_be_bytes()), (1, Instant::now(), false));
-        }
-        assert!(matches!(full.enter("100.127.0.1".parse().unwrap()), Err(Turned::Limited { .. })), "full: refused");
-    }
-
-    #[test]
     fn a_changed_or_tagged_account_is_not_the_owner() {
         let owner = Owner { user: 7, login: "me@example.com".into() };
-        let me = localapi::Me { node: "n".into(), user: 7, login: "me@example.com".into(), ips: vec![], tagged: false };
+        let me = localapi::Me {
+            node: "n".into(),
+            user: 7,
+            login: "me@example.com".into(),
+            ips: vec![],
+            tagged: false,
+            dns: None,
+        };
         assert!(owner.check(&me).is_ok());
         assert!(owner.check(&localapi::Me { user: 8, ..me.clone() }).is_err());
         assert!(owner.check(&localapi::Me { login: "you@example.com".into(), ..me.clone() }).is_err());

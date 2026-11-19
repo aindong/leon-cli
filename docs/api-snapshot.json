@@ -1,5 +1,5 @@
 {
-  "api_version": "1.15.0",
+  "api_version": "1.16.0",
   "methods": {
     "help.all": {
       "input_schema": {
@@ -285,12 +285,19 @@
                     "type": "null"
                   }
                 ]
+              },
+              "web": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
               "state",
               "port",
-              "addresses"
+              "addresses",
+              "web"
             ]
           }
         },
@@ -2976,6 +2983,9 @@
               "cursor_shader_duration": {
                 "type": "number",
                 "format": "double"
+              },
+              "serve_web": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -2994,7 +3004,8 @@
               "serve_tailscale_port",
               "serve_tailscale_tags",
               "cursor_shader",
-              "cursor_shader_duration"
+              "cursor_shader_duration",
+              "serve_web"
             ]
           },
           "sources": {

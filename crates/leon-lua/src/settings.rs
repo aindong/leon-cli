@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 19] = [
+pub const KEYS: [&str; 20] = [
     "theme",
     "font.family",
     "font.size",
@@ -30,6 +30,7 @@ pub const KEYS: [&str; 19] = [
     "serve_tailscale_tags",
     "cursor_shader",
     "cursor_shader_duration",
+    "serve_web",
 ];
 
 /// How far the app fades the panes without the focus toward the window's background, unless the
@@ -113,6 +114,8 @@ pub struct Settings {
     pub cursor_shader: String,
     /// Seconds the cursor shader animates after the cursor changes.
     pub cursor_shader_duration: f64,
+    /// With `serve_tailscale` on, the tailnet listener also serves the web page (docs/web.md).
+    pub serve_web: bool,
 }
 
 /// tmux's `repeat-time` default, in milliseconds, for a config that doesn't set `repeat_time`.
@@ -141,6 +144,7 @@ impl Default for Settings {
             serve_tailscale_tags: vec![],
             cursor_shader: String::new(),
             cursor_shader_duration: CURSOR_SHADER_DURATION,
+            serve_web: false,
         }
     }
 }
@@ -166,6 +170,7 @@ impl Settings {
             "serve_tailscale_tags": self.serve_tailscale_tags,
             "cursor_shader": self.cursor_shader,
             "cursor_shader_duration": self.cursor_shader_duration,
+            "serve_web": self.serve_web,
         })
     }
 
@@ -260,6 +265,7 @@ impl Settings {
                     return Err(format!("cursor_shader_duration must be a number of seconds from {lo} to {hi}"));
                 }
             },
+            "serve_web" => self.serve_web = flag()?,
             _ if key.starts_with("notifications.") => {
                 return Err(format!("unknown setting {key:?}; the notification kinds are done, blocked and error"))
             }

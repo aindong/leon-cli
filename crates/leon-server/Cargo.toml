@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# base64 and sha1_smol: the WebSocket handshake's accept key (sha1_smol is already in the tree through uuid).
+base64.workspace = true
+sha1_smol.workspace = true
 leon-core.workspace = true
 leon-hosts.workspace = true
 leon-lua.workspace = true

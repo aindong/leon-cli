@@ -79,6 +79,8 @@ The decisions, in nine parts:
 - [Hosts](architecture/hosts.md): remote hosts and reconnects, and the app's hosts.
 - [Serving over Tailscale](architecture/tailnet.md): the server's one network listener, who it
   lets in, `tailnet://` endpoints, and the threat model.
+- [The web client](architecture/web.md): the page served over the tailnet listener with
+  `serve_web`, the WebSocket that carries the socket's API, and how other sites are kept out.
 - [How leon uses GPUI](architecture/gpui.md): the app's view structure, redraws, animation,
   painting, input, async and tests as GPUI intends them, what may go beside GPUI, and that GPUI
   is used as published.
