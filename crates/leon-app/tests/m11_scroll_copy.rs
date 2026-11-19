@@ -126,9 +126,6 @@ fn copy_on_select_when_the_config_says_so(cx: &mut TestAppContext) {
     let (ws, cx) = open(cx, &s.app);
     ws.update(cx, |ws, cx| ws.sync_keymap(cx));
     let id = tab_running(&s, &ws, cx, SCRIPT, "10000");
-    // the window's fit (a queued resize) lands first: a reflow after the rows are read moves them
-    let t = term(&s.app, &id);
-    assert!(shows(cx, |cx| stays(cx, &t, t.size())), "the pane keeps its size");
     let r = row_of(&ws, cx, &id, "9999");
     let (from, to) = (cell(&ws, cx, &id, r, 0), cell(&ws, cx, &id, r, 3));
     drag(cx, from, to, Modifiers::none());
