@@ -43,3 +43,8 @@ tempfile.workspace = true
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
+
+# A real GPUI window, so its own main on the main thread (the file says how it runs)
+[[test]]
+name = "gpui_display_link"
+harness = false

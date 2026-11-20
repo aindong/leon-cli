@@ -8,6 +8,15 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### A key's echo shown at once
+
+#### Changed
+- Leon.app draws and shows a key's echo when the pane's screen arrives, instead of waiting for
+  GPUI's next display tick ([performance-app.md](performance-app.md#key-echo-at-once)). It builds
+  GPUI 0.2.2 from a fork with one fix, so drawing at once no longer leaks a display link per key
+  ([architecture/gpui-patch.md](architecture/gpui-patch.md)); every build now also fetches
+  github.com/aindong/gpui.
+
 ### Leon.app doesn't wait on its own server
 
 #### Changed

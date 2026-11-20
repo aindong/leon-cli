@@ -88,8 +88,24 @@ fn the_adr_names_the_gpui_leon_builds_with() {
         .find(|l| l.starts_with("Built against: "))
         .expect("docs/architecture/gpui.md has a `Built against: ` line")
         .to_string();
+    // R11 as amended (docs/architecture/gpui-patch.md): the one patch is the fork, at a full commit
     let patched = cargo_patches();
-    assert!(!patched.contains("gpui"), "R11: GPUI is used as published, no [patch] for it: {patched}");
+    let lines: Vec<&str> = patched.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')).collect();
+    let fork = "gpui = { git = \"https://github.com/aindong/gpui\", rev = \"";
+    assert!(
+        lines.len() == 2 && lines[0] == "patch.crates-io]" && lines[1].starts_with(fork),
+        "R11: the only [patch] is GPUI's fork named in the ADR: {patched}"
+    );
+    let rev = lines[1][fork.len()..].trim_end_matches("\" }");
+    assert!(
+        rev.len() == 40 && rev.bytes().all(|b| b.is_ascii_hexdigit()),
+        "R11: the fork is pinned by full commit: {rev}"
+    );
+    assert_eq!(
+        source,
+        format!("git+https://github.com/aindong/gpui?rev={rev}#{rev}"),
+        "Cargo.lock builds the pinned commit"
+    );
     assert!(built.contains(&format!("GPUI {version}")), "a GPUI change (to {version}) amends the ADR first: {built}");
     if source.starts_with("registry+") {
         assert!(built.contains("crates.io"), "the ADR says the GPUI is crates.io's: {built}");
@@ -106,19 +122,27 @@ fn raw_appkit_is_only_where_the_adr_allows_it() {
     let rule = |n: &str| section(&adr, "Rules").lines().find(|l| l.starts_with(&format!("- **{n}."))).unwrap_or("");
     assert!(rule("R2").contains("AppKit"), "R2 is the AppKit rule the messages below cite");
     assert!(rule("R8").contains("thread"), "R8 is the threads rule the messages below cite");
+    let r2 = section(&adr, "Rules").split("\n- **R").find(|r| r.starts_with("2.")).unwrap_or("");
     let mut users = 0;
     for (name, code) in app_sources() {
         if code.contains("msg_send!") || code.contains("objc2::") {
             users += 1;
             assert!(allowed.contains(&format!("`{name}`")), "{name} calls AppKit: list it under Allowed outside GPUI");
         }
+        // a key's echo, the one exception R2 names
+        let echo = name == "view_echo.rs" && r2.contains("`view_echo.rs`");
         for poke in ["setNeedsDisplay", "displayLayer"] {
-            assert!(!code.contains(poke), "{name} uses {poke}: never schedule GPUI's frames through AppKit (R2)");
+            assert!(
+                (echo && poke == "setNeedsDisplay") || !code.contains(poke),
+                "{name} uses {poke}: never schedule GPUI's frames through AppKit (R2)"
+            );
         }
-        // GPUI's view, only for the cursor shader overlay's sublayer, as the amendment says
-        let overlay = name == "cursor_shader/overlay.rs" && allowed.contains("`raw-window-handle`, here only");
+        // GPUI's view, only where its entry says why: the cursor shader overlay's sublayer, the echo
+        let entry = allowed.split("\n- ").find(|e| e.starts_with(&format!("`{name}`"))).unwrap_or("");
+        let view = matches!(name.as_str(), "cursor_shader/overlay.rs" | "view_echo.rs")
+            && entry.contains("`raw-window-handle`");
         for poke in ["raw_window_handle", "HasWindowHandle"] {
-            assert!(overlay || !code.contains(poke), "{name} uses {poke}: GPUI's view is GPUI's (R2)");
+            assert!(view || !code.contains(poke), "{name} uses {poke}: GPUI's view is GPUI's (R2)");
         }
     }
     assert!(users > 0, "the walk sees the AppKit calls there are");

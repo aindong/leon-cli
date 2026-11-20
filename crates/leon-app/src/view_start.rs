@@ -77,6 +77,7 @@ impl Workspace {
         let mut ws = Self::with_hosts(app, settings_path(), hosts, window, cx);
         ws.platform = true;
         ws.native_key = crate::input::current_key_event;
+        ws.echo.show = echo::show_now;
         let store = leon_core::paths::state_dir().map(|d| d.join("updates.json"));
         ws.enable_updates(store, Arc::new(leon_update::Target::running));
         crate::notify::prepare();

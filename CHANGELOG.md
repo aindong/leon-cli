@@ -32,6 +32,7 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- **A key's echo is shown at once** in Leon.app, not at the next display tick ([detail](docs/changelog-detail.md#a-keys-echo-shown-at-once)).
 - **Leon.app doesn't wait on its own server once its window is up.** Keys, splits, copies and the
   window's other calls to This Mac's server queue in order off its thread, and a config reload shows at once ([detail](docs/changelog-detail.md#leonapp-doesnt-wait-on-its-own-server)).
 - **Input methods and the emoji picker in Leon.app's panes.** Japanese, Chinese and other input

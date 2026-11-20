@@ -99,6 +99,7 @@ impl Workspace {
             focus,
             stats: Rc::new(RefCell::new(stats)),
             wakes: (0, 0),
+            echo: Default::default(),
             models: Vec::new(),
             root_seen: Default::default(),
             wake_seen: (0, 0),

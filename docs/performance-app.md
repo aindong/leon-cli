@@ -50,7 +50,40 @@ pulsing status indicator re-lays out the whole window on each of its frames. Dur
 the bytes (the slice scans in `terminal_view::feed`, the X10 mouse scanner, the OSC 7501 scanner)
 than in alacritty's parser (fixed since: docs/performance-cat.md). A keystroke's echo is painted 12 ms after the key (most of it waiting for the next
 display tick), then shown about two display frames later: GPUI draws on the display link and
-presents through a three-drawable Metal layer.
+presents through a three-drawable Metal layer (before 2026-11-20: a key's echo is now drawn
+when its screen arrives, [Key echo at once](#key-echo-at-once)).
+
+## Key echo at once
+
+Since 2026-11-20 the app shows a key's echo when the pane's screen arrives, not at GPUI's next
+display tick: it asks AppKit to display GPUI's view, and GPUI draws and presents that frame in
+the same run-loop pass (`view_echo.rs`). GPUI 0.2.2 leaked a display link each time; leon builds
+it with one fix ([architecture/gpui-patch.md](architecture/gpui-patch.md)), and
+`crates/leon-app/tests/gpui_display_link.rs` counts the links: 500 shows at once and a window
+hidden and shown again leave its 1 link with the fix; 500 shows alone left 109 without it.
+
+Measured in the Tart VM (6 cores, 60 Hz), as phase 8 was: dev (`22005da`) against this change,
+release builds, alternating, `keylat.sh` three times each (200 keys a load, VM load 0.6 to 2.4,
+`PERF_ALLOW_LOAD=1` since the host was busy). Medians of the three runs' p50; the VM's absolute
+numbers are not the host's, only the change counts:
+
+| | before | after |
+|---|---|---|
+| key to frame composited, outside: idle / one pane flooding / eight busy | 102.7 / 72.7 / 89.6 ms | 68.7 / 40.9 / 52.8 ms |
+| the same, p99 (median of three) | 183.0 / 93.5 / 151.6 ms | 151.8 / 85.1 / 145.6 ms |
+| floor (a window that repaints at once), outside | 36.3 ms | 27.6 ms |
+| key to echo painted, in the app | 30.2 / 14.0 / 19.0 ms | 10.0 / 8.3 / 9.1 ms |
+| key to the key sent to the pane, in the app | 10.0 / 4.4 / 9.8 ms | 1.8 / 1.4 / 1.2 ms |
+
+The echo reaches the screen 32 to 37 ms sooner at p50 in the VM, and is painted about 10 ms
+after the key instead of 14 to 30. The key itself also reaches the pane sooner (10 to under
+2 ms); measured, not yet explained (a guess: the key no longer waits behind a frame drawn at
+the display link's tick). `flood.sh` (five runs each): one pane the same (median 46.2 against
+45.0 frames a second shown in the app); eight panes 15.5 against 19.0, with runs from 12.8 to 25.6 after and 17.0 to
+23.1 before, the VM's 6 cores saturated (load 5 to 7): not a difference this VM can show. The change adds at
+most one frame at once per key, none while output alone arrives. Earlier, on the host with
+crates.io GPUI (#21's probe): outside p50 49.8 to 36.3 ms, in-app paint 11.1 to 6.8 ms. At
+120 Hz the saving is about half.
 
 ## The overview with 50 tabs
 
@@ -104,5 +137,5 @@ after the key and reaches the screen about 50 ms after it (the table at the top)
 waiting for GPUI's next display tick and then its presentation. The refactor's rule was to change
 nothing inside GPUI (R11). Drawing the echo at once, as a probe on a branch did, took the host's
 outside p50 from 49.8 to 36.3 ms, but GPUI 0.2.2 leaks a display link per immediate draw, so it
-needs a change inside GPUI. Whether to make one is a decision for the ADR, not this page; idle
-CPU (under 1% of a core shown, nothing hidden) is not a reason to.
+needs a change inside GPUI. The ADR took one on 2026-11-20 ([Key echo at once](#key-echo-at-once));
+idle CPU (under 1% of a core shown, nothing hidden) was not a reason to.
