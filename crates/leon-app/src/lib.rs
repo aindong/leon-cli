@@ -26,6 +26,7 @@ pub mod panes;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod popover;
 pub mod program_kind;
+pub mod qr;
 pub mod remote;
 pub mod render;
 pub mod scrollback;

@@ -14,6 +14,8 @@ futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+# the web page's QR code (qr.rs), shared with `leon server status --qr`
+qrcode.workspace = true
 
 # The window (GPUI, macOS for now). Without it the crate is the GPUI-free part that `leon attach`
 # shares: the client, keymap, palette and pane layout (docs/architecture.md, Platforms).
@@ -40,6 +42,7 @@ raw-window-handle = { version = "0.6", optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
+rqrr.workspace = true
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

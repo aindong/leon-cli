@@ -56,6 +56,10 @@ sha2 = "0.10"
 tar = "0.4"
 zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 tempfile = "3"
+# The web page's QR code (Settings and `leon server status --qr`): pure Rust, no image crate.
+qrcode = { version = "0.15", default-features = false }
+# its test decodes the code back (dev only): no image crate either
+rqrr = { version = "0.11", default-features = false }
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
 

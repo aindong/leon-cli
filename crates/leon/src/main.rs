@@ -477,7 +477,11 @@ pub enum ServerCmd {
         discard: bool,
     },
     /// Show whether a server runs (exit 4 if not).
-    Status,
+    Status {
+        /// Also draw the web page's address as a QR code, to open it on a phone.
+        #[arg(long)]
+        qr: bool,
+    },
     /// Connect stdin and stdout to this machine's server, starting one first (unless
     /// --autostart=false): what `leon -H` runs on the host over ssh.
     Proxy,
