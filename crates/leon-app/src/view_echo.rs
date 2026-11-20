@@ -24,8 +24,9 @@ impl Default for Echo {
 
 impl Workspace {
     /// A key went to pane `id`: its next screen is shown at once.
-    // shortcut: a key that changes nothing on screen (echo off) leaves its show for that pane's next
-    // screen, one extra frame at once at most; give it a deadline if that is ever seen to matter
+    // shortcut: the pane's next committed screen takes the show, even one the reader had before the
+    // key, or with nothing new (echo off): that key's echo then waits for the tick, as before, and
+    // costs one frame at once at most; tie it to the screen's generation if that is ever seen to matter
     pub(super) fn key_sent(&mut self, id: &str) {
         self.echo.pane = Some(id.to_string());
     }

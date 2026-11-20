@@ -43,7 +43,7 @@ while read -r d name short; do
   for p in "$checkouts"/*/*; do
     case "$short" in "$(basename "$p")"*) ;; *) continue ;; esac
     if grep -q "^name = \"$name\"" "$p/Cargo.toml" 2>/dev/null; then
-      ln -s "$p" "$tmp/git-pkgs/$d" && echo "$tmp/git-pkgs/$d" >> "$tmp/dirs"
+      ln -s "$(cd "$p" && pwd)" "$tmp/git-pkgs/$d" && echo "$tmp/git-pkgs/$d" >> "$tmp/dirs"
       break
     fi
   done

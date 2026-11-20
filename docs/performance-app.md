@@ -50,7 +50,8 @@ pulsing status indicator re-lays out the whole window on each of its frames. Dur
 the bytes (the slice scans in `terminal_view::feed`, the X10 mouse scanner, the OSC 7501 scanner)
 than in alacritty's parser (fixed since: docs/performance-cat.md). A keystroke's echo is painted 12 ms after the key (most of it waiting for the next
 display tick), then shown about two display frames later: GPUI draws on the display link and
-presents through a three-drawable Metal layer.
+presents through a three-drawable Metal layer (before 2026-11-20: a key's echo is now drawn
+when its screen arrives, [Key echo at once](#key-echo-at-once)).
 
 ## Key echo at once
 
