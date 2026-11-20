@@ -36,7 +36,9 @@ the window is on screen; output with no key behind it (a flood) keeps to the dis
 - No GPUI release fixes either (checked 2026-11-20): crates.io's newest `gpui` is 0.2.2, and
   Zed's main still draws only on its frame source's tick; its `displayLayer:` still stops and
   restarts the frame source, which no longer leaks there (below).
-- This patch, measured in a VM: docs/performance-app.md, "Key echo at once".
+- This patch, in a VM against dev (docs/performance-app.md, "Key echo at once"): key to frame
+  shown p50 32 to 37 ms sooner (idle 102.7 to 68.7 ms), key to echo painted about 10 ms instead
+  of 14 to 30 ms.
 
 ## The check
 

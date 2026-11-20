@@ -61,10 +61,28 @@ it with one fix ([architecture/gpui-patch.md](architecture/gpui-patch.md)), and
 `crates/leon-app/tests/gpui_display_link.rs` counts the links: 500 shows at once leave 1 link
 with the fix, and 109 without it.
 
-The first measurement (#21's probe on the host, crates.io GPUI, 200 keys, `keylat.sh --loads
-idle`): key to frame composited from outside p50 49.8 to 36.3 ms, p99 67.3 to 55.0 ms; in the
-app, key to echo painted p50 11.1 to 6.8 ms; `flood.sh` unchanged (the display link's pace).
-At 120 Hz the saving is about half.
+Measured in the Tart VM (6 cores, 60 Hz), as phase 8 was: dev (`22005da`) against this change,
+release builds, alternating, `keylat.sh` three times each (200 keys a load, VM load 0.6 to 2.4,
+`PERF_ALLOW_LOAD=1` since the host was busy). Medians of the three runs' p50; the VM's absolute
+numbers are not the host's, only the change counts:
+
+| | before | after |
+|---|---|---|
+| key to frame composited, outside: idle / one pane flooding / eight busy | 102.7 / 72.7 / 89.6 ms | 68.7 / 40.9 / 52.8 ms |
+| the same, p99 (median of three) | 183.0 / 93.5 / 151.6 ms | 151.8 / 85.1 / 145.6 ms |
+| floor (a window that repaints at once), outside | 36.3 ms | 27.6 ms |
+| key to echo painted, in the app | 30.2 / 14.0 / 19.0 ms | 10.0 / 8.3 / 9.1 ms |
+| key to the key sent to the pane, in the app | 10.0 / 4.4 / 9.8 ms | 1.8 / 1.4 / 1.2 ms |
+
+The echo reaches the screen 32 to 37 ms sooner at p50 in the VM, and is painted about 10 ms
+after the key instead of 14 to 30. The key itself also reaches the pane sooner (10 to under
+2 ms); measured, not yet explained (a guess: the key no longer waits behind a frame drawn at
+the display link's tick). `flood.sh` (five runs each): one pane the same (median 46.2 against
+45.0 frames a second shown in the app); eight panes 15.5 against 19.0, with runs from 12.8 to 25.6 after and 17.0 to
+23.1 before, the VM's 6 cores saturated (load 5 to 7): not a difference this VM can show. The change adds at
+most one frame at once per key, none while output alone arrives. Earlier, on the host with
+crates.io GPUI (#21's probe): outside p50 49.8 to 36.3 ms, in-app paint 11.1 to 6.8 ms. At
+120 Hz the saving is about half.
 
 ## The overview with 50 tabs
 
