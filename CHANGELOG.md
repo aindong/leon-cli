@@ -59,8 +59,8 @@ the app, or `brew upgrade` ([Install](README.md#install)).
 
 ### leon in the browser
 
-- **leon in the browser, over your tailnet.** `serve_web` serves a view-only page of your sessions,
-  tabs and panes to your own machines; `api_version` goes to `1.16.0` ([detail](docs/changelog-detail.md#leon-in-the-browser)).
+- **leon in the browser, over your tailnet.** `serve_web` serves a page of your sessions, tabs
+  and panes to your own machines; `api_version` goes to `1.16.0` ([detail](docs/changelog-detail.md#leon-in-the-browser)).
 - **HTTPS for the browser page.** `serve_web_cert` and `serve_web_key` name the files `tailscale cert`
   wrote; leon reads and reloads them; `api_version` goes to `1.17.0` ([detail](docs/changelog-detail.md#https-for-the-browser-page)).
 - **Drive leon from the browser.** The tailnet web page types, pastes, copies, sends the mouse,
