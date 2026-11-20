@@ -13,6 +13,8 @@ one needs you. It runs on macOS and Linux (the app is macOS only for now) and is
 
 ![The leon app: splitting a tab, switching tabs, splitting from the command palette, a git popup, switching sessions with ⌘K, and an agent working, then blocked](docs/images/demo-app.gif)
 
+**New in 0.2:** agents that start agents and hear back, leon in a browser or on a phone, a link card, cursor shaders, and closing and renaming tabs ([What's new](https://aindong.github.io/leon-cli/whats-new/0.2.0/)).
+
 ![The leon command: a new session, a run that waits, typing into Python and waiting for its answer, then leon attach and a split](docs/images/demo-cli.gif)
 
 ## Features
