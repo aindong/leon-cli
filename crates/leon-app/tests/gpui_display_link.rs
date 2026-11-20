@@ -1,7 +1,8 @@
-//! GPUI's `displayLayer:` (what a key's echo shown at once goes through, view_echo.rs) reuses the
-//! window's display link: 500 calls leave the one link, where GPUI 0.2.2 as published leaked one
-//! per call (docs/architecture/gpui-patch.md). Run without `[patch.crates-io]` this is the check
-//! that the patch can go.
+//! A GPUI window keeps one display link (docs/architecture/gpui-patch.md): shown at once 500 times
+//! (`displayLayer:`, what a key's echo goes through, view_echo.rs) and moved between screens while
+//! on screen, then drawn at once and hidden and shown again while off screen, it still has the one
+//! link it started with. GPUI 0.2.2 as published dropped and rebuilt the link each time, and never
+//! frees a dropped one. Run without `[patch.crates-io]` this is the check that the patch can go.
 //!
 //! A real window on the real platform, so its own `main` (AppKit wants the main thread). It opens
 //! a window on screen, so it runs only with `LEON_GUI_TESTS=1` (CI's macOS job, the VM) and says
@@ -46,7 +47,9 @@ fn run() {}
 fn run() {
     use gpui::{px, size, App, AppContext, Application, Bounds, WindowBounds, WindowOptions};
     use leon_app::view::echo::show_now;
-    use objc2::runtime::{AnyClass, Imp, Sel};
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject, Imp, Sel};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use std::time::Duration;
 
     struct Blank;
@@ -74,6 +77,14 @@ fn run() {
         }
     }
 
+    /// GPUI's NSView of `window`.
+    fn ns_view(window: &gpui::Window) -> *mut AnyObject {
+        match HasWindowHandle::window_handle(window).map(|h| h.as_raw()) {
+            Ok(RawWindowHandle::AppKit(h)) => h.ns_view.as_ptr().cast(),
+            _ => panic!("GPUI's window has an NSView"),
+        }
+    }
+
     if std::env::var("LEON_GUI_TESTS").is_ok_and(|v| v == "1") {
         println!("{NAME}: runs (LEON_GUI_TESTS=1)");
     } else {
@@ -90,27 +101,67 @@ fn run() {
             let executor = cx.background_executor().clone();
             let tick = || executor.timer(Duration::from_millis(2));
             tick().await;
+            let view = handle.update(cx, |_, window, _| ns_view(window)).expect("the window");
+            // SAFETY: GPUI's NSView and its window live until the process exits; main thread. The
+            // window is its own delegate: these are AppKit's notifications to it, sent by hand.
+            let tell = |sel: Sel| unsafe {
+                let window: *mut AnyObject = msg_send![view, window];
+                let _: *mut AnyObject =
+                    msg_send![window, performSelector: sel, withObject: std::ptr::null_mut::<AnyObject>()];
+            };
+            let mut failed = Vec::new();
+            let check = |what: &str, before: usize| {
+                let now = display_links();
+                println!("{NAME}: {what}: live CVDisplayLinks {before} before, {now} after");
+                (now != before).then(|| format!("{what}: {before} links before, {now} after"))
+            };
             let before = display_links();
+            if before == 0 {
+                eprintln!("{NAME}: FAILED: the window on screen has no display link");
+                std::process::exit(1);
+            }
+
+            // on screen: shown at once through the app's own path, and moved between screens
             let mut asked = 0;
             for _ in 0..500 {
-                // the app's own path: AppKit displays the view at the end of this run-loop pass
                 asked += handle.update(cx, |_, window, _| show_now(window)).expect("the window") as usize;
                 tick().await;
             }
-            let after = display_links();
-            println!("{NAME}: live CVDisplayLinks {before} before, {after} after {asked} immediate shows");
-            let mut ok = asked == 500 && before >= 1 && after <= before + 1;
-            if !ok {
-                eprintln!(
-                    "{NAME}: FAILED: each displayLayer: left a display link behind (GPUI rebuilds it, not reuses it)"
-                );
+            for _ in 0..20 {
+                tell(objc2::sel!(windowDidChangeScreen:));
             }
-            // a window not on screen is not shown at once: GPUI draws nothing there
+            if asked != 500 {
+                failed.push(format!("on screen, {asked} of 500 shows were asked for"));
+            }
+            failed.extend(check("on screen: 500 shows at once, 20 screen changes", before));
+
+            // off screen: not shown at once, a frame drawn at once anyway (activation does), and
+            // hidden and shown 50 times; then on screen again
             occlusion(hidden);
+            tell(objc2::sel!(windowDidChangeOcclusionState:));
             if handle.update(cx, |_, window, _| show_now(window)).expect("the window") {
-                eprintln!("{NAME}: FAILED: a hidden window was shown at once");
-                ok = false;
+                failed.push("a hidden window was shown at once".into());
             }
+            for _ in 0..50 {
+                // SAFETY: as above; AppKit calls this when the view's layer needs display
+                unsafe {
+                    let layer: *mut AnyObject = msg_send![view, layer];
+                    let _: () = msg_send![view, displayLayer: layer];
+                }
+            }
+            for _ in 0..50 {
+                occlusion(on_screen);
+                tell(objc2::sel!(windowDidChangeOcclusionState:));
+                occlusion(hidden);
+                tell(objc2::sel!(windowDidChangeOcclusionState:));
+            }
+            occlusion(on_screen);
+            tell(objc2::sel!(windowDidChangeOcclusionState:));
+            failed.extend(check("off screen: 50 frames at once, hidden and shown 50 times", before));
+            for f in &failed {
+                eprintln!("{NAME}: FAILED: {f} (GPUI drops and rebuilds the link, and never frees it)");
+            }
+            let ok = failed.is_empty();
             std::process::exit(if ok { 0 } else { 1 });
         })
         .detach();

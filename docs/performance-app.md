@@ -59,8 +59,8 @@ Since 2026-11-20 the app shows a key's echo when the pane's screen arrives, not 
 display tick: it asks AppKit to display GPUI's view, and GPUI draws and presents that frame in
 the same run-loop pass (`view_echo.rs`). GPUI 0.2.2 leaked a display link each time; leon builds
 it with one fix ([architecture/gpui-patch.md](architecture/gpui-patch.md)), and
-`crates/leon-app/tests/gpui_display_link.rs` counts the links: 500 shows at once leave 1 link
-with the fix, and 109 without it.
+`crates/leon-app/tests/gpui_display_link.rs` counts the links: 500 shows at once and a window
+hidden and shown again leave its 1 link with the fix; 500 shows alone left 109 without it.
 
 Measured in the Tart VM (6 cores, 60 Hz), as phase 8 was: dev (`22005da`) against this change,
 release builds, alternating, `keylat.sh` three times each (200 keys a load, VM load 0.6 to 2.4,

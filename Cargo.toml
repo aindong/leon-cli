@@ -72,4 +72,4 @@ opt-level = 3
 
 # GPUI 0.2.2 plus one display-link fix (docs/architecture/gpui-patch.md; ADR R11 as amended)
 [patch.crates-io]
-gpui = { git = "https://github.com/aindong/gpui", rev = "24807306dcc0c90072c4cfa80e1da3f6f11228b8" }
+gpui = { git = "https://github.com/aindong/gpui", rev = "ba990617598d621ff4fdbe1e0b58fb8654bd02bf" }

@@ -4,7 +4,7 @@ Part of [docs/architecture.md](../architecture.md). The app (`leon-app`, the `gu
 GPUI client of the server; this is how it uses GPUI, as rules a contributor can check, and why.
 Written 2026-11-17. A GPUI upgrade amends this file first (the doc test reads `Cargo.lock`):
 
-Built against: GPUI 0.2.2 from crates.io plus one fix, aindong/gpui at 24807306dcc0c90072c4cfa80e1da3f6f11228b8
+Built against: GPUI 0.2.2 from crates.io plus one fix, aindong/gpui at ba990617598d621ff4fdbe1e0b58fb8654bd02bf
 (amended 2026-11-20: [gpui-patch.md](gpui-patch.md)).
 
 ## Context

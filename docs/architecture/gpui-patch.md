@@ -7,17 +7,19 @@ measurement that needs it, and how it goes away.
 
 leon builds GPUI 0.2.2 from [aindong/gpui](https://github.com/aindong/gpui), through
 `[patch.crates-io]` in the workspace's `Cargo.toml`, pinned by full commit. That repository has
-two commits:
+three commits:
 
 1. `gpui-0.2.2.crate` from crates.io, unpacked unchanged (its sha256 is the checksum crates.io's
    index records, `979b45cf…`; GPUI's `LICENSE-APACHE` with it).
-2. The fix, in `src/platform/mac/window.rs`. GPUI 0.2.2 draws a frame at once in `displayLayer:`
-   and when a window becomes key (after the first time): it stops the window's display link by
-   dropping it, draws, and builds a new one. `DisplayLink`'s `Drop` never frees its
-   `CVDisplayLink` (on purpose, against a crash on the link's thread), so each call leaks a link.
-   The fix pauses the window's own link and runs it again after the frame
-   (`pause_display_link`, `resume_display_link`); a link built meanwhile, or a window hidden
-   meanwhile, keeps 0.2.2's behaviour. Nothing else changes, and nothing off macOS.
+2. and 3. The fix, in `src/platform/mac/window.rs` and `display_link.rs`. GPUI 0.2.2 stops a
+   window's display link by dropping it and starts one by building a new one: around a frame
+   drawn at once (`displayLayer:`, a window becoming key), when the window is hidden or shown
+   again, and when it moves to another screen. `DisplayLink`'s `Drop` never frees its
+   `CVDisplayLink` (on purpose, against a crash on the link's thread), so each leaks a link. With
+   the fix a window keeps one link for its life: `stop_display_link` pauses it, and
+   `start_display_link` runs the same link again, moved to the window's display if that changed.
+   (Commit 2 kept the link only around a frame drawn at once, and still dropped it when hidden;
+   commit 3 replaces that.) Nothing else changes, and nothing off macOS.
 
 With it, leon's app shows a key's echo at once (R2's one exception, `view_echo.rs`): when the
 screen of the pane a key went to arrives, it asks AppKit to display GPUI's view, and GPUI's own
@@ -42,10 +44,12 @@ the window is on screen; output with no key behind it (a flood) keeps to the dis
 
 ## The check
 
-`crates/leon-app/tests/gpui_display_link.rs` opens a GPUI window on the real platform and shows
-it at once 500 times through `view_echo.rs`, then counts the live `CVDisplayLink`s with `heap`:
-1 before and 1 after with the fix, 109 after on crates.io 0.2.2 (AppKit merges some of the
-requests); then, the window reported hidden, it is not shown at once. It opens a window, so it runs with `LEON_GUI_TESTS=1` (CI's macOS job) and says it
+`crates/leon-app/tests/gpui_display_link.rs` opens a GPUI window on the real platform, with its
+`occlusionState` answered by the test, and counts the live `CVDisplayLink`s with `heap`, which
+must stay at the window's one link in both cases. On screen: shown at once 500 times through
+`view_echo.rs` and moved between screens 20 times. Off screen: not shown at once, 50 frames
+drawn at once anyway, and hidden and shown 50 times. With commit 2 alone it counted 21 and 72
+links; on crates.io 0.2.2 the first 500 shows alone left 109. It opens a window, so it runs with `LEON_GUI_TESTS=1` (CI's macOS job) and says it
 skipped otherwise. `crates/leon/tests/gpui_adr.rs` checks the `[patch]` is this fork at a full
 commit and that the ADR's Built against line names that commit.
 
