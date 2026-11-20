@@ -38,10 +38,10 @@ fn main() {
     run();
 }
 
-// macOS only: GPUI's macOS platform and its display link are what this measures.
 #[cfg(not(target_os = "macos"))]
 fn run() {}
 
+// macOS only: GPUI's macOS platform and its display link are what this measures.
 #[cfg(target_os = "macos")]
 fn run() {
     use gpui::{px, size, App, AppContext, Application, Bounds, WindowBounds, WindowOptions};
@@ -118,6 +118,7 @@ fn run() {
 }
 
 /// The live CVDisplayLink objects in this process, counted by `heap`.
+// macOS only: heap(1) and CVDisplayLink are macOS's.
 #[cfg(target_os = "macos")]
 fn display_links() -> usize {
     let out = std::process::Command::new("heap").arg(std::process::id().to_string()).output().expect("heap(1) runs");
