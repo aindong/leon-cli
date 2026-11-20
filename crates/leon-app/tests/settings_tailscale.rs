@@ -1,4 +1,4 @@
-//! Settings → Server → Tailscale: `serve_tailscale_port` has a field and `serve_tailscale_tags` a
+//! Settings → Server → Tailscale, under Advanced: `serve_tailscale_port` has a field and `serve_tailscale_tags` a
 //! tag list. Each writes init.lua as `leon config set` would, refuses what the setting refuses
 //! (saying why, writing nothing), and is read-only when init.lua sets it by code.
 mod m9_support;
@@ -24,6 +24,7 @@ fn errors(cx: &VisualTestContext, o: &Opened) -> [Option<String>; 2] {
 fn the_port_field_writes_a_port_and_refuses_anything_else(cx: &mut TestAppContext) {
     let (o, mut cx) = open_settings(cx, "");
     click(&mut cx, "section-server");
+    click(&mut cx, "tailscale-advanced"); // Port and Tags sit under Advanced
     let mut refused = vec![];
     for bad in ["0", "70000", "abc", "80.5"] {
         enter(&mut cx, "port-field", bad);
@@ -50,6 +51,7 @@ fn the_tag_list_adds_and_removes_tags_and_refuses_a_bad_one(cx: &mut TestAppCont
     let src = "leon.set(\"serve_tailscale_tags\", { \"tag:a\", \"tag:b\" })\n";
     let (o, mut cx) = open_settings(cx, src);
     click(&mut cx, "section-server");
+    click(&mut cx, "tailscale-advanced"); // Port and Tags sit under Advanced
     enter(&mut cx, "tag-field", "ci");
     assert!(saved(&mut cx, &o));
     let (bad_why, bad_shown, bad_written) = (errors(&cx, &o)[1].clone(), drawn(&mut cx, "tag-error"), text(&o.config));
@@ -78,6 +80,7 @@ fn a_seventeenth_tag_is_refused(cx: &mut TestAppContext) {
     let src = format!("leon.set(\"serve_tailscale_tags\", {{ {} }})\n", tags.join(", "));
     let (o, mut cx) = open_settings(cx, &src);
     click(&mut cx, "section-server");
+    click(&mut cx, "tailscale-advanced"); // Port and Tags sit under Advanced
     enter(&mut cx, "tag-field", "tag:more");
     assert!(saved(&mut cx, &o));
     let (why, shown, got) = (errors(&cx, &o)[1].clone(), drawn(&mut cx, "tag-error"), text(&o.config));
@@ -92,6 +95,7 @@ fn port_and_tags_set_by_code_are_read_only(cx: &mut TestAppContext) {
     let src = "local p, ts = 8000, { \"tag:a\" }\nleon.set(\"serve_tailscale_port\", p)\nleon.set(\"serve_tailscale_tags\", ts)\n";
     let (o, mut cx) = open_settings(cx, src);
     click(&mut cx, "section-server");
+    click(&mut cx, "tailscale-advanced"); // Port and Tags sit under Advanced
     let locked = drawn(&mut cx, "locked-serve_tailscale_port") && drawn(&mut cx, "locked-serve_tailscale_tags");
     let fields = drawn(&mut cx, "port-field") || drawn(&mut cx, "tag-field");
     click(&mut cx, "tag-remove-0");

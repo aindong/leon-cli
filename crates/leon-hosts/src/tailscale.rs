@@ -147,6 +147,35 @@ pub fn ssh_advice(label: &str) -> String {
     )
 }
 
+/// The `tailscale` to tell someone to run: one on `path`, else the Mac app's binary (the
+/// standalone app puts none on PATH), else the plain name. `$LEON_TAILSCALE` is leon's, not theirs.
+pub fn cert_program(path: Option<&OsStr>, bundles: &[&Path]) -> String {
+    match locate(None, path, bundles) {
+        Some(p) if p.file_name() == Some(OsStr::new("tailscale")) => "tailscale".into(),
+        Some(p) => quoted(&p),
+        None => "tailscale".into(),
+    }
+}
+
+/// The command that makes the web page's HTTPS files `cert` and `key` for `name` (docs/web.md):
+/// on Linux only root (or the operator) may ask, and then the files are root's.
+pub fn cert_command(cert: &Path, key: &Path, name: &str) -> String {
+    let bundles: Vec<&Path> = BUNDLES.iter().map(Path::new).collect();
+    let ts = cert_program(std::env::var_os("PATH").as_deref(), &bundles);
+    let (c, k) = (quoted(cert), quoted(key));
+    match cfg!(target_os = "linux") {
+        true => format!(
+            "sudo {ts} cert --cert-file {c} --key-file {k} {name} && sudo chown \"$USER\" {c} {k} && chmod 600 {k}"
+        ),
+        false => format!("{ts} cert --cert-file {c} --key-file {k} {name}"),
+    }
+}
+
+/// A path as one shell word, for a command to paste.
+fn quoted(p: &Path) -> String {
+    format!("'{}'", p.display().to_string().replace('\'', "'\\''"))
+}
+
 /// The client leon would run: `locate` with this process's env.
 pub fn client() -> Option<PathBuf> {
     let bundles: Vec<&Path> = BUNDLES.iter().map(Path::new).collect();

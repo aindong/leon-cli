@@ -1,7 +1,7 @@
-//! The Settings window's Tailscale section: the `serve_tailscale` switch, the port and tags it
-//! serves with (a field, and a tag list with a field to add one), and what the server says about
-//! serving (`server.status`'s `tailnet`), fetched every 2 s while the window is open
-//! (docs/architecture/tailnet.md).
+//! The Settings window's Tailscale section: Tailscale access (the `serve_tailscale` switch, what
+//! the server says about serving, `server.status`'s `tailnet`, fetched every 2 s while the window
+//! is open, and under Advanced the port and tags it serves with), then the Web page part
+//! (settings_window_web.rs) (docs/architecture/tailnet.md).
 
 use std::time::Duration;
 
@@ -65,22 +65,22 @@ impl SettingsWindow {
         let refused = t_["last_refusal"]
             .as_object()
             .map(|r| note(format!("Last refused {}: {}", text(&r["peer"]), text(&r["reason"])), t.muted));
-        Self::subtitle(t, "Tailscale")
-            .child(self.toggle(t, "serve_tailscale", "Let my other machines on Tailscale reach this server", cx))
+        let access = Self::subtitle(t, "Tailscale access")
+            .child(self.toggle(t, "serve_tailscale", "Let my other machines on Tailscale connect to leon here", cx))
             .child(note(
                 format!(
-                    "Your own machines signed in to the same Tailscale account, and {tags}. They can do anything \
-                     you can here. Reach it with leon -H tailnet://THIS-MACHINE."
+                    "For the leon app and leon -H tailnet://THIS-MACHINE on your other machines. Your own \
+                     machines on the same Tailscale account, and {tags}, can then do anything you can here."
                 ),
                 t.muted,
             ))
             .children(state)
             .children(refused)
-            .child(self.port_control(t, cx))
-            .child(self.tags_control(t, cx))
-            .child(self.toggle(t, "serve_web", "Also serve them a web page of my sessions", cx))
-            .child(self.web_file(t, "serve_web_cert", cx))
-            .child(self.web_file(t, "serve_web_key", cx))
+            .child(Self::disclosure(t, "tailscale-advanced", "Advanced: port and tags", self.open.advanced, cx, |sw| {
+                sw.open.advanced = !sw.open.advanced
+            }))
+            .when(self.open.advanced, |d| d.child(self.port_control(t, cx)).child(self.tags_control(t, cx)));
+        div().flex().flex_col().gap(px(28.)).child(access).child(self.web_page(t, cx))
     }
 
     /// Why the last port typed, and the last tag, were refused.
@@ -173,7 +173,7 @@ impl SettingsWindow {
 
     /// A field for one of the web page's HTTPS files, as `tailscale cert` wrote them (docs/web.md):
     /// Enter sets the typed path, an empty one clears it.
-    fn web_file(&self, t: &Theme, key: &'static str, cx: &mut Context<Self>) -> gpui::Div {
+    pub(super) fn web_file(&self, t: &Theme, key: &'static str, cx: &mut Context<Self>) -> gpui::Div {
         let row = self.row(key);
         let locked = Self::is_locked(&row);
         let path = row.as_ref().and_then(|r| r.value.as_str()).filter(|p| !p.is_empty()).unwrap_or("none");

@@ -41,7 +41,7 @@ fn missing_files_say_the_command() {
     let dir = tempfile::tempdir().unwrap();
     let (cert, key) = (dir.path().join("web.crt"), dir.path().join("web.key"));
     let (s, t) = broken(Fake::new(), &cert, &key);
-    let cmd = format!("tailscale cert --cert-file '{}' --key-file '{}'", cert.display(), key.display());
+    let cmd = format!(" cert --cert-file '{}' --key-file '{}'", cert.display(), key.display());
     assert_says(&t, &[cert.to_str().unwrap(), &cmd]);
     assert_no_page(&s, &ca);
 }
@@ -53,7 +53,7 @@ fn an_expired_or_future_cert_is_refused() {
         let dir = tempfile::tempdir().unwrap();
         let (cert, key) = ca.leaf(&["127.0.0.1"], when).write(dir.path());
         let (s, t) = broken(Fake::new(), &cert, &key);
-        assert_says(&t, &["valid", "tailscale cert --cert-file"]);
+        assert_says(&t, &["valid", " cert --cert-file"]);
         assert_no_page(&s, &ca);
     }
 }
@@ -79,6 +79,6 @@ fn a_cert_for_another_name_is_refused() {
     st["Self"]["DNSName"] = json!("box.example-tailnet.ts.net.");
     fake.set_status(st);
     let (s, t) = broken(fake, &cert, &key);
-    assert_says(&t, &["box.example-tailnet.ts.net", "tailscale cert"]);
+    assert_says(&t, &["box.example-tailnet.ts.net", " cert --cert-file"]);
     assert_no_page(&s, &ca);
 }

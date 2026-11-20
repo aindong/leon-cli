@@ -1,5 +1,6 @@
 //! The leon app: a GPUI window attached to a leon server over its socket (docs/architecture.md).
 
+pub mod agent_skill;
 pub mod attention;
 pub mod chrome;
 pub mod copy_mode;
@@ -26,6 +27,7 @@ pub mod panes;
 #[cfg(all(feature = "gui", target_os = "macos"))]
 pub mod popover;
 pub mod program_kind;
+pub mod qr;
 pub mod remote;
 pub mod render;
 pub mod scrollback;

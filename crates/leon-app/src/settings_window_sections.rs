@@ -307,7 +307,7 @@ impl SettingsWindow {
                 part = part.child(self.shortcut_rows(&shortcuts, t));
             }
             if !agents.is_empty() {
-                part = part.child(self.agent_rows(&agents, t));
+                part = part.child(self.agent_rows(&agents, t, cx));
             }
             body = body.child(part);
         }

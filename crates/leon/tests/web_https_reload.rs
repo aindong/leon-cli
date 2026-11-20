@@ -23,7 +23,7 @@ fn renewed_files_are_served_without_a_restart() {
 
     std::fs::write(&cert, "not a certificate").unwrap(); // a renewal half done
     let t = s.until("the bad file noticed", |t| t["web_error"].is_string());
-    assert!(t["web_error"].as_str().unwrap().contains("tailscale cert"), "{t}");
+    assert!(t["web_error"].as_str().unwrap().contains(" cert --cert-file"), "{t}");
     assert_eq!(tls::served_cert(s.port, &ca).unwrap(), old, "the good certificate is kept meanwhile");
 
     ca.leaf(&["127.0.0.1"], When::Now).write(dir.path());
