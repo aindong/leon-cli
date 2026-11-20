@@ -1,5 +1,6 @@
 //! The leon app: a GPUI window attached to a leon server over its socket (docs/architecture.md).
 
+pub mod agent_skill;
 pub mod attention;
 pub mod chrome;
 pub mod copy_mode;
