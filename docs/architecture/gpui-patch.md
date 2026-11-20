@@ -45,7 +45,8 @@ the window is on screen; output with no key behind it (a flood) keeps to the dis
 ## The check
 
 `crates/leon-app/tests/gpui_display_link.rs` opens a GPUI window on the real platform, with its
-`occlusionState` answered by the test, and counts the live `CVDisplayLink`s with `heap`, which
+`occlusionState` answered by the test, and counts the live display links with `heap`
+(`CVDisplayLink`s, and the `CAMetalDisplayLink`s a later GPUI uses on macOS 14 and later), which
 must stay at the window's one link in both cases. On screen: shown at once 500 times through
 `view_echo.rs` and moved between screens 20 times. Off screen: not shown at once, 50 frames
 drawn at once anyway, and hidden and shown 50 times. With commit 2 alone it counted 21 and 72
@@ -62,8 +63,10 @@ crates.io `gpui` after 0.2.2 ships either, drop the patch:
 
 1. Move to that release and delete the `[patch.crates-io]` entry.
 2. Run `LEON_GUI_TESTS=1 cargo test -p leon-app --test gpui_display_link`. It passes: the
-   release reuses its links, and the patch is gone for good. It fails: keep a fork of that
-   release with the same fix, as here.
+   release reuses its links, and the patch is gone for good. It fails on a count that grew:
+   keep a fork of that release with the same fix, as here. It fails with "the window on screen
+   has no display link": the release paces frames with a link `heap` doesn't name here; add
+   that class to the test's count (`display_links`) and run it again before deciding.
 3. Amend gpui.md (Built against, R11) and this file; R2's exception stays as long as GPUI draws
    only on its tick.
 

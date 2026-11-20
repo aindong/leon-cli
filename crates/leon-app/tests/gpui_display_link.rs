@@ -112,7 +112,7 @@ fn run() {
             let mut failed = Vec::new();
             let check = |what: &str, before: usize| {
                 let now = display_links();
-                println!("{NAME}: {what}: live CVDisplayLinks {before} before, {now} after");
+                println!("{NAME}: {what}: live display links {before} before, {now} after");
                 (now != before).then(|| format!("{what}: {before} links before, {now} after"))
             };
             let before = display_links();
@@ -168,7 +168,8 @@ fn run() {
     });
 }
 
-/// The live CVDisplayLink objects in this process, counted by `heap`.
+/// The live display links in this process, counted by `heap`: CVDisplayLinks (GPUI 0.2.2), and
+/// CAMetalDisplayLinks, which a later GPUI uses on macOS 14 and later (gpui-patch.md).
 // macOS only: heap(1) and CVDisplayLink are macOS's.
 #[cfg(target_os = "macos")]
 fn display_links() -> usize {
@@ -176,7 +177,7 @@ fn display_links() -> usize {
     assert!(out.status.success(), "heap(1) read this process: {}", String::from_utf8_lossy(&out.stderr));
     let text = String::from_utf8_lossy(&out.stdout);
     text.lines()
-        .filter(|l| l.contains("CVCGDisplayLink") || l.contains("CVDisplayLink"))
+        .filter(|l| l.contains("CVCGDisplayLink") || l.contains("CVDisplayLink") || l.contains("CAMetalDisplayLink"))
         .filter_map(|l| l.split_whitespace().next()?.parse::<usize>().ok())
         .sum()
 }
