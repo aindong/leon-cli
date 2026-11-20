@@ -40,6 +40,11 @@ const PLACES = {
   Quote: "'", Comma: ",", Period: ".", Slash: "/", Backquote: "`",
 };
 
+/** The character ctrl goes with: the layout's own Latin letter (Dvorak's C), else the key's place. */
+export function ctrlChar(e) {
+  return /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : place(e.code);
+}
+
 function place(code) {
   if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
   if (/^Digit[0-9]$/.test(code)) return code.slice(5);
@@ -86,8 +91,7 @@ export function keyName(e) {
   if (named) return mods(true) + named;
   if (!e.ctrlKey && !(e.altKey && !MAC)) return null; // text (Option's too), or a lone modifier
   // ctrl: the layout's own Latin letter (Dvorak's C is ctrl+c), else the key's place (other scripts)
-  const latin = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : null;
-  const c = e.ctrlKey ? latin ?? place(e.code) : e.key.length === 1 ? e.key.toLowerCase() : null;
+  const c = e.ctrlKey ? ctrlChar(e) : e.key.length === 1 ? e.key.toLowerCase() : null;
   if (!c || c.length !== 1 || c === "+" || (e.ctrlKey && !CTRL.includes(c))) return null;
   if (!MAC && e.ctrlKey && !e.altKey && (c === "v" || (c === "c" && e.shiftKey))) return null;
   const shift = !e.ctrlKey && /^[A-Z]$/.test(e.key) ? "shift+" : ""; // alt+B is ESC B, not ESC b

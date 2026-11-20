@@ -21,6 +21,8 @@ let refetch = null;
 let burst = null; // when the events waiting for a refetch began
 let shown = null; // the window drawn now
 let view = "home"; // on a phone: Home (Activity and the sessions) or the shown tab's one pane
+let moves = 0; // the person's navigations: what a slow + Tab or + Session made opens only if none came since
+let lastTarget = ""; // the pane the keys went to at the last render
 let font = 13; // the server's font size; a phone's is kept readable (phone.js)
 const phone = () => narrow.matches;
 
@@ -75,7 +77,8 @@ const call = (method, params) => conn.call(method, params).catch(failed);
  */
 const picked = new Map(); // window id → block id the person clicked or went to here
 const target = () => {
-  if (!chosen.session || !shown) return null;
+  // while another session is being fetched, `shown` is still the last one's: no target in between
+  if (!chosen.session || !shown || model.view?.session_id !== chosen.session) return null;
   const mine = picked.get(shown.window_id);
   const zoomed = shown.zoomed_block_id;
   const b = mine && shown.block_ids.includes(mine) && (!zoomed || mine === zoomed) ? mine : zoomed ?? shown.focused_block_id;
@@ -106,9 +109,13 @@ function layout() {
   if (!phone()) drawer(false), input.unstick(); // the row's Ctrl is gone with the row
   setFont(phone() ? phoneFont(font) : font);
 }
-const activity = new Activity(conn, $("activity"), $("notify"), (e) => {
+const activity = new Activity(conn, $("activity"), $("notify"), async (e) => {
   picked.set(e.w, e.b);
   choose(e.s, e.w);
+  // a tab zoomed on another pane would keep showing that one: unzoom it first
+  const tabs = await conn.call("session.view", { session_id: e.s }).catch(() => null);
+  const zoomed = tabs?.windows.find((w) => w.window_id === e.w)?.zoomed_block_id;
+  if (zoomed && zoomed !== e.b) await call("session.zoom_block", { session_id: e.s, block_id: zoomed, zoom: false });
   call("session.focus_block", { session_id: e.s, block_id: e.b });
   call("block.event", { session_id: e.s, block_id: e.b, event: { type: "focus" } }); // clears done/error
   $("keys").focus({ preventScroll: true }); // typing goes on to the pane
@@ -163,6 +170,7 @@ async function refresh() {
 }
 
 function choose(session, window) {
+  moves++;
   chosen.session = session;
   chosen.window = window;
   view = "pane"; // on a phone, what was chosen opens
@@ -181,6 +189,10 @@ function render() {
     const first = shown.zoomed_block_id ?? shown.focused_block_id;
     if (first) picked.set(shown.window_id, first);
   }
+  // the sticky Ctrl is for the pane it was pressed for: another pane (one closed under it) drops it
+  const now = target();
+  const key = now ? `${now.s} ${now.b}` : "";
+  if (key !== lastTarget) (lastTarget = key), input.unstick();
   renderSidebar(win);
   renderPanes(win);
   renderStrip(win);
@@ -267,9 +279,9 @@ function renderSidebar(win) {
       }
       const add = document.createElement("li");
       const tab = () => {
-        const before = view;
-        // open it, unless the person went elsewhere (Home) while it was made
-        call("session.new_window", { session_id: s.session_id }).then((r) => r?.window_id && view === before && choose(s.session_id, r.window_id));
+        const before = moves;
+        // open it, unless the person went elsewhere while it was made
+        call("session.new_window", { session_id: s.session_id }).then((r) => r?.window_id && moves === before && choose(s.session_id, r.window_id));
       };
       add.append(button("+ Tab", false, tab, "New tab"));
       add.firstChild.classList.add("add");
@@ -385,7 +397,7 @@ function renderPanes(win) {
   }
   for (const f of win?.floating ?? []) {
     if (f.hidden || win.zoomed_block_id || phone()) continue;
-    const el = tree({ block: { block_id: f.block_id } }, win.focused_block_id);
+    const el = tree({ block: { block_id: f.block_id } }, target()?.b ?? win.focused_block_id);
     el.classList.add("float");
     Object.assign(el.style, {
       left: `${f.bounds.x * 100}%`,
@@ -411,11 +423,12 @@ function renderPanes(win) {
 }
 
 $("new-session").onclick = () => {
-  const before = view;
-  conn.call("session.create", {}).then((r) => view === before && choose(r.session_id, r.window_id), failed);
+  const before = moves;
+  conn.call("session.create", {}).then((r) => moves === before && choose(r.session_id, r.window_id), failed);
 };
 $("panes").addEventListener("mousedown", () => $("keys").focus({ preventScroll: true }));
 $("home").onclick = () => {
+  moves++;
   view = "home";
   input.unstick();
   layout();

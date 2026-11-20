@@ -4,7 +4,7 @@
 // (dev.leon.terminal.selection) that the copy event puts on the clipboard. Nothing here sends
 // input on its own: every call follows a person's key, click or paste.
 
-import { CTRL, keyName, MAC } from "./keys.js";
+import { CTRL, ctrlChar, keyName, MAC } from "./keys.js";
 
 /**
  * Wire the keyboard to `textarea` (kept focused while a pane is), and return `pane(…)`, which wires
@@ -47,6 +47,7 @@ export function wire(conn, textarea, target, failed, leave, sticky) {
   };
   let copied = ""; // the selection's text, for the next copy
   let owner = null; // the pane whose selection `copied` is
+  let gen = 0; // bumped when any pane's selection starts or clears: a late answer is dropped
   /** The longest paste, JSON-escaped: one request line is at most 1 MiB, with room for the rest. */
   const MOST_PASTE = (1 << 20) - (4 << 10);
 
@@ -55,7 +56,7 @@ export function wire(conn, textarea, target, failed, leave, sticky) {
       e.preventDefault();
       return leave();
     }
-    if (!MAC && e.ctrlKey && e.shiftKey && !e.altKey && e.code === "KeyC") {
+    if (!MAC && e.ctrlKey && e.shiftKey && !e.altKey && ctrlChar(e) === "c") {
       document.execCommand("copy"); // the copy event below; a key press may copy without the clipboard API
       return e.preventDefault();
     }
@@ -113,7 +114,7 @@ export function wire(conn, textarea, target, failed, leave, sticky) {
     let last = ""; // the cell last reported, so a move within it isn't sent again
     let sel = null;
     let asking = false;
-    let gen = 0; // bumped when the selection is replaced, cleared or its pane goes: a late answer is dropped
+    let gone = false; // the pane went: its late answer is dropped
     const me = {};
     const at = (e) => grid.cellAt(e.clientX, e.clientY);
     const report = (action, e, button) => {
@@ -136,7 +137,7 @@ export function wire(conn, textarea, target, failed, leave, sticky) {
           method: "dev.leon.terminal.selection",
           args: { kind: sel.kind, anchor: sel.anchor, head: sel.head, text },
         });
-        if (g !== gen) return;
+        if (g !== gen || gone) return;
         grid.mark(r);
         if (text) (copied = r?.text ?? ""), (owner = me);
       } catch (err) {
@@ -197,7 +198,7 @@ export function wire(conn, textarea, target, failed, leave, sticky) {
     return () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
-      gen++;
+      gone = true;
       if (owner === me) (copied = ""), (owner = null); // its pane is gone
     };
   };
