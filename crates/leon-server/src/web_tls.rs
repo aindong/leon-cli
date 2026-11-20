@@ -164,18 +164,10 @@ impl Tls {
         }
     }
 
-    /// What to run: `tailscale cert` writes both files; on Linux only root (or the operator) may
-    /// ask, and then the files are root's.
+    /// What to run: `tailscale cert` writes both files.
     fn advice(&self, cert: &Path, key: &Path) -> String {
         let name = self.dns.as_deref().unwrap_or("MACHINE.TAILNET.ts.net");
-        let (c, k) = (quoted(cert), quoted(key));
-        if cfg!(target_os = "linux") {
-            format!(
-                "Make them with: sudo tailscale cert --cert-file {c} --key-file {k} {name} && sudo chown \"$USER\" {c} {k} && chmod 600 {k}"
-            )
-        } else {
-            format!("Make them with: tailscale cert --cert-file {c} --key-file {k} {name}")
-        }
+        format!("Make them with: {}", leon_hosts::tailscale::cert_command(cert, key, name))
     }
 }
 

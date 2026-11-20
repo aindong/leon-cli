@@ -127,7 +127,9 @@ tell leon where the two files are. leon only reads them: it never runs `tailscal
 asks Tailscale for a certificate. Making one is your call: it needs HTTPS turned on for your
 tailnet in Tailscale's admin console, and it puts the machine's name in public certificate logs.
 
-On a Mac:
+On a Mac (with the Tailscale app from the App Store or tailscale.com, which puts no `tailscale` on
+your PATH, run `/Applications/Tailscale.app/Contents/MacOS/Tailscale cert …` instead; the command
+`leon server status` and Settings show already names the one you have):
 
 ```text
 mkdir -p ~/.config/leon/certs
