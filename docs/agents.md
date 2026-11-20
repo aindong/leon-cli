@@ -38,6 +38,15 @@ expects. It won't replace a `SKILL.md` it didn't write unless you pass `--force`
 replace keeps the old file under a new name and never overwrites an earlier backup:
 `SKILL.md.leon-backup` the first time, then `SKILL.md.leon-backup.2`, `SKILL.md.leon-backup.3` and so on.
 
+In the app, **Settings → Agents** has a row for each agent: whether it is on this Mac, its state in
+plain words, the files, and what setup writes. Its buttons run the same commands: **Install**
+(`leon skill setup --agent X`), **Update** for a skill or hooks from an older leon, and **Remove**
+(`leon skill remove --agent X`). A `SKILL.md` you changed gets no button, only the `--force`
+command to run yourself. When Leon.app starts and an agent's skill is out of date, a notice says so
+once for each version of leon, with an Update button. Leon.app reads `CLAUDE_CONFIG_DIR` and
+`CODEX_HOME` only when it was started with them; if only your shell sets them, run `leon skill setup`
+there.
+
 ```sh
 leon skill show                    # read the guide the agent reads
 leon skill remove --dry-run
