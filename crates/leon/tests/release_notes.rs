@@ -17,7 +17,10 @@ fn notes_are_this_versions_changelog_section() {
     let changelog = std::fs::read_to_string(repo().join("CHANGELOG.md")).unwrap();
     // its links point at the tag (release_notes_links.rs)
     let blob = format!("](https://github.com/aindong/leon-cli/blob/v{VERSION}/");
+    // a release's clips are pictures: their raw file
+    let raw = format!("](https://github.com/aindong/leon-cli/raw/v{VERSION}/");
     let want = section(&changelog, VERSION)
+        .replace("](docs/images/", &format!("{raw}docs/images/"))
         .replace("](docs/", &format!("{blob}docs/"))
         .replace("](README.md", &format!("{blob}README.md"));
     assert!(want.len() > 200, "CHANGELOG.md has a section for {VERSION}");
