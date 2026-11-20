@@ -1,6 +1,6 @@
 # CLI: agents and floating panes
 
-Part of the [command reference](../cli.md): teaching coding agents to work in panes (`leon skill`), and floating, toggled and docked panes.
+Part of the [command reference](../cli.md): teaching coding agents to work in panes (`leon skill`), agents starting agents (`leon agent`, `leon inbox`), and floating, toggled and docked panes.
 
 ## Agents
 
@@ -8,18 +8,20 @@ Part of the [command reference](../cli.md): teaching coding agents to work in pa
 
 Teach coding agents (Claude Code, Codex) to drive leon. Needs no server. See [agents.md](../agents.md).
 
-### `leon skill show`
+### `leon skill show [orchestration]`
 
-Print the guide for agents driving leon (a SKILL.md).
+Print the guide for agents driving leon (a SKILL.md); `orchestration` prints its part on starting
+other agents.
 
 ### `leon skill setup`
 
-Install the skill and a session-start hook for each agent found: Claude Code or Codex when its
+Install the skill, a session-start hook and the status hooks for each agent found: Claude Code or Codex when its
 config dir (`~/.claude`, `~/.codex`) exists or its program (`claude`, `codex`) is on PATH. It
 prints why it picked each agent and every file it wrote; with no agent found it installs only the
 shared `~/.agents/skills/leon/SKILL.md` and says to pass `--agent`. The hook runs
 `leon skill hook --agent claude|codex`, which tells the agent where it is and records how to
-resume its session after a restart (see [agents.md](../agents.md)).
+resume its session after a restart; the status hooks run `leon skill hook --agent A --on EVENT`,
+which set the agent's block's state (see [agents.md](../agents.md#the-status-hooks)).
 
 - `--agent claude|codex`: only this agent.
 - `--dry-run`: print what would change; write nothing.
@@ -42,6 +44,72 @@ Remove what setup installed, and nothing else.
 leon skill setup --dry-run
 leon skill setup
 leon skill status
+```
+
+### `leon agent`
+
+Start agents that work for you, list them, and answer them. See
+[agents.md](../agents.md#orchestrate-other-agents).
+
+### `leon agent start AGENT [TASK] [-- ARGS]`
+
+Start AGENT (`claude`, `codex`, or any program that takes a prompt as its last argument) with TASK
+as its first prompt, followed by a paragraph from leon on how to report, in a new tab of your
+session. It works for your block (`-b`, else `$LEON_BLOCK`; with neither, exit 2): its reports go to
+your `leon inbox`. Prints its block ID. Its pane stays open after it exits. ARGS go to the agent
+before the prompt.
+
+- `TASK`: the task; `-` reads it from stdin. A task is at most 64 KiB.
+- `-f, --file FILE`: read the task from FILE.
+- `--split right|left|above|below`: open it in a pane beside you instead.
+- `--label NAME`: label its block.
+- `-c, --cwd DIR`: its working directory (default: the current directory).
+- `--worktree`: give it a git worktree and branch of its own, made at the checkout's HEAD in
+  `<checkout>-worktrees/<branch>` beside the checkout of `-c DIR` (else the current directory), and
+  run it there. Outside a git checkout, exit 1. Not with `-H`.
+- `--branch NAME`: the worktree's new branch (default `agent/LABEL`, else `agent/AGENT-TIME-PID`).
+
+### `leon agent ls`
+
+List the agents working for you (`-b`, else `$LEON_BLOCK`): label, the state each last reported,
+agent, age, unread reports and block. `--json` also gives your own parent and state.
+
+### `leon agent close BLOCK`
+
+Close a worker's block and remove the worktree and branch `--worktree` made for it. It first checks
+what that would lose: changes not committed (untracked and ignored files too), commits no other
+branch or remote holds, and a lock on the worktree. With any, it exits 1 listing them and closes
+nothing; after closing it checks again, and if the agent wrote something as it ended, the worktree
+stays and leon prints how to remove it. It only removes a worktree that git lists where leon puts
+its own, on the branch leon made (a renamed branch is left alone). A worker without a worktree just
+closes. A worktree is never removed any other way: closing the block otherwise leaves it. Not with
+`-H`: run it on the machine the worker's server runs on.
+
+- `--force`: remove them anyway; that work is lost.
+
+### `leon agent tell BLOCK TEXT`
+
+Type TEXT and press Enter in a worker once its agent reports its turn ended; a worker that reports
+no state (no leon hooks, or its agent quit) isn't typed into. Refused while it waits on a
+permission prompt, which only the user answers.
+
+- `--for DUR`: give up after DUR (e.g. `30s`, `10m`) and exit 1 (default 10m).
+
+### `leon inbox`
+
+Print your workers' unread reports, oldest first, each with how to look at the worker's screen,
+and mark them read.
+
+- `--peek`: list them without marking them read.
+
+```sh
+id=$(leon agent start --label tests claude "Make the failing test pass")
+leon agent ls
+leon inbox --peek
+leon agent tell tests "Use the fixture in tests/data." --for 30s
+leon block close "$id"
+w=$(leon agent start --worktree --branch fix-parser --label parser claude "Fix the parser")
+leon agent close "$w"
 ```
 
 ### `leon float [--new [-- CMD]]`

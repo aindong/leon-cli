@@ -47,11 +47,12 @@ struct Motion {
 impl Workspace {
     /// After `prepare`, on every notify of the workspace: this frame's layout, then the grids and
     /// sections it shows (a closing pane's grid kept, the headers' widths).
-    pub(super) fn sync_views(&mut self, seen: &grid_view::Screens, window: &Window, cx: &mut Context<Self>) {
+    pub(super) fn sync_views(&mut self, window: &Window, cx: &mut Context<Self>) {
         self.note_layout(window);
         self.report_geometry(window);
-        self.sync_grids(seen, cx);
+        self.sync_grids(cx);
         self.sync_sections(window, cx);
+        self.sync_cursor_shader(window, cx);
     }
 
     /// Tell the server how the active tab is drawn (`client.geometry`): the pane area, a cell, and

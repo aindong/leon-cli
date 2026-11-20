@@ -113,7 +113,8 @@ pub(crate) fn spawn(
     let spec = Spec { command, cwd, env };
     let weak = Arc::downgrade(ctx);
     let block_id = block_id.to_string();
-    Terminal::spawn_sized(spec, shown, size, move |notice| {
+    let lines = ctx.scrollback.load(std::sync::atomic::Ordering::SeqCst);
+    Terminal::spawn_sized(spec, shown, size, lines, move |notice| {
         let Some(ctx) = weak.upgrade() else { return };
         let exited = matches!(notice, Notice::Exited(_));
         ctx.state().notice(&block_id, notice);
@@ -121,6 +122,8 @@ pub(crate) fn spawn(
             ctx.exited.send_modify(|n| *n += 1);
         }
     })
+    // noted now, not when its block is added: that can still fail, and the program outlive it
+    .inspect(|t| ctx.gone.note([t.pid()]))
     .map_err(|e| ApiError::bad_request(format!("can't start the program: {e}")))
 }
 
@@ -356,6 +359,8 @@ pub struct SetResume {
 pub struct ReportStatus {
     /// `working`, `blocked`, `done` or `error` (also `idle`, or `clear` to remove the record).
     pub state: String,
+    /// With `blocked`: `permission`, `question` or `auth`.
+    pub kind: Option<String>,
     /// One line of text, at most 192 bytes.
     pub title: Option<String>,
     /// One line of text, at most 2048 bytes.
@@ -476,7 +481,8 @@ static TERMINAL_METHODS: LazyLock<Vec<TermMethod>> = LazyLock::new(|| {
              (`leon notify`), for tools that can't write one to the terminal. The spec's limits apply; text \
              OSC 7501 would drop (controls, line breaks, invisible characters) is a 400.",
             |t, a: ReportStatus| {
-                t.report_status(&a.state, a.title.as_deref(), a.msg.as_deref()).map_err(ApiError::bad_request)?;
+                t.report_status(&a.state, a.kind.as_deref(), a.title.as_deref(), a.msg.as_deref())
+                    .map_err(ApiError::bad_request)?;
                 Ok(Empty {})
             },
         ),

@@ -4,13 +4,14 @@
 
 use std::path::{Path, PathBuf};
 
+use leon_core::terminal::{MAX_SCROLLBACK, SCROLLBACK};
 use leon_core::theme::{self, Theme};
 use serde_json::{json, Value};
 
 use crate::Resume;
 
 /// Every key `leon.set` takes.
-pub const KEYS: [&str; 16] = [
+pub const KEYS: [&str; 23] = [
     "theme",
     "font.family",
     "font.size",
@@ -18,6 +19,7 @@ pub const KEYS: [&str; 16] = [
     "notifications.blocked",
     "notifications.error",
     "copy_on_select",
+    "link_card",
     "repeat_time",
     "hint_patterns",
     "resume",
@@ -27,6 +29,12 @@ pub const KEYS: [&str; 16] = [
     "serve_tailscale",
     "serve_tailscale_port",
     "serve_tailscale_tags",
+    "cursor_shader",
+    "cursor_shader_duration",
+    "serve_web",
+    "serve_web_cert",
+    "serve_web_key",
+    "scrollback",
 ];
 
 /// How far the app fades the panes without the focus toward the window's background, unless the
@@ -45,6 +53,13 @@ pub const TRANSLUCENCY_MAX: f64 = 0.8;
 pub const TAILNET_PORT: u16 = 7297;
 /// The most tags `serve_tailscale_tags` holds.
 pub const MOST_TAGS: usize = 16;
+
+/// How long, in seconds, a cursor shader animates after the cursor changes, unless the config
+/// says; and the range it can say (docs/cursor-shaders.md).
+pub const CURSOR_SHADER_DURATION: f64 = 1.0;
+pub const CURSOR_SHADER_DURATIONS: (f64, f64) = (0.1, 5.0);
+/// The longest `cursor_shader` path taken.
+const PATH_MAX: usize = 1024;
 
 /// The app's own font size range (it clamps ⌘+ and ⌘- to it too).
 pub const FONT_SIZES: (f64, f64) = (8., 32.);
@@ -75,6 +90,9 @@ pub struct Settings {
     pub notifications: Notifications,
     /// The app copies a selection to the clipboard as it is made.
     pub copy_on_select: bool,
+    /// The app shows a card with a link's address, Copy and Open in Browser when the mouse rests
+    /// on the link or it is right-clicked.
+    pub link_card: bool,
     /// Milliseconds after a repeatable binding during which its keys work without the prefix; 0
     /// turns repeat off.
     pub repeat_time: u64,
@@ -95,6 +113,18 @@ pub struct Settings {
     pub serve_tailscale_port: u16,
     /// Tagged machines let in besides yours: tags such as `tag:ci`.
     pub serve_tailscale_tags: Vec<String>,
+    /// A Shadertoy-style cursor shader file Leon.app draws over its window, as written (`~` and a
+    /// path relative to init.lua are the app's to resolve); empty: none.
+    pub cursor_shader: String,
+    /// Seconds the cursor shader animates after the cursor changes.
+    pub cursor_shader_duration: f64,
+    /// With `serve_tailscale` on, the tailnet listener also serves the web page (docs/web.md).
+    pub serve_web: bool,
+    /// The certificate and key `tailscale cert` wrote, for HTTPS; both empty: plain HTTP.
+    pub serve_web_cert: String,
+    pub serve_web_key: String,
+    /// Lines of history each terminal keeps, 0 to `MAX_SCROLLBACK`.
+    pub scrollback: usize,
 }
 
 /// tmux's `repeat-time` default, in milliseconds, for a config that doesn't set `repeat_time`.
@@ -111,6 +141,7 @@ impl Default for Settings {
             font_size: 13.,
             notifications: Notifications { done: true, blocked: true, error: true },
             copy_on_select: false,
+            link_card: true,
             repeat_time: REPEAT_TIME,
             hint_patterns: vec![],
             resume: Resume::Ask,
@@ -120,6 +151,12 @@ impl Default for Settings {
             serve_tailscale: false,
             serve_tailscale_port: TAILNET_PORT,
             serve_tailscale_tags: vec![],
+            cursor_shader: String::new(),
+            cursor_shader_duration: CURSOR_SHADER_DURATION,
+            serve_web: false,
+            serve_web_cert: String::new(),
+            serve_web_key: String::new(),
+            scrollback: SCROLLBACK,
         }
     }
 }
@@ -133,6 +170,7 @@ impl Settings {
             "font": { "family": self.font_family, "size": self.font_size },
             "notifications": { "done": n.done, "blocked": n.blocked, "error": n.error },
             "copy_on_select": self.copy_on_select,
+            "link_card": self.link_card,
             "repeat_time": self.repeat_time,
             "hint_patterns": self.hint_patterns,
             "resume": self.resume.as_str(),
@@ -142,6 +180,12 @@ impl Settings {
             "serve_tailscale": self.serve_tailscale,
             "serve_tailscale_port": self.serve_tailscale_port,
             "serve_tailscale_tags": self.serve_tailscale_tags,
+            "cursor_shader": self.cursor_shader,
+            "cursor_shader_duration": self.cursor_shader_duration,
+            "serve_web": self.serve_web,
+            "serve_web_cert": self.serve_web_cert,
+            "serve_web_key": self.serve_web_key,
+            "scrollback": self.scrollback,
         })
     }
 
@@ -193,6 +237,7 @@ impl Settings {
             "notifications.blocked" => self.notifications.blocked = flag()?,
             "notifications.error" => self.notifications.error = flag()?,
             "copy_on_select" => self.copy_on_select = flag()?,
+            "link_card" => self.link_card = flag()?,
             "check_for_updates" => self.check_for_updates = flag()?,
             "repeat_time" => match v.as_f64() {
                 Some(ms) if ms.fract() == 0. && (0. ..=10_000.).contains(&ms) => self.repeat_time = ms as u64,
@@ -218,6 +263,46 @@ impl Settings {
                 _ => return Err("serve_tailscale_port is a port, a whole number from 1 to 65535".into()),
             },
             "serve_tailscale_tags" => self.serve_tailscale_tags = tags(v)?,
+            "cursor_shader" => match v.as_str() {
+                Some(p) if p.len() <= PATH_MAX && !p.chars().any(char::is_control) => self.cursor_shader = p.into(),
+                _ => {
+                    return Err(format!(
+                        "cursor_shader is a shader file's path (at most {PATH_MAX} bytes), or \"\" for none"
+                    ))
+                }
+            },
+            "cursor_shader_duration" => match v.as_f64() {
+                Some(s) if (CURSOR_SHADER_DURATIONS.0..=CURSOR_SHADER_DURATIONS.1).contains(&s) => {
+                    self.cursor_shader_duration = s
+                }
+                _ => {
+                    let (lo, hi) = CURSOR_SHADER_DURATIONS;
+                    return Err(format!("cursor_shader_duration must be a number of seconds from {lo} to {hi}"));
+                }
+            },
+            "serve_web" => self.serve_web = flag()?,
+            "serve_web_cert" | "serve_web_key" => {
+                let path = match v.as_str() {
+                    Some(p)
+                        if p.len() <= 4096
+                            && !p.contains('\0')
+                            && (p.is_empty() || p.starts_with('/') || p.starts_with("~/")) =>
+                    {
+                        p
+                    }
+                    _ => return Err(format!("{key} must be a file's path, from / or ~/ (\"\" for none)")),
+                };
+                match key {
+                    "serve_web_cert" => self.serve_web_cert = path.to_string(),
+                    _ => self.serve_web_key = path.to_string(),
+                }
+            }
+            "scrollback" => match v.as_f64() {
+                Some(n) if n.fract() == 0. && (0. ..=MAX_SCROLLBACK as f64).contains(&n) => {
+                    self.scrollback = n as usize
+                }
+                _ => return Err(format!("scrollback is whole lines of history, 0 to {MAX_SCROLLBACK}")),
+            },
             _ if key.starts_with("notifications.") => {
                 return Err(format!("unknown setting {key:?}; the notification kinds are done, blocked and error"))
             }
@@ -225,6 +310,22 @@ impl Settings {
         }
         Ok(())
     }
+}
+
+/// The file `cursor_shader` names, for the config at `config`: `~/` is `home`, a relative path is
+/// relative to the config's folder; None when the setting is empty (no shader).
+pub fn shader_path(setting: &str, config: &Path, home: Option<&Path>) -> Option<PathBuf> {
+    let p = setting.trim();
+    if p.is_empty() {
+        return None;
+    }
+    let path = match (p.strip_prefix("~/"), home) {
+        (Some(rest), Some(home)) => home.join(rest),
+        _ if p == "~" => home.map_or_else(|| PathBuf::from(p), Path::to_path_buf),
+        _ => PathBuf::from(p),
+    };
+    let dir = config.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    Some(if path.is_absolute() { path } else { dir.join(path) })
 }
 
 /// A list of at most `MAX_PATTERNS` strings, each a regular expression leon_core::hints compiles.

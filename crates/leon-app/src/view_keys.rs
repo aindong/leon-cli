@@ -1,6 +1,6 @@
-//! Keys and actions: every keystroke goes through the keymap (defaults under the config's
-//! bindings), the palette when it is open, else the focused pane. Actions run by name, from a key,
-//! the palette or a menu.
+//! Keys and actions: a keystroke no overlay took (view_overlays.rs) goes through the keymap
+//! (defaults under the config's bindings), else to the focused pane. Actions run by name, from a
+//! key, the palette or a menu.
 
 use super::*;
 use crate::palette::{self, Item};
@@ -10,6 +10,7 @@ impl Workspace {
         if self.stopped {
             return; // nothing to type into: the notice's buttons and ⌘Q are what's left
         }
+        self.close_hover_card(window, cx);
         let ks = &match (self.native_key)() {
             Some((code, text)) => crate::input::retext(ev.keystroke.clone(), code, &text),
             None => ev.keystroke.clone(),
@@ -17,17 +18,7 @@ impl Workspace {
         let chord = keymap::chord(ks);
         // every key closes the repeat window; only a repeatable one opens it again
         let mut repeat = std::mem::take(&mut self.repeat);
-        if self.palette.is_some() {
-            self.palette_key(ks, chord.as_ref(), window, cx);
-            cx.stop_propagation();
-            return;
-        }
         if self.mode_key(ks, chord.as_ref(), cx) {
-            cx.stop_propagation();
-            return;
-        }
-        let finding = self.term.find.as_ref().is_some_and(|f| Some(&f.block) == self.target_block().as_ref());
-        if finding && self.find_key(ks, cx) {
             cx.stop_propagation();
             return;
         }
@@ -81,19 +72,15 @@ impl Workspace {
             }
         }
         let Some((sid, id, f)) = self.target_screen() else { return };
+        // typed text goes on to the input handler (view_input.rs), registered while the pane has
+        // the focus, which an input method composes through; one `retext` changed is final
+        // (automation, not an input method): sent here
+        let retexted = ks.key_char != ev.keystroke.key_char;
+        if let Some(text) = crate::input::typed(ks).filter(|_| !retexted && self.focus.is_focused(window)) {
+            return self.leave_key(Some(text));
+        }
         if let Some(bytes) = crate::input::key_bytes(ks, f.app_cursor) {
-            // only a key that reaches the pane is timed (LEON_FRAME_LOG): its echo moves the cursor
-            if self.stats.borrow().logging() {
-                if let Some(stamped) = crate::input::current_event_stamp() {
-                    let cursor = self.drawn(&id).frame.cursor.map(|c| (c.line, c.col));
-                    self.stats.borrow_mut().key(stamped, id.clone(), cursor);
-                }
-            }
-            self.app.write(&sid, &id, &bytes);
-            if self.view_top(&id).is_some() {
-                self.scroll_to(&id, None); // typing goes back to the prompt
-                cx.notify();
-            }
+            self.write_pane(&sid, &id, &bytes, cx);
             cx.stop_propagation();
         }
     }
@@ -127,6 +114,9 @@ impl Workspace {
             "client.host.add" => self.ask_host(args, cx),
             "client.theme.change" => self.theme_action(args, cx),
             "client.tab.new" => self.new_tab(&NewTab, window, cx),
+            "client.tab.close" | "session.close" | "client.tab.rename" | "session.rename" => {
+                self.row_action(name, window, cx)
+            }
             "client.tab.next" => self.step_tab(1, cx),
             "client.tab.previous" => self.step_tab(-1, cx),
             "client.tab.goto" => {
@@ -176,6 +166,7 @@ impl Workspace {
             "client.palette.toggle" => {
                 self.palette = match self.palette {
                     Some(_) => None,
+                    None if self.overlays.palette_closed => None, // this press closed it
                     None => Some(Palette {
                         query: String::new(),
                         selected: 0,
@@ -311,12 +302,12 @@ impl Workspace {
         .to_string()
     }
 
-    pub(super) fn palette_query(&self) -> String {
+    pub fn palette_query(&self) -> String {
         self.palette.as_ref().map(|p| p.query.clone()).unwrap_or_default()
     }
 
     /// Keys while the palette is open: they edit the query and pick a row, never reach a pane.
-    fn palette_key(
+    pub(super) fn palette_key(
         &mut self,
         ks: &gpui::Keystroke,
         chord: Option<&Chord>,

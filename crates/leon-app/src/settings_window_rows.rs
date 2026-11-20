@@ -15,12 +15,12 @@ pub(super) const RESUME: [(&str, &str); 3] = [("ask", "Ask"), ("always", "Always
 /// A number's control: its step, its range, whether init.lua takes it whole, and how it reads.
 #[derive(Clone, Copy)]
 pub(super) struct Steps {
-    step: f64,
-    min: f64,
-    max: f64,
-    whole: bool,
-    show: fn(f64) -> String,
-    range: &'static str,
+    pub(super) step: f64,
+    pub(super) min: f64,
+    pub(super) max: f64,
+    pub(super) whole: bool,
+    pub(super) show: fn(f64) -> String,
+    pub(super) range: &'static str,
 }
 
 fn ms(v: f64) -> String {
@@ -47,6 +47,10 @@ fn see_through(v: f64) -> String {
     }
 }
 
+fn lines(v: f64) -> String {
+    format!("{v}")
+}
+
 fn points(v: f64) -> String {
     format!("{v} pt")
 }
@@ -68,6 +72,14 @@ pub(super) const TRANSLUCENCY: Steps = Steps {
     whole: false,
     show: see_through,
     range: "0 (opaque) to 80%",
+};
+pub(super) const SCROLLBACK: Steps = Steps {
+    step: 1000.,
+    min: 0.,
+    max: leon_core::terminal::MAX_SCROLLBACK as f64,
+    whole: true,
+    show: lines,
+    range: "0 to 100000 lines",
 };
 const FONT_SIZE: Steps =
     Steps { step: 1., min: FONT_SIZES.0, max: FONT_SIZES.1, whole: false, show: points, range: "8 to 32 pt" };

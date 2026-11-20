@@ -13,6 +13,8 @@ one needs you. It runs on macOS and Linux (the app is macOS only for now) and is
 
 ![The leon app: splitting a tab, switching tabs, splitting from the command palette, a git popup, switching sessions with ⌘K, and an agent working, then blocked](docs/images/demo-app.gif)
 
+**New in 0.2:** agents that start agents and hear back, leon in a browser or on a phone, a link card, cursor shaders, and closing and renaming tabs ([What's new](https://aindong.github.io/leon-cli/whats-new/0.2.0/)).
+
 ![The leon command: a new session, a run that waits, typing into Python and waiting for its answer, then leon attach and a split](docs/images/demo-cli.gif)
 
 ## Features
@@ -172,9 +174,10 @@ Dropped links, keys typed while one is down, and the hosts in the app's sidebar 
 leon skill setup
 ```
 
-installs a skill and a session-start hook for Claude Code and Codex (each one whose config dir
-exists or whose program is on your PATH; it says which, and why). Then, working in a leon
-terminal, ask "run the tests beside you", and the agent does what you would:
+installs a skill and hooks for Claude Code and Codex (each one whose config dir exists or whose
+program is on your PATH; it says which, and why). The hooks show each agent's state on its pane:
+working, waiting on you, or done. Then, working in a leon terminal, ask "run the tests beside
+you", and the agent does what you would:
 
 ```sh
 id=$(leon split --label tests --keep-open -- cargo test)
@@ -184,7 +187,11 @@ leon block close "$id"
 ```
 
 It knows where it is from `LEON_SESSION` and `LEON_BLOCK`, labels what it opens, and closes only
-what it created. See [docs/agents.md](docs/agents.md).
+what it created. An agent can also start other agents (`leon agent start claude "the task"`) and
+hear back from them: their reports go to its `leon inbox`, and leon types a short notice into its
+prompt when its turn has ended. Permission prompts stay yours: agents in leon can't type into a
+pane that waits on one or move your keys onto it. That keeps agents from answering; it is not a
+sandbox ([docs/agents.md](docs/agents.md) lists the limits).
 
 ## Know what needs you
 

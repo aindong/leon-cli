@@ -5,8 +5,11 @@
 
 pub mod host;
 pub mod localapi;
+pub mod orch;
 pub mod remote;
 pub mod tailscale;
+pub mod tls;
+pub mod web;
 
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;

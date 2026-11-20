@@ -1,7 +1,9 @@
 //! leon's object model: sessions and windows with stable IDs, target resolution, and OSC 7501 program status.
 
+pub mod agents;
 pub mod error;
 pub mod events;
+pub mod held_keys;
 pub mod hints;
 pub mod keys;
 pub mod layout;
@@ -10,6 +12,7 @@ pub mod mouse;
 pub mod overlays;
 pub mod panes;
 pub mod paths;
+pub mod process_tree;
 pub mod program_status;
 pub mod screen;
 pub mod search;

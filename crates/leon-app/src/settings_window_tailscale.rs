@@ -78,6 +78,9 @@ impl SettingsWindow {
             .children(refused)
             .child(self.port_control(t, cx))
             .child(self.tags_control(t, cx))
+            .child(self.toggle(t, "serve_web", "Also serve them a web page of my sessions", cx))
+            .child(self.web_file(t, "serve_web_cert", cx))
+            .child(self.web_file(t, "serve_web_key", cx))
     }
 
     /// Why the last port typed, and the last tag, were refused.
@@ -166,6 +169,63 @@ impl SettingsWindow {
             Typed::Escape => self.tag.escape(window, &self.focus),
             Typed::Edited | Typed::Other => {}
         }
+    }
+
+    /// A field for one of the web page's HTTPS files, as `tailscale cert` wrote them (docs/web.md):
+    /// Enter sets the typed path, an empty one clears it.
+    fn web_file(&self, t: &Theme, key: &'static str, cx: &mut Context<Self>) -> gpui::Div {
+        let row = self.row(key);
+        let locked = Self::is_locked(&row);
+        let path = row.as_ref().and_then(|r| r.value.as_str()).filter(|p| !p.is_empty()).unwrap_or("none");
+        let field = match key {
+            "serve_web_cert" => {
+                let enter = |sw: &mut Self, cx: &mut Context<Self>| sw.set_web_file("serve_web_cert", cx);
+                self.web_cert.draw(t, "web-cert", path.to_string(), "Set", Self::web_cert_key, enter, cx)
+            }
+            _ => {
+                let enter = |sw: &mut Self, cx: &mut Context<Self>| sw.set_web_file("serve_web_key", cx);
+                self.web_key.draw(t, "web-key", path.to_string(), "Set", Self::web_key_key, enter, cx)
+            }
+        };
+        let (label, note) = match key {
+            "serve_web_cert" => {
+                ("HTTPS certificate", "The --cert-file tailscale cert wrote; with the key, the page is HTTPS")
+            }
+            _ => ("HTTPS key", "The --key-file tailscale cert wrote (yours, mode 600)"),
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .child(Self::label(t, label, note, locked))
+            .when(!locked, |d| d.child(field))
+            .children(Self::locked(t, key, &row))
+    }
+
+    fn web_cert_key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match typed(&mut self.web_cert.draft, e, cx) {
+            Typed::Enter => self.set_web_file("serve_web_cert", cx),
+            Typed::Escape => self.web_cert.escape(window, &self.focus),
+            Typed::Edited | Typed::Other => {}
+        }
+    }
+
+    fn web_key_key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match typed(&mut self.web_key.draft, e, cx) {
+            Typed::Enter => self.set_web_file("serve_web_key", cx),
+            Typed::Escape => self.web_key.escape(window, &self.focus),
+            Typed::Edited | Typed::Other => {}
+        }
+    }
+
+    /// Write the typed path to `key` once the setting takes it; otherwise say why under the field.
+    fn set_web_file(&mut self, key: &str, cx: &mut Context<Self>) {
+        let field: fn(&mut Self) -> &mut patterns::TextField = match key {
+            "serve_web_cert" => |sw| &mut sw.web_cert,
+            _ => |sw| &mut sw.web_key,
+        };
+        let draft = field(self).draft.trim().to_string();
+        self.write_field(key, json!(draft), field, cx);
     }
 
     /// Write the typed port once the setting takes it; otherwise say why under the field.

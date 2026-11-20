@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="430" viewBox="0 0 720 430" role="img" aria-labelledby="title desc">
+<title id="title">Server memory in an agent soak, before and with scrollback B</title>
+<desc id="desc">Server memory in the agent soak: before scrollback B it climbed from 359 to 562 MiB in 5 minutes; with leon's history store it fell to 36 MiB and stayed there (478 against 48 MiB over minutes 1 to 5).</desc>
+<style>
+  .bg { fill: #fcfcfb; } .t1 { fill: #0b0b0b; } .t2 { fill: #52514e; }
+  .grid { stroke: #e7e6e2; } .axis { stroke: #b9b8b1; } .ref { stroke: #52514e; }
+  .c1 { fill: #2a78d6; stroke: #2a78d6; } .c2 { fill: #eb6834; stroke: #eb6834; } .c0 { fill: #8f8d86; stroke: #8f8d86; }
+  .ring { stroke: #fcfcfb; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .t1 { fill: #f0efec; } .t2 { fill: #c3c2b7; }
+    .grid { stroke: #2f2f2c; } .axis { stroke: #57564f; } .ref { stroke: #c3c2b7; }
+    .c1 { fill: #3987e5; stroke: #3987e5; } .c2 { fill: #d95926; stroke: #d95926; } .c0 { fill: #76756f; stroke: #76756f; }
+    .ring { stroke: #1a1a19; }
+  }
+  text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+</style>
+<rect class="bg" width="720" height="430" rx="8"/>
+<text x="24.0" y="32.0" class="t1" font-size="16" text-anchor="start" font-weight="600">Server memory in an agent soak, before and with scrollback B</text>
+<text x="24.0" y="52.0" class="t2" font-size="12" text-anchor="start">soak.sh: 12 agent panes printing, and a session of 2 made and killed every minute.</text>
+<text x="24.0" y="69.0" class="t2" font-size="12" text-anchor="start">The server's footprint by minute. Apple M6, release build, 2026-11-19.</text>
+<rect x="24.0" y="97.0" width="10" height="10" rx="2" class="c0"/>
+<text x="39.0" y="106.0" class="t2" font-size="12" text-anchor="start">before scrollback B</text>
+<rect x="190.0" y="97.0" width="10" height="10" rx="2" class="c1"/>
+<text x="205.0" y="106.0" class="t2" font-size="12" text-anchor="start">scrollback B</text>
+<line x1="74.0" y1="380.0" x2="546.0" y2="380.0" class="axis" stroke-width="1"/>
+<text x="66.0" y="384.0" class="t2" font-size="11" text-anchor="end">0</text>
+<line x1="74.0" y1="340.0" x2="546.0" y2="340.0" class="grid" stroke-width="1"/>
+<text x="66.0" y="344.0" class="t2" font-size="11" text-anchor="end">100</text>
+<line x1="74.0" y1="300.0" x2="546.0" y2="300.0" class="grid" stroke-width="1"/>
+<text x="66.0" y="304.0" class="t2" font-size="11" text-anchor="end">200</text>
+<line x1="74.0" y1="260.0" x2="546.0" y2="260.0" class="grid" stroke-width="1"/>
+<text x="66.0" y="264.0" class="t2" font-size="11" text-anchor="end">300</text>
+<line x1="74.0" y1="220.0" x2="546.0" y2="220.0" class="grid" stroke-width="1"/>
+<text x="66.0" y="224.0" class="t2" font-size="11" text-anchor="end">400</text>
+<line x1="74.0" y1="180.0" x2="546.0" y2="180.0" class="grid" stroke-width="1"/>
+<text x="66.0" y="184.0" class="t2" font-size="11" text-anchor="end">500</text>
+<line x1="74.0" y1="140.0" x2="546.0" y2="140.0" class="grid" stroke-width="1"/>
+<text x="66.0" y="144.0" class="t2" font-size="11" text-anchor="end">600</text>
+<text x="74.0" y="396.0" class="t2" font-size="11" text-anchor="middle">0</text>
+<text x="133.0" y="396.0" class="t2" font-size="11" text-anchor="middle">1</text>
+<text x="192.0" y="396.0" class="t2" font-size="11" text-anchor="middle">2</text>
+<text x="251.0" y="396.0" class="t2" font-size="11" text-anchor="middle">3</text>
+<text x="310.0" y="396.0" class="t2" font-size="11" text-anchor="middle">4</text>
+<text x="369.0" y="396.0" class="t2" font-size="11" text-anchor="middle">5</text>
+<text x="428.0" y="396.0" class="t2" font-size="11" text-anchor="middle">6</text>
+<text x="487.0" y="396.0" class="t2" font-size="11" text-anchor="middle">7</text>
+<text x="546.0" y="396.0" class="t2" font-size="11" text-anchor="middle">8</text>
+<text x="310.0" y="414.0" class="t2" font-size="12" text-anchor="middle">minutes into the soak</text>
+<text x="66.0" y="126.0" class="t2" font-size="12" text-anchor="end">MiB</text>
+<polyline fill="none" class="c0" stroke-width="2" style="fill:none" points="74.0,236.4 133.0,219.2 192.0,202.4 251.0,196.0 310.0,170.8 369.0,155.2"/>
+<circle cx="74.0" cy="236.4" r="4" class="c0 ring" stroke-width="2"/>
+<circle cx="133.0" cy="219.2" r="4" class="c0 ring" stroke-width="2"/>
+<circle cx="192.0" cy="202.4" r="4" class="c0 ring" stroke-width="2"/>
+<circle cx="251.0" cy="196.0" r="4" class="c0 ring" stroke-width="2"/>
+<circle cx="310.0" cy="170.8" r="4" class="c0 ring" stroke-width="2"/>
+<circle cx="369.0" cy="155.2" r="4" class="c0 ring" stroke-width="2"/>
+<text x="379.0" y="159.2" class="t1" font-size="12" text-anchor="start">562 MiB at minute 5</text>
+<polyline fill="none" class="c1" stroke-width="2" style="fill:none" points="74.0,336.8 133.0,356.8 192.0,359.2 251.0,361.6 310.0,362.0 369.0,364.0 428.0,365.6 487.0,365.6 546.0,365.6"/>
+<circle cx="74.0" cy="336.8" r="4" class="c1 ring" stroke-width="2"/>
+<circle cx="133.0" cy="356.8" r="4" class="c1 ring" stroke-width="2"/>
+<circle cx="192.0" cy="359.2" r="4" class="c1 ring" stroke-width="2"/>
+<circle cx="251.0" cy="361.6" r="4" class="c1 ring" stroke-width="2"/>
+<circle cx="310.0" cy="362.0" r="4" class="c1 ring" stroke-width="2"/>
+<circle cx="369.0" cy="364.0" r="4" class="c1 ring" stroke-width="2"/>
+<circle cx="428.0" cy="365.6" r="4" class="c1 ring" stroke-width="2"/>
+<circle cx="487.0" cy="365.6" r="4" class="c1 ring" stroke-width="2"/>
+<circle cx="546.0" cy="365.6" r="4" class="c1 ring" stroke-width="2"/>
+<text x="556.0" y="369.6" class="t1" font-size="12" text-anchor="start">36 MiB at minute 8</text>
+</svg>

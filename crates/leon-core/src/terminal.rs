@@ -26,12 +26,20 @@ use crate::program_status::{coalesce, strip_hidden, Change, Record, Tracker};
 #[path = "terminal_cwd.rs"]
 mod cwd;
 use cwd::{process_cwd, pwd_path, pwd_url};
+#[path = "terminal_history.rs"]
+mod history;
+pub use history::WINDOW;
+use history::{Emu, Store};
 #[path = "terminal_foreground.rs"]
 mod foreground;
+#[path = "terminal_scratch.rs"]
+mod scratch;
 pub use foreground::owned_process_name;
 #[path = "terminal_process.rs"]
 mod process;
 use process::{reap, wait_exit, Registered, Started};
+#[path = "terminal_input.rs"]
+mod input;
 #[path = "terminal_reading.rs"]
 mod reading;
 #[path = "terminal_start.rs"]
@@ -48,8 +56,10 @@ pub const ROWS: u16 = 24;
 pub const COLS: u16 = 80;
 /// The largest grid (rows, cols): more than a 6K display holds at 8 pt.
 pub const MAX_SIZE: (u16, u16) = (500, 1000);
-/// shortcut: scrollback is counted in lines, not the spec's ~64 MiB; revisit with M8's benchmarks.
-const SCROLLBACK: usize = 10_000;
+/// Lines of history a terminal keeps unless the `scrollback` setting says (`set_scrollback`).
+pub const SCROLLBACK: usize = 10_000;
+/// The most the setting can ask for: at about 200 bytes a stored line, 20 MB a pane.
+pub const MAX_SCROLLBACK: usize = 100_000;
 /// Answers to terminal queries waiting to be written; past this a program that queries but never
 /// reads gets no more, so the writer queue can't grow without bound.
 const REPLY_BUDGET: usize = 64 << 10;
@@ -177,7 +187,7 @@ impl Dimensions for Size {
 }
 
 pub struct Terminal {
-    term: Arc<Mutex<Term<Listener>>>,
+    term: Arc<Mutex<Emu>>,
     tracker: Arc<Mutex<Tracker>>,
     writer: Writer,
     master: Mutex<Box<dyn MasterPty + Send>>,
@@ -202,6 +212,10 @@ pub struct Terminal {
     scrolled: Arc<AtomicUsize>,
     /// The program set X10 mouse mode (`?9`), which alacritty doesn't track.
     x10: Arc<AtomicBool>,
+    /// When input was last queued (`write`): leon's typed notices wait for a quiet pane.
+    last_input: Mutex<Option<std::time::Instant>>,
+    /// Its program reported a permission prompt, and no person typed here since (`hold_for_person`).
+    held: AtomicBool,
 }
 
 impl std::fmt::Debug for Terminal {
@@ -225,15 +239,16 @@ impl Terminal {
         shown: &[u8],
         notify: impl Fn(Notice) + Send + Sync + 'static,
     ) -> io::Result<Terminal> {
-        Self::spawn_sized(spec, shown, None, notify)
+        Self::spawn_sized(spec, shown, None, SCROLLBACK, notify)
     }
 
     /// `spawn_showing` at `size` (None: 24x80, clamped as `resize` clamps): the program's first
-    /// look at its size is right.
+    /// look at its size is right. It keeps `scrollback` lines of history, `shown` included.
     pub fn spawn_sized(
         spec: Spec,
         shown: &[u8],
         size: Option<(u16, u16)>,
+        scrollback: usize,
         notify: impl Fn(Notice) + Send + Sync + 'static,
     ) -> io::Result<Terminal> {
         let notify: Notify = Arc::new(notify);
@@ -281,13 +296,16 @@ impl Terminal {
                 written
             })
         });
-        let config = Config { scrolling_history: SCROLLBACK, ..Config::default() };
+        let scrollback = scrollback.min(MAX_SCROLLBACK);
+        let config = Config { scrolling_history: scrollback.max(1), ..Config::default() };
         let seen = Arc::new(Mutex::new(Seen::default()));
         let listener = Listener { writer: writer.clone(), seen: seen.clone() };
-        let mut emulator = Term::new(config, &Size { rows, cols }, listener);
+        let term = Term::new(config, &Size { rows, cols }, listener);
+        let mut emulator = Emu { term, store: Store::new(scrollback) };
         let mut parser: Processor = Processor::new();
         let scrolled = Arc::new(AtomicUsize::new(0));
         view::feed(&mut emulator, &mut parser, &mut Escapes::default(), shown, &scrolled);
+        emulator.store.settle(&mut emulator.term);
         let term = Arc::new(Mutex::new(emulator));
         let tracker = Arc::new(Mutex::new(Tracker::default()));
 
@@ -354,6 +372,8 @@ impl Terminal {
             resume: Mutex::default(),
             scrolled,
             x10,
+            last_input: Mutex::new(None),
+            held: AtomicBool::new(false),
         })
     }
 
@@ -366,34 +386,13 @@ impl Terminal {
         self.output.load(Ordering::SeqCst)
     }
 
-    /// Queue input for the program; never blocks.
-    pub fn write(&self, data: &[u8]) -> io::Result<()> {
-        self.writer.input(data.to_vec())
-    }
-
-    /// Whether the program asked for bracketed paste (a line editor does while it reads a line).
-    pub fn bracketed_paste(&self) -> bool {
-        lock(&self.term).mode().contains(TermMode::BRACKETED_PASTE)
-    }
-
-    /// Paste `text` the way the program asked for it now (`keys::paste_bytes`).
-    pub fn paste(&self, text: &str) -> io::Result<()> {
-        self.write(&crate::keys::paste_bytes(text, self.bracketed_paste()))
-    }
-
-    /// Press one key given in binding syntax (`enter`, `ctrl+c`, `up`).
-    pub fn key(&self, key: &str) -> Result<(), String> {
-        let app_cursor = lock(&self.term).mode().contains(TermMode::APP_CURSOR);
-        let bytes = crate::keys::encode(key, app_cursor)?;
-        self.write(&bytes).map_err(|e| e.to_string())
-    }
-
     /// Scrollback and screen as text, oldest line first. `trim` drops trailing spaces and blank lines.
     pub fn text(&self, trim: bool) -> String {
-        let term = lock(&self.term);
-        let start = Point::new(term.topmost_line(), Column(0));
-        let end = Point::new(term.bottommost_line(), term.last_column());
-        let text = term.bounds_to_string(start, end);
+        let emu = lock(&self.term);
+        let start = Point::new(emu.topmost_line(), Column(0));
+        let end = Point::new(emu.bottommost_line(), emu.last_column());
+        let mut text = if emu.stored() > 0 { emu.store.text() } else { String::new() };
+        text += &emu.bounds_to_string(start, end);
         if !trim {
             return text;
         }
@@ -414,10 +413,11 @@ impl Terminal {
     pub fn resize(&self, rows: u16, cols: u16) -> io::Result<()> {
         let (rows, cols) = (rows.clamp(1, MAX_SIZE.0), cols.clamp(2, MAX_SIZE.1));
         {
-            let mut term = lock(&self.term);
-            term.resize(Size { rows, cols });
+            let mut emu = lock(&self.term);
+            let Emu { term, store } = &mut *emu;
+            store.resize(term, Size { rows, cols });
             // shrinking pushes rows into the scrollback: the oldest kept line keeps a number
-            self.scrolled.fetch_max(term.grid().history_size(), Ordering::SeqCst);
+            self.scrolled.fetch_max(emu.history(), Ordering::SeqCst);
         }
         let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
         lock(&self.master).resize(size).map_err(pty)?;

@@ -19,6 +19,11 @@ pub(super) enum Ask {
     HostEndpoint {
         label: String,
     },
+    /// A new name for a tab or a session (view_rows.rs); `name` is the one it has.
+    Rename {
+        row: super::sidebar::rows::RowRef,
+        name: String,
+    },
 }
 
 /// A machine as the sidebar shows it.
@@ -106,9 +111,9 @@ impl Workspace {
         }
     }
 
-    /// The poll's share: pick up hosts that connected or gave up, and select a session made over
-    /// a link once its host's model has it.
-    pub(super) fn poll_hosts(&mut self) {
+    /// On a wake: pick up hosts that connected or gave up. True when a host gained or lost its
+    /// remote.
+    pub(super) fn poll_hosts(&mut self) -> bool {
         let changed = self.hosts.poll();
         if changed {
             self.send_palette(); // a host that connected gets the theme's colours
@@ -116,6 +121,12 @@ impl Workspace {
         if changed && !self.hosts.machines()[self.host].remote().is_some_and(|r| Rc::ptr_eq(r, &self.app)) {
             self.use_host(0); // the selected host went away
         }
+        changed
+    }
+
+    /// After the models' commit: select a session made with New Session once its machine's model
+    /// has it. True when it did.
+    pub(super) fn select_made(&mut self) -> bool {
         let later = lock(&self.select_later).clone();
         if let Some((host, sid)) = later {
             let there = self.hosts.machines().get(host).and_then(Machine::remote);
@@ -123,22 +134,25 @@ impl Workspace {
                 *lock(&self.select_later) = None;
                 self.use_host(host);
                 self.session_id = Some(sid);
+                return true;
             }
         }
+        false
     }
 
-    /// Create a session on machine `host` (This Mac when unknown) and select it, at once on This
-    /// Mac, once it shows over a link.
+    /// Create a session on machine `host` (This Mac when unknown) and select it once its model
+    /// has it (`select_made`).
     pub(super) fn new_session_on(&mut self, host: usize, cx: &mut Context<Self>) {
         let Some(remote) = self.hosts.machines().get(host).and_then(Machine::remote).cloned() else { return };
         let (later, wake) = (self.select_later.clone(), self.wake.clone());
         remote.act_later("session.create", json!({}), move |r| {
             if let Some(sid) = r.ok().and_then(|r| r["session_id"].as_str().map(String::from)) {
                 *lock(&later) = Some((host, sid));
-                wake(); // over a link the refetch's wake came first
+                wake(); // the refetch's wake came first
             }
         });
         self.poll_hosts();
+        self.select_made();
         cx.notify();
     }
 
@@ -372,6 +386,10 @@ impl Workspace {
             Ask::HostEndpoint { label } => {
                 ("ssh://[user@]host[:port]…", format!("How ssh reaches {label}: ssh://me@devbox.example.com"))
             }
+            Ask::Rename { name, .. } => {
+                let hint = "↩ sets it; empty, it shows its program's title again".to_string();
+                return Some((format!("Rename “{name}” to…"), refused.clone().unwrap_or(hint)));
+            }
         };
         Some((prompt.to_string(), refused.clone().unwrap_or(hint)))
     }
@@ -382,6 +400,10 @@ impl Workspace {
         let Some(p) = self.palette.as_mut() else { return };
         let Some((ask, refused)) = p.ask.as_mut() else { return };
         let typed = p.query.trim().to_string();
+        if let Ask::Rename { row, .. } = ask.clone() {
+            self.palette = None;
+            return self.rename_row(row, typed, cx);
+        }
         let mut list = match leon_hosts::hosts::load() {
             Ok(l) => l,
             Err(e) => {
@@ -390,7 +412,7 @@ impl Workspace {
             }
         };
         match ask.clone() {
-            Ask::Tailnet => {} // a row is picked like an action (palette_key)
+            Ask::Tailnet | Ask::Rename { .. } => {} // a row is picked like an action (palette_key)
             // one in the window but no longer in the file (removed from the CLI) is taken too
             Ask::HostLabel if self.hosts.index_of(&typed).is_some() => {
                 *refused = Some(format!("{} {typed:?} already", leon_hosts::hosts::TAKEN));

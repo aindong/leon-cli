@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="308" viewBox="0 0 720 308" role="img" aria-labelledby="title desc">
+<title id="title">Key to echo, before and after the GPUI refactor</title>
+<desc id="desc">Key to echo painted before and after GPUI refactor phases 5 to 7, in a VM: the same within the runs' spread, idle 26.0 against 28.3 ms, one pane flooding 17.5 against 20.8 ms, eight panes busy 18.0 against 18.0 ms.</desc>
+<style>
+  .bg { fill: #fcfcfb; } .t1 { fill: #0b0b0b; } .t2 { fill: #52514e; }
+  .grid { stroke: #e7e6e2; } .axis { stroke: #b9b8b1; } .ref { stroke: #52514e; }
+  .c1 { fill: #2a78d6; stroke: #2a78d6; } .c2 { fill: #eb6834; stroke: #eb6834; } .c0 { fill: #8f8d86; stroke: #8f8d86; }
+  .ring { stroke: #fcfcfb; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .t1 { fill: #f0efec; } .t2 { fill: #c3c2b7; }
+    .grid { stroke: #2f2f2c; } .axis { stroke: #57564f; } .ref { stroke: #c3c2b7; }
+    .c1 { fill: #3987e5; stroke: #3987e5; } .c2 { fill: #d95926; stroke: #d95926; } .c0 { fill: #76756f; stroke: #76756f; }
+    .ring { stroke: #1a1a19; }
+  }
+  text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+</style>
+<rect class="bg" width="720" height="308" rx="8"/>
+<text x="24.0" y="32.0" class="t1" font-size="16" text-anchor="start" font-weight="600">Key to echo, before and after the GPUI refactor</text>
+<text x="24.0" y="52.0" class="t2" font-size="12" text-anchor="start">keylat.sh in a Tart macOS VM, key to the echo painted in the app, the median p50 of three</text>
+<text x="24.0" y="69.0" class="t2" font-size="12" text-anchor="start">alternating runs per build. The VM's absolute numbers are not the host's; compare the two.</text>
+<line x1="155.0" y1="124.0" x2="155.0" y2="258.0" class="axis" stroke-width="1"/>
+<text x="155.0" y="274.0" class="t2" font-size="11" text-anchor="middle">0</text>
+<line x1="231.8" y1="124.0" x2="231.8" y2="258.0" class="grid" stroke-width="1"/>
+<text x="231.8" y="274.0" class="t2" font-size="11" text-anchor="middle">5</text>
+<line x1="308.7" y1="124.0" x2="308.7" y2="258.0" class="grid" stroke-width="1"/>
+<text x="308.7" y="274.0" class="t2" font-size="11" text-anchor="middle">10</text>
+<line x1="385.5" y1="124.0" x2="385.5" y2="258.0" class="grid" stroke-width="1"/>
+<text x="385.5" y="274.0" class="t2" font-size="11" text-anchor="middle">15</text>
+<line x1="462.3" y1="124.0" x2="462.3" y2="258.0" class="grid" stroke-width="1"/>
+<text x="462.3" y="274.0" class="t2" font-size="11" text-anchor="middle">20</text>
+<line x1="539.2" y1="124.0" x2="539.2" y2="258.0" class="grid" stroke-width="1"/>
+<text x="539.2" y="274.0" class="t2" font-size="11" text-anchor="middle">25</text>
+<line x1="616.0" y1="124.0" x2="616.0" y2="258.0" class="grid" stroke-width="1"/>
+<text x="616.0" y="274.0" class="t2" font-size="11" text-anchor="middle">30</text>
+<text x="385.5" y="292.0" class="t2" font-size="12" text-anchor="middle">milliseconds</text>
+<line x1="411.6" y1="118.0" x2="411.6" y2="258.0" class="ref" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="415.6" y="116.0" class="t2" font-size="11" text-anchor="start">one 60 Hz frame</text>
+<rect x="24.0" y="95.0" width="10" height="10" rx="2" class="c0"/>
+<text x="39.0" y="104.0" class="t2" font-size="12" text-anchor="start">before (2e773bd)</text>
+<rect x="169.0" y="95.0" width="10" height="10" rx="2" class="c1"/>
+<text x="184.0" y="104.0" class="t2" font-size="12" text-anchor="start">after (ae96f39)</text>
+<text x="145.0" y="149.0" class="t1" font-size="12" text-anchor="end">idle</text>
+<path class="c0" d="M155.0 130.0h396.5a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-396.5z"/>
+<text x="560.5" y="141.0" class="t1" font-size="11" text-anchor="start">26.0 ms</text>
+<path class="c1" d="M155.0 146.0h431.9a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-431.9z"/>
+<text x="595.9" y="157.0" class="t1" font-size="11" text-anchor="start">28.3 ms</text>
+<text x="145.0" y="193.0" class="t1" font-size="12" text-anchor="end">one pane flooding</text>
+<path class="c0" d="M155.0 174.0h265.9a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-265.9z"/>
+<text x="429.9" y="185.0" class="t1" font-size="11" text-anchor="start">17.5 ms</text>
+<path class="c1" d="M155.0 190.0h316.6a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-316.6z"/>
+<text x="480.6" y="201.0" class="t1" font-size="11" text-anchor="start">20.8 ms</text>
+<text x="145.0" y="237.0" class="t1" font-size="12" text-anchor="end">eight panes busy</text>
+<path class="c0" d="M155.0 218.0h273.6a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-273.6z"/>
+<text x="437.6" y="229.0" class="t1" font-size="11" text-anchor="start">18.0 ms</text>
+<path class="c1" d="M155.0 234.0h273.6a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-273.6z"/>
+<text x="437.6" y="245.0" class="t1" font-size="11" text-anchor="start">18.0 ms</text>
+</svg>

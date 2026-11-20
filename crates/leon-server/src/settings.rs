@@ -21,6 +21,9 @@ pub struct Effective {
     pub notifications: Notifications,
     /// The app copies a selection to the clipboard as it is made.
     pub copy_on_select: bool,
+    /// Leon.app shows a card with a link's address, Copy and Open in Browser when the mouse rests
+    /// on the link or it is right-clicked; false, ⌘-click only.
+    pub link_card: bool,
     /// Milliseconds after a repeatable binding during which its keys work without the prefix
     /// (0 turns repeat off).
     pub repeat_time: u64,
@@ -42,6 +45,20 @@ pub struct Effective {
     pub serve_tailscale_port: u16,
     /// Tagged machines it lets in too, by tag (`tag:ci`).
     pub serve_tailscale_tags: Vec<String>,
+    /// A Shadertoy-style cursor shader file Leon.app draws over its window, as init.lua wrote it
+    /// (`~` and a path relative to init.lua's folder are resolved by the app); empty: none.
+    pub cursor_shader: String,
+    /// Seconds the cursor shader animates after the cursor changes, from 0.1 to 5.
+    pub cursor_shader_duration: f64,
+    /// With serve_tailscale on, the tailnet listener also serves the web page.
+    pub serve_web: bool,
+    /// The certificate file `tailscale cert` wrote, for HTTPS ("" for plain HTTP).
+    pub serve_web_cert: String,
+    /// Its private key file.
+    pub serve_web_key: String,
+    /// Lines of history each terminal keeps, from 0 to 100000; a change applies to running
+    /// terminals at once, and a lower value drops their oldest lines.
+    pub scrollback: usize,
 }
 
 /// A theme name for each OS appearance (the same one for both unless init.lua gives two).

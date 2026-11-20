@@ -39,10 +39,10 @@ fn a_spinner_nothing_shows_does_not_redraw(cx: &mut TestAppContext) {
     assert!(shows(cx, known), "the app knows each pane's program: {:?}", program(cx, &first_id));
     settle(&second);
     cx.run_until_parked();
-    let before = ws.read_with(cx, |ws, _| ws.signature());
+    let before = ws.read_with(cx, |ws, _| ws.renders());
     std::thread::sleep(Duration::from_millis(400));
     cx.run_until_parked();
-    let after = ws.read_with(cx, |ws, _| ws.signature());
+    let after = ws.read_with(cx, |ws, _| ws.renders());
     assert_eq!(before, after, "the spinner of an off-screen session redraws the window");
     s.app.stop();
 }

@@ -56,6 +56,7 @@ fn a_popup_and_a_drawer_start_at_the_size_the_app_gives_them(cx: &mut TestAppCon
     let mut wrong = Vec::new();
     for (i, (w, h)) in [(1400., 900.), (1033., 777.), (1291.5, 853.5), (1120., 701.)].into_iter().enumerate() {
         cx.simulate_resize(size(px(w), px(h)));
+        cx.run_until_parked(); // the geometry the resize reports goes through the call queue
         if i == 3 {
             act(&ws, cx, "client.font.increase");
         }

@@ -1,5 +1,5 @@
 //! App update criterion 17 (.agent/plans/2026-11-16-app-update-notice.md): a notice on screen
-//! doesn't make an idle window draw: what the poll compares to decide on a redraw stays the same.
+//! doesn't make an idle window draw: the root isn't rendered again while nothing changes.
 
 mod m10b_support;
 
@@ -13,7 +13,7 @@ fn setup() -> Setup {
 }
 
 /// Until the pane's shell has started and the app knows the program in front: the server
-/// reports it on a 200 ms tick, and its arrival is a change the signature follows.
+/// reports it on a 200 ms tick, and its arrival is a change the window draws.
 fn shell_known(s: &Setup, ws: &Entity<Workspace>, cx: &mut VisualTestContext) {
     let id = ws.read_with(cx, |ws, _| ws.target_block()).unwrap();
     let t = term(&s.app, &id);
@@ -35,24 +35,24 @@ fn a_shown_notice_leaves_the_window_idle(cx: &mut TestAppContext) {
     let phase = Phase::Available { version: "9.9.9".into(), notes: "https://example.com/n".into(), how: How::Install };
     ws.read_with(cx, |ws, _| ws.updater().set_phase(phase));
     assert!(shows(cx, |cx| drawn(cx, "update-notice")), "the notice is drawn");
-    let first = ws.read_with(cx, |ws, _| ws.signature());
+    let first = ws.read_with(cx, |ws, _| ws.renders());
     let mut later = Vec::new();
     for _ in 0..10 {
         cx.executor().advance_clock(std::time::Duration::from_millis(100));
         cx.run_until_parked();
-        later.push(ws.read_with(cx, |ws, _| ws.signature()));
+        later.push(ws.read_with(cx, |ws, _| ws.renders()));
     }
     s.app.stop();
-    assert!(later.iter().all(|s| *s == first), "the signature moved while nothing changed: {first} then {later:?}");
+    assert!(later.iter().all(|s| *s == first), "the root rendered while nothing changed: {first} then {later:?}");
 }
 
 #[gpui::test]
 fn a_new_phase_does_move_it(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
-    let before = ws.read_with(cx, |ws, _| ws.signature());
+    let before = ws.read_with(cx, |ws, _| ws.root_redraws());
     ws.read_with(cx, |ws, _| ws.updater().set_phase(Phase::Done { version: "9.9.9".into() }));
-    let after = ws.read_with(cx, |ws, _| ws.signature());
+    let moved = shows(cx, |cx| ws.read_with(cx, |ws, _| ws.root_redraws()) > before);
     s.app.stop();
-    assert_ne!(before, after, "a change to the notice is drawn");
+    assert!(moved, "a change to the notice is drawn");
 }

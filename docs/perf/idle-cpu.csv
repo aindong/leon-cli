@@ -1,0 +1,4 @@
+state,before_pct,after_pct,before_wakeups,after_wakeups,before_load,after_load,machine,source
+still,2.3,0.74,80,18,2 to 4.5,1.4 to 2.3,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
+one pane working,6.6,4.4,58,18,2 to 4.5,1.4 to 2.3,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf
+app hidden,1.9,0.06,32,0.3,2 to 4.5,1.4 to 2.3,"Apple M6 (12 cores), macOS 27, 60 Hz display, release build",performance-app.md#the-app-end-to-end-scriptsperf

@@ -29,6 +29,11 @@ impl Workspace {
         self.overview.hover.as_ref().filter(|h| h.shown).map(|h| h.window_id.clone())
     }
 
+    /// No preview now (a menu opened over the rows).
+    pub(in crate::view) fn hide_preview(&mut self) {
+        self.overview.hover = None;
+    }
+
     /// The pointer entered (or left) a tab: after `HOVER_DELAY` its preview shows, at once when
     /// another tab's preview just showed.
     pub(in crate::view) fn hover_tab(
@@ -51,7 +56,7 @@ impl Workspace {
         }
         let warm = self.overview.hover.as_ref().is_some_and(|h| h.shown)
             || self.overview.hover_left.is_some_and(|t| t.elapsed() < HOVER_WARM);
-        if self.overview_shown() || self.palette.is_some() {
+        if self.overview_shown() || self.palette.is_some() || self.row_menu().is_some() {
             return;
         }
         let at = window.mouse_position();

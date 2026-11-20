@@ -44,12 +44,13 @@ of [the architecture](../architecture.md); the ssh path it sits beside is in [Ho
 - **Limits.** A caller outside the tailnet ranges is closed before any whois and leaves no
   entry. An address with 5 refusals in a minute is closed unasked for the rest of that minute
   (logged once); the count remembers 4096 addresses, and when full a new address is refused
-  unasked. At most 32 connections (4 per address) wait for a decision; more are refused. A failure
-  of tailscaled's own doesn't count against the caller.
+  unasked. At most 32 connections (8 per address: a browser loads a page over 6) wait for a
+  decision; more are refused. A failure of tailscaled's own doesn't count against the caller.
 - **The same protocol.** A connection let in goes to `serve::connection`, the code the Unix socket
-  uses (the stream halves are generic): the 1 MiB request line cap, events, resume and the idle
-  count all apply. A caller can do what a local client can. Only the API is served: a connection
-  whose first byte isn't `{` (an HTTP request, say) is closed unread.
+  uses (the stream halves are generic), when its first byte is `{`; a capital letter is HTTP, for
+  [the web client](web.md) with `serve_web` on, and anything else is closed unanswered. The 1 MiB
+  request line cap, events, resume and the idle count all apply. A caller can do what a local
+  client can.
 - **`tailnet://HOST[:PORT]`** is an `Endpoint` like `ssh://` (no user part; default port 7297),
   so `-H`, the hosts list, `leon attach` and the app reach it through the same `Link`: the link's
   Unix socket keeps its peer-uid check, and each connection, instead of ssh, is
@@ -64,6 +65,22 @@ of [the architecture](../architecture.md); the ssh path it sits beside is in [Ho
   debug build has code that reads it: `update_release_build` checks a release binary doesn't
   contain the name. The fake's socket must be ours. CI has no tailnet; the real path was checked by
   hand against the Mac app (status and whois only).
+
+## Who gets in, step by step
+
+```mermaid
+flowchart TD
+  conn["a connection to the tailnet listener"] --> range{"from a tailnet address?"}
+  range -->|no| quiet["closed, no whois"]
+  range -->|yes| limits{"under the limits? 5 refusals a minute,<br/>32 waiting, 8 per address"}
+  limits -->|no| unasked["refused unasked"]
+  limits -->|yes| ask["status, whois of the caller, status again:<br/>within 3 s, before a byte is read"]
+  ask --> self{"this machine itself?"}
+  self -->|yes| refused["closed unread and unanswered,<br/>one log line and last_refusal"]
+  self -->|no| owner{"untagged and the pinned owner,<br/>or a tag in serve_tailscale_tags?"}
+  owner -->|no| refused
+  owner -->|yes| first["let in: the first byte picks the API<br/>or the web page (web.md)"]
+```
 
 ## Threat model
 

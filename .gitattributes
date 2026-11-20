@@ -1,6 +1,7 @@
 # brand assets that are mostly embedded base64 image data (88-99%), refreshed by brand/build-assets.cjs
 brand/icon/*.svg linguist-generated
 brand/marketing/*.svg linguist-generated
-brand/marketing/index.html linguist-generated
 docs/api.md linguist-generated
 docs/api-snapshot.json linguist-generated
+# the site's pinned dependencies with their hashes, written by uv pip compile (website/requirements.in)
+website/requirements.txt linguist-generated

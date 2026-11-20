@@ -4,6 +4,42 @@ leon is a terminal multiplexer: a long-lived server owns sessions, windows (tabs
 layouts and terminal panes ("blocks"); clients (the macOS app, the `leon` CLI, Lua scripts,
 agents) drive it through one self-describing API.
 
+## The big picture
+
+One server owns every terminal; everything else is a client of its API. Programs keep running when
+a client goes away.
+
+```mermaid
+flowchart LR
+  subgraph clients["clients on this Mac"]
+    direction TB
+    app["Leon.app"]
+    attach["leon attach"]
+    cli["the leon CLI, leon do scripts"]
+    agent["agents in panes, through the skill"]
+  end
+  clients -->|"the socket API"| server["leon server: owns the PTYs,<br/>sessions, windows and blocks"]
+  web["the web page, in a browser<br/>on another of your machines"] -->|"the tailnet listener"| server
+  clients -->|"a Link: ssh, or tailnet://"| host["the leon server on a host"]
+```
+
+What the server holds: sessions, each with windows (the app's tabs); a window's tiles are a layout
+of splits, and floats and drawers sit over and beside them. Every pane is a block.
+
+```mermaid
+flowchart TD
+  server["server"] --> session["session"]
+  session --> window["window (a tab)"]
+  window --> layout["layout: a tree of splits"]
+  layout --> tile1["block"]
+  layout --> tile2["block"]
+  window --> float["floats, over the tiles"]
+  window --> drawer["drawers, docked left, right or bottom"]
+  float --> fb["block"]
+  drawer --> db["block"]
+  tile1 --> pty["a terminal: its PTY, screen and history"]
+```
+
 ## Crates (one Cargo workspace)
 
 | Crate | Job |
@@ -60,12 +96,14 @@ each other's pipes: pass `--test-threads=1`) and writes `$HOME/.cache/rosetta` (
 
 ## Decisions
 
-The decisions, in eight parts:
+The decisions, in nine parts:
 
 - [Protocol and clients](architecture/protocol-and-clients.md): the wire protocol, events, layout,
   the socket path, terminal emulation, Lua (config, runtime, bounds), the app, the screen transport,
   scrollback, selection, find, links and mouse reporting, `leon attach`, the app keymap and look,
   and the agent skill.
+- [Scrollback](architecture/scrollback.md): alacritty's rows and leon's store behind them: when
+  rows move, why none is lost or renumbered, styles, clears, resize and the cap.
 - [Switching and attention](architecture/attention.md): the session switcher, Activity, the
   badges, notifications, the fade of the panes without the focus, the translucent window, and
   `leon notify`.
@@ -79,9 +117,15 @@ The decisions, in eight parts:
 - [Hosts](architecture/hosts.md): remote hosts and reconnects, and the app's hosts.
 - [Serving over Tailscale](architecture/tailnet.md): the server's one network listener, who it
   lets in, `tailnet://` endpoints, and the threat model.
+- [The web client](architecture/web.md): the page served over the tailnet listener with
+  `serve_web`, the WebSocket that carries the socket's API, and how other sites are kept out.
 - [How leon uses GPUI](architecture/gpui.md): the app's view structure, redraws, animation,
   painting, input, async and tests as GPUI intends them, what may go beside GPUI, and that GPUI
   is used as published.
+- [GPUI with one display-link fix](architecture/gpui-patch.md): the patch leon builds GPUI
+  0.2.2 with (an amendment to the GPUI rules), so a key's echo is shown at once, and how it goes.
+- [Cursor shaders](architecture/cursor-shaders.md): users' Shadertoy-style cursor shaders on an
+  overlay of leon's own above GPUI (an amendment to the GPUI rules), and its Linux plan.
 
 ## Verification
 

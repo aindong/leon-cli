@@ -2,7 +2,8 @@
 
 use super::*;
 
-/// GPUI key bindings: only Quit. Every other shortcut goes through `key_down` and the keymap
+/// GPUI key bindings: only Quit. Every other shortcut goes through `key_down` (or the open overlay's
+/// own handler, view_overlays.rs) and the keymap
 /// (`keymap::DEFAULTS` under the config's bindings), since GPUI matches its own bindings before
 /// any key listener and a config could never override them.
 pub fn init(cx: &mut App) {
@@ -58,4 +59,33 @@ pub fn run(server: Remote) {
 /// After a window closed: quit when no workspace window is left (closing Settings doesn't quit).
 pub fn quits(cx: &App) -> bool {
     !cx.windows().iter().any(|w| w.downcast::<Workspace>().is_some())
+}
+
+impl Workspace {
+    /// A workspace whose settings live in memory only.
+    pub fn new(app: Rc<Remote>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::with_settings(app, None, window, cx)
+    }
+
+    /// The app's own workspace: settings from `settings_path()`, saved there on each change, and
+    /// the hosts list's machines.
+    pub fn for_app(app: Rc<Remote>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let hosts = leon_hosts::hosts::load().unwrap_or_else(|e| {
+            eprintln!("leon: can't read the hosts list: {e}");
+            Vec::new()
+        });
+        let mut ws = Self::with_hosts(app, settings_path(), hosts, window, cx);
+        ws.platform = true;
+        ws.native_key = crate::input::current_key_event;
+        ws.echo.show = echo::show_now;
+        let store = leon_core::paths::state_dir().map(|d| d.join("updates.json"));
+        ws.enable_updates(store, Arc::new(leon_update::Target::running));
+        crate::notify::prepare();
+        ws
+    }
+
+    /// A workspace with the settings in `path` (the defaults when it is None or unreadable).
+    pub fn with_settings(app: Rc<Remote>, path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::with_hosts(app, path, Vec::new(), window, cx)
+    }
 }

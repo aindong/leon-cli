@@ -62,7 +62,6 @@ impl Workspace {
     pub(super) fn render_titlebar(&self, input: &TitleBarInput, cx: &mut Context<Self>) -> impl IntoElement {
         let t = &input.theme;
         let row = input.row.as_ref();
-        let frame = self.pulse();
         let hidden = input.hidden;
         let mut bar = div()
             .debug_selector(|| sel("titlebar".into()))
@@ -91,7 +90,7 @@ impl Workspace {
             );
             if input.top_tabs {
                 for (i, w) in row.windows.iter().enumerate() {
-                    bar = bar.child(self.top_tab(i, w, i == row.active, row, frame, cx));
+                    bar = bar.child(self.top_tab(i, w, row, input.renaming.as_ref(), cx));
                 }
                 bar = bar.child(self.tool("new-tab", Icon::Plus, "client.tab.new", cx));
             } else if let Some(w) = row.windows.get(row.active) {
@@ -119,13 +118,13 @@ impl Workspace {
         &self,
         i: usize,
         w: &WindowRow,
-        active: bool,
         row: &SessionRow,
-        frame: u64,
+        renaming: Option<&super::sidebar::rows::Renaming>,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let t = &self.theme;
-        let (sid, wid) = (row.id.clone(), w.id.clone());
+        let (t, active, frame) = (&self.theme, i == row.active, self.pulse());
+        let tab = super::sidebar::rows::RowRef { host: row.host, session: row.id.clone(), window: Some(w.id.clone()) };
+        let (closed, renamed, menu) = (tab.clone(), tab.clone(), tab.clone());
         let hovered = (row.host, row.id.clone(), w.id.clone());
         div()
             .id(SharedString::from(format!("tab-{i}")))
@@ -148,7 +147,7 @@ impl Workspace {
             .when(active, |d| d.bg(rgb(t.selected)).text_color(rgb(t.title)))
             .when(!active, |d| d.text_color(rgb(t.text)).hover(|d| d.bg(rgb(t.hover))))
             .children(w.program.map(|k| program_mark(k, format!("tab-program-{i}"), t.muted)))
-            .child(div().flex_1().overflow_hidden().min_w(px(0.)).line_clamp(1).text_ellipsis().child(w.title.clone()))
+            .child(self.name_or_field(renaming, &tab, w.title.clone(), t, cx))
             .children(w.status.map(|s| status_mark(s, frame, t).debug_selector(move || sel(format!("tab-status-{i}")))))
             .when(i < 9, |d| {
                 d.child(div().text_size(px(SECONDARY_TEXT)).text_color(rgb(t.muted)).child(format!("⌘{}", i + 1)))
@@ -156,6 +155,7 @@ impl Workspace {
             .child(
                 div()
                     .id(SharedString::from(format!("close-{i}")))
+                    .debug_selector(move || sel(format!("close-{i}")))
                     .group(SharedString::from(format!("close-{i}")))
                     .px(px(4.))
                     .rounded(px(4.))
@@ -166,13 +166,25 @@ impl Workspace {
                     .child(Icon::Close.in_button(ROW_ICON, t.muted, t.title, format!("close-{i}")))
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(move |ws, _, _, cx| {
-                            ws.close_window((sid.clone(), wid.clone()), cx);
+                        cx.listener(move |ws, _, window, cx| {
                             cx.stop_propagation();
+                            ws.close_row(closed.clone(), window, cx);
                         }),
                     ),
             )
-            .on_mouse_down(MouseButton::Left, cx.listener(move |ws, _, _, cx| ws.focus_window(i, cx)))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |ws, ev: &gpui::MouseDownEvent, _, cx| match ev.click_count {
+                    2 => ws.start_rename(renamed.clone(), cx),
+                    _ => ws.focus_window(i, cx),
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |ws, ev: &gpui::MouseDownEvent, window, cx| {
+                    ws.open_row_menu(menu.clone(), ev.position, window, cx)
+                }),
+            )
     }
 }
 

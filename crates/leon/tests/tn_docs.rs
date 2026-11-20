@@ -29,5 +29,6 @@ fn serving_over_tailscale_is_documented() {
         !hosts_arch.contains("Nothing listens on TCP"),
         "docs/architecture/hosts.md no longer says nothing listens"
     );
-    assert!(doc("CHANGELOG.md").contains("serve_tailscale"));
+    // with the earlier releases' sections, which moved to the archive
+    assert!((doc("CHANGELOG.md") + &doc("docs/changelog-archive.md")).contains("serve_tailscale"));
 }

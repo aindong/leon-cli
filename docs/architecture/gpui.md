@@ -4,68 +4,22 @@ Part of [docs/architecture.md](../architecture.md). The app (`leon-app`, the `gu
 GPUI client of the server; this is how it uses GPUI, as rules a contributor can check, and why.
 Written 2026-11-17. A GPUI upgrade amends this file first (the doc test reads `Cargo.lock`):
 
-Built against: GPUI 0.2.2 from crates.io.
+Built against: GPUI 0.2.2 from crates.io plus one fix, aindong/gpui at ba990617598d621ff4fdbe1e0b58fb8654bd02bf
+(amended 2026-11-20: [gpui-patch.md](gpui-patch.md)).
 
 ## Context
 
-leon's app uses GPUI's current API (`Application::new().run`, `Render` with `&mut Window` and
-`&mut Context<Self>`, `cx.new`, `cx.notify()`, actions, focus handles, executors), but not its
-shape: the window is one `Workspace` view drawn through helper functions (`view_*.rs`), with no
-child views and no caching. The performance baseline (docs/performance.md) found a spinner frame
-re-laying out the whole window (6.6% of a core then, 4.4% since the poll runs only when woken), key echo about one display frame behind another
-terminal, and 0.74% of a core for an idle visible window. The fixes reached for next were AppKit
-tricks (`setNeedsDisplay:` on GPUI's view, which leaked a display link per key) and GPUI patches.
-This ADR is what GPUI's own source and Zed's use of it say instead.
+leon's app uses GPUI's current API (`Render`, `cx.new`, `cx.notify()`, actions, focus handles,
+executors), but not its shape: the window is one `Workspace` view drawn through helper functions (`view_*.rs`), with no
+child views and no caching. The performance baseline (docs/performance-app.md) found a spinner frame
+re-laying out the whole window (6.6% of a core then, 4.4% once the poll ran only when woken),
+key echo a display frame behind another terminal, and 0.74% of a core for an idle visible window. The fixes reached for next were AppKit
+tricks (`setNeedsDisplay:` on GPUI's view) and GPUI patches. This ADR is what GPUI's own source
+and Zed's use of it say instead.
 
-What GPUI 0.2.2 does, read from its source (`~/.cargo/registry/src/*/gpui-0.2.2/src`):
-
-- **A frame.** `cx.notify()` only marks the view dirty (`App::notify`, `WindowInvalidator`). On
-  macOS a frame is presented only from `on_request_frame` (`window.rs`), called by the window's
-  `CVDisplayLink` tick (`platform/mac/window.rs` `step`), by `displayLayer:`, on activation and on
-  resize. If the window is dirty it runs `Window::draw` and presents; otherwise, for 1 s after
-  input to the active window, it presents the last frame again (no new draw). `Window::draw`
-  also runs, without presenting, before a key is dispatched to a dirty window
-  (`dispatch_key_event`), when a window opens, and on each flush in tests.
-- **The display link ticks at the display's refresh rate whenever the window is visible**, dirty
-  or not (`start_display_link`; occlusion stops it and visibility starts it). That is the idle 0.74%. `displayLayer:` and
-  activation drop the link and build a new one; in 0.2.2 each rebuild leaks one.
-- **The root view renders on every frame** (`draw_roots`). `cx.notify()` on a view marks it and
-  its ancestors dirty (`mark_view_dirty`). A child shown through `AnyView::from(entity).cached(style)`
-  reuses last frame's layout and paint unless it is dirty, the window is refreshing, or its
-  bounds, content mask or text style changed (`view.rs`, `AnyView` `prepaint`; so a cached view
-  that moves draws again), and its subtree is not laid out again (its style is the whole layout
-  node). A cached view that does render again renders its
-  subtree with caching off (`window.refreshing`), so cached views nested in it render too:
-  caching pays only for the cached children of a parent that did not render again.
-  `Window::refresh` ignores every cache, and GPUI calls it itself when a hover or pressed
-  style, a drag, a tooltip or the focus changes (`elements/div.rs`, `Window::focus`).
-- **A notify while drawing schedules nothing.** During `render`, `prepaint` or `paint` a
-  `cx.notify()` marks the view but does not ask for a frame (`WindowInvalidator::invalidate_view`
-  returns false outside `DrawPhase::None`), so the change waits for some other wake.
-- **Notifying a model is not enough for a cached view.** An entity read while drawing makes the
-  window draw again when it notifies, but only views in the dirty set skip their cache; a view
-  that shows a model observes it (`cx.observe`) or subscribes to its events (`cx.subscribe`) and
-  notifies itself.
-- **Animation.** `with_animation` (`elements/animation.rs`) and `window.request_animation_frame()`
-  notify the view they run in on the next frame (`on_next_frame`), so an animation costs that
-  view's subtree, every tick, until it ends.
-- **Lists and grids.** `uniform_list` and `list` render only the visible rows; `canvas` and custom
-  `Element`s paint without per-cell layout.
-- **Threads.** Entities live on the main thread. Work leaves it through `cx.spawn` and
-  `cx.background_executor()` (`spawn`, `timer`); other threads come back through a channel a
-  `cx.spawn` task awaits.
-- **Tests.** `#[gpui::test]` gives a `TestAppContext` on a test platform; `add_window_view` gives a
-  `VisualTestContext` with `simulate_*` input and `run_until_parked`.
-
-How Zed shapes a window with it (Zed at
-[69e2130](https://github.com/zed-industries/zed/tree/69e2130295c2649963eb639fc70b4f2ee8ea1624),
-the commit 0.2.2 was published from): the workspace is a view whose panes and dock panels are
-entities, each shown as `AnyView::from(pane).cached(…)` (`workspace/src/pane_group.rs`,
-`dock.rs`); a terminal is a model entity fed by alacritty's thread through a channel awaited in
-`cx.spawn` and batched per 4 ms, which emits `Wakeup`, and its view subscribes and notifies
-(`terminal/src/terminal.rs`, `terminal_view.rs`); the grid is one custom `Element` that batches
-text runs per row and takes text input through an `InputHandler` (`terminal_element.rs`); the
-cursor blink is a `cx.spawn` timer loop that notifies its own view (`editor/src/blink_manager.rs`).
+What GPUI 0.2.2 does, read from its source, and how Zed shapes a window with it, are in
+[gpui-0.2.2.md](gpui-0.2.2.md): the facts these rules rest on (a frame, the display link, the root
+rendering on every frame, cached views, notify while drawing, animation, threads, tests).
 
 ## Decision
 
@@ -90,11 +44,16 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   a test counts what a spinner tick renders.
 - **R2. Never schedule or force a frame through AppKit** (`setNeedsDisplay:`, `displayLayer:`, the
   NSView or layer behind the window handle). Use `cx.notify()` for changed state and
-  `window.request_animation_frame()` for animation. Why: GPUI's `displayLayer:` path rebuilds the
-  display link and 0.2.2 leaks one per call (500 keys left 501 links); frames are GPUI's job. Check: test.
+  `window.request_animation_frame()` for animation. One exception (amended 2026-11-20,
+  [gpui-patch.md](gpui-patch.md)): `view_echo.rs` asks AppKit to display GPUI's view once per
+  key's echo. Why: GPUI's `displayLayer:` rebuilt the display link and 0.2.2 leaks one per call
+  (500 keys left 501 links; fixed by R11's patch); frames are GPUI's job. Check: test.
 - **R3. A part of the window that changes on its own clock is its own view**, shown from its
   parent with `AnyView::from(entity).cached(style)`: each pane, the sidebar, the title bar, the
-  status indicator, and each overlay (palette, switcher, find bar, notice, overview). Why: a
+  status indicator. The overlays are views too (the palette with its switcher, the overview, the
+  notice; the find bar and the rename field are parts of the header and sidebar sections), but
+  not cached: they fade and scale on the root's frames, and GPUI renders the root on every frame
+  it draws, so a cache would be redrawn each frame of their motion anyway. Why: a
   notify dirties only that view and its ancestors, and cached siblings reuse their layout and
   paint, so a spinner frame no longer lays out the panes. A view that changes often and the heavy views beside it
   are siblings under a parent that is not itself a re-rendering cached view: a pane's header (with
@@ -113,15 +72,20 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   cached view unless that view was notified, and a hash over everything costs every view on
   every change. Check: review, and for each input a view draws from, a test that changing it
   renders the view again.
-  Stop-gap until phase 5 (the model as entities): the sidebar, title bar and pane headers are
-  cached views that render through the workspace (`ws.update`, the helpers as they are) and
-  hold a typed input of exactly what their helper reads; the workspace notifies one when its
-  input changed, and in debug builds its render checks the stored input against a fresh one.
-  It goes when the views observe the model's entities instead.
+  The model's shape (phase 5): each machine's model is a `HostModel` entity whose copy changes
+  only on the main thread (`Remote::commit`), emitting what moved (sessions, screens by block,
+  a keymap change); the workspace subscribes. The sidebar, title bar and pane headers are cached
+  views that render through the workspace (`ws.update`, the helpers as they are) and hold a
+  typed input of exactly what their helper reads, since that input mixes the model with window
+  state (pane rects, the hover); on each model event the workspace notifies one only when its
+  input changed (debug builds check the stored input against a fresh one), a grid on its own
+  screen's event, and the root only when its own typed input (`RootInput`: sessions, tabs,
+  revisions, machines, the selection) changed.
 - **R5. `render`, `prepaint` and `paint` only draw.** No server calls, fetches, model changes,
   focus events or I/O in them; that work happens where the state changes (an event, an action,
-  the reader's wake). The one exception is an element fitting its own content, as a pane's grid
-  asks the server for its size from `prepaint` (Zed's terminal element does the same). Why: a
+  the reader's wake). The one exception: an element fitting its own content, as a pane's grid
+  asks the server for its size from `prepaint` (Zed's terminal element does the same); paint
+  notes where it drew (hit tests, the cursor shader's feed read that). Why: a
   cached view's `render` does not run, so work done there stops happening; a dirty one runs it
   every frame. And a `cx.notify()` made while drawing asks for no frame, so its change waits.
   Bookkeeping about the frame itself (that one was drawn, what it showed, such as the pane the
@@ -151,15 +115,22 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   (`remote*`, `hosts`, `updates`, shared with `leon attach`, which has no GPUI) keep their
   threads and reach the UI only through a channel a `cx.spawn` task awaits (the wake), as Zed's
   terminal does (the link's retry and watchdog sleeps in `remote_link.rs` are on its own
-  threads). Why: entities are main-thread only, and a blocked main thread stalls every
-  window and every frame. Check: test (no thread, sleep or `block_on` in GPUI code); review for
-  blocking calls.
+  threads). The window's calls to every server, This Mac's too, go through the remote's one
+  ordered queue: a link's thread, or for This Mac a future the window runs on GPUI's background
+  executor (`Remote::call_queue`, so tests run it on GPUI's test scheduler); a reply the window uses comes back on a wake or
+  to a task awaiting it, and a call made from another's reply is one job (`act_after`), so
+  nothing queued meanwhile comes between them. Why: entities are main-thread only, and a
+  blocked main thread stalls every window and every frame. Check: test (no thread, sleep or
+  `block_on` in GPUI code; `gpui_local_never_waits`); review for blocking calls.
 - **R9. GPUI owns actions, menus and focus; leon's keymap owns the terminal's keys.** Menu items,
   ⌘Q and anything GPUI dispatches are `actions!` handled with `on_action` under a `key_context`;
-  each view that takes keys has its own `FocusHandle` (`track_focus`, `window.focus`). The
+  each view that takes keys has its own `FocusHandle` (`track_focus`, `window.focus`) and key
+  context, takes its keys from its own `on_key_down`, and gives the focus back when it closes:
+  the workspace gives the focus to the top open overlay after every change, else to itself. The
   terminal's keys go from `on_key_down` to leon's keymap (the server's Lua keymap, shared with
   `leon attach`). Text that composes (an input method, the emoji picker) goes through an
-  `InputHandler` (`window.handle_input`), as Zed's terminal does. Why: GPUI dispatches by the
+  `InputHandler` (`window.handle_input`), as Zed's terminal does: marked text drawn at the
+  cursor, never sent; press-and-hold off, so a held key repeats. Why: GPUI dispatches by the
   focused element's context path, and delivers marked text only to an input handler. Check: review.
 - **R10. Tests drive GPUI's test contexts.** `#[gpui::test]`, `add_window_view`, `simulate_*` and
   `run_until_parked`; a test of a view checks what it drew (`debug_selector`, the drawn list) or
@@ -169,9 +140,11 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
   has no display link, so a test can say "this view did not render again", the property R3 and
   R4 are for. Motion tests advance the clock and draw the frames the app asked for (R5). Check: review.
 - **R11. GPUI is used as published.** crates.io GPUI 0.2.2: no fork, patch, vendored copy or
-  `[patch]` entry, unless an amendment here names it. Why: a patch is paid for again at every
-  upgrade, and the GPUI-side costs the baseline found are fixed upstream (below). Check: test (the Built against line matches `Cargo.lock`, and no
-  `[patch]` names gpui).
+  `[patch]` entry, unless an amendment here names it. Named: one display-link fix, in a fork
+  pinned by commit (amended 2026-11-20, [gpui-patch.md](gpui-patch.md), with how it goes away).
+  Why: a patch is paid for again at every upgrade, and the GPUI-side costs the baseline found
+  are fixed upstream (below). Check: test (the Built against line matches `Cargo.lock`, and the
+  only `[patch]` is that fork at a full commit).
 - **R12. Read GPUI before using it.** Before writing or changing GPUI code, read the source or
   an example (`gpui-0.2.2/src`, `gpui-0.2.2/examples`) for each API used, and Zed at 69e2130 for
   the pattern; no names from memory, blog posts or another version (`View`, `Model`,
@@ -182,7 +155,8 @@ rule names) or **review** (the reviewer reads the diff against the rule and says
 
 Raw AppKit through objc2 is allowed in these files and for these reasons only; the doc test
 (`crates/leon/tests/gpui_adr.rs`) fails when another file calls `msg_send!` or `objc2::`. No
-entry touches GPUI's window, view or layer, but `view_glass.rs`'s, which says why.
+entry touches GPUI's window, view or layer, but `view_glass.rs`'s, `cursor_shader/overlay.rs`'s and
+`view_echo.rs`'s, which say why.
 
 - `input.rs`: `[NSApp currentEvent]` during GPUI's own key dispatch, for the key code and
   characters (GPUI rebuilds a key-code-0 event's text from the layout, so automation's keys
@@ -203,6 +177,14 @@ entry touches GPUI's window, view or layer, but `view_glass.rs`'s, which says wh
   on the main thread and changes nothing else. With no such class or view it does nothing and
   logs once. Remove it when a crates.io GPUI has that commit: its `blurred_view_init_with_frame`
   sets `UnderWindowBackground`.
+- `cursor_shader/overlay.rs`: users' cursor shaders (amended 2026-11-19; why, and how it goes, in
+  [cursor-shaders.md](cursor-shaders.md)). GPUI 0.2.2 has no custom Metal
+  pass, so a `CAMetalLayer` sublayer of GPUI's view's layer (via `raw-window-handle`)
+  draws them on its own display link, off the main thread, only while one animates (R2 holds).
+- `view_echo.rs`: a key's echo shown at once (amended 2026-11-20, [gpui-patch.md](gpui-patch.md)).
+  GPUI 0.2.2 draws only on its display link's tick, `displayLayer:` and activation. Once per
+  key, when that pane's screen arrives and the window is on screen, `setNeedsDisplay:` on GPUI's
+  view (via `raw-window-handle`): GPUI's own `displayLayer:` draws and presents the frame.
 
 To add one: show in GPUI's source that it has no way to do it, keep it to reads or system calls
 on the main thread, list the file here with its reason, and never use it to drive frames (R2).
@@ -211,42 +193,50 @@ on the main thread, list the file here with its reason, and never use it to driv
 
 - **Keep one view and make it cheaper** (a smaller `signature`, a dot painted in a canvas,
   fewer spinner frames). Rejected as the plan: the root still renders and lays out the whole
-  window on every frame anything moves; each trick is local and the next feature undoes it.
+  window on every frame anything moves; each trick is local.
 - **Patch GPUI 0.2.2** (draw at once after input, `presentsWithTransaction`, two drawables, pause
-  the idle display link). Not now: the refactor removes leon's own share first, and the rest is
-  a GPUI matter Zed has changed upstream (a per-display link registry; a display link that
-  pauses when nothing is dirty). Revisit with numbers from `scripts/perf/keylat.sh` and
-  `idle-cpu.sh` after the refactor, as an amendment here.
+  the idle display link). Not then: the refactor removed leon's own share first, and Zed has
+  changed the rest upstream (a per-display link registry; a link that pauses when nothing is
+  dirty). After the refactor's numbers, one diff adopted (2026-11-20, gpui-patch.md).
 - **Move to Zed's main GPUI** (a mirror of its crates). Not now: 22 crates and 6 git
-  dependencies on every platform's build, the platform split into `gpui_platform` and
-  `gpui_macos`, a pinned Rust, and a test scheduler that panics when another thread wakes the
-  executor, which leon's reader thread does in its tests. Revisit when a crates.io GPUI carries
-  the display-link changes, or when the refactor is done and a measured gap remains.
-- **AppKit tricks for frames** (`setNeedsDisplay:` on GPUI's view). Rejected: it leaked a
-  display link per key, and it fights GPUI for the frame schedule (R2).
+  dependencies, a pinned Rust, and a test scheduler that panics when another thread wakes the
+  executor, as leon's reader thread does in its tests. Revisit when a crates.io GPUI carries
+  the display-link changes, or a measured gap remains after the refactor.
+- **AppKit tricks for frames** (`setNeedsDisplay:` on GPUI's view). Rejected as a way to drive
+  frames (R2); one per key's echo adopted with the leak fixed (gpui-patch.md).
 
 ## Consequences
 
-- Where the app is today: a root `Render` with cached
-  views the workspace gives their input and notifies on change: each pane's grid
-  (`view_grid.rs`), and the sidebar, title bar and pane headers, which render through the
-  workspace (`view_sections.rs`, the stop-gap under R4; R1, R3); the model work
-  `render` did (`sync_pane`, `run_find`, `settle`) runs in `prepare`, an observer of every
-  notify of the workspace, and for a pushed screen in the poll (phase 5 takes it over; R5); a
-  poll that hashes what the root draws (no screens) and notifies the whole window
-  (`view_poll.rs`; R4); motions on GPUI's clock, the spinner on its own `Pulse` (`view_pulse.rs`; R6); keys for the palette, find and modes handled by hand inside one `key_down`
-  under one focus handle (R9); no `InputHandler`, so no input method (R9); every call to This
-  Mac's server waits on the main thread, since its `Remote` has no queue (`Remote::enqueue`):
-  actions, each key's write, `fit` in prepaint and `watch` in `prepare` (R8).
+- Where the app is today: a root `Render` with cached views the workspace gives their input and
+  notifies on change: each pane's grid (`view_grid.rs`), and the sidebar, title bar and pane
+  headers, which render through the workspace (`view_sections.rs`; R1, R3). Each machine's model
+  is a `HostModel` entity (`view_feed.rs`): the reader thread writes the remote's model and
+  wakes the window, the wake task commits it into the window's copy on the main thread, and the
+  workspace's subscription notifies a grid for its screen, a section for its input and the root
+  for its own (R4). `render`'s old model work (`sync_pane`, `run_find`, `settle`) runs in
+  `prepare`, on a model event and in an observer of every notify of the workspace (R5). Each
+  timed thing is a task of its own (the storm summary, a host's retry, the Activity list's
+  waited times, a find's re-run, a held thumbnail, the update look), and the keymap follows the
+  server's `keymap_changed` event (R6, R8). Motions run on GPUI's clock, the spinner on its own
+  `Pulse` (`view_pulse.rs`; R6). Each overlay that takes keys has its own
+  focus handle and key context (`Palette`, `Overview`, `FindBar`, `RenameField`; the popover's own) and its own
+  `on_key_down` (`view_overlays.rs`), and `sync_focus` gives the focus to the top open one after
+  every change, else to the workspace, so `key_down` is the terminal's path (the keymap,
+  sequences, copy mode and hints) (R3, R9). A frame drawn without the focused element (GPUI's
+  `on_focus_lost`) ends a rename whose field it hid. The workspace registers an input handler for
+  the focused pane while painting (`view_input.rs`): `key_down` leaves a key that types text, so
+  macOS hands it, an input method's marked text (drawn at the cursor, never sent) and commit, or
+  the emoji picker's pick to the handler; it is leon's own, with press-and-hold off so a held key
+  repeats (GPUI's `ElementInputHandler` leaves it on). The overlays read keys, not composed text (R9).
+  A server call queues (R8) or, for a Lua binding, a config action or a reload, runs on a thread
+  of its own; what still waits on the main thread is the first
+  `session.create`, before the window draws, and a watch line's write (a socket write, bounded).
 - Already in line: panes paint through `canvas` (R7); std threads only in GPUI-free modules,
   reaching the UI through a wake channel (R8); tests on `TestAppContext` (R10); GPUI from
-  crates.io unpatched (R11).
-- The refactor costs more types (an entity per pane, sidebar, title bar, overlay); tests read
-  the child entities, not `Workspace` fields.
-- Until the model is entities (phase 5), `render` reads the live model the reader thread writes
-  off the UI thread. A frame drawn between that write and the poll's wake (a hover refresh, a
-  resize, the display link first) shows a model the workspace has not reconciled yet, for one
-  frame: a destroyed selected session as the empty window, a row just scrolled into history
-  blank in a pane scrolled back. Phase 5's entities, changed only on the main thread, close it.
+  crates.io, with one patch since 2026-11-20 (R11).
+- The refactor costs more types (an entity per pane, sidebar, title bar, machine, overlay).
+- The root renders on every frame GPUI draws (`draw_roots`), a header's or a grid's too: what a
+  model event saves is the root's notify, whose observer runs `prepare` and works out every
+  child's input again; the cached children are reused either way unless their input moved.
 - What GPUI itself costs stays until an upgrade: the display link's idle ticks while the window
-  is visible, and a key's echo waiting for the next tick. Neither is patched (R11).
+  is visible. A key's echo no longer waits for the next tick (gpui-patch.md).

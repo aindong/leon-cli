@@ -10,28 +10,38 @@ impl Workspace {
         if zoomed {
             self.call("session.zoom_block", json!({ "block_id": id, "zoom": false }), cx);
         }
-        let p = json!({ "anchor_id": id, "direction": direction, "side": side, "layout": self.here(), "focus": true });
-        self.call("session.new_split", p, cx);
+        let p = json!({ "anchor_id": id, "direction": direction, "side": side, "focus": true });
+        self.call_here("session.new_split", p, cx);
     }
 
-    /// A layout for a shell in the target pane's working directory (or the default, `$HOME`).
-    /// Over a link the model's cwd is used: no round trip on the UI thread, and the path is the
-    /// host's, so it can't be checked here.
-    pub(super) fn here(&self) -> Value {
-        let cwd = match self.app.is_link() {
-            true => self.target().and_then(|(_, id, _)| self.app.model().block(&id)?.1.cwd.clone()),
-            false => {
-                let pwd = |(sid, id, _): (String, String, bool)| {
-                    let p = json!({ "session_id": sid, "block_id": id, "method": "dev.leon.terminal.pwd" });
-                    self.app.call("block.method", p).ok()?["path"].as_str().map(String::from)
+    /// Run layout method `method` on the selected session with a `layout` for a shell in the
+    /// target pane's working directory (or the default, `$HOME`). Here the server is asked the
+    /// pane's directory first, in the same queued job as the call, so nothing queued meanwhile
+    /// comes between them (ADR R8). Over a link the model's cwd is used: the path is the host's,
+    /// so it can't be checked here.
+    pub(super) fn call_here(&mut self, method: &str, mut params: Value, cx: &mut Context<Self>) {
+        let Some(sid) = self.session_id.clone() else { return };
+        params["session_id"] = json!(sid);
+        let target = self.target();
+        match target {
+            Some((sid, id, _)) if !self.app.is_link() => {
+                let p = json!({ "session_id": sid, "block_id": id, "method": "dev.leon.terminal.pwd" });
+                let method = method.to_string();
+                let next = move |r: Result<Value, leon_core::ApiError>| {
+                    // on the queue, off the window's thread: a path of This Mac's, so it is checked here
+                    let cwd = r.ok().and_then(|v| v["path"].as_str().map(String::from));
+                    params["layout"] = shell_in(cwd.filter(|d| std::path::Path::new(d).is_dir()));
+                    (method, params)
                 };
-                self.target().and_then(pwd).filter(|d| std::path::Path::new(d).is_dir())
+                self.app.act_after(("block.method", p), next, drop);
             }
-        };
-        match cwd {
-            Some(d) => json!({ "block": { "options": { "cwd": d } } }),
-            None => json!({ "block": {} }),
+            _ => {
+                let cwd = target.and_then(|(_, id, _)| self.app.model().block(&id)?.1.cwd.clone());
+                params["layout"] = shell_in(cwd);
+                self.app.act_later(method, params, drop);
+            }
         }
+        self.called(cx);
     }
 
     /// Move focus by direction from the pane on screen; a zoom ends first so the result shows.
@@ -85,7 +95,7 @@ impl Workspace {
         if self.hidden_overlay(id) {
             return; // a drawer sliding out: focusing it would show it again
         }
-        self.call("session.focus_block", json!({ "block_id": id }), cx);
+        self.ask_focus(None, Some(id), cx);
     }
 
     pub(super) fn start_drag(&mut self, divider: Divider, at: gpui::Point<Pixels>, cx: &mut Context<Self>) {
@@ -175,28 +185,19 @@ impl Workspace {
         let sid = self.session_id.clone()?;
         let m = self.app.model();
         let s = m.session(&sid)?;
-        let wid = s.windows.get(index.unwrap_or(s.active))?.id.clone();
+        let wid = s.windows.get(index.unwrap_or(self.active_of(s)))?.id.clone();
         Some((sid, wid))
     }
 
     pub(super) fn focus_window(&mut self, index: usize, cx: &mut Context<Self>) {
-        if let Some((sid, wid)) = self.window_ref(Some(index)) {
-            self.app.act_later("session.focus_window", json!({ "session_id": sid, "window_id": wid }), drop);
-            cx.notify();
+        if let Some((_, wid)) = self.window_ref(Some(index)) {
+            self.ask_focus(Some(wid), None, cx);
         }
-    }
-
-    /// Close a window; if that ended its session, select a neighbouring one.
-    pub(super) fn close_window(&mut self, (sid, wid): (String, String), cx: &mut Context<Self>) {
-        self.app.act_later("session.close_window", json!({ "session_id": sid, "window_id": wid }), drop);
-        let rows = self.rows();
-        self.settle(&rows);
-        cx.notify();
     }
 
     pub(super) fn step_tab(&mut self, by: isize, cx: &mut Context<Self>) {
         let Some(sid) = self.session_id.clone() else { return };
-        let Some((n, active)) = self.app.model().session(&sid).map(|s| (s.windows.len(), s.active)) else {
+        let Some((n, active)) = self.app.model().session(&sid).map(|s| (s.windows.len(), self.active_of(s))) else {
             return;
         };
         if n > 0 {
@@ -206,9 +207,7 @@ impl Workspace {
 
     pub(super) fn new_tab(&mut self, _: &NewTab, window: &mut Window, cx: &mut Context<Self>) {
         match self.session_id.clone() {
-            Some(sid) => {
-                self.app.act_later("session.new_window", json!({ "session_id": sid, "layout": self.here() }), drop)
-            }
+            Some(_) => self.call_here("session.new_window", json!({}), cx),
             None => self.new_session(&NewSession, window, cx),
         }
         cx.notify();
@@ -257,7 +256,11 @@ impl Workspace {
         cx.spawn(async move |this, cx| {
             if answer.await == Ok(0) {
                 let _ = this.update(cx, |ws, _| ws.ending = true);
-                if let Err(e) = app.call("server.stop", json!({})) {
+                // through the queue, awaited here: the window goes on drawing meanwhile
+                let (tx, stopped) = futures::channel::oneshot::channel();
+                app.send_then("server.stop", json!({}), move |r| drop(tx.send(r)));
+                let gone = || leon_core::ApiError::new(503, "unreachable", "the call queue went away");
+                if let Err(e) = stopped.await.unwrap_or_else(|_| Err(gone())) {
                     let _ = this.update(cx, |ws, _| ws.ending = false);
                     eprintln!("leon: can't stop the server: {}", e.message);
                     return;
@@ -329,5 +332,13 @@ impl Workspace {
             Some(i) => self.focus_window(i, cx),
             None => cx.notify(),
         }
+    }
+}
+
+/// A layout for a shell in `cwd`, or in the default (`$HOME`).
+fn shell_in(cwd: Option<String>) -> Value {
+    match cwd {
+        Some(d) => json!({ "block": { "options": { "cwd": d } } }),
+        None => json!({ "block": {} }),
     }
 }

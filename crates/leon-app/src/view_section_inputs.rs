@@ -4,6 +4,7 @@
 use std::collections::hash_map::DefaultHasher;
 
 use super::header::{HEADER_PARTS, TITLE_MAX};
+use super::sidebar::rows::Renaming;
 use super::*;
 use crate::attention;
 use crate::glass::Glass;
@@ -44,6 +45,8 @@ pub(super) struct SidebarInput {
     /// The Activity list's rows with their waited times, while it shows.
     pub(super) activity: Vec<(attention::Row, String)>,
     pub(super) working: bool,
+    /// A row's name being edited in place (view_rows.rs).
+    pub(super) renaming: Option<Renaming>,
 }
 
 /// A machine's label in the sidebar.
@@ -69,6 +72,7 @@ pub(super) struct TitleBarInput {
     pub(super) tips: u64,
     pub(super) badge: Option<String>,
     pub(super) working: bool,
+    pub(super) renaming: Option<Renaming>,
 }
 
 /// What a pane's header draws (`render_header`, its find bar).
@@ -108,7 +112,7 @@ impl Workspace {
     pub(super) fn sidebar_input(&self, rows: &[SessionRow]) -> Option<SidebarInput> {
         let list = self.places().sidebar.filter(|_| !self.stopped && !self.overview_shown())?;
         let working = |i: &Option<Indicator>| matches!(i, Some(Indicator::Working { .. }));
-        let now = Instant::now();
+        let now = self.clock_now();
         let activity = match list {
             SidebarList::Activity => self
                 .attention
@@ -159,6 +163,7 @@ impl Workspace {
             tips: self.tips_key(),
             badge: self.activity_badge(),
             activity,
+            renaming: self.term.rows.renaming.clone(),
         })
     }
 
@@ -181,6 +186,7 @@ impl Workspace {
             tips: self.tips_key(),
             badge: self.activity_badge(),
             working,
+            renaming: self.term.rows.renaming.clone(),
         })
     }
 

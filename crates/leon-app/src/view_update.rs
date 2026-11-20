@@ -6,7 +6,7 @@ use crate::palette::Item;
 use crate::updates::{Act, Find, Updater, APP_MANAGEMENT, RELEASES};
 
 /// How often a running app asks whether its daily look is due (it is, once a day).
-const LOOK_EVERY: Duration = Duration::from_secs(60 * 60);
+pub(super) const LOOK_EVERY: Duration = Duration::from_secs(60 * 60);
 
 impl Workspace {
     /// Have this workspace look for updates on its own (the app's, never a test's unless it asks),
@@ -52,6 +52,7 @@ impl Workspace {
             let (name, label, primary) = match &act {
                 Act::Install => ("update-install", "Install", true),
                 Act::Notes(_) => ("update-notes", "Release Notes", false),
+                Act::WhatsNew(_) => ("update-whats-new", "What's New", true),
                 Act::Copy(_) => ("update-copy", "Copy", true),
                 Act::Restart => ("update-restart", "Restart", true),
                 Act::AppManagement => ("update-settings", "Open System Settings", true),
@@ -90,7 +91,7 @@ impl Workspace {
     /// The palette's rows for what the notice offers now, past Install (always a row): the
     /// keyboard's way to every button on it.
     pub(super) fn update_items(&self) -> Vec<Item> {
-        let acts = self.updates.notice().map(|n| n.actions).unwrap_or_default();
+        let acts = self.notice().map(|n| n.actions).unwrap_or_default();
         let item = |(name, title): (&str, &str)| Item {
             name: name.into(),
             title: title.into(),
@@ -104,7 +105,7 @@ impl Workspace {
     /// `client.update.<what>` for one of the notice's buttons: what that button does, if the
     /// notice has it now.
     pub(super) fn update_named(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let acts = self.updates.notice().map(|n| n.actions).unwrap_or_default();
+        let acts = self.notice().map(|n| n.actions).unwrap_or_default();
         if let Some(act) = acts.into_iter().find(|a| palette_row(a).is_some_and(|(n, _)| n == name)) {
             self.update_act(&act, window, cx);
         }
@@ -114,11 +115,11 @@ impl Workspace {
         match act {
             Act::Install => self.run_action("client.update.install", None, "update_notice", window, cx),
             Act::Restart => self.run_action("client.update.restart", None, "update_notice", window, cx),
-            Act::Notes(url) => cx.open_url(url),
+            Act::Notes(url) | Act::WhatsNew(url) => cx.open_url(url),
             Act::Copy(text) => cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.clone())),
             Act::AppManagement => cx.open_url(APP_MANAGEMENT),
             Act::ReleasePage => cx.open_url(RELEASES),
-            Act::Dismiss => self.updates.dismiss(),
+            Act::Dismiss => self.dismiss_notice(),
         }
         cx.notify();
     }
@@ -137,6 +138,7 @@ fn palette_row(act: &Act) -> Option<(&'static str, &'static str)> {
     Some(match act {
         Act::Install => return None,
         Act::Notes(_) => ("client.update.notes", "Open the Release Notes"),
+        Act::WhatsNew(_) => ("client.update.whats_new", "Open What's New"),
         Act::Copy(_) => ("client.update.copy", "Copy the Update Command"),
         Act::Restart => ("client.update.restart", "Restart to Finish the Update"),
         Act::AppManagement => ("client.update.settings", "Open App Management Settings"),

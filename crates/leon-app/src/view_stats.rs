@@ -1,5 +1,5 @@
 //! `LEON_FRAME_STATS=1`: how long frames take to build. `LEON_FRAME_LOG=PATH`: also every frame
-//! and keystroke, one line each, for scripts/perf (docs/performance.md, "The app end to end
+//! and keystroke, one line each, for scripts/perf (docs/performance-app.md, "The app end to end
 //! (scripts/perf)").
 
 use std::io::Write;

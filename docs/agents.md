@@ -21,11 +21,14 @@ each agent, why it was picked and each file it wrote. With neither found it writ
 | | Claude Code | Codex |
 |---|---|---|
 | The skill: a `SKILL.md` stub | `~/.claude/skills/leon/` (`$CLAUDE_CONFIG_DIR`) | `~/.agents/skills/leon/` |
-| A session-start hook running `leon skill hook --agent …` | `~/.claude/settings.json` | `~/.codex/hooks.json` (`$CODEX_HOME`) |
+| Hooks running `leon skill hook --agent …`: session start, and status ([below](#orchestrate-other-agents)) | `~/.claude/settings.json` | `~/.codex/hooks.json` (`$CODEX_HOME`) |
 
 - **The skill** tells the agent to run `leon skill show`, which prints the full guide compiled into
   your `leon` binary. Upgrading leon upgrades the guide; there is nothing to reinstall.
-- **The hook** runs when an agent session starts. Inside leon it tells the agent its session and
+- **The status hooks** set the agent's block to working, waiting on a permission prompt or a
+  question, or done, so every agent pane shows its state. They print nothing and do nothing outside
+  leon.
+- **The session-start hook** runs when an agent session starts. Inside leon it tells the agent its session and
   terminal block, and records how to resume that session (below); outside leon it prints nothing
   and never contacts the server. A hook from an older leon is `outdated`: run `leon skill setup`.
 
@@ -123,6 +126,149 @@ On restore the block follows the `resume` setting in `init.lua` (`leon.set("resu
 `"ask"` (the default) types the command at the new prompt and waits for Enter (Ctrl-C skips it),
 `"always"` runs it, `"never"` ignores it. A command is offered at one restart: once typed it isn't saved again, so a
 skipped or stale one doesn't come back each time. A resumed agent's hook registers it again.
+
+## Orchestrate other agents
+
+An agent can start other agents in leon tabs or panes and hear back from them. The one that starts
+them is the orchestrator; the ones it starts are its workers. leon carries what they say:
+
+```sh
+id=$(leon agent start --label tests claude "Make the failing test in crates/foo pass")
+leon agent ls                        # the orchestrator's workers: state, agent, age, unread
+leon inbox                           # their reports, oldest first; marks them read
+leon agent tell tests "Use the fixture in tests/data."   # once its turn ended
+leon block close "$id"
+```
+
+A worker's turn, from start to the orchestrator reading its report:
+
+```mermaid
+sequenceDiagram
+  participant O as orchestrator
+  participant S as leon server
+  participant W as worker
+  O->>S: leon agent start --label tests claude "task"
+  S->>W: a new tab, the task and how to report as its first prompt
+  W->>S: hooks: working
+  W->>S: hooks: done, with its last message
+  S->>S: the report goes into the orchestrator's inbox
+  Note over S,O: once the orchestrator's turn has ended and its pane had no input for 3 s
+  S->>O: types: You have 1 leon message. Run leon inbox to read it.
+  O->>S: leon inbox
+  S-->>O: the worker's report, now marked read
+```
+
+- **Start.** `leon agent start AGENT TASK` runs `AGENT [ARGS…] PROMPT` in a new tab (`--split DIR`
+  for a pane) with the task and a paragraph on how to report as its first prompt. A Claude Code
+  worker whose hooks leon finds (the project's `.claude/settings.json` or `settings.local.json`, or
+  `~/.claude/settings.json` when `CLAUDE_CONFIG_DIR` isn't set; not with `-p`, `disableAllHooks`
+  or `-H`) is told to end its turn with the result, or a question, as its last message, which runs
+  no command the user must approve; any other worker, Codex included (its hooks run only once
+  trusted in `/hooks`), is told to use `leon notify`. It makes the new block a
+  worker of the caller's block (`$LEON_BLOCK`, or `-b`). `claude "…"` and `codex "…"` start an
+  interactive session with that prompt; any agent CLI that takes a prompt as its last argument
+  works. A worker's pane stays open after its program exits. Workers can start workers of their
+  own: reports go to the direct parent only.
+- **Reports.** When a worker's status changes to `done`, `blocked` or `error` (by its hooks,
+  `leon notify`, or an OSC 7501 report), the report goes to its orchestrator's inbox with the
+  worker's label, block, agent, kind and message; `working` and `idle` don't. A report with no
+  message right after an unread one of the same state and kind from the same worker adds nothing.
+  When a worker's program exits or its block closes, an `exited` or `closed` report says so, and
+  it leaves the team. An inbox keeps the newest 256 unread reports.
+- **The notice.** leon types `You have 2 leon messages. Run leon inbox to read them.` (for one,
+  `… 1 leon message. Run leon inbox to read it.`) into the
+  orchestrator's prompt and presses Enter, once: when the program in front of its pane is the one
+  whose hooks last said its turn ended (`done`, or Codex's interrupt), at least a second ago, and
+  nothing was typed into its pane for 3 seconds. Reports that come while it works make one notice.
+  A pane whose program never reported a state (a shell), or whose agent quit back to its shell,
+  is never typed into; the notice holds no shell syntax in case.
+- **Worktrees.** `leon agent start --worktree [--branch NAME]` gives a worker a git worktree and
+  branch of its own beside the checkout (`<checkout>-worktrees/<branch>`), so workers don't edit
+  the same files. `leon agent close W` closes it and removes both, but first lists what that would
+  lose (changes not committed, ignored files included, commits no other branch or remote holds, a
+  lock) and refuses; `--force` removes them anyway. Closing the block any other way leaves the
+  worktree, and its `closed` report says where. leon only removes worktrees it made: it keeps each
+  one with its block, and checks with git that the worktree is where it puts them, on its branch.
+- **Lifetime.** When the orchestrator's block closes, its inbox goes and its workers keep running,
+  unlinked. When the server restarts, links and unread reports come back with the sessions (the
+  agents themselves start again only through `resume`).
+
+### The status hooks
+
+`leon skill setup` installs these beside the session-start hook. Each runs
+`leon skill hook --agent claude|codex --on EVENT`, which sets the block's root status record. They
+act only inside leon, only for the agent in its terminal's foreground (not a `claude -p` another
+agent runs), never fail the agent, and give up within about 2 seconds.
+
+| Event (Claude Code 2.1, Codex 0.164) | Status |
+|---|---|
+| `UserPromptSubmit` | working |
+| `PermissionRequest`: `tool_name`, `tool_input` | blocked, kind `permission`: "Permission: Bash", the command |
+| Claude Code `PreToolUse` on `AskUserQuestion`: the first question | blocked, kind `question` |
+| `PostToolUse`, Claude Code `PostToolUseFailure` | working |
+| `Stop`: `last_assistant_message` | done, with that message on one line (at most 2048 bytes) |
+| Codex `Interrupt` | idle |
+
+Claude Code runs no hook when you interrupt it (Esc), so its block stays `working` until your
+next prompt. Codex has no question tool; it asks in its last message, which arrives as `done`. A
+subagent's tool events don't change the block's state (the main agent may still wait on a
+prompt), and a turn whose agent already reported its result with `leon notify --state done --body`
+keeps that result: its Stop hook adds nothing.
+
+### Only the user answers permission prompts
+
+When an agent's block reports `blocked` with kind `permission`, leon holds it for a person: until a
+person's keys reach that pane, no program running inside a leon terminal can type into it
+(`leon send`, `send-key`, `agent tell`, `api call` of `block.event`, `dev.leon.terminal.write` or
+`client.key`, a `leon attach` started in a pane, a socket client of its own), change its status
+from outside it, run a config action or reload (`leon do ACTION`, `client.action`,
+`server.config_reload`), or focus it (`leon focus`, `session.focus_block`, `focus_window`,
+`zoom_block`, `dock_block`, swapping it with the focused pane). Each gets error
+`permission_pending`. Only the block's own program (its
+hooks) may change its status meanwhile, and that doesn't end the hold: a person typing does. So an
+agent can't approve its own or another agent's prompt, even by writing a report to the terminal
+or starting a job that outlives it.
+
+Your keys land on such a pane only when you move them there, and stay on one only where you put
+them or typed. Any focus move of yours does it: a click, a direction or next-pane key, a tab, the
+Activity list, `leon focus` from a shell outside leon, or a key binding you press. Anything else
+that would leave your keys on it moves them instead to the pane that had them, the nearest pane
+that isn't held, or the nearest tab whose keys aren't on one: a pane closing or exiting (your own
+Ctrl-C in the pane beside it, or your close, included), a pane moved or swapped (by you or a
+program), a program inside leon moving the focus or running a key binding, or a prompt raised in
+a pane a program put your keys on. A key binding a program runs (`client.key`) can't type into
+such a pane either. The pane stays marked in its tab and in the Activity list, so you see where
+the prompt is.
+
+```mermaid
+flowchart TD
+  held["a block reports blocked, kind permission"] --> who{"who sends keys or a status?"}
+  who -->|"a program inside a leon terminal: leon send,<br/>agent tell, leon do, a socket client of its own"| refused["refused: permission_pending"]
+  who -->|"the block's own program, through its hooks"| status["its status may change;<br/>the hold stays"]
+  who -->|"a person: the app's keys, leon attach in a terminal app,<br/>leon send from a shell outside leon, another machine"| answered["the keys reach the pane,<br/>and the hold ends"]
+  held --> find["the app's Activity list and the notification<br/>take the person to that pane"]
+```
+
+A person answers where they are: the app's keys reach the pane (the Activity list and the
+notification take them there), and so do `leon attach` in a terminal app and `leon send` from a
+shell outside leon. leon tells where a client runs from its process: the peer of the socket, its
+parents up to pid 1, and its session, which a job keeps after its parent exits, and after its
+pane closes, whatever process group it moves to. What the server itself runs counts as inside
+too: a pane's program after its pane closed, and what your config's Lua runs (`leon.exec`), so a
+key binding of yours that runs `leon` to type into such a pane is refused; have it call
+`leon.call` instead. A client it can't place counts as inside.
+
+This keeps agents from answering. It is not a sandbox:
+
+- a program running as you outside leon counts as the person, and so does a request from another
+  machine (`-H`, or a client reaching this server over Tailscale, even from a pane here);
+- a program that moves itself to a new session (`setsid`) and drops its terminal gets past it,
+  and so does one your config's Lua starts that leaves the server's processes (a double fork);
+- when every pane left in a session waits on such a prompt, your keys stay on one of them: a tab
+  always has somewhere for them to go;
+- a dialog with no hook, such as Claude Code's question whether to trust a new folder, isn't
+  held: start workers in folders the agent already trusts;
+- `agent.link` and `agent.inbox` don't check who asks, as `leon send` doesn't for other blocks.
 
 ## Program status: let the user see what the agent is doing
 

@@ -350,7 +350,7 @@ fn click_focuses_and_dragging_a_divider_resizes(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn signature_follows_every_visible_pane_and_nothing_hidden(cx: &mut TestAppContext) {
+fn the_root_follows_every_visible_pane_and_nothing_hidden(cx: &mut TestAppContext) {
     let s = setup();
     let (ws, cx) = open(cx, &s.app);
     let a = leaves(&window(&s.app, &ws, cx).0)[0].clone();
@@ -359,11 +359,12 @@ fn signature_follows_every_visible_pane_and_nothing_hidden(cx: &mut TestAppConte
     let (ta, tb) = (term(&s.app, &a), term(&s.app, &b));
     settle(&ta);
     settle(&tb);
-    let sig = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.signature());
+    // the root's renders: a layout or focus change draws it, output elsewhere doesn't
+    let sig = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.renders());
 
     let before = sig(cx);
     cx.simulate_keystrokes("cmd-alt-left");
-    assert_ne!(sig(cx), before, "a focus change redraws");
+    assert!(changes(cx, &sig, before), "a focus change redraws");
     cx.simulate_keystrokes("cmd-alt-right");
     let before = sig(cx);
     let sid = ws.read_with(cx, |ws, _| ws.session_id()).unwrap();
@@ -383,7 +384,7 @@ fn signature_follows_every_visible_pane_and_nothing_hidden(cx: &mut TestAppConte
 
     let before = sig(cx);
     cx.simulate_keystrokes("cmd-shift-enter"); // zooms b, hiding a
-    assert_ne!(sig(cx), before, "zoom redraws");
+    assert!(changes(cx, &sig, before), "zoom redraws");
     cx.run_until_parked();
     settle(&tb); // the zoom resized b, and its shell redraws for that
     let before = sig(cx);

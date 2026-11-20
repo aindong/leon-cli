@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="440" viewBox="0 0 720 440" role="img" aria-labelledby="title desc">
+<title id="title">Key to pixel, p50 and p99</title>
+<desc id="desc">Key to pixel: the app paints a key's echo 12 to 15 ms after the key at p50, idle or busy, mostly waiting for the next display tick; a screen capture sees it about 50 ms after the key.</desc>
+<style>
+  .bg { fill: #fcfcfb; } .t1 { fill: #0b0b0b; } .t2 { fill: #52514e; }
+  .grid { stroke: #e7e6e2; } .axis { stroke: #b9b8b1; } .ref { stroke: #52514e; }
+  .c1 { fill: #2a78d6; stroke: #2a78d6; } .c2 { fill: #eb6834; stroke: #eb6834; } .c0 { fill: #8f8d86; stroke: #8f8d86; }
+  .ring { stroke: #fcfcfb; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .t1 { fill: #f0efec; } .t2 { fill: #c3c2b7; }
+    .grid { stroke: #2f2f2c; } .axis { stroke: #57564f; } .ref { stroke: #c3c2b7; }
+    .c1 { fill: #3987e5; stroke: #3987e5; } .c2 { fill: #d95926; stroke: #d95926; } .c0 { fill: #76756f; stroke: #76756f; }
+    .ring { stroke: #1a1a19; }
+  }
+  text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+</style>
+<rect class="bg" width="720" height="440" rx="8"/>
+<text x="24.0" y="32.0" class="t1" font-size="16" text-anchor="start" font-weight="600">Key to pixel, p50 and p99</text>
+<text x="24.0" y="52.0" class="t2" font-size="12" text-anchor="start">In the app: key to the first paint that shows it. Outside: key to the frame composited, as a</text>
+<text x="24.0" y="69.0" class="t2" font-size="12" text-anchor="start">screen capture sees it (that tool's own floor is 18.8 ms at p50). 60 Hz display, load 2 to 4.5.</text>
+<line x1="239.0" y1="124.0" x2="239.0" y2="390.0" class="axis" stroke-width="1"/>
+<text x="239.0" y="406.0" class="t2" font-size="11" text-anchor="middle">0</text>
+<line x1="333.2" y1="124.0" x2="333.2" y2="390.0" class="grid" stroke-width="1"/>
+<text x="333.2" y="406.0" class="t2" font-size="11" text-anchor="middle">20</text>
+<line x1="427.5" y1="124.0" x2="427.5" y2="390.0" class="grid" stroke-width="1"/>
+<text x="427.5" y="406.0" class="t2" font-size="11" text-anchor="middle">40</text>
+<line x1="521.8" y1="124.0" x2="521.8" y2="390.0" class="grid" stroke-width="1"/>
+<text x="521.8" y="406.0" class="t2" font-size="11" text-anchor="middle">60</text>
+<line x1="616.0" y1="124.0" x2="616.0" y2="390.0" class="grid" stroke-width="1"/>
+<text x="616.0" y="406.0" class="t2" font-size="11" text-anchor="middle">80</text>
+<text x="427.5" y="424.0" class="t2" font-size="12" text-anchor="middle">milliseconds</text>
+<line x1="317.7" y1="118.0" x2="317.7" y2="390.0" class="ref" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="321.7" y="116.0" class="t2" font-size="11" text-anchor="start">one 60 Hz frame</text>
+<rect x="24.0" y="95.0" width="10" height="10" rx="2" class="c1"/>
+<text x="39.0" y="104.0" class="t2" font-size="12" text-anchor="start">p50</text>
+<rect x="78.0" y="95.0" width="10" height="10" rx="2" class="c2"/>
+<text x="93.0" y="104.0" class="t2" font-size="12" text-anchor="start">p99</text>
+<text x="229.0" y="149.0" class="t1" font-size="12" text-anchor="end">idle, in the app</text>
+<path class="c1" d="M239.0 130.0h53.1a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-53.1z"/>
+<text x="301.1" y="141.0" class="t1" font-size="11" text-anchor="start">11.9 ms</text>
+<path class="c2" d="M239.0 146.0h95.0a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-95.0z"/>
+<text x="343.0" y="157.0" class="t1" font-size="11" text-anchor="start">20.8 ms</text>
+<text x="229.0" y="193.0" class="t1" font-size="12" text-anchor="end">one pane flooding, in the app</text>
+<path class="c1" d="M239.0 174.0h55.4a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-55.4z"/>
+<text x="303.4" y="185.0" class="t1" font-size="11" text-anchor="start">12.4 ms</text>
+<path class="c2" d="M239.0 190.0h93.1a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-93.1z"/>
+<text x="341.1" y="201.0" class="t1" font-size="11" text-anchor="start">20.4 ms</text>
+<text x="229.0" y="237.0" class="t1" font-size="12" text-anchor="end">eight panes busy, in the app</text>
+<path class="c1" d="M239.0 218.0h67.2a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-67.2z"/>
+<text x="315.2" y="229.0" class="t1" font-size="11" text-anchor="start">14.9 ms</text>
+<path class="c2" d="M239.0 234.0h115.3a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-115.3z"/>
+<text x="363.3" y="245.0" class="t1" font-size="11" text-anchor="start">25.1 ms</text>
+<text x="229.0" y="281.0" class="t1" font-size="12" text-anchor="end">idle, outside</text>
+<path class="c1" d="M239.0 262.0h234.0a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-234.0z"/>
+<text x="482.0" y="273.0" class="t1" font-size="11" text-anchor="start">50.3 ms</text>
+<path class="c2" d="M239.0 278.0h310.9a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-310.9z"/>
+<text x="558.9" y="289.0" class="t1" font-size="11" text-anchor="start">66.6 ms</text>
+<text x="229.0" y="325.0" class="t1" font-size="12" text-anchor="end">one pane flooding, outside</text>
+<path class="c1" d="M239.0 306.0h231.2a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-231.2z"/>
+<text x="479.2" y="317.0" class="t1" font-size="11" text-anchor="start">49.7 ms</text>
+<path class="c2" d="M239.0 322.0h303.8a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-303.8z"/>
+<text x="551.8" y="333.0" class="t1" font-size="11" text-anchor="start">65.1 ms</text>
+<text x="229.0" y="369.0" class="t1" font-size="12" text-anchor="end">eight panes busy, outside</text>
+<path class="c1" d="M239.0 350.0h241.6a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-241.6z"/>
+<text x="489.6" y="361.0" class="t1" font-size="11" text-anchor="start">51.9 ms</text>
+<path class="c2" d="M239.0 366.0h335.4a3.0 3.0 0 0 1 3.0 3.0v8.0a3.0 3.0 0 0 1 -3.0 3.0h-335.4z"/>
+<text x="583.4" y="377.0" class="t1" font-size="11" text-anchor="start">71.8 ms</text>
+</svg>

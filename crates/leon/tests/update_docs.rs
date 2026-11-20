@@ -94,10 +94,11 @@ fn the_other_docs_point_at_it() {
     let releases = read("docs/releases.md");
     assert!(!releases.contains("Nothing in leon reads"), "docs/releases.md no longer says nothing reads the keys");
     assert!(releases.contains("(updates.md)"), "docs/releases.md links docs/updates.md");
-    let changelog = read("CHANGELOG.md");
+    // 0.1.0's section moved to the archive, whose links start from docs/
+    let changelog = read("docs/changelog-archive.md");
     let release = changelog.split("\n## [0.1.0] ").nth(1).expect("a 0.1.0 section");
     let release = release.split("\n## [").next().unwrap();
-    assert!(release.contains("leon self-update") && release.contains("docs/updates.md"), "the changelog has it");
+    assert!(release.contains("leon self-update") && release.contains("](updates.md)"), "the changelog has it");
     let readme = read("README.md");
     let install = readme.split("\n## Install\n").nth(1).expect("an Install section").split("\n## ").next().unwrap();
     for needle in ["leon self-update", "brew upgrade", "(docs/updates.md)"] {

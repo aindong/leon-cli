@@ -99,6 +99,11 @@ pub struct State {
     pub(crate) outbox: Vec<Event>,
     /// Sessions whose view changed since the events were last taken.
     pub(crate) dirty: Vec<String>,
+    /// Which blocks work for which, and their reports (agents.rs).
+    pub agents: crate::agents::Agents,
+    /// Each session's key target at the last look, and whether a person put the keys there or
+    /// typed there since, by session (held_keys.rs).
+    pub(crate) keys: HashMap<String, (String, bool)>,
 }
 
 /// Labels are optional, trimmed, and at most 128 characters.

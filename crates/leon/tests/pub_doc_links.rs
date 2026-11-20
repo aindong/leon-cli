@@ -166,7 +166,12 @@ fn unreleased_bullets_link_to_their_detail() {
         assert!(heads.contains(anchor), "docs/changelog-detail.md has no heading #{anchor}");
         assert!(features.contains(anchor), "#{anchor} is not a feature under Since 0.1.0");
     }
+    // earlier releases' sections are in the archive, whose links start from docs/
+    let archive = std::fs::read_to_string(root().join("docs/changelog-archive.md")).unwrap();
+    let links = |text: &str, link: &str| -> Vec<String> {
+        text.split(link).skip(1).filter_map(|s| s.split(')').next()).map(String::from).collect()
+    };
     let linked: BTreeSet<String> =
-        changelog.split(link).skip(1).filter_map(|s| s.split(')').next()).map(String::from).collect();
+        links(&changelog, link).into_iter().chain(links(&archive, "](changelog-detail.md#")).collect();
     assert_eq!(linked, features, "every feature under Since 0.1.0 has a bullet in CHANGELOG.md");
 }

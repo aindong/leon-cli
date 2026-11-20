@@ -13,8 +13,7 @@ use std::io::{self, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 use leon_core::overlays::Overlays;
@@ -24,6 +23,8 @@ use leon_core::{ApiError, Window};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+#[path = "remote_commit.rs"]
+mod commit;
 #[path = "remote_conn.rs"]
 mod conn;
 #[path = "remote_events.rs"]
@@ -34,14 +35,17 @@ mod fetch_model;
 mod geometry;
 #[path = "remote_link.rs"]
 mod link;
+#[path = "remote_model.rs"]
+mod model;
 #[path = "remote_palette.rs"]
 mod palette;
+pub use commit::Commit;
 use conn::{left, Conn};
 use events::{attach, read_events};
 pub use fetch_model::decode_overlays;
 use fetch_model::{fetch, read_line};
-use link::Job;
 pub use link::LinkState;
+pub use model::{Block, Model, Session};
 
 /// How long a whole call (its write and its reply) may take before it gives up (the server answers
 /// in microseconds); lines that aren't the reply don't extend it.
@@ -53,104 +57,6 @@ const SPAWN_TIMEOUT: Duration = Duration::from_secs(leon_server::lua::ACTION_LIM
 const WATCH_WRITE: Duration = Duration::from_millis(100);
 /// How long the first call over a link waits.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
-/// One session as the app shows it.
-#[derive(Debug, Clone)]
-pub struct Session {
-    pub id: String,
-    pub label: Option<String>,
-    pub revision: u64,
-    /// Index of the active window.
-    pub active: usize,
-    pub windows: Vec<Window>,
-    pub blocks: Vec<Block>,
-    /// Each window's floats and drawers, by window id (`session.view`'s `floating` and `docked`).
-    pub overlays: HashMap<String, Overlays>,
-    /// Each window's tile focused last, by window id, kept across refetches: the server keeps only
-    /// the focus, which a float or drawer can have.
-    pub tiled_focus: HashMap<String, String>,
-}
-
-impl Session {
-    /// Window `id`'s floats (back to front) and drawers; none for a window without any.
-    pub fn overlay(&self, id: &str) -> Overlays {
-        self.overlays.get(id).cloned().unwrap_or_default()
-    }
-
-    /// The tile that names window `w`: the zoomed or focused one, else the tile focused last (the
-    /// focus is a float's or drawer's), else its first; the focused overlay only when there is no tile.
-    pub fn named_tile<'a>(&'a self, w: &'a Window) -> Option<&'a str> {
-        let leaves = w.layout.as_ref().map(|t| t.leaves()).unwrap_or_default();
-        let tile = |id: &&str| leaves.contains(id);
-        w.zoomed
-            .as_deref()
-            .or(w.focus.as_deref())
-            .filter(tile)
-            .or_else(|| self.tiled_focus.get(&w.id).map(String::as_str).filter(tile))
-            .or_else(|| leaves.first().copied())
-            .or(w.focus.as_deref())
-    }
-
-    /// Remember each window's tile focused last, from this fetch's focus or the one before it.
-    fn remember_tiles(&mut self, before: Option<&Session>) {
-        self.tiled_focus = self
-            .windows
-            .iter()
-            .filter_map(|w| {
-                let leaves = w.layout.as_ref().map(|t| t.leaves()).unwrap_or_default();
-                let tile = |id: &&str| leaves.contains(id);
-                let last = || before?.tiled_focus.get(&w.id).map(String::as_str).filter(tile);
-                w.focus.as_deref().filter(tile).or_else(last).map(|id| (w.id.clone(), id.to_string()))
-            })
-            .collect();
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Block {
-    pub id: String,
-    pub window_id: String,
-    /// The label it was given (`leon toggle` finds a drawer by it).
-    pub label: Option<String>,
-    pub command: Vec<String>,
-    /// The title the program set, and where it is (`session.list_blocks`).
-    pub title: Option<String>,
-    pub cwd: Option<String>,
-    /// The program in front (`foreground`): None from a server older than that field, `Some(None)`
-    /// when the server names none (the program exited, or another user's is in front).
-    pub foreground: Option<Option<String>>,
-    /// Program-status records, least recently reported first.
-    pub status: Vec<Record>,
-}
-
-impl Block {
-    /// The records most recently reported first, as `status::indicator_of` takes them.
-    pub fn newest_first(&self) -> Vec<&Record> {
-        self.status.iter().rev().collect()
-    }
-}
-
-/// The server's sessions and the watched blocks' screens, as last received.
-#[derive(Default)]
-pub struct Model {
-    pub sessions: Vec<Session>,
-    pub screens: HashMap<String, Arc<Frame>>,
-    /// Per block, how many screen updates came: what a redraw check compares.
-    pub screen_updates: HashMap<String, u64>,
-    /// How many times the sessions were fetched (each `refresh`, on any thread).
-    pub fetches: u64,
-}
-
-impl Model {
-    pub fn session(&self, id: &str) -> Option<&Session> {
-        self.sessions.iter().find(|s| s.id == id)
-    }
-
-    /// A block and the session it belongs to.
-    pub fn block(&self, id: &str) -> Option<(&Session, &Block)> {
-        self.sessions.iter().find_map(|s| s.blocks.iter().find(|b| b.id == id).map(|b| (s, b)))
-    }
-}
-
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -183,6 +89,9 @@ struct Shared {
     geometry: Mutex<Option<Value>>,
     alive: AtomicBool,
     closing: AtomicBool,
+    /// A `keymap_changed` or `settings_changed` event came (or a re-attach may have missed one)
+    /// since the window last committed.
+    keymap_news: AtomicBool,
     /// Over a link: whether the connections are up.
     link: Mutex<LinkState>,
     /// The resumable stream's token, the last event seq seen, and how often the seq skipped.
@@ -222,7 +131,7 @@ impl Shared {
             s.remember_tiles(m.sessions.iter().find(|o| o.id == s.id));
         }
         // screens go with the watch set (`Remote::watch`), not here: a refetch can skip a session
-        m.sessions = sessions;
+        m.sessions = Arc::new(sessions);
         m.fetches += 1;
         drop(m);
         drop(c);
@@ -259,8 +168,13 @@ type Asked = ((u16, u16), (usize, usize));
 
 pub struct Remote {
     shared: Arc<Shared>,
-    /// Over a link, the window's calls go through here (`link::run_queue`).
-    queue: Option<Sender<Job>>,
+    /// The window's calls go through here: over a link a thread's from the start
+    /// (`link::run_queue`), on This Mac the window's task once it asks (`call_queue`); `leon
+    /// attach` here calls directly.
+    queue: OnceLock<link::Queue>,
+    /// The window's copy of the model, moved on only by `commit` (on the window's thread); until
+    /// the first commit `model` reads the reader thread's own (`leon attach`).
+    shown: OnceLock<Mutex<Model>>,
     /// Per block: the size last asked for and the size the screen had then (`fit`).
     asked: Mutex<HashMap<String, Asked>>,
     /// Calls the app made into this remote: each call, queued job, spawn and watch (tests).
@@ -305,6 +219,7 @@ impl Remote {
             geometry: Mutex::default(),
             alive: AtomicBool::new(true),
             closing: AtomicBool::new(false),
+            keymap_news: AtomicBool::new(false),
             link: Mutex::new(LinkState::Up),
             resume: Mutex::default(),
             seq: AtomicU64::new(0),
@@ -322,24 +237,44 @@ impl Remote {
             .name("leon-events".into())
             .spawn(move || read_events(reader, r))
             .map_err(|e| e.to_string())?;
-        let queue = match retry {
-            None => None,
-            Some(_) => {
-                let (tx, jobs) = std::sync::mpsc::channel();
-                let (q, w) = (Arc::downgrade(&shared), Arc::downgrade(&shared));
-                let spawn =
-                    |name: &str, f: Box<dyn FnOnce() + Send>| std::thread::Builder::new().name(name.into()).spawn(f);
-                spawn("leon-link-calls", Box::new(move || link::run_queue(q, jobs))).map_err(|e| e.to_string())?;
-                spawn("leon-link-watchdog", Box::new(move || link::watchdog(w))).map_err(|e| e.to_string())?;
-                Some(tx)
-            }
+        let r = Remote {
+            shared,
+            queue: OnceLock::new(),
+            shown: OnceLock::new(),
+            asked: Mutex::default(),
+            asks: AtomicU64::new(0),
         };
-        Ok(Remote { shared, queue, asked: Mutex::default(), asks: AtomicU64::new(0) })
+        if retry.is_some() {
+            let (tx, jobs) = std::sync::mpsc::channel();
+            let q = Arc::downgrade(&r.shared);
+            std::thread::Builder::new()
+                .name("leon-link-calls".into())
+                .spawn(move || link::run_queue(q, jobs))
+                .map_err(|e| e.to_string())?;
+            let _ = r.queue.set(link::Queue::Thread(tx));
+            let w = Arc::downgrade(&r.shared);
+            std::thread::Builder::new()
+                .name("leon-link-watchdog".into())
+                .spawn(move || link::watchdog(w))
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(r)
     }
 
-    /// The model as last received. Hold it briefly: the reader thread waits for it.
+    /// From now on `send`, `send_then` and `act_later` go through one ordered queue, as over a
+    /// link, so the window never waits on this server (docs/architecture/gpui.md R8): the queue is
+    /// the returned future, which the window runs on its executor's background threads (and its
+    /// test scheduler runs deterministically). None once a queue runs.
+    pub fn call_queue(&self) -> Option<impl std::future::Future<Output = ()> + Send + 'static> {
+        let (tx, jobs) = futures::channel::mpsc::unbounded();
+        self.queue.set(link::Queue::Task(tx)).ok()?;
+        Some(link::run_queue_task(Arc::downgrade(&self.shared), jobs))
+    }
+
+    /// The model as the window last committed it, or before any commit as last received. Hold
+    /// it briefly: the reader thread waits for the received one.
     pub fn model(&self) -> MutexGuard<'_, Model> {
-        lock(&self.shared.model)
+        lock(self.shown.get().unwrap_or(&self.shared.model))
     }
 
     /// Call a method and wait for the reply (methods that answer at once; not `block.wait`). A
@@ -410,10 +345,11 @@ impl Remote {
             if let Err(e) = self.shared.send_watch(&ids) {
                 eprintln!("leon: can't watch the panes: {e}");
             }
-            let mut m = self.model();
-            m.screens.retain(|id, _| ids.contains(id));
-            m.screen_updates.retain(|id, _| ids.contains(id));
-            drop(m);
+            for m in [Some(&self.shared.model), self.shown.get()].into_iter().flatten() {
+                let mut m = lock(m);
+                m.screens.retain(|id, _| ids.contains(id));
+                m.screen_updates.retain(|id, _| ids.contains(id));
+            }
             *watched = ids;
         }
     }

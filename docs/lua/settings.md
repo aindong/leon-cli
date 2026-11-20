@@ -11,7 +11,7 @@ them in place; a running app follows them on a reload. A bad value is a skipped 
 
 The Settings window has a control for every setting in the table below, in sections: General
 (`resume`, `check_for_updates`), Appearance (`theme`, `translucency`, `fade_inactive_panes`,
-`font`), Terminal (`copy_on_select`, `repeat_time`, `hint_patterns`) and Notifications. Its search
+`font`, `cursor_shader`), Terminal (`copy_on_select`, `link_card`, `repeat_time`, `hint_patterns`, `scrollback`) and Notifications. Its search
 field finds a setting by its label or by its name here (`fade_inactive_panes`). A setting init.lua
 sets by code, not with a literal value, shows read-only there, with the line to change. Two more
 sections are read-only: Shortcuts lists every key the app binds, with Edit in init.lua to change
@@ -29,6 +29,7 @@ since every program in every session ends.
 | `font.size` | points, 8 to 32 | `13` |
 | `notifications.done`, `notifications.blocked`, `notifications.error` | `true` or `false` (below) | `true` |
 | `copy_on_select` | `true` or `false` | `false` |
+| `link_card` | `true` or `false`: a card with a link's address, Copy and Open in Browser when the mouse rests on a link or it is right-clicked | `true` |
 | `repeat_time` | milliseconds, 0 (off) to 10000 | `500` |
 | `hint_patterns` | a list of regular expressions, at most 32 | `{}` |
 | `resume` | `"ask"`, `"always"` or `"never"` | `"ask"` |
@@ -38,6 +39,11 @@ since every program in every session ends.
 | `serve_tailscale` | `true` or `false` ([cli/hosts.md](../cli/hosts.md#serve-over-tailscale)) | `false` |
 | `serve_tailscale_port` | a port, 1 to 65535 | `7297` |
 | `serve_tailscale_tags` | a list of tags such as `"tag:ci"`, at most 16 | `{}` |
+| `cursor_shader` | a Shadertoy-style cursor shader file, or `""` for none ([cursor-shaders.md](../cursor-shaders.md)) | `""` |
+| `cursor_shader_duration` | seconds the cursor shader draws after the cursor changes, 0.1 to 5 | `1` |
+| `serve_web` | `true` or `false` ([web.md](../web.md)) | `false` |
+| `serve_web_cert`, `serve_web_key` | a file's path, from `/` or `~/` ([web.md](../web.md#https)) | `""` (plain HTTP) |
+| `scrollback` | lines of history a pane keeps, 0 to 100000 | `10000` |
 
 `theme` names a theme `leon theme list` shows (built in or imported); an unknown name is an error.
 
@@ -76,8 +82,27 @@ Reduce Transparency and full screen are opaque, as is `leon.set("translucency", 
 `serve_tailscale` makes the server also listen on this machine's Tailscale addresses, on
 `serve_tailscale_port`, for your own other machines only (and tagged ones with a tag in
 `serve_tailscale_tags`); [cli/hosts.md](../cli/hosts.md#serve-over-tailscale) has the rest.
+`serve_web` also serves a web page that drives your sessions there, to the same machines ([web.md](../web.md)),
+over HTTPS when `serve_web_cert` and `serve_web_key` name the files `tailscale cert` wrote.
+
+`cursor_shader` names a GLSL file Leon.app draws over its window as the cursor moves, macOS only;
+`~/` is your home and a relative path is next to init.lua. [cursor-shaders.md](../cursor-shaders.md)
+has the uniforms and what works.
+
+```lua
+leon.set("cursor_shader", "")
+leon.set("cursor_shader_duration", 0.5)
+```
 
 `repeat_time` is how long a repeatable binding's keys work without the prefix ([keys.md](keys.md#repeat-keys)).
+
+`scrollback` is how many lines of history each pane keeps. A change applies to running panes at
+once; a lower value drops their oldest lines. A line costs about what its text does (the newest
+1,000 more, at the pane's full width), so 100,000 lines of 70 characters are about 20 MB a pane.
+
+```lua
+leon.set("scrollback", 50000)
+```
 
 `hint_patterns` adds regular expressions (Rust syntax) to what the app's hints label. Hints
 (`client.hints`, ⌘⇧H) put a short label on every URL, path, git hash, UUID, `0x` number, IPv4

@@ -13,7 +13,10 @@ Check or reload the Lua config (`init.lua`), and get or set its settings.
 
 Load a config without applying it: print counts and diagnostics, exit 1 if it fails or any
 `leon.*` call was skipped. Needs no server. The default path is `$LEON_CONFIG`, else
-`$XDG_CONFIG_HOME/leon/init.lua`, else `~/.config/leon/init.lua`.
+`$XDG_CONFIG_HOME/leon/init.lua`, else `~/.config/leon/init.lua`. With `cursor_shader` set it
+also translates that file and prints `cursor_shader: PATH: ok`, or the shader's error with its
+line, an error too ([cursor-shaders.md](../cursor-shaders.md)); off macOS it says cursor shaders
+are macOS only for now.
 
 ### `leon config reload`
 
@@ -30,8 +33,8 @@ leon config reload
 Print a setting as init.lua leaves it (its `leon.set` call, else the default), or every setting
 and where each is set without KEY. Needs no server. The keys are `theme`, `font.family`,
 `font.size`, `notifications.done`, `notifications.blocked`, `notifications.error`,
-`copy_on_select`, `repeat_time`, `hint_patterns`, `resume`, `fade_inactive_panes`, `check_for_updates`, `translucency`, `serve_tailscale`,
-`serve_tailscale_port` and `serve_tailscale_tags` ([docs/lua/settings.md](../lua/settings.md#settings) has what each does). With `--json`
+`copy_on_select`, `link_card`, `repeat_time`, `hint_patterns`, `resume`, `fade_inactive_panes`, `check_for_updates`, `translucency`, `serve_tailscale`,
+`serve_tailscale_port`, `serve_tailscale_tags`, `cursor_shader`, `cursor_shader_duration`, `serve_web`, `serve_web_cert`, `serve_web_key` and `scrollback` ([docs/lua/settings.md](../lua/settings.md#settings) has what each does). With `--json`
 the value is JSON.
 
 ### `leon config set KEY VALUE`

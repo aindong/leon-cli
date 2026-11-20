@@ -3,6 +3,8 @@
 pub mod attention;
 pub mod chrome;
 pub mod copy_mode;
+#[cfg(target_os = "macos")]
+pub mod cursor_shader;
 pub mod embedded;
 pub mod fade;
 pub mod floats;
@@ -21,6 +23,8 @@ pub mod overlay_motion;
 pub mod overview;
 pub mod palette;
 pub mod panes;
+#[cfg(all(feature = "gui", target_os = "macos"))]
+pub mod popover;
 pub mod program_kind;
 pub mod remote;
 pub mod render;
