@@ -11,7 +11,7 @@ export class Activity {
     this.conn = conn;
     this.list = list;
     this.go = go; // go(entry): show its session and tab, focus its block
-    this.seen = new Map(); // "block state" → when the page first saw it
+    this.seen = new Map(); // "block state" → { at: when the page first saw it, s: its session }
     this.loaded = false; // nothing notifies for the states already there when the page opened
     this.button = button;
     const can = window.isSecureContext && "Notification" in window;
@@ -48,12 +48,16 @@ export class Activity {
 
   async read(sessions) {
     const entries = [];
+    const unread = new Set(); // sessions and blocks this round couldn't read: what was seen of them stays
     for (const s of sessions) {
       const both = await Promise.all([
         this.conn.call("session.list_blocks", { session_id: s.session_id }),
         this.conn.call("session.view", { session_id: s.session_id }),
       ]).catch(() => null); // closed while this was read
-      if (!both) continue;
+      if (!both) {
+        unread.add(s.session_id);
+        continue;
+      }
       const [{ blocks }, view] = both;
       const tab = new Map(view.windows.map((w) => [w.window_id, w]));
       const states = await Promise.all(
@@ -61,7 +65,7 @@ export class Activity {
           this.conn
             .call("block.method", { session_id: s.session_id, block_id: b.block_id, method: "dev.leon.terminal.program_status" })
             .then((r) => r.records.find((x) => x.id === null)?.record ?? null)
-            .catch(() => null),
+            .catch(() => (unread.add(b.block_id), null)),
         ),
       );
       blocks.forEach((b, i) => {
@@ -76,12 +80,15 @@ export class Activity {
     for (const e of entries) {
       const key = `${e.b} ${e.state}`;
       if (this.seen.has(key)) continue;
-      this.seen.set(key, now);
+      this.seen.set(key, { at: now, s: e.s });
       if (this.loaded) this.notify(e);
     }
-    for (const key of this.seen.keys()) if (!entries.some((e) => `${e.b} ${e.state}` === key)) this.seen.delete(key);
+    for (const [key, { s }] of this.seen) {
+      if (unread.has(s) || unread.has(key.split(" ")[0])) continue;
+      if (!entries.some((e) => `${e.b} ${e.state}` === key)) this.seen.delete(key);
+    }
     this.loaded = true;
-    entries.sort((a, b) => this.seen.get(`${b.b} ${b.state}`) - this.seen.get(`${a.b} ${a.state}`));
+    entries.sort((a, b) => this.seen.get(`${b.b} ${b.state}`).at - this.seen.get(`${a.b} ${a.state}`).at);
     this.draw(entries);
   }
 

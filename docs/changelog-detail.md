@@ -75,6 +75,14 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   translations, images or `brand/` alone (they start no run)
   ([releases.md](releases.md#the-website)).
 
+### The web page on a phone
+
+#### Added
+- Under 700 px wide the web page shows Home (Activity, then the sessions) or one pane with a strip
+  (‹ Home, ☰ the drawer, the tab's other panes) and a key row: Esc, a sticky Ctrl, Tab, the arrows
+  and `| ~ / -`. A phone's keyboard types into the pane, its Backspace and Enter included; the font
+  is kept between 11 and 14 px ([web.md](web.md#on-a-phone)). No API change.
+
 ### Drive leon from the browser
 
 #### Added

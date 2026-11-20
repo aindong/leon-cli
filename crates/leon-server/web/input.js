@@ -4,22 +4,50 @@
 // (dev.leon.terminal.selection) that the copy event puts on the clipboard. Nothing here sends
 // input on its own: every call follows a person's key, click or paste.
 
-import { keyName, MAC } from "./keys.js";
+import { CTRL, ctrlChar, keyName, MAC } from "./keys.js";
 
 /**
  * Wire the keyboard to `textarea` (kept focused while a pane is), and return `pane(…)`, which wires
- * one pane's mouse. `target()` names the pane that gets the keys: {s, b} or null. Shift+Escape
- * calls `leave()`: the way out of the pane for the keyboard, since Tab goes to the program.
+ * one pane's mouse, and `press(entry)`, a key of the phone's key row (keys.js's ROW). `target()`
+ * names the pane that gets the keys: {s, b} or null. Shift+Escape calls `leave()`: the way out of
+ * the pane for the keyboard, since Tab goes to the program. `sticky(on)` shows the row's Ctrl.
  */
-export function wire(conn, textarea, target, failed, leave) {
+export function wire(conn, textarea, target, failed, leave, sticky) {
   const send = (method, params) => conn.call(method, params).catch(failed);
   const event = (t, ev) => t && send("block.event", { session_id: t.s, block_id: t.b, event: ev });
   const write = (data) => {
     const t = target();
     if (t && data) send("block.method", { session_id: t.s, block_id: t.b, method: "dev.leon.terminal.write", args: { data } });
   };
+  // the key row's Ctrl: the next key or character, from the row or the keyboard, goes as ctrl+ it
+  let ctrl = false;
+  const setCtrl = (on) => ((ctrl = on), sticky?.(on));
+  const key = (name) => {
+    const t = target();
+    if (ctrl && !name.startsWith("ctrl+")) name = `ctrl+${name}`;
+    setCtrl(false);
+    event(t, { type: "key", key: name });
+  };
+  /** Text typed or composed: one character under the sticky Ctrl is a control key, if it has one. */
+  const text = (data) => {
+    if (ctrl && data.length === 1 && CTRL.includes(data.toLowerCase())) return key(data.toLowerCase());
+    if (data) setCtrl(false);
+    write(data);
+  };
+  /** Send what the field still holds (a word a phone's keyboard hasn't committed), before a key. */
+  const flush = () => {
+    const held = textarea.value;
+    textarea.value = "";
+    if (held) write(held);
+  };
+  const press = (entry) => {
+    if (entry.ctrl) return setCtrl(!ctrl);
+    flush();
+    entry.key ? key(entry.key) : text(entry.text);
+  };
   let copied = ""; // the selection's text, for the next copy
   let owner = null; // the pane whose selection `copied` is
+  let gen = 0; // bumped when any pane's selection starts or clears: a late answer is dropped
   /** The longest paste, JSON-escaped: one request line is at most 1 MiB, with room for the rest. */
   const MOST_PASTE = (1 << 20) - (4 << 10);
 
@@ -28,23 +56,37 @@ export function wire(conn, textarea, target, failed, leave) {
       e.preventDefault();
       return leave();
     }
-    if (!MAC && e.ctrlKey && e.shiftKey && !e.altKey && e.code === "KeyC") {
+    if (!MAC && e.ctrlKey && e.shiftKey && !e.altKey && ctrlChar(e) === "c") {
       document.execCommand("copy"); // the copy event below; a key press may copy without the clipboard API
       return e.preventDefault();
     }
     const name = keyName(e);
     if (!name) return; // text comes as input; ⌘ and the rest stay the browser's
     e.preventDefault();
-    event(target(), { type: "key", key: name });
+    key(name);
+  });
+  // a phone's keyboard names no keys (keyCode 229): Backspace and Enter come as edits of the field
+  textarea.addEventListener("beforeinput", (e) => {
+    const k = {
+      deleteContentBackward: "backspace",
+      deleteWordBackward: "ctrl+w",
+      insertLineBreak: "enter",
+      insertParagraph: "enter",
+    }[e.inputType];
+    if (!k || e.isComposing) return;
+    if (k !== "enter" && textarea.value) return; // the field's own text, not yet sent: let it edit that
+    e.preventDefault();
+    flush(); // Enter goes after the text it ends
+    key(k);
   });
   // text the keyboard composed; whichever of these comes second finds the field empty
   textarea.addEventListener("input", (e) => {
     if (e.isComposing) return;
-    write(textarea.value);
+    text(textarea.value);
     textarea.value = "";
   });
   textarea.addEventListener("compositionend", () => {
-    write(textarea.value);
+    text(textarea.value);
     textarea.value = "";
   });
   textarea.addEventListener("paste", (e) => {
@@ -53,6 +95,7 @@ export function wire(conn, textarea, target, failed, leave) {
     if (data && new TextEncoder().encode(JSON.stringify(data)).length > MOST_PASTE) {
       return failed(new Error("That paste is too big for the page (over 1 MB once encoded)"));
     }
+    setCtrl(false);
     if (data) event(target(), { type: "paste", data });
   });
   document.addEventListener("copy", (e) => {
@@ -65,13 +108,13 @@ export function wire(conn, textarea, target, failed, leave) {
   const mods = (e) => ({ shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey });
 
   /** Wire one pane: `focus()` makes it the one that gets the keys. */
-  return function pane(el, s, b, grid, focus) {
+  const pane = (el, s, b, grid, focus) => {
     let drag = null; // "report" while a button reports to the program, "select" while selecting
     let held = "left"; // the button a report drag holds
     let last = ""; // the cell last reported, so a move within it isn't sent again
     let sel = null;
     let asking = false;
-    let gen = 0; // bumped when the selection is replaced, cleared or its pane goes: a late answer is dropped
+    let gone = false; // the pane went: its late answer is dropped
     const me = {};
     const at = (e) => grid.cellAt(e.clientX, e.clientY);
     const report = (action, e, button) => {
@@ -94,7 +137,7 @@ export function wire(conn, textarea, target, failed, leave) {
           method: "dev.leon.terminal.selection",
           args: { kind: sel.kind, anchor: sel.anchor, head: sel.head, text },
         });
-        if (g !== gen) return;
+        if (g !== gen || gone) return;
         grid.mark(r);
         if (text) (copied = r?.text ?? ""), (owner = me);
       } catch (err) {
@@ -155,8 +198,9 @@ export function wire(conn, textarea, target, failed, leave) {
     return () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
-      gen++;
+      gone = true;
       if (owner === me) (copied = ""), (owner = null); // its pane is gone
     };
   };
+  return { pane, press, unstick: () => setCtrl(false) };
 }

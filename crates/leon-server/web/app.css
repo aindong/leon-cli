@@ -146,6 +146,7 @@ button { font: inherit; color: inherit; }
   border: 0;
   padding: 0;
   resize: none;
+  font-size: 16px; /* iOS zooms the page into a focused field under 16 px */
 }
 
 .marks > span { position: absolute; z-index: 0; height: var(--lh, 16px); background: var(--selected); }
@@ -162,3 +163,43 @@ button { font: inherit; color: inherit; }
 #activity .name { color: var(--title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #activity .where { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #notify { margin-top: 8px; }
+
+/* a phone (phone.js sets .phone under 700 px): Home, or one pane with its strip and the key row */
+#strip, #keyrow, #scrim { display: none; }
+body.phone { flex-direction: column; font-size: 15px; height: var(--seen, 100%); }
+body.phone #sidebar { width: auto; flex: 1; min-height: 0; border-right: 0; display: flex; flex-direction: column; }
+body.phone #sidebar header { order: -2; }
+body.phone #activity-box { order: -1; margin: 0 0 14px; padding: 0 0 10px; border-top: 0; border-bottom: 1px solid var(--border); }
+body.phone #sidebar button { padding: 9px 10px; }
+body.phone #sidebar button.close { opacity: 1; }
+/* Home shows only the notes of the pane view (errors, "Disconnected") */
+body.phone[data-view="home"] #main { flex: none; }
+body.phone[data-view="home"] #main > :not(#note) { display: none; }
+body.phone[data-view="pane"] #sidebar { display: none; }
+body.phone #main { padding: 4px; min-height: 0; }
+body.phone[data-view="pane"] #strip { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; min-width: 0; }
+#strip button, #keyrow button {
+  flex: none;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface, none);
+  cursor: pointer;
+}
+#strip-title { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--title); font-weight: 600; }
+#chips { display: flex; gap: 4px; overflow-x: auto; min-width: 0; }
+#chips button { color: var(--muted); max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.phone[data-view="pane"] #keyrow { display: flex; gap: 4px; padding-top: 4px; overflow-x: auto; }
+#keyrow button { min-width: 2.6em; font-family: var(--font, monospace); }
+#keyrow button[aria-pressed="true"] { background: var(--accent); color: var(--chrome); }
+body.phone .pane .tools { display: none; }
+body.phone.drawer[data-view="pane"] #sidebar {
+  display: flex;
+  position: fixed;
+  inset: 0 20% 0 0;
+  z-index: 10;
+  padding: 10px 8px;
+  background: var(--chrome);
+  border-right: 1px solid var(--border);
+}
+body.phone.drawer #scrim { display: block; position: fixed; inset: 0; z-index: 9; background: rgb(0 0 0 / 45%); }

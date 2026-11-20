@@ -40,6 +40,11 @@ const PLACES = {
   Quote: "'", Comma: ",", Period: ".", Slash: "/", Backquote: "`",
 };
 
+/** The character ctrl goes with: the layout's own Latin letter (Dvorak's C), else the key's place. */
+export function ctrlChar(e) {
+  return /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : place(e.code);
+}
+
 function place(code) {
   if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
   if (/^Digit[0-9]$/.test(code)) return code.slice(5);
@@ -48,6 +53,25 @@ function place(code) {
 
 /** The characters ctrl makes a control code of (leon_core::keys's `control`); JSON-shaped. */
 export const CTRL = "abcdefghijklmnopqrstuvwxyz@2[\\]^6_-/?";
+
+/**
+ * The phone's key row (phone.js): what a phone's keyboard lacks. Each is a key by name, a character
+ * typed as text, or the sticky Ctrl, which makes the next key or character `ctrl+` it. JSON-shaped:
+ * crates/leon/tests/web_phone_keys.rs reads it.
+ */
+export const ROW = [
+  {"label": "Esc", "key": "escape"},
+  {"label": "Ctrl", "ctrl": true},
+  {"label": "Tab", "key": "tab"},
+  {"label": "←", "key": "left"},
+  {"label": "↑", "key": "up"},
+  {"label": "↓", "key": "down"},
+  {"label": "→", "key": "right"},
+  {"label": "|", "text": "|"},
+  {"label": "~", "text": "~"},
+  {"label": "/", "text": "/"},
+  {"label": "-", "text": "-"}
+];
 
 export const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
@@ -67,8 +91,7 @@ export function keyName(e) {
   if (named) return mods(true) + named;
   if (!e.ctrlKey && !(e.altKey && !MAC)) return null; // text (Option's too), or a lone modifier
   // ctrl: the layout's own Latin letter (Dvorak's C is ctrl+c), else the key's place (other scripts)
-  const latin = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : null;
-  const c = e.ctrlKey ? latin ?? place(e.code) : e.key.length === 1 ? e.key.toLowerCase() : null;
+  const c = e.ctrlKey ? ctrlChar(e) : e.key.length === 1 ? e.key.toLowerCase() : null;
   if (!c || c.length !== 1 || c === "+" || (e.ctrlKey && !CTRL.includes(c))) return null;
   if (!MAC && e.ctrlKey && !e.altKey && (c === "v" || (c === "c" && e.shiftKey))) return null;
   const shift = !e.ctrlKey && /^[A-Z]$/.test(e.key) ? "shift+" : ""; // alt+B is ESC B, not ESC b
