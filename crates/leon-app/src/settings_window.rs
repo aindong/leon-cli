@@ -45,10 +45,13 @@ mod shader;
 mod tailscale;
 #[path = "settings_window_theme.rs"]
 mod theme_picker;
+#[path = "settings_window_web.rs"]
+mod web;
 
 pub use lists::{parse_agents, AgentRow, ShortcutRow};
 pub use sections::Section;
 pub use server::{running_for, stop_warning, ServerInfo};
+pub use web::{web_state, WebState};
 
 /// Monospaced families the font control steps through, when installed (init.lua takes any).
 // shortcut: a fixed list, not every installed monospace font; upgrade with a text field.
@@ -138,6 +141,7 @@ pub struct SettingsWindow {
     renders: usize,
     /// `server.status`'s `tailnet`, fetched every 2 s (settings_window_tailscale.rs).
     tailnet: Option<Value>,
+    open: web::Open,
     focus: FocusHandle,
     _appearance: Subscription,
     _activation: Subscription,
@@ -238,6 +242,7 @@ impl SettingsWindow {
             handle: window.window_handle(),
             renders: 0,
             tailnet: None,
+            open: web::Open::default(),
             focus,
             _appearance: appearance,
             _activation: activation,
