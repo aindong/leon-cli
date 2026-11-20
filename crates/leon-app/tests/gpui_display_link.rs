@@ -18,8 +18,21 @@ fn main() {
         }
         return;
     }
-    let filters: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
-    if !filters.is_empty() && !filters.iter().any(|f| NAME.contains(f.as_str())) {
+    // libtest's own arguments: a name filter, `--skip NAME`, `--ignored` (this test isn't), and
+    // the options that take a value
+    let (mut filters, mut skips, mut it) = (Vec::new(), Vec::new(), args.iter());
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--ignored" => return,
+            "--skip" => skips.extend(it.next().map(String::as_str)),
+            "--test-threads" | "--format" | "--color" | "--logfile" | "-Z" => drop(it.next()),
+            s if s.starts_with('-') => {}
+            s => filters.push(s),
+        }
+    }
+    let exact = args.iter().any(|a| a == "--exact");
+    let hit = |f: &&str| if exact { NAME == *f } else { NAME.contains(*f) };
+    if (!filters.is_empty() && !filters.iter().any(hit)) || skips.iter().any(hit) {
         return;
     }
     run();

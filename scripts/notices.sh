@@ -27,9 +27,9 @@ trap 'rm -rf "$tmp"' EXIT
 # "name vX.Y.Z|license|repository"; workspace crates (path dependencies) are leon's own LICENSE
 cargo tree --locked --offline -p leon -e normal,build --prefix none --format '{p}|{l}|{r}' ${target[@]+"${target[@]}"} \
   | sed 's/ (\*)$//; s/ (proc-macro)//' | grep -v ' (/' | sort -u > "$tmp/tree"
-# a git dependency reads "name vX.Y.Z (https://…#<short commit>)": "name-X.Y.Z <short commit>"
+# a git dependency reads "name vX.Y.Z (https://…#<short commit>)": "name-X.Y.Z name <short commit>"
 # for finding its checkout, and the line as a registry crate's
-sed -n 's/^\([^ ]*\) v\([^ |]*\) ([^)]*#\([0-9a-f]*\)).*/\1-\2 \3/p' "$tmp/tree" > "$tmp/git"
+sed -n 's/^\([^ ]*\) v\([^ |]*\) ([^)]*#\([0-9a-f]*\)).*/\1-\2 \1 \3/p' "$tmp/tree" > "$tmp/git"
 sed 's/^\([^ ]*\) v\([^ |]*\) ([^)]*#[0-9a-f]*)/\1 v\2/' "$tmp/tree" | sort -u > "$tmp/crates"
 [ -s "$tmp/crates" ] || { echo "notices.sh: cargo tree listed no crates" >&2; exit 1; }
 # each crate's package dir, then every license file in them with its checksum, in one pass each
@@ -39,14 +39,15 @@ sed 's/^\(.*\) v\([^|]*\)|.*/\1-\2/' "$tmp/crates" | while read -r d; do
 done > "$tmp/dirs"
 # a git dependency's checkout (<repo>-<hash>/<short commit>), linked as name-X.Y.Z like the rest
 mkdir "$tmp/git-pkgs"
-while read -r d short; do
+while read -r d name short; do
   for p in "$checkouts"/*/*; do
     case "$short" in "$(basename "$p")"*) ;; *) continue ;; esac
-    if grep -q "^name = \"${d%-*}\"" "$p/Cargo.toml" 2>/dev/null; then
+    if grep -q "^name = \"$name\"" "$p/Cargo.toml" 2>/dev/null; then
       ln -s "$p" "$tmp/git-pkgs/$d" && echo "$tmp/git-pkgs/$d" >> "$tmp/dirs"
       break
     fi
   done
+  [ -e "$tmp/git-pkgs/$d" ] || echo "notices.sh: no checkout of $d ($short) under $checkouts: build first" >&2
 done < "$tmp/git"
 tr '\n' '\0' < "$tmp/dirs" | xargs -0 -I{} find -H {} -maxdepth 1 -type f \( -iname 'licen[cs]e*' \
   -o -iname 'copying*' -o -iname 'notice*' -o -iname 'unlicense*' \) -print0 | xargs -0 cksum | sort -k3 > "$tmp/sums"
