@@ -110,7 +110,7 @@ mark() {
   cue "\"type\": \"mark\", \"name\": $(jstr "$*")"
 }
 # scene1 … sceneN, N=SCENES (12 for the launch video), SECS the take's seconds
-SCENES=12 SECS=117
+SCENES=12 SECS=117 SRC=2880x1620 # the scenes file can change them; SRC is the VM's screen in pixels
 . "$here/scenes${DEMO_SCENES:+-$DEMO_SCENES}.sh"
 
 case "${1:-}" in
@@ -176,7 +176,7 @@ case "${1:-}" in
     t0=$(python3 -c 'import time; print(time.time())')
     : >"$work/take-beats.txt"
     : >"$work/take-late.txt"
-    printf '{"t": 0, "type": "take", "lead": 1.5, "width": 2880, "height": 1620}\n' >"$cuefile"
+    printf '{"t": 0, "type": "take", "lead": 1.5, "width": %s, "height": %s}\n' "${SRC%x*}" "${SRC#*x}" >"$cuefile"
     for ((n = from; n <= to; n++)); do "scene$n"; done
     wait "$rec" "$wig"
     trap - EXIT
@@ -197,7 +197,8 @@ case "${1:-}" in
     echo "take: the video runs $lead s ahead of the script"
     # 60 fps constant rate at 1080p for editors. The crop keeps 16:9 and takes 32 px off the right:
     # macOS's recording dot (top right) and the parked pointer's sliver (right edge) are there
-    ffmpeg -loglevel error -y -i "$work/take-raw.mov" -vf crop=2848:1602:0:9,fps=60,scale=1920:1080:flags=lanczos \
+    cw=$((${SRC%x*} - 32)); ch=$((cw * 9 / 16)) # 2848x1602 at 9 px down, for the launch video's 2880x1620
+    ffmpeg -loglevel error -y -i "$work/take-raw.mov" -vf crop=$cw:$ch:0:$(((${SRC#*x} - ch) / 2)),fps=60,scale=1920:1080:flags=lanczos \
       -c:v libx264 -crf 16 -pix_fmt yuv420p "$work/take.mp4"
     [ -n "${DEMO_SCENES:-}" ] || python3 "$here/cut.py" "$work/take.mp4" "$work/take-cut.mp4" # the launch video's ⌘Q
     echo "take: $work/take.mp4, $work/take-cut.mp4; beats: $work/take-beats.txt" ;;
@@ -208,7 +209,7 @@ case "${1:-}" in
     CUE_ONLY=1
     # the lead `take` measured stays: it is the video's, not the script's
     lead=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readline())["lead"])' "$cuefile" 2>/dev/null) || lead=1.5
-    printf '{"t": 0, "type": "take", "lead": %s, "width": 2880, "height": 1620}\n' "$lead" >"$cuefile"
+    printf '{"t": 0, "type": "take", "lead": %s, "width": %s, "height": %s}\n' "$lead" "${SRC%x*}" "${SRC#*x}" >"$cuefile"
     for ((n = 1; n <= SCENES; n++)); do "scene$n"; done
     echo "cue: $cuefile ($(wc -l <"$cuefile" | tr -d ' ') lines, rebuilt from $anchor)" ;;
   render)
@@ -221,8 +222,10 @@ case "${1:-}" in
     mkdir -p "$work/renders"
     if [ -n "${DEMO_SCENES:-}" ]; then
       r=$work/renders
-      # web.mp4 for the site; the short cut 16:9, 1:1 and 9:16 for social media, each with a poster
-      for m in web web-short web-square web-vertical; do
+      # web.mp4 for the site (web-4k.mp4 at 3840x2160 too); the short cut 16:9, 1:1 and 9:16 for
+      # social media, each with a poster
+      export LEON_DEMO_SRC=$SRC
+      for m in web web-4k web-short web-square web-vertical; do
         nice -n 10 "$venv/bin/python" "$here/compose/compose.py" "$m" "$work/take-raw.mov" "$work/take-cue.jsonl" "$r/$m.mp4"
         # its poster on the website's demo page: two thirds in, the side by side
         long=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$r/$m.mp4")
@@ -237,7 +240,7 @@ case "${1:-}" in
       done
       [ "$(wc -c <"$r/web.gif")" -le 1500000 ] || { echo "render: web.gif is over 1.5 MB at every size" >&2; exit 1; }
       width=${try#*:}
-      echo "render: $r/web.mp4, web-short.mp4, web-square.mp4, web-vertical.mp4, web.gif ($(($(wc -c <"$r/web.gif") / 1024)) KB, ${width}px), posters"
+      echo "render: $r/web.mp4, web-4k.mp4, web-short.mp4, web-square.mp4, web-vertical.mp4, web.gif ($(($(wc -c <"$r/web.gif") / 1024)) KB, ${width}px), posters"
       exit 0
     fi
     cut=$(python3 "$here/cut.py" --print "$work/take.mp4") # the reopen's windowed seconds, A:B

@@ -1,71 +1,69 @@
 # scenes-web.sh: the web demo's scenes (DEMO_SCENES=web), sourced by run-demo.sh, which defines at,
-# k, mark, caption, zoom and cue. Leon.app ("your Mac") on the left half of the VM's screen, the
-# page in kit/bin/viewer ("your laptop") on the right half (kit/web.sh). About 56 s; compose.py
-# web renders all of it, web-short the WEB_CUT pieces by these marks.
-SCENES=6 SECS=56
+# k, mark, caption, zoom and cue. "Open it anywhere": Leon.app ("your Mac") on the left half of the
+# VM's screen; Settings copies the page's address; a browser on "another machine" (kit/bin/viewer,
+# the right half) has it pasted and shows the same session; the agent is answered from it, then
+# from a phone. About 43 s; compose.py web renders all of it, the short cuts the WEB_CUT pieces by
+# these marks (compose/web.py).
+SCENES=5 SECS=43 SRC=3840x2160 # the clone's screen: 1920x1080 pt at 2x (README: tart set --display)
 # w STEP…: kit/web.sh in the VM (setup and the take)
 w() {
   cue "\"type\": \"step\", \"step\": $(jstr "web $*")"
   [ -n "${CUE_ONLY:-}" ] && { spend 0.3; return; }
   ssh $(ssh_opts) "demo@$(cat "$work/.ip")" "bash kit/web.sh $(printf "%q " "$@")"
 }
-# where things are, in points on the VM's 1440x810 screen (measured from VNC shots of a setup)
-SERVER_DOWNS=${SERVER_DOWNS:-7}  # Settings' sidebar: Down presses from General to Server (Tailscale access, Web page)
-SERVE_X=${SERVE_X:-1104} SERVE_Y=${SERVE_Y:-423} # "Let my other machines on Tailscale connect"'s switch
-WEB_X=${WEB_X:-1104} WEB_Y=${WEB_Y:-589}   # "Web page"'s switch, 30 pt lower once the first is on
-SETTINGS_ZOOM=${SETTINGS_ZOOM:-"1010 760 1260 560"} # raw pixels: Settings' two switches
-WEB_ZOOM=${WEB_ZOOM:-"1010 740 1250 610"}           # the Web page part once scrolled: address, Copy, QR
-SCROLL_DY=${SCROLL_DY:--200} # Settings' content scrolled to its end: the whole QR code on screen
-COPY_X=${COPY_X:-915} COPY_Y=${COPY_Y:-465}  # the address's Copy button, after that scroll
-APP_SHELL_X=${APP_SHELL_X:-612} APP_SHELL_Y=${APP_SHELL_Y:-288}   # the app's shell pane
-PAGE_SHELL_X=${PAGE_SHELL_X:-1310} PAGE_SHELL_Y=${PAGE_SHELL_Y:-288} # the page's shell pane
-PAGE_BLOCKED_X=${PAGE_BLOCKED_X:-840} PAGE_BLOCKED_Y=${PAGE_BLOCKED_Y:-320} # the page's blocked row in Activity
-PAGE_AGENT_X=${PAGE_AGENT_X:-1070} PAGE_AGENT_Y=${PAGE_AGENT_Y:-300} # the page's agent pane
+# where things are, in points on the clone's 1920x1080 screen (measured from VNC shots of a setup)
+SERVER_DOWNS=${SERVER_DOWNS:-7}  # Settings' sidebar: Down presses from General to Server
+WEB_X=${WEB_X:-1344} WEB_Y=${WEB_Y:-738}   # "Web page"'s switch (Tailscale access is on already)
+SCROLL_DY=${SCROLL_DY:--200}               # Settings' content scrolled to its end: the whole QR code
+COPY_X=${COPY_X:-1162} COPY_Y=${COPY_Y:-613} # the address's Copy button, after that scroll
+PAGE_BLOCKED_X=${PAGE_BLOCKED_X:-1080} PAGE_BLOCKED_Y=${PAGE_BLOCKED_Y:-318} # the browser's blocked row in Activity
+PAGE_AGENT_X=${PAGE_AGENT_X:-1500} PAGE_AGENT_Y=${PAGE_AGENT_Y:-495}       # the browser's agent pane
+PHONE_BLOCKED_X=${PHONE_BLOCKED_X:-1390} PHONE_BLOCKED_Y=${PHONE_BLOCKED_Y:-278} # the phone's blocked row
+PHONE_PANE_X=${PHONE_PANE_X:-1440} PHONE_PANE_Y=${PHONE_PANE_Y:-525}       # the phone's pane, once open
+# zooms, in the 3840x2160 take's pixels
+APP="48 80 1840 1900" SETTINGS_ZOOM="1500 1000 1260 560" WEB_ZOOM="1490 1050 1240 620"
+BROWSER="1936 60 1856 1900" BROWSER_TOP="1936 60 1856 700" PHONE="2440 100 880 1800"
 
-scene1() { # your Mac: tests in a shell, an agent at work
+scene1() { # your Mac: an agent at work, Activity open (kit/web.sh stage opens it)
   mark "1 your mac"
-  at 0.5; k type "python3 runtests.py"; k key return
-  at 1.4; w go
-  caption "Your Mac: an agent at work." 6.6
-  at 0.6; zoom 16 76 1440 1512 6.6 # Leon.app's window
+  at 0.6; w go
+  caption "Your Mac: an agent at work." 5.8
+  at 0.6; zoom $APP 5.8 # Leon.app's window
 }
-scene2() { # Settings, Server: Tailscale access, and the web page on; its address and QR
-  at 7; mark "2 settings"; k combo cmd+, # the first shortcut: lead.py measures the video's lead on it
-  caption "Turn on the web page." 16.9 "then Copy its address"
-  at 7.6; zoom $SETTINGS_ZOOM 14.6
-  at 7.9
+scene2() { # Settings, Server: the web page on; its address and QR code; Copy
+  at 6; mark "2 settings"; k combo cmd+, # the first shortcut: lead.py measures the video's lead on it
+  caption "Turn on the web page." 14.4 "Settings · Server"
+  at 6.6; zoom $SETTINGS_ZOOM 11.8
+  at 6.8
   for ((i = 0; i < SERVER_DOWNS; i++)); do k key down; done
-  at 8.8; k click "$SERVE_X" "$SERVE_Y"
-  at 9.8; k click "$WEB_X" "$WEB_Y" # the address and the QR code appear under it, within 5 s
-  at 14.8; k scroll 1100 500 "$SCROLL_DY"; zoom $WEB_ZOOM 16.9
-  at 15.6; k click "$COPY_X" "$COPY_Y" # the address, copied
-  at 17; k key esc
+  at 7.8; k click "$WEB_X" "$WEB_Y" # the address and the QR code appear under it, within 5 s
+  at 12; k scroll 1050 675 "$SCROLL_DY"; zoom $WEB_ZOOM 14.4
+  at 12.8; k click "$COPY_X" "$COPY_Y" # the address, copied
+  at 14.2; k key esc
 }
-scene3() { # your laptop: the address in a browser; the same sessions, live
-  at 17.4; mark "3 laptop"; w viewer # a browser beside the app, its address bar empty
-  caption "Open it on your other machine." 23.4 "paste the address"
-  at 20.2; k combo cmd+v
-  at 21; k key return
+scene3() { # a browser on another machine: the address pasted, Return, the same session, live
+  at 14.6; mark "3 browser"; w viewer # its address bar empty and focused
+  caption "Open it anywhere: paste it into a browser." 23
+  at 16.8; zoom $BROWSER_TOP 19.4 # the address bar
+  at 17.6; k combo cmd+v
+  at 18.6; k key return
+  at 19.6; zoom $BROWSER 23 # the session appearing, held
 }
-scene4() { # typing both ways
-  at 24; mark "4 typing"; k click "$PAGE_SHELL_X" "$PAGE_SHELL_Y"
-  caption "Type from anywhere on your tailnet." 34.6
-  at 24.8; k type "echo typed in the browser"; k key return
-  at 29; k click "$APP_SHELL_X" "$APP_SHELL_Y"
-  at 29.8; k type "echo and back on the Mac"; k key return
+scene4() { # the agent asks; the browser answers it
+  at 23; mark "4 answer"; w go ask
+  caption "Answer your agents from it." 29.6 "the web page counts as a person"
+  at 24.2; k click "$PAGE_BLOCKED_X" "$PAGE_BLOCKED_Y" # the page's Activity row: its pane
+  at 25; k click "$PAGE_AGENT_X" "$PAGE_AGENT_Y" # the keys go to the pane clicked
+  at 25.6; k type y
+  at 26.1; k key return
 }
-scene5() { # the agent asks; both Activity lists show it; the person answers from the browser
-  at 35; mark "5 blocked"; w go ask
-  at 36; k combo cmd+shift+a # the app's Activity, in its sidebar; it stays open
-  caption "An agent needs you: both show it." 39.8
-  at 39; k click "$PAGE_BLOCKED_X" "$PAGE_BLOCKED_Y" # the page's Activity row: its tab and pane
-  caption "Answer it from the browser." 46.6 "the web page counts as a person"
-  at 40.2; k click "$PAGE_AGENT_X" "$PAGE_AGENT_Y" # the keys go to the pane clicked
-  at 40.9; k type y
-  at 41.5; k key return
-}
-scene6() { # the same page, phone-sized, as if from the QR code
-  at 47; mark "6 phone"; w unviewer; w viewer phone
-  at 47.8; zoom 1960 60 880 1540 55.6 # the phone-sized page
-  caption "Or from your phone." 55.6 "the QR code in Settings opens it"
+scene5() { # anywhere: a phone, as if from the QR code; it answers the agent's next question
+  at 30; mark "5 phone"; w unviewer; w viewer phone
+  w go ask2
+  caption "Or from your phone." 42.6 "the QR code in Settings opens it"
+  at 32.4; zoom $PHONE 42.6
+  at 35.4; k click "$PHONE_BLOCKED_X" "$PHONE_BLOCKED_Y" # Activity's row: its pane, the key row under it
+  at 36.6; k click "$PHONE_PANE_X" "$PHONE_PANE_Y"
+  at 37.2; k type y
+  at 37.8; k key return
 }

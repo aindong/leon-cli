@@ -217,7 +217,7 @@ def soft(mode, i, ps=()):
 def piece_frame(R, L, p, pt, src, out_t):
     """one output frame of piece p at pt seconds into it (src: the raw frame, for a take piece)"""
     if p[0] == "card":
-        return card(L, p[1], pt, p[2], END_LINES)
+        return card(L, p[1], pt, p[2], p[3] if len(p) > 3 else END_LINES)  # the web cuts' own lines
     t = p[1] + pt
     if p[4] == "cold":  # the take as it is: its caption and keycap belong to the story, later
         return R.frame(src, t, out_t, captions=[], keys=False, show_cursor=False)

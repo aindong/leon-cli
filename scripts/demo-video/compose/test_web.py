@@ -6,12 +6,12 @@ from pathlib import Path
 
 from compose import END, frame_plan, pieces, srt
 from frame import load_cue
-from web import VERTICAL, WEB_CUT, WEB_FRAMES, layout, stacked
-from frame import SQUARE, MAIN, Renderer
+from web import VERTICAL, WEB16, WEB4K, WEB_CUT, WEB_FRAMES, WEB_SQUARE, layout, stacked
+from frame import Renderer
 from PIL import Image
 
 HERE = Path(__file__).resolve().parent
-MARKS = ["1 your mac", "2 settings", "3 laptop", "4 typing", "5 blocked", "6 phone"]
+MARKS = ["1 your mac", "2 settings", "3 browser", "4 answer", "5 phone"]
 
 
 def take(lead=1.2, captions=()):
@@ -32,7 +32,9 @@ class WebTest(unittest.TestCase):
         self.assertEqual(ps[0][0], "take")
         self.assertAlmostEqual(ps[0][1], 0.5 + 1.2 - 0.3)  # just before the first mark, in video time
         self.assertEqual(ps[0][2], 60.0)
-        self.assertEqual(ps[-1], ("card", "end", END))
+        self.assertEqual(ps[-1][:3], ("card", "end", END))
+        self.assertEqual(ps[-1][3][0], "Open it anywhere.")  # the end card's headline
+        self.assertEqual(pieces("web-4k", None, 60.0, c), ps)  # the 4K cut: the same pieces
 
     def test_the_short_cut_is_its_pieces_by_mark_with_their_own_captions(self):
         c = load_cue(take())
@@ -45,27 +47,35 @@ class WebTest(unittest.TestCase):
             self.assertIs(p[3], WEB_FRAMES["web-short"][WEB_CUT.index((m, off, dur, cap, small))])
             self.assertEqual(p[4], (cap, small))
         self.assertEqual(ps[-1][:2], ("card", "end"))
+        self.assertEqual(ps[0][4][0], "Open it anywhere.")  # the hook, on the opening frame
         total = len(frame_plan(ps)) / 60
         self.assertTrue(12 <= total <= 20, total)  # "a ~15 s short cut"
 
     def test_square_and_vertical_frame_each_piece(self):
         c = load_cue(take())
         short = pieces("web-short", None, 60.0, c)
-        for mode, L in (("web-square", SQUARE), ("web-vertical", VERTICAL)):
+        for mode, L in (("web-square", WEB_SQUARE), ("web-vertical", VERTICAL)):
             ps = pieces(mode, None, 60.0, c)
             self.assertIs(layout(mode), L)
             self.assertEqual([p[:3] for p in ps[:-1]], [p[:3] for p in short[:-1]])  # the same pieces
             self.assertEqual([p[3] for p in ps[:-1]], WEB_FRAMES[mode])
-            for regions in WEB_FRAMES[mode]:
-                self.assertIsInstance(regions, tuple)  # compose.py tells them from a camera region so
+            for f in WEB_FRAMES[mode]:
+                # a camera region (a list) or regions stacked (a tuple), all inside the 4K take
+                regions = [f] if isinstance(f, list) else f
+                self.assertIsInstance(f, (list, tuple))
                 for x, y, w, h in regions:
-                    self.assertTrue(0 <= x and x + w <= 2880 and 0 <= y and y + h <= 1620, (x, y, w, h))
-        self.assertIs(layout("web-short"), MAIN)
-        self.assertEqual((VERTICAL.W, VERTICAL.H), (1080, 1920))
+                    self.assertTrue(0 <= x and x + w <= 3840 and 0 <= y and y + h <= 2160, (x, y, w, h))
+                if isinstance(f, tuple):  # stacked edge to edge: they fill the frame, nothing behind
+                    self.assertAlmostEqual(sum(L.vw * h / w for _, _, w, h in f), L.vh, delta=4)
+        self.assertIs(layout("web-short"), WEB16)
+        self.assertIs(layout("web-4k"), WEB4K)
+        self.assertEqual((VERTICAL.W, VERTICAL.H, WEB4K.W, WEB4K.H), (1080, 1920, 3840, 2160))
+        for L in (WEB16, WEB4K, WEB_SQUARE, VERTICAL):  # the VM's own screen: no frame around it
+            self.assertEqual((L.vx, L.vy, L.vw, L.vh), (0, 0, L.W, L.H))
 
     def test_stacked_is_the_layouts_size_with_both_windows(self):
-        src = Image.new("RGB", (2880, 1620), (200, 0, 0))
-        src.paste((0, 0, 200), (1440, 0, 2880, 1620))  # the right half, the page, blue
+        src = Image.new("RGB", (3840, 2160), (200, 0, 0))
+        src.paste((0, 0, 200), (1920, 0, 3840, 2160))  # the right half, the browser, blue
         R = Renderer(VERTICAL, load_cue(take()))
         img = stacked(R, src, 5.0, 0.5, WEB_FRAMES["web-vertical"][0], (0, 2, "Caption", ""))
         self.assertEqual(img.size, (1080, 1920))
@@ -73,15 +83,14 @@ class WebTest(unittest.TestCase):
         bottom = img.getpixel((540, VERTICAL.vy + VERTICAL.vh - 200))
         self.assertGreater(top[0], top[2])  # the app on top
         self.assertGreater(bottom[2], bottom[0])  # the page under it
-        one = stacked(R, src, 5.0, 0.5, ((2000, 76, 800, 1512),), (0, 2, "Caption", ""))
-        self.assertEqual(one.getpixel((540, 960))[2], 200)  # one tall region, scaled to fit, centred
-        self.assertNotEqual(one.getpixel((40, 960))[2], 200)  # narrower than the frame: background beside it
+        self.assertGreater(img.getpixel((540, 959))[0], 150)  # edge to edge: the app right to the seam
+        self.assertGreater(img.getpixel((540, 961))[2], 150)  # and the browser right after it
 
     def test_a_take_without_a_mark_of_the_cut_says_which(self):
-        c = [r for r in load_cue(take()) if r.get("name") != "4 typing"]
+        c = [r for r in load_cue(take()) if r.get("name") != "3 browser"]
         with self.assertRaises(SystemExit) as e:
             pieces("web-short", None, 60.0, c)
-        self.assertIn("4 typing", str(e.exception))
+        self.assertIn("3 browser", str(e.exception))
 
     def test_srt_lines_are_on_the_outputs_clock(self):
         path = take(captions=[(1.0, 6.0, "Your Mac: an agent at work.")])

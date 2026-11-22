@@ -219,17 +219,24 @@ input and lowers its capture rate.
 
 ## The web demo (Leon.app beside the web page)
 
-`DEMO_SCENES=web` films a second, shorter demo with the same kit: Leon.app on the left half of
-the VM's screen as "your Mac", the web page ([docs/web.md](../../docs/web.md)) on the right half
-as "your laptop", and, at the end, the page at a phone's width.
+`DEMO_SCENES=web` films a second, shorter demo with the same kit, "Open it anywhere": Leon.app on
+the left half of a big screen as "your Mac"; Settings turns on the web page
+([docs/web.md](../../docs/web.md)) and copies its address; a browser on the right half, "another
+machine", has it pasted and shows the same session, live, and answers the agent; then a phone
+answers its next question. It records a clone of the demo VM with a 1920x1080 pt screen (3840x2160
+px), never `leon-demo` itself:
 
 ```sh
-scripts/demo-video/run-demo.sh webapp                    # the demo's own Leon.app, in $DEMO_WORK/web-app
-DEMO_SCENES=web scripts/demo-video/run-demo.sh push      # that app, the kit, keypost and the viewer
-DEMO_SCENES=web scripts/demo-video/run-demo.sh setup     # tailscaled.py, two sessions, the app windowed
-DEMO_SCENES=web scripts/demo-video/run-demo.sh take      # scenes 1-6 of scenes-web.sh, about 56 s
-DEMO_SCENES=web scripts/demo-video/run-demo.sh render    # renders/web*.mp4, web.gif, posters
+tart clone leon-demo leon-demo-web && tart set leon-demo-web --display 1920x1080pt
+export DEMO_VM=leon-demo-web DEMO_SCENES=web
+scripts/demo-video/run-demo.sh webapp   # the demo's own Leon.app, in $DEMO_WORK/web-app
+scripts/demo-video/run-demo.sh boot     # then push, setup, take, render, as above
+scripts/demo-video/run-demo.sh stop && tart delete leon-demo-web
 ```
+
+`render` makes `renders/web.mp4` (1920x1080) and `web-4k.mp4` (3840x2160), the whole take; the
+short cut at 16:9, 1:1 and 9:16 (`web-short`, `web-square`, `web-vertical`), about 19 s each; a
+poster for each; and `web.gif` (at most 1.5 MB) from the short cut.
 
 The page refuses its own machine on purpose (`admit`, [docs/architecture/web.md](../../docs/architecture/web.md)),
 and a second VM doesn't help: Tart's network is outside Tailscale's ranges, so leon refuses it
@@ -238,20 +245,25 @@ leon with debug assertions in `leon-hosts` only, which compiles in `LEON_TEST_TA
 `kit/bin/tailscaled.py` answers its status and whois calls for a made-up tailnet, naming every
 caller "laptop", another of the owner's machines. A release build has no code that reads the
 seam (the `update_release_build` test checks), and this build is never published. Nothing about
-admission is bypassed: `admit`, the Host check, Origin and the token run as they ship. The VM
-can't resolve the made-up MagicDNS name (`studio-mac.example-tailnet.ts.net`; `/etc/hosts` needs
-root), so the viewer sends its requests through `kit/bin/proxy.py`, which tunnels them unchanged
-to leon's port on 127.0.0.1 and refuses anything else: leon sees the page's own Host and Origin.
-The listener can only bind an address the VM has, so Settings' "Serving on" line names
-127.0.0.1; the short cuts frame Settings' Web page part (the address, Copy, the QR code) without it.
+admission is bypassed: `admit`, the Host check, Origin and the token run as they ship. The page
+is HTTPS: `kit/web.sh stage` makes a certificate for the made-up name with the VM's `openssl`, as
+`tailscale cert` would for a real one, and the viewer trusts it for that name only. The VM can't
+resolve the made-up MagicDNS name (`studio-mac.example-tailnet.ts.net`; `/etc/hosts` needs root),
+so the viewer sends its requests through `kit/bin/proxy.py`, which tunnels them unchanged to
+leon's port on 127.0.0.1 and refuses anything else: leon sees the page's own Host and Origin. The
+listener can only bind an address the VM has, so Settings' "Serving on" line names 127.0.0.1; the
+short cuts frame Settings' Web page part (the address, Copy, the QR code) without it.
 
-`viewer.swift` is "the browser": one window with an address bar and the page, so no other
-product's window is in the shot. The take clicks Copy beside the address in Settings, pastes it
-into the empty address bar and presses Return. Clicks are in points on the VM's screen; scenes-web.sh's
-variables at its top hold the ones measured from VNC shots of a setup (`run-demo.sh shot`).
-`compose.py web` renders the whole take, `web-short` the pieces in `compose/web.py`'s `WEB_CUT`,
-each found by its scene's mark, and `web-square` and `web-vertical` the same pieces at 1:1 and
-9:16 for social media, each framed on one window or on the two stacked (`WEB_FRAMES`). The GIF is made from the short cut, at most 1.5 MB.
+`viewer.swift` draws the browser (a tab strip, back, forward, reload, a padlock in the address
+bar) and the phone (a phone-shaped frame, its address pill, the page's phone layout with its key
+row), neutral and unbranded, so no other product is on screen. The take clicks Copy beside the
+address in Settings (`keypost scroll` first, for the whole QR code), pastes it into the browser's
+empty address bar and presses Return. Clicks are in points on the VM's screen; the variables at
+the top of `scenes-web.sh` hold the ones measured from VNC shots of a setup (`run-demo.sh shot`).
+The cuts show the VM's own screen edge to edge, no brand frame, with each caption a small opaque
+pill near the bottom. `compose/web.py` has the short cut's pieces (`WEB_CUT`, each found by its
+scene's mark) and their framing at 1:1 and 9:16 (`WEB_FRAMES`: a region the camera holds, or the
+two windows stacked); `LEON_DEMO_SRC` tells the compositor the take's size.
 
 ## Licences of what it uses
 

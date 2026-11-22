@@ -3,6 +3,7 @@ beat, and the renderer that puts the take, the pointer, the keycaps and the capt
 """
 import json
 import math
+import os
 from dataclasses import dataclass
 
 import numpy as np
@@ -12,10 +13,11 @@ from draw import (AMBER, CHALK, IRON, PARCHMENT, SYMBOLS, UMBER, background, bad
                   rounded_mask, shadow, symbol)
 
 FPS = 60
-SRC_W, SRC_H = 2880, 1620
+# the raw take's size: the launch video's VM screen, or LEON_DEMO_SRC=WxH (the web demo's is 4K)
+SRC_W, SRC_H = map(int, os.environ.get("LEON_DEMO_SRC", "2880x1620").split("x"))
 # the part of the raw frame that is used: the right 32 px hold macOS's recording dot and the
-# parked pointer; 9 px off the top and bottom keep it 16:9
-BASE = (0.0, 9.0, 2848.0, 1602.0)
+# parked pointer; as much off the top and bottom as keeps it 16:9 (9 px of each at 2880x1620)
+BASE = (0.0, (SRC_H - (SRC_W - 32) * 9 / 16) / 2, float(SRC_W - 32), (SRC_W - 32) * 9 / 16)
 MOVE = 0.7  # seconds for a zoom in or out
 
 # ---------------------------------------------------------------- layouts
@@ -83,10 +85,10 @@ class Renderer:
         b = self.bg.convert("RGBA")
         b.alpha_composite(self.shadow, (L.vx - self.spad, L.vy - self.spad))
         self.base = b.convert("RGB")
-        self.cursor = pointer(int(46 * L.W / 1920) if L.W == 1920 else 40)
+        self.cursor = pointer(int(46 * L.W / 1920) if L.W >= 1920 else 40)
         # the captions tell the story (a voice-over is optional), so they read on a phone (a still 390 px wide)
-        self.cap_font = font(56 if L.W == 1920 else 40, 640)
-        self.small_font = font(38 if L.W == 1920 else 30, 520)
+        self.cap_font = font(round(56 * L.W / 1920) if L.W >= 1920 else 40, 640)  # 4K: twice 1080p's
+        self.small_font = font(round(38 * L.W / 1920) if L.W >= 1920 else 30, 520)
         self.badges = {}
         self.home = (BASE[0] + BASE[2] / 2, BASE[1] + BASE[3] / 2, min(BASE[2], BASE[3] * self.aspect))
         self.zooms = sorted((r for r in cue if r["type"] == "zoom"), key=lambda r: r["vt"])
@@ -202,7 +204,7 @@ class Renderer:
             alpha = min(alpha, max(0.0, (nxt["vt"] - t) / 0.12))
         b = self.badges.get(k["combo"])
         if b is None:
-            b = self.badges[k["combo"]] = badge(k["combo"], 58 if L.W == 1920 else 54)
+            b = self.badges[k["combo"]] = badge(k["combo"], round(58 * L.W / 1920) if L.W >= 1920 else 54)
         rise = int((1 - ease(min(1.0, age / 0.18))) * 10)
         b2 = b
         if alpha < 1:

@@ -247,21 +247,22 @@ def card(L, kind, t, dur, end_lines=None):
     img = background(L.W, L.H).convert("RGBA") if not hasattr(card, "bg") or card.bg.size != (L.W, L.H) else card.bg.copy()
     card.bg = img.copy()
     icon = Image.open(REPO / "brand" / "icon" / "leon-1024.png").convert("RGBA")
-    s = 250 if L.W == 1920 else 230
+    k = L.W / 1920 if L.W >= 1920 else 1.0  # 4K: everything twice 1080p's
+    s = round(250 * k) if L.W >= 1920 else 230
     icon = icon.resize((s, s), Image.Resampling.LANCZOS)
-    wm = wordmark(110 if L.W == 1920 else 96)
+    wm = wordmark(round(110 * k) if L.W >= 1920 else 96)
     a = ease(min(1.0, t / 0.5)) * (1 - ease(max(0.0, (t - (dur - 0.4)) / 0.4)))
-    cy = L.H // 2 - (60 if kind == "title" else 120)
-    rise = int((1 - ease(min(1.0, t / 0.6))) * 18)
+    cy = L.H // 2 - round((60 if kind == "title" else 120) * k)
+    rise = int((1 - ease(min(1.0, t / 0.6))) * 18 * k)
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    layer.alpha_composite(icon, (L.W // 2 - s // 2, cy - s // 2 - 70 + rise))
-    layer.alpha_composite(wm, (L.W // 2 - wm.width // 2, cy + s // 2 - 40 + rise))
+    layer.alpha_composite(icon, (L.W // 2 - s // 2, cy - s // 2 - round(70 * k) + rise))
+    layer.alpha_composite(wm, (L.W // 2 - wm.width // 2, cy + s // 2 - round(40 * k) + rise))
     d = ImageDraw.Draw(layer)
     y = cy + s // 2 + wm.height
     lines = ["Keep your work in view."] if kind == "title" else (end_lines or [])
     for i, line in enumerate(lines):
-        f = font(40 if i == 0 else 32, 560 if i == 0 else 480)
-        d.text((L.W / 2, y + 10 + i * 56), line, font=f, fill=(PARCHMENT if i == 0 else CHALK) + (255,), anchor="mm")
+        f = font(round((40 if i == 0 else 32) * k), 560 if i == 0 else 480)
+        d.text((L.W / 2, y + 10 * k + i * 56 * k), line, font=f, fill=(PARCHMENT if i == 0 else CHALK) + (255,), anchor="mm")
     layer.putalpha(layer.getchannel("A").point(lambda v: int(v * a)))
     img.alpha_composite(layer)
     return img.convert("RGB")
