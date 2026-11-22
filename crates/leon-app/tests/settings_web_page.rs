@@ -160,3 +160,21 @@ fn the_cert_command_follows_the_files_while_open(cx: &mut TestAppContext) {
     assert!(!before.contains("/certs/b.crt"), "{before}");
     assert!(after.contains("--cert-file '/certs/b.crt' --key-file '/certs/b.key'"), "{after}");
 }
+
+/// The machine's name in the command is the MagicDNS name the server said, and only a DNS name:
+/// anything else (a shell word, an address) leaves the placeholder.
+#[gpui::test]
+fn the_cert_command_names_the_machine_only_by_a_dns_name(cx: &mut TestAppContext) {
+    let (o, mut cx) = open(cx, "leon.set(\"serve_tailscale\", true)\nleon.set(\"serve_web\", true)\n");
+    let hint = |cx: &mut VisualTestContext, url: &str| {
+        show(cx, &o, serving(&[url], None));
+        o.sw.read_with(cx, |sw, _| sw.cert_hint()).unwrap()
+    };
+    let good = hint(&mut cx, DNS);
+    let bad = hint(&mut cx, "http://x;touch$IFS/tmp/p:7297/");
+    let ip = hint(&mut cx, IP);
+    o.s.app.stop();
+    assert!(good.ends_with(" devbox.example-tailnet.ts.net"), "{good}");
+    assert!(bad.ends_with(" MACHINE.TAILNET.ts.net") && !bad.contains("touch"), "{bad}");
+    assert!(ip.ends_with(" MACHINE.TAILNET.ts.net"), "{ip}");
+}
