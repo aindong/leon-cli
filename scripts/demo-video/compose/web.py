@@ -27,7 +27,7 @@ WEB_END_LINES = ["Open it anywhere.", "leon 0.2.1 · your terminals in a browser
 # machines on one frame, the agent waiting in each
 WEB_CUT = [
     ("4 answer", 0.6, 1.8, "Open it anywhere.", ""),
-    ("2 settings", 4.4, 2.6, "Copy the address from Settings.", ""),
+    ("2 settings", 6.0, 2.4, "Copy the address from Settings.", ""),  # scrolled, then Copy
     ("3 browser", 2.8, 4.4, "Paste it into any browser.", "on your tailnet"),
     ("4 answer", 1.6, 3.0, "Answer your agents from it.", ""),
     ("5 phone", 3.4, 4.6, "Or from your phone.", ""),
@@ -39,13 +39,13 @@ WEB_CUT = [
 SETTINGS = [1490, 1050, 1240, 620]  # Settings' Web page part: the switch, the address, Copy, the QR
 PHONE = [2440, 100, 880, 1800]
 WEB_FRAMES = {
-    "web-square": [((48, 80, 1840, 920), (1936, 80, 1856, 928)), SETTINGS, [1936, 80, 1856, 1856],
+    "web-square": [((48, 80, 1840, 920), (1936, 80, 1856, 928)), SETTINGS, [1936, 60, 1400, 1400],
                    ((48, 80, 1840, 920), (1936, 80, 1856, 928)), PHONE],
     "web-vertical": [((48, 80, 1840, 1636), (1936, 80, 1856, 1650)), SETTINGS, [1936, 80, 1160, 1900],
                      ((48, 80, 1840, 1636), (1936, 80, 1856, 1650)), PHONE],
-    # 16:9 follows the take's zooms, but holds Settings' Web page part: the "Serving on" line above
-    # it says the seam's 127.0.0.1
-    "web-short": [None, SETTINGS, None, None, None],
+    # 16:9 opens wide on the whole desktop, follows the take's zooms after, but holds Settings' Web
+    # page part: the "Serving on" line above it says the seam's 127.0.0.1
+    "web-short": [[0, 9, 3808, 2142], SETTINGS, None, None, None],
 }
 WEB_END = 2.5
 WEB_HEAD = 0.3  # the web cut starts this long before the take's first mark

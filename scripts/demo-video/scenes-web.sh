@@ -21,14 +21,15 @@ PAGE_AGENT_X=${PAGE_AGENT_X:-1500} PAGE_AGENT_Y=${PAGE_AGENT_Y:-495}       # the
 PHONE_BLOCKED_X=${PHONE_BLOCKED_X:-1390} PHONE_BLOCKED_Y=${PHONE_BLOCKED_Y:-278} # the phone's blocked row
 PHONE_PANE_X=${PHONE_PANE_X:-1440} PHONE_PANE_Y=${PHONE_PANE_Y:-525}       # the phone's pane, once open
 # zooms, in the 3840x2160 take's pixels
-APP="48 80 1840 1900" SETTINGS_ZOOM="1500 1000 1260 560" WEB_ZOOM="1490 1050 1240 620"
-BROWSER="1936 60 1856 1900" BROWSER_TOP="1936 60 1856 700" PHONE="2440 100 880 1800"
+APP="48 80 1840 1035" SETTINGS_ZOOM="1500 1000 1260 560" WEB_ZOOM="1490 1050 1240 620"
+BROWSER="1936 60 1856 1000" BROWSER_TOP="1936 60 1856 700" # the browser's top: URL, session, the agent's prompt
+PHONE="2440 120 880 950" # the phone's top half: its address, the pane, the prompt (the 9:16 cut has the whole phone)
 
 scene1() { # your Mac: an agent at work, Activity open (kit/web.sh stage opens it)
   mark "1 your mac"
   at 0.6; w go
   caption "Your Mac: an agent at work." 5.8
-  at 0.6; zoom $APP 5.8 # Leon.app's window
+  at 0.4; zoom $APP 6.2 # Leon.app's window, filling the frame: the agent's pane
 }
 scene2() { # Settings, Server: the web page on; its address and QR code; Copy
   at 6; mark "2 settings"; k combo cmd+, # the first shortcut: lead.py measures the video's lead on it
@@ -51,8 +52,8 @@ scene3() { # a browser on another machine: the address pasted, Return, the same 
 }
 scene4() { # the agent asks; the browser answers it
   at 23; mark "4 answer"; w go ask
-  caption "Answer your agents from it." 29.6 "the web page counts as a person"
-  at 24.2; k click "$PAGE_BLOCKED_X" "$PAGE_BLOCKED_Y" # the page's Activity row: its pane
+  caption "Answer your agents from it." 29.6
+  at 24.2; zoom $BROWSER 29.6; k click "$PAGE_BLOCKED_X" "$PAGE_BLOCKED_Y" # the page's Activity row: its pane
   at 25; k click "$PAGE_AGENT_X" "$PAGE_AGENT_Y" # the keys go to the pane clicked
   at 25.6; k type y
   at 26.1; k key return
