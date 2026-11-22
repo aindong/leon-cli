@@ -257,6 +257,8 @@ mod activity;
 mod bars;
 #[path = "view_calls.rs"]
 mod calls;
+#[path = "view_connect.rs"]
+mod connect;
 #[path = "view_copy.rs"]
 mod copy;
 #[path = "view_cursor_shader.rs"]

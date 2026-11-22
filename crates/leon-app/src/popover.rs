@@ -21,17 +21,22 @@ use crate::view::{drawing, sel};
 const WIDTH: f32 = 360.;
 
 /// A choice in a popover: `id` is what `Chose` carries, `hint` a muted note on its right (a
-/// shortcut).
+/// shortcut). A heading names the items under it and is never highlighted or chosen.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Item {
     pub id: String,
     pub label: String,
     pub hint: Option<String>,
+    pub heading: bool,
 }
 
 impl Item {
     pub fn new(id: impl Into<String>, label: impl Into<String>, hint: Option<String>) -> Item {
-        Item { id: id.into(), label: label.into(), hint }
+        Item { id: id.into(), label: label.into(), hint, heading: false }
+    }
+
+    pub fn heading(label: impl Into<String>) -> Item {
+        Item { id: String::new(), label: label.into(), hint: None, heading: true }
     }
 }
 
@@ -50,6 +55,8 @@ pub struct Popover {
     focus: FocusHandle,
     /// It chose or was dismissed: its owner hears one `Chose` or `Dismissed`, whatever follows.
     ended: bool,
+    /// Text shown as a QR code under the lines (the web page's address).
+    qr: Option<String>,
     _blur: Subscription,
 }
 
@@ -67,14 +74,36 @@ impl Popover {
     ) -> Popover {
         let focus = cx.focus_handle();
         let blur = cx.on_blur(&focus, window, |p, _, cx| p.end(PopoverEvent::Dismissed, cx));
-        Popover { anchor, lines, items, highlighted: None, theme, focus, ended: false, _blur: blur }
+        Popover { anchor, lines, items, highlighted: None, theme, focus, ended: false, qr: None, _blur: blur }
     }
 
     /// Take the focus, for the keyboard: the first item is highlighted unless one already is.
     pub fn focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.highlighted = self.highlighted.or((!self.items.is_empty()).then_some(0));
+        self.highlighted = self.highlighted.or_else(|| self.items.iter().position(|i| !i.heading));
         window.focus(&self.focus);
         cx.notify();
+    }
+
+    /// Show `items` instead (a list that filled in later): the highlighted one stays highlighted
+    /// while it is still there, else the first.
+    pub fn set_items(&mut self, items: Vec<Item>, cx: &mut Context<Self>) {
+        let was = self.highlighted.and_then(|i| self.items.get(i)).map(|i| i.id.clone());
+        self.items = items;
+        let first = self.items.iter().position(|i| !i.heading);
+        self.highlighted = match (was, self.highlighted) {
+            (Some(id), _) => self.items.iter().position(|i| !i.heading && i.id == id).or(first),
+            (None, h) => h.and(first),
+        };
+        cx.notify();
+    }
+
+    /// Show `qr`'s text as a QR code under the lines.
+    pub fn with_qr(self, qr: Option<String>) -> Popover {
+        Popover { qr, ..self }
+    }
+
+    pub fn has_qr(&self) -> bool {
+        self.qr.is_some()
     }
 
     pub fn is_focused(&self, window: &Window) -> bool {
@@ -103,7 +132,7 @@ impl Popover {
     }
 
     fn choose(&mut self, i: usize, cx: &mut Context<Self>) {
-        if let Some(item) = self.items.get(i) {
+        if let Some(item) = self.items.get(i).filter(|i| !i.heading) {
             self.end(PopoverEvent::Chose(item.id.clone()), cx);
         }
     }
@@ -118,10 +147,17 @@ impl Popover {
         cx.stop_propagation();
         let n = self.items.len();
         match ev.keystroke.key.as_str() {
-            "down" | "up" if n > 0 => {
-                // from nothing highlighted, Down starts at the top and Up at the bottom
+            "down" | "up" if self.items.iter().any(|i| !i.heading) => {
+                // from nothing highlighted, Down starts at the top and Up at the bottom; headings are passed over
                 let (by, from) = if ev.keystroke.key == "down" { (1, n - 1) } else { (n - 1, 0) };
-                self.highlighted = Some((self.highlighted.unwrap_or(from) + by) % n);
+                let mut at = self.highlighted.unwrap_or(from);
+                loop {
+                    at = (at + by) % n;
+                    if !self.items[at].heading {
+                        break;
+                    }
+                }
+                self.highlighted = Some(at);
                 cx.notify();
             }
             "enter" => match self.highlighted {
@@ -150,6 +186,19 @@ impl Render for Popover {
                 .children(self.lines.iter().map(|l| div().child(l.clone())))
         });
         let items = self.items.iter().enumerate().map(|(i, item)| {
+            if item.heading {
+                return div()
+                    .id(SharedString::from(format!("popover-heading-{i}")))
+                    .debug_selector(move || sel(format!("popover-heading-{i}")))
+                    .mx(px(4.))
+                    .px(px(6.))
+                    .pt(px(if i == 0 { 2. } else { 8. }))
+                    .pb(px(2.))
+                    .text_size(px(SECONDARY_TEXT))
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(rgb(t.muted))
+                    .child(item.label.clone());
+            }
             let name = format!("popover-item-{}", item.id);
             let on = self.highlighted == Some(i);
             div()

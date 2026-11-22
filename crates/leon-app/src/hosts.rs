@@ -235,6 +235,18 @@ impl Hosts {
         }
     }
 
+    /// Start an attempt on host `i` now rather than at its backoff's end (one chosen in the Connect
+    /// menu); nothing when it is connected or an attempt is running.
+    pub fn retry_now(&mut self, i: usize) {
+        let wake = self.wake.clone();
+        let Some(m) = self.machines.get_mut(i).filter(|m| !m.is_local() && m.remote.is_none()) else { return };
+        if m.attempt.lock().unwrap_or_else(PoisonError::into_inner).running {
+            return;
+        }
+        (m.retry_at, m.backoff) = (None, BACKOFF.0);
+        Self::spawn(m, wake);
+    }
+
     pub fn machines(&self) -> &[Machine] {
         &self.machines
     }

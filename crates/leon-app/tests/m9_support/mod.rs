@@ -64,7 +64,11 @@ fn serve(init_lua: Option<&str>, pane_env: Vec<(String, String)>) -> Setup {
 /// test binary, by the first `setup` before its server starts (every test sets the same value).
 pub fn no_tailscale() {
     static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| std::env::set_var("LEON_TAILSCALE", "/nonexistent/tailscale"));
+    ONCE.call_once(|| {
+        std::env::set_var("LEON_TAILSCALE", "/nonexistent/tailscale");
+        // the Connect menu asks tailscaled's LocalAPI (a debug build reads this seam): nothing there
+        std::env::set_var("LEON_TEST_TAILNET", r#"{"localapi": "/nonexistent/tailscaled.sock"}"#);
+    });
 }
 
 pub fn open<'a>(cx: &'a mut TestAppContext, app: &Rc<Embedded>) -> (Entity<Workspace>, &'a mut VisualTestContext) {

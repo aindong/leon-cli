@@ -32,6 +32,8 @@ fields it doesn't know. The full policy is in
 
 ## [Unreleased]
 
+- Leon.app's sidebar has a footer with Settings and Connect (⌘⇧K): your hosts, your tailnet's machines, Add a host… and this Mac's web page in one menu ([detail](docs/changelog-detail.md#a-sidebar-footer-to-connect)).
+
 ## [0.2.0] - 2026-11-20
 
 leon is a terminal multiplexer for people who run several terminal programs and coding agents at

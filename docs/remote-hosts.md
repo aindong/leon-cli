@@ -35,6 +35,24 @@ says why it can't, and picking one adds it as `leon hosts add --tailscale` would
 when you pick "Another host by its ssh address…", it asks for a label (such as `devbox`) and then
 for the `ssh://` address that reaches the host. The app saves the host to the same list `leon hosts` reads and starts connecting to it.
 
+### Connect from the sidebar's footer
+
+The sidebar's footer has two buttons: Connect on the left and Settings (⌘,) on the right. Connect,
+also ⌘⇧K or "Connect to a Machine…" in the command palette, opens one menu for reaching another
+machine; ↑, ↓ and ↩ work in it, and esc closes it:
+
+- **Your hosts**: every host the app shows and every one `leon hosts` lists that it doesn't, each
+  with its state (connected, connecting, unreachable, needs login, not shown). Choose a connected
+  one to go to its sessions, one that isn't to try it again now, and one not shown to show it.
+- **On your tailnet**: with Tailscale running here, your own other machines, read from the local
+  Tailscale client's status (leon only reads it and changes nothing). Only machines signed in as
+  you and not tagged are listed, since those are the only ones a `tailnet://` host reaches. Choose
+  one to save it as `tailnet://NAME` under its short name and connect. leon doesn't probe them
+  first: one that doesn't serve leon (`serve_tailscale`) shows unreachable.
+- **Add a host…**: the Add Host prompt above.
+- **This Mac's web page**: while the [web page](web.md) is served, "Open on another device" shows
+  its address and a QR code to scan; else "Turn on in Settings…" opens Settings.
+
 The app's ssh never asks for a password. A host that needs one says
 `needs login: run leon hosts check devbox in a terminal`; do that once (accept the host key, unlock
 your key), and the app's next try gets in. While a link is down the host's panes keep their last

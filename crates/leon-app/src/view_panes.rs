@@ -411,6 +411,7 @@ impl Render for Workspace {
             .children(self.render_hint().filter(|_| !self.stopped))
             .children(self.render_card(cx).filter(|_| !self.stopped))
             .children(self.render_row_menu(cx).filter(|_| !self.stopped))
+            .children(self.render_connect(cx).filter(|_| !self.stopped))
             .child(self.frame_mark())
             .when(!self.stopped, |d| d.child(self.input_canvas(cx)))
     }
