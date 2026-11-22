@@ -6,6 +6,7 @@ pub mod direct;
 pub mod hosts;
 mod link;
 pub mod localapi;
+pub mod peers;
 pub mod tailscale;
 
 use std::process::Command;

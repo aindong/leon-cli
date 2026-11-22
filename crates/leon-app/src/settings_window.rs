@@ -48,7 +48,7 @@ mod tailscale;
 #[path = "settings_window_theme.rs"]
 mod theme_picker;
 #[path = "settings_window_web.rs"]
-mod web;
+pub(crate) mod web;
 
 pub use crate::agent_skill::{parse_agents, AgentRow};
 pub use lists::ShortcutRow;

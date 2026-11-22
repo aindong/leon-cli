@@ -112,6 +112,7 @@ impl Workspace {
             "session.new" => self.new_session_on(self.host_arg(args), cx),
             "session.switch" => self.switch_action(args, cx),
             "client.host.add" => self.ask_host(args, cx),
+            "client.connect" => self.toggle_connect(window, cx),
             "client.theme.change" => self.theme_action(args, cx),
             "client.tab.new" => self.new_tab(&NewTab, window, cx),
             "client.tab.close" | "session.close" | "client.tab.rename" | "session.rename" => {

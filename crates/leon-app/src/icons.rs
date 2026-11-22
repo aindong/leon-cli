@@ -56,6 +56,8 @@ icons! {
     ProgramMonitor => "program-monitor",
     ProgramRemote => "program-remote",
     ProgramGeneric => "program-generic",
+    Settings => "settings",
+    Remote => "remote",
 }
 
 impl Icon {

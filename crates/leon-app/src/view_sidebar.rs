@@ -1,7 +1,7 @@
 //! The sidebar: the toolbar row, then each session as a quiet label with its tabs as rows under it
 //! (sidebar style), or one row per session (top style, the tabs then in the titlebar). Once there
 //! are hosts, sessions are grouped under their machine's label, This Mac first. Its right edge
-//! drags to resize it.
+//! drags to resize it, and a footer under the list holds Connect and Settings.
 
 use super::*;
 
@@ -117,11 +117,15 @@ impl Workspace {
             .h_full()
             .bg(self.chrome_fill())
             .child(self.render_toolbar(cx))
-            .child(div().id("sidebar-list").flex_1().overflow_y_scroll().child(super::presence::faded(
-                input.list_look,
-                8.,
-                items,
-            )))
+            .child(
+                div()
+                    .id("sidebar-list")
+                    .debug_selector(|| sel("sidebar-list".into()))
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .child(super::presence::faded(input.list_look, 8., items)),
+            )
+            .child(self.render_footer(cx))
             .child(
                 div()
                     .id("sidebar-edge")
@@ -141,6 +145,20 @@ impl Workspace {
                         }),
                     ),
             )
+    }
+
+    /// The footer, pinned under the list: Connect on the left, Settings on the right.
+    fn render_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .debug_selector(|| sel("sidebar-footer".into()))
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_between()
+            .h(px(ROW))
+            .px(px(8.))
+            .child(self.tool("footer-connect", Icon::Remote, "client.connect", cx))
+            .child(self.tool("footer-settings", Icon::Settings, "client.settings", cx))
     }
 
     /// A session in sidebar style: a small muted label. Clicking it selects the session, or, when

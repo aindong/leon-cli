@@ -15,7 +15,9 @@ fn the_toolbar_buttons_work(cx: &mut TestAppContext) {
         let at = at(cx, b).unwrap_or_else(|| panic!("no {b}"));
         assert!(bar.contains(&center(at)), "{b} is in the toolbar row");
     }
-    assert!(!drawn(cx, "sidebar-footer") && !drawn(cx, "sidebar-header"), "no header or footer rows");
+    assert!(!drawn(cx, "sidebar-header"), "no header row");
+    // the footer came back on 2026-11-22 as buttons (Connect, Settings: footer_app.rs), not a hint
+    assert!(!drawn(cx, "sidebar-hint"), "no footer hint");
     let p = center(at(cx, "toolbar-palette").unwrap());
     cx.simulate_click(p, Modifiers::none());
     assert!(ws.read_with(cx, |ws, _| ws.palette_open()), "the palette button opens the palette");

@@ -32,6 +32,7 @@ Leon.app's keys, from the [README](../README.md#app-shortcuts), and [how the app
 | ⌘⇧P | Command palette: type to find an action, ↩ runs it, esc closes |
 | ⌘, | Settings: every setting in sections, with search, ↑ and ↓ between sections, esc or ⌘W closes (into init.lua) |
 | ⌘⇧T | Change theme, shown live as you move; ↩ keeps it, esc goes back |
+| ⌘⇧K | Connect to a machine: your hosts, your tailnet's machines, Add a host…, this Mac's web page ([remote-hosts.md](remote-hosts.md#connect-from-the-sidebars-footer)) |
 | ⌘K | Switch to any host › session › tab (or a block by its title): ↩ goes there, ⌘↩ moves it beside this pane (same machine) |
 | ⌘⇧A | Activity: every block that needs you on every host (blocked, error, done, working); click one to go there |
 | ⌘⇧\\, ⌘\\ | Overview: every tab (⌘\\: this session's), live; arrows and ↩ go, typing filters; resting on a tab previews it |

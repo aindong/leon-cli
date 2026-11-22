@@ -15,7 +15,8 @@ fn a_click_on_the_blank_sidebar_leaves_the_find_bar_its_keys(cx: &mut TestAppCon
     cx.simulate_keystrokes("cmd-f");
     assert_eq!(owner(&ws, cx), Some("find"), "the find bar has the focus");
     let side = at(cx, "sidebar").expect("the sidebar");
-    let blank = point(side.origin.x + px(20.), side.origin.y + side.size.height - px(20.));
+    // blank: above the footer (its 30 pt row holds Connect and Settings)
+    let blank = point(side.origin.x + px(20.), side.origin.y + side.size.height - px(50.));
     cx.simulate_click(blank, Modifiers::none());
     cx.run_until_parked();
     cx.simulate_keystrokes("z q");

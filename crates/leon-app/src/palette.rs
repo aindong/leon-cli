@@ -51,6 +51,7 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("client.scroll.top", "Scroll to the Top"),
     ("client.scroll.bottom", "Scroll to the Bottom"),
     ("client.host.add", "Add Host…"),
+    ("client.connect", "Connect to a Machine…"),
     ("client.update.check", "Check for Updates"),
     ("client.update.install", "Install Update"),
 ];

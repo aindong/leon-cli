@@ -236,8 +236,9 @@ impl SettingsWindow {
     }
 }
 
-/// `url`'s QR code, painted (R7): the field, then each run of dark modules, on whole points.
-fn qr_code(url: &str, t: &Theme) -> Option<gpui::Div> {
+/// `url`'s QR code, painted (R7): the field, then each run of dark modules, on whole points. The
+/// Connect menu's web card draws it too (view_connect.rs).
+pub(crate) fn qr_code(url: &str, t: &Theme) -> Option<gpui::Div> {
     let m = qr::modules(url)?;
     let (field, module) = qr::colours(t);
     let (side, runs) = (m.len() + 2 * qr::QUIET, qr::runs(&m));
