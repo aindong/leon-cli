@@ -98,10 +98,10 @@ impl AgentRow {
 
     /// What setup writes, so a button is no surprise.
     pub fn writes(&self) -> String {
-        let hooks = match (&self.hook, self.agent.as_str()) {
-            (Some(p), _) => p.clone(),
-            (None, "claude") => "Claude Code's settings.json".into(),
-            (None, _) => "Codex's hooks.json".into(),
+        // the file's own path is on the row's line above, home-relative
+        let hooks = match self.agent.as_str() {
+            "claude" => "Claude Code's settings.json",
+            _ => "Codex's hooks.json",
         };
         format!("Setup writes the skill file, plus leon's hooks in {hooks} (backed up once first).")
     }
