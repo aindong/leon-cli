@@ -20,6 +20,7 @@ moments every time, driven over ssh. Nothing touches the host's own leon, screen
 | `cut.py` | Finds the second where the app reopens windowed after ⌘Q, so the edit can drop it. |
 | `lead.py` | Measures how far the raw take runs ahead of the script's clock, into the cue file. |
 | `compose/` | The compositor: `compose.py` (timeline, render, CLI), `frame.py` (layouts, camera, one frame), `draw.py` (gradient, keycaps, pointer, wordmark, cards), `test_compose.py`, `requirements.txt`. |
+| `scenes-web.sh`, `kit/web.sh`, `kit/bin/tailscaled.py`, `viewer.swift` | The web demo ([below](#the-web-demo-leonapp-beside-the-web-page)). |
 | `frames.sh` | Contact sheets of a video at given seconds, for checking a take or a render frame by frame. |
 
 Everything a take or a render writes goes to `$DEMO_WORK`, by default `target/demo-video/`,
@@ -215,6 +216,38 @@ input and lowers its capture rate.
 - The banner in scene 10 is leon's own (the app posts it when logtally's agent asks its second
   question); only when the agent asks is scripted. leon is full screen in its own Space, so the
   terminal is on the desktop and the shot shows one or the other, never both at once.
+
+## The web demo (Leon.app beside the web page)
+
+`DEMO_SCENES=web` films a second, shorter demo with the same kit: Leon.app on the left half of
+the VM's screen as "your Mac", the web page ([docs/web.md](../../docs/web.md)) on the right half
+as "your laptop", and, at the end, the page at a phone's width.
+
+```sh
+scripts/demo-video/run-demo.sh webapp                    # the demo's own Leon.app, in $DEMO_WORK/web-app
+DEMO_SCENES=web scripts/demo-video/run-demo.sh push      # that app, the kit, keypost and the viewer
+DEMO_SCENES=web scripts/demo-video/run-demo.sh setup     # tailscaled.py, two sessions, the app windowed
+DEMO_SCENES=web scripts/demo-video/run-demo.sh take      # scenes 1-6 of scenes-web.sh, about 56 s
+DEMO_SCENES=web scripts/demo-video/run-demo.sh render    # renders/web.mp4, web-short.mp4, web.gif, posters
+```
+
+The page refuses its own machine on purpose (`admit`, [docs/architecture/web.md](../../docs/architecture/web.md)),
+and a second VM doesn't help: Tart's network is outside Tailscale's ranges, so leon refuses it
+before asking who it is. So the demo uses leon's test seam, as its own tests do: `webapp` builds
+leon with debug assertions in `leon-hosts` only, which compiles in `LEON_TEST_TAILNET`, and
+`kit/bin/tailscaled.py` answers its status and whois calls for a made-up tailnet, naming every
+caller "laptop", another of the owner's machines. A release build has no code that reads the
+seam (the `update_release_build` test checks), and this build is never published. Nothing about
+admission is bypassed: `admit`, the Host check, Origin and the token run as they ship, and the
+viewer opens the page by its MagicDNS name, which `kit/web.sh stage` maps to 127.0.0.1 in the
+VM's `/etc/hosts` (through the VM's admin account; it falls back to 127.0.0.1, which leon also
+answers to).
+
+`viewer.swift` is "the browser": one window, a read-only address line and the page, so no other
+product's window is in the shot. Clicks are in points on the VM's screen; scenes-web.sh's
+variables at its top hold the ones measured from VNC shots of a setup (`run-demo.sh shot`).
+`compose.py web` renders the whole take, `web-short` the pieces in `compose/web.py`'s `WEB_CUT`,
+each found by its scene's mark. The GIF is made from the short cut, at most 1.5 MB.
 
 ## Licences of what it uses
 
