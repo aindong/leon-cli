@@ -15,6 +15,8 @@ pub(super) struct AgentsUi {
     /// By agent: running now, and the last command's notes or failure.
     busy: HashMap<String, Verb>,
     said: HashMap<String, Result<String, String>>,
+    /// Status reads started; only the newest one's answer is shown (two can end out of order).
+    reads: u64,
 }
 
 impl AgentRow {
@@ -48,9 +50,14 @@ impl SettingsWindow {
     /// `read_agents`, keeping the rows shown until the new ones come.
     fn reread_agents(&mut self, leon: PathBuf, cx: &mut Context<Self>) {
         self.agents_ui.leon = Some(leon.clone());
+        self.agents_ui.reads += 1;
+        let n = self.agents_ui.reads;
         cx.spawn(async move |this, cx| {
             let read = cx.background_executor().spawn(async move { agent_skill::status(&leon) }).await;
             this.update(cx, |sw, cx| {
+                if n != sw.agents_ui.reads {
+                    return;
+                }
                 sw.agents = Some(read);
                 cx.notify();
             })
@@ -128,8 +135,10 @@ impl SettingsWindow {
                 Ok(notes) => Some(small(notes.clone(), t.muted)),
                 Err(why) => Some(small(why.clone(), t.error)),
             });
+            // the command when no button sets it up: foreign, or an agent that isn't here
+            let sets_up = a.verbs().iter().any(|v| *v != Verb::Remove);
             let command =
-                a.setup.clone().filter(|_| a.verbs().is_empty()).map(|cmd| {
+                a.setup.clone().filter(|_| !sets_up).map(|cmd| {
                     div().font_family("Menlo").text_size(px(SECONDARY_TEXT)).text_color(rgb(t.text)).child(cmd)
                 });
             let sel = format!("agent-{}-said", a.agent);

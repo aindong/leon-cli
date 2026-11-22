@@ -131,3 +131,22 @@ fn missing_or_foreign_skills_show_nothing(cx: &mut TestAppContext) {
     let shown = start(cx, &h.path().join("updates.json"), &bin);
     assert_eq!(shown, None);
 }
+
+/// No agent on this Mac, but `leon skill setup` ran once: only the shared skill (~/.agents) is
+/// there. Once it is an older leon's, neither the notice nor the row offers Update (Remove stays), which would
+/// make ~/.codex for a Codex that isn't here.
+#[test]
+fn an_agent_that_isnt_here_gets_no_update() {
+    let (h, bin) = home(|_| {});
+    leon(&bin, &["skill", "setup"]);
+    let skill = h.path().join(".agents/skills/leon/SKILL.md");
+    let stub = std::fs::read_to_string(&skill).unwrap();
+    std::fs::write(&skill, format!("{stub}an older line\n")).unwrap();
+    let rows = leon_app::agent_skill::status(&bin).unwrap();
+    let codex = rows.iter().find(|r| r.agent == "codex").unwrap();
+    assert!(!codex.found && codex.status == "outdated", "{codex:?}");
+    assert!(leon_app::agent_skill::outdated(&rows).is_empty(), "no notice for an agent that isn't here");
+    assert_eq!(codex.verbs(), vec![leon_app::agent_skill::Verb::Remove], "no Update button");
+    assert_eq!(codex.setup.as_deref(), Some("leon skill setup --agent codex"), "the command instead");
+    assert!(!h.path().join(".codex").exists());
+}

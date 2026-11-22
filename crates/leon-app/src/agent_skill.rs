@@ -85,13 +85,13 @@ impl AgentRow {
         }
     }
 
-    /// Its buttons. Never one that writes over a file leon didn't write, and no Install for an
-    /// agent that isn't here: setup would make its config dir.
+    /// Its buttons. Never one that writes over a file leon didn't write, and no Install or Update
+    /// for an agent that isn't here: setup would make its config dir.
     pub fn verbs(&self) -> Vec<Verb> {
         match self.status.as_str() {
             "missing" if self.found => vec![Verb::Install],
-            "outdated" => vec![Verb::Update, Verb::Remove],
-            "current" => vec![Verb::Remove],
+            "outdated" if self.found => vec![Verb::Update, Verb::Remove],
+            "outdated" | "current" => vec![Verb::Remove],
             _ => vec![],
         }
     }
@@ -170,7 +170,7 @@ pub fn change(leon: &Path, verb: Verb, agent: &str) -> Result<Vec<String>, Strin
     Ok(e["notes"].as_array().into_iter().flatten().filter_map(|n| n.as_str().map(String::from)).collect())
 }
 
-/// The agents whose skill an update would bring up to date (not missing, not foreign).
+/// The agents whose skill an update would bring up to date (here, not missing, not foreign).
 pub fn outdated(rows: &[AgentRow]) -> Vec<AgentRow> {
-    rows.iter().filter(|r| r.status == "outdated").cloned().collect()
+    rows.iter().filter(|r| r.status == "outdated" && r.found).cloned().collect()
 }

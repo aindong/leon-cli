@@ -58,7 +58,9 @@ pub(super) struct Open {
 /// `url`'s host when it is a name (not an address), for `tailscale cert`.
 fn host_name(url: &str) -> Option<String> {
     let host = url.split("://").nth(1)?.split(['/', ':']).next()?;
-    (!host.is_empty() && !host.starts_with('[') && host.parse::<std::net::IpAddr>().is_err()).then(|| host.into())
+    // a DNS name only: it goes into a command to paste unquoted
+    let dns = host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+    (!host.is_empty() && dns && host.parse::<std::net::IpAddr>().is_err()).then(|| host.into())
 }
 
 impl SettingsWindow {
