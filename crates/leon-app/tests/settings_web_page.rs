@@ -140,3 +140,23 @@ fn the_https_files_are_under_their_own_disclosure(cx: &mut TestAppContext) {
     assert!(closed && open, "closed at first, open on a click");
     assert!(cmd.contains(" cert --cert-file ") && cmd.contains("--key-file "), "{cmd}");
 }
+
+/// While "HTTPS (optional)" is open, the command follows the files set: it is made from the
+/// settings each time, and only the program it names is looked up once.
+#[gpui::test]
+fn the_cert_command_follows_the_files_while_open(cx: &mut TestAppContext) {
+    let (o, mut cx) = open(cx, "");
+    click(&mut cx, "web-https");
+    let before = o.sw.read_with(&cx, |sw, _| sw.cert_hint()).unwrap();
+    o.sw.update(&mut cx, |sw, _, cx| {
+        sw.choose("serve_web_cert", json!("/certs/b.crt"), cx);
+        sw.choose("serve_web_key", json!("/certs/b.key"), cx);
+    })
+    .unwrap();
+    let saved = saved(&mut cx, &o);
+    let after = o.sw.read_with(&cx, |sw, _| sw.cert_hint()).unwrap();
+    o.s.app.stop();
+    assert!(saved, "the files were written");
+    assert!(!before.contains("/certs/b.crt"), "{before}");
+    assert!(after.contains("--cert-file '/certs/b.crt' --key-file '/certs/b.key'"), "{after}");
+}

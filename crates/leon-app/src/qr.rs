@@ -1,12 +1,12 @@
 //! The web page's QR code (docs/web.md): one encoder for the Settings window, which paints the
 //! modules, and `leon server status --qr`, which prints them as half blocks.
 
-use leon_core::theme::contrast;
+use leon_core::theme::{contrast, DARK, LIGHT};
 use qrcode::{Color, QrCode};
 
 /// The light margin a scanner needs around the code, in modules.
 pub const QUIET: usize = 4;
-/// The least contrast between the code's two colours: below it, black on white.
+/// The least contrast between the code's two colours: below it, leon's light and dark grounds.
 pub const MIN_CONTRAST: f64 = 7.;
 
 /// `text`'s QR code as rows of modules (true: dark), without the quiet zone; None if too long.
@@ -39,10 +39,11 @@ pub fn half_blocks(text: &str) -> Option<Vec<String>> {
 }
 
 /// The code's (field, module) colours from a theme's background and title colours: the lighter
-/// one is the field, as a scanner wants dark modules on light; black on white if they are close.
+/// one is the field, as a scanner wants dark modules on light; if they are close, Parchment and
+/// Coal (the light and dark themes' grounds).
 pub fn colours(bg: u32, title: u32) -> (u32, u32) {
     if contrast(bg, title) < MIN_CONTRAST {
-        return (0xFFFFFF, 0x000000);
+        return (LIGHT.bg, DARK.bg);
     }
     if contrast(bg, 0) > contrast(title, 0) {
         (bg, title)

@@ -50,8 +50,8 @@ pub fn web_state(serve_web: bool, serve_tailscale: bool, tailnet: Option<&Value>
 pub(super) struct Open {
     pub advanced: bool,
     pub others: bool,
-    /// The `tailscale cert` command while "HTTPS (optional)" is open, made when it opened (it
-    /// looks for the program, which render mustn't).
+    /// The `tailscale` the cert command names while "HTTPS (optional)" is open, looked up when it
+    /// opened (render mustn't); the command itself follows the files set.
     pub https: Option<String>,
 }
 
@@ -92,9 +92,6 @@ impl SettingsWindow {
     /// The command that makes the HTTPS files, for the files set (or the usual place) and this
     /// machine's name.
     pub fn cert_hint(&self) -> String {
-        if let Some(cmd) = &self.open.https {
-            return cmd.clone();
-        }
         let file = |key: &str, usual: &str| {
             let set = self.row(key).and_then(|r| r.value.as_str().map(String::from)).filter(|p| !p.is_empty());
             let p = set.unwrap_or_else(|| usual.into());
@@ -104,7 +101,9 @@ impl SettingsWindow {
             }
         };
         let name = self.web_url().and_then(|u| host_name(&u)).unwrap_or_else(|| "MACHINE.TAILNET.ts.net".into());
+        let ts = self.open.https.clone().unwrap_or_else(leon_hosts::tailscale::cert_tool);
         leon_hosts::tailscale::cert_command(
+            &ts,
             &file("serve_web_cert", "~/.config/leon/certs/web.crt"),
             &file("serve_web_key", "~/.config/leon/certs/web.key"),
             &name,
@@ -169,7 +168,7 @@ impl SettingsWindow {
         out.child(Self::disclosure(t, "web-https", "HTTPS (optional)", https, cx, |sw| {
             sw.open.https = match sw.open.https {
                 Some(_) => None,
-                None => Some(sw.cert_hint()),
+                None => Some(leon_hosts::tailscale::cert_tool()),
             }
         }))
         .when(https, |d| {

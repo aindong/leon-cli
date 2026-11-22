@@ -167,7 +167,10 @@ impl Tls {
     /// What to run: `tailscale cert` writes both files.
     fn advice(&self, cert: &Path, key: &Path) -> String {
         let name = self.dns.as_deref().unwrap_or("MACHINE.TAILNET.ts.net");
-        format!("Make them with: {}", leon_hosts::tailscale::cert_command(cert, key, name))
+        format!(
+            "Make them with: {}",
+            leon_hosts::tailscale::cert_command(&leon_hosts::tailscale::cert_tool(), cert, key, name)
+        )
     }
 }
 

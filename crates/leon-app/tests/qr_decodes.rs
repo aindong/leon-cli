@@ -90,5 +90,7 @@ fn the_colours_are_dark_on_light_with_contrast_in_every_theme() {
         );
         assert!((field, module) == (t.bg, t.title) || (field, module) == (t.title, t.bg), "{name}: its own colours");
     }
-    assert_eq!(colours(0x777777, 0x888888), (0xFFFFFF, 0), "too close: black on white");
+    let (light, dark) = (leon_core::theme::LIGHT.bg, leon_core::theme::DARK.bg);
+    assert_eq!(colours(0x777777, 0x888888), (light, dark), "too close: Parchment and Coal");
+    assert!(leon_core::theme::contrast(light, dark) >= MIN_CONTRAST);
 }

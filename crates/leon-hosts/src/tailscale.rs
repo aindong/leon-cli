@@ -157,11 +157,15 @@ pub fn cert_program(path: Option<&OsStr>, bundles: &[&Path]) -> String {
     }
 }
 
-/// The command that makes the web page's HTTPS files `cert` and `key` for `name` (docs/web.md):
-/// on Linux only root (or the operator) may ask, and then the files are root's.
-pub fn cert_command(cert: &Path, key: &Path, name: &str) -> String {
+/// `cert_program` with this process's PATH and the Mac app's usual places.
+pub fn cert_tool() -> String {
     let bundles: Vec<&Path> = BUNDLES.iter().map(Path::new).collect();
-    let ts = cert_program(std::env::var_os("PATH").as_deref(), &bundles);
+    cert_program(std::env::var_os("PATH").as_deref(), &bundles)
+}
+
+/// The command that makes the web page's HTTPS files `cert` and `key` for `name` with `ts`
+/// (`cert_tool`, docs/web.md): on Linux only root (or the operator) may ask, and then the files are root's.
+pub fn cert_command(ts: &str, cert: &Path, key: &Path, name: &str) -> String {
     let (c, k) = (quoted(cert), quoted(key));
     match cfg!(target_os = "linux") {
         true => format!(

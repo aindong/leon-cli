@@ -30,7 +30,12 @@ fn the_program_is_the_one_on_path_else_the_apps() {
 
 #[test]
 fn the_command_fills_in_the_files_and_the_name() {
-    let c = cert_command(Path::new("/x/my certs/web.crt"), Path::new("/x/web.key"), "devbox.example-tailnet.ts.net");
+    let c = cert_command(
+        "tailscale",
+        Path::new("/x/my certs/web.crt"),
+        Path::new("/x/web.key"),
+        "devbox.example-tailnet.ts.net",
+    );
     assert!(
         c.contains(" cert --cert-file '/x/my certs/web.crt' --key-file '/x/web.key' devbox.example-tailnet.ts.net"),
         "{c}"
