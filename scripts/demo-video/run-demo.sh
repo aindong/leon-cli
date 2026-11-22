@@ -22,7 +22,7 @@
 #                 leon's test seam LEON_TEST_TAILNET is in it (kit/web.sh); never a release build
 # DEMO_SCENES=web films the web demo instead (scenes-web.sh: Leon.app and the web page side by
 # side): setup, take, cue and render then use its scenes, and render makes renders/web.mp4,
-# web-short.mp4, web.gif and their posters. Push its app first: DEMO_APP=$DEMO_WORK/web-app/Leon.app.
+# web-short.mp4 (16:9), web-square.mp4, web-vertical.mp4 (9:16), web.gif and their posters. Push its app first: DEMO_APP=$DEMO_WORK/web-app/Leon.app.
 # Files go to $DEMO_WORK (default target/demo-video). The one-time VM setup (Setup Assistant,
 # the TCC grants for sshd, the devbox account, the ssh key) is in README.md next to this script.
 set -euo pipefail
@@ -221,7 +221,8 @@ case "${1:-}" in
     mkdir -p "$work/renders"
     if [ -n "${DEMO_SCENES:-}" ]; then
       r=$work/renders
-      for m in web web-short; do
+      # web.mp4 for the site; the short cut 16:9, 1:1 and 9:16 for social media, each with a poster
+      for m in web web-short web-square web-vertical; do
         nice -n 10 "$venv/bin/python" "$here/compose/compose.py" "$m" "$work/take-raw.mov" "$work/take-cue.jsonl" "$r/$m.mp4"
         # its poster on the website's demo page: two thirds in, the side by side
         long=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$r/$m.mp4")
@@ -234,7 +235,7 @@ case "${1:-}" in
           -loop 0 "$r/web.gif"
         [ "$(wc -c <"$r/web.gif")" -le 1500000 ] && break
       done
-      echo "render: $r/web.mp4, web-short.mp4, web.gif ($(($(wc -c <"$r/web.gif") / 1024)) KB, ${width}px), posters"
+      echo "render: $r/web.mp4, web-short.mp4, web-square.mp4, web-vertical.mp4, web.gif ($(($(wc -c <"$r/web.gif") / 1024)) KB, ${width}px), posters"
       exit 0
     fi
     cut=$(python3 "$here/cut.py" --print "$work/take.mp4") # the reopen's windowed seconds, A:B

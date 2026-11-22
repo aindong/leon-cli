@@ -28,8 +28,8 @@ from pathlib import Path
 from PIL import Image
 
 from draw import card, ease
-from frame import BASE, FPS, MAIN, SQUARE, SRC_H, SRC_W, Renderer, fit, load_cue
-from web import web_pieces, web_srt_rows
+from frame import BASE, FPS, SRC_H, SRC_W, Renderer, fit, load_cue
+from web import layout, stacked, web_pieces, web_srt_rows
 
 # ---------------------------------------------------------------- the timeline
 
@@ -63,7 +63,7 @@ SQUARE_CUT = [
 def pieces(mode, cut, duration, cue=()):
     """the output, as pieces: ("card", kind, dur) or ("take", start, end, fixed_region, caption);
     main's cold open is a take piece whose caption is the string cold"""
-    if mode in ("web", "web-short"):
+    if mode.startswith("web"):
         return web_pieces(mode, duration, cue, END)
     if mode == "main":
         a, b = cut if cut else (duration, duration)
@@ -221,6 +221,8 @@ def piece_frame(R, L, p, pt, src, out_t):
     t = p[1] + pt
     if p[4] == "cold":  # the take as it is: its caption and keycap belong to the story, later
         return R.frame(src, t, out_t, captions=[], keys=False, show_cursor=False)
+    if p[3] is not None and len(p[3]) == 2:  # web-square, web-vertical: two windows stacked
+        return stacked(R, src, t, pt, p[3], (0, p[2] - p[1], *p[4]))
     if p[3] is not None:  # square: framed on the piece's region, its own caption
         cam = fit(p[3], L.vw / L.vh, max_zoom=BASE[2] / L.vw)
         return R.frame(src, t, pt, fixed=cam, captions=[(0, p[2] - p[1], p[4][0], p[4][1])])
@@ -248,7 +250,7 @@ def last_frame(R, L, raw, p, out_t):
 def render_chunk(args):
     mode, raw, cue_path, f0, f1, cut, duration, out, blur = args
     os.nice(10)
-    L = SQUARE if mode == "square" else MAIN
+    L = layout(mode)
     cue = load_cue(cue_path)
     R = Renderer(L, cue, blur)
     ps = pieces(mode, cut, duration, cue)
@@ -283,7 +285,7 @@ def srt(mode, cue_path, cut, duration, out):
         ms = int(round(s * 1000))
         return f"{ms // 3600000:02}:{ms // 60000 % 60:02}:{ms // 1000 % 60:02},{ms % 1000:03}"
     rows = []
-    if mode in ("web", "web-short"):
+    if mode.startswith("web"):
         cue = load_cue(cue_path)
         rows = web_srt_rows(pieces(mode, cut, duration, cue), cue)
     elif mode == "main":
@@ -309,7 +311,7 @@ def srt(mode, cue_path, cut, duration, out):
 
 def stills(mode, raw, cue_path, outdir, times, cut=None):
     """single output frames as PNGs, at output times (seconds), for checking the look"""
-    L = SQUARE if mode == "square" else MAIN
+    L = layout(mode)
     cue = load_cue(cue_path)
     R = Renderer(L, cue)
     duration = seconds(raw)

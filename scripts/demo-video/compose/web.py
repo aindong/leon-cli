@@ -1,17 +1,34 @@
-"""web.py: the web demo's two cuts (DEMO_SCENES=web, scripts/demo-video/scenes-web.sh), for compose.py:
-web is the whole take from its first mark, web-short the WEB_CUT pieces, each found by its mark."""
+"""web.py: the web demo's cuts (DEMO_SCENES=web, scripts/demo-video/scenes-web.sh), for compose.py:
+web is the whole take from its first mark; web-short (16:9), web-square (1:1) and web-vertical
+(9:16) are the WEB_CUT pieces, each found by its mark. The square and vertical cuts frame each
+piece by WEB_FRAMES: one region, or the two windows stacked, so the text stays readable on a phone."""
 import sys
+
+from PIL import Image
+
+from draw import rounded_mask
+from frame import MAIN, SQUARE, Layout
+
+# 9:16 for Reels and Shorts: the take in the middle, the caption above it, the keycaps below
+VERTICAL = Layout(1080, 1920, 24, 200, 1032, 1560, 22, 110, 1840)
+LAYOUTS = {"square": SQUARE, "web-square": SQUARE, "web-vertical": VERTICAL}
 
 
 # the web demo's short cut: (its scene's mark, seconds after it, seconds, caption, small line), so
 # it follows the take's own beats (scripts/demo-video/scenes-web.sh)
 WEB_CUT = [
-    ("2 settings", 2.6, 3.4, "Turn on the web page.", "Settings · Tailscale"),
+    ("5 blocked", 1.6, 1.6, "Your Mac, and leon in a browser.", ""),  # a first frame that shows both
+    ("2 settings", 2.8, 3.0, "Turn on the web page.", "Settings · Tailscale"),
     ("3 laptop", 0.6, 3.2, "Open it on your other machine.", ""),
-    ("4 typing", 0.6, 4.0, "Type from anywhere on your tailnet.", ""),
+    ("4 typing", 0.6, 3.6, "Type from anywhere on your tailnet.", ""),
     ("5 blocked", 4.4, 3.4, "Answer your agents from the browser.", ""),
     ("6 phone", 1.0, 2.0, "Or from your phone.", ""),
 ]
+# the square and vertical cuts' framing of each WEB_CUT piece, in raw pixels: [x, y, w, h], one
+# region the camera holds; or ((x, y, w), (x, y, w)), two windows' tops stacked, the app over the
+# page (kit/web.sh puts the app at 16,38 pt and the page at 728,38 pt, each 696 x 756 pt)
+STACK = ((32, 76, 1392), (1456, 76, 1392))
+WEB_FRAMES = [STACK, [400, 120, 2080, 1400], STACK, STACK, STACK, [2000, 76, 800, 1512]]
 WEB_END = 2.5
 WEB_HEAD = 0.3  # the web cut starts this long before the take's first mark
 
@@ -24,8 +41,30 @@ def web_pieces(mode, duration, cue, end):
     missing = [m for m, *_ in WEB_CUT if m not in marks]
     if missing:
         sys.exit(f"compose: the short cut needs the take's marks; the cue has no mark {', '.join(missing)}")
-    out = [("take", marks[m] + a, min(duration, marks[m] + a + d), None, (c, sm)) for m, a, d, c, sm in WEB_CUT]
+    frames = WEB_FRAMES if mode in ("web-square", "web-vertical") else [None] * len(WEB_CUT)
+    out = [("take", marks[m] + a, min(duration, marks[m] + a + d), f, (c, sm))
+           for (m, a, d, c, sm), f in zip(WEB_CUT, frames)]
     return out + [("card", "end", WEB_END)]
+
+
+def layout(mode):
+    return LAYOUTS.get(mode, MAIN)
+
+
+def stacked(R, src, t, pt, regions, caption):
+    """one frame of two windows' tops, one over the other, each the viewport's width: the caption
+    above, the keycaps below (no pointer: it would need a place in each half)"""
+    L, gap = R.L, 16
+    sh = (L.vh - gap) // 2
+    img = R.bg.copy()
+    mask = rounded_mask(L.vw, sh, L.radius)
+    for i, (x, y, w) in enumerate(regions):
+        box = (x, y, x + w, y + w * sh / L.vw)
+        img.paste(src.resize((L.vw, sh), Image.Resampling.LANCZOS, box=box), (L.vx, L.vy + i * (sh + gap)), mask)
+    img = img.convert("RGBA")
+    R.draw_keys(img, t)
+    R.draw_caption(img, pt, [caption])
+    return img.convert("RGB")
 
 
 def web_srt_rows(ps, cue):

@@ -228,7 +228,7 @@ scripts/demo-video/run-demo.sh webapp                    # the demo's own Leon.a
 DEMO_SCENES=web scripts/demo-video/run-demo.sh push      # that app, the kit, keypost and the viewer
 DEMO_SCENES=web scripts/demo-video/run-demo.sh setup     # tailscaled.py, two sessions, the app windowed
 DEMO_SCENES=web scripts/demo-video/run-demo.sh take      # scenes 1-6 of scenes-web.sh, about 56 s
-DEMO_SCENES=web scripts/demo-video/run-demo.sh render    # renders/web.mp4, web-short.mp4, web.gif, posters
+DEMO_SCENES=web scripts/demo-video/run-demo.sh render    # renders/web*.mp4, web.gif, posters
 ```
 
 The page refuses its own machine on purpose (`admit`, [docs/architecture/web.md](../../docs/architecture/web.md)),
@@ -247,7 +247,8 @@ answers to).
 product's window is in the shot. Clicks are in points on the VM's screen; scenes-web.sh's
 variables at its top hold the ones measured from VNC shots of a setup (`run-demo.sh shot`).
 `compose.py web` renders the whole take, `web-short` the pieces in `compose/web.py`'s `WEB_CUT`,
-each found by its scene's mark. The GIF is made from the short cut, at most 1.5 MB.
+each found by its scene's mark, and `web-square` and `web-vertical` the same pieces at 1:1 and
+9:16 for social media, each framed on one window or on the two stacked (`WEB_FRAMES`). The GIF is made from the short cut, at most 1.5 MB.
 
 ## Licences of what it uses
 
