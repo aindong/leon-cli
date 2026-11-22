@@ -71,14 +71,9 @@ try:
     echoed = s.recv(65536)
     s.close()
     assert echoed == b"ECHO " + req, echoed
-    # a plain proxy request for the name: passed on as it came
-    plain = f"GET http://{NAME}:{leon}/ HTTP/1.1\r\nHost: {NAME}:{leon}\r\n\r\n".encode()
-    got, s = ask(listen, plain)
-    s.close()
-    assert got == b"ECHO " + plain, got
-    # anything else: refused, never connected
+    # anything else, a plain proxy request for the name too: refused, never connected
     for other in (f"CONNECT example.com:443 HTTP/1.1\r\n\r\n", f"CONNECT {NAME}:22 HTTP/1.1\r\n\r\n",
-                  "GET http://127.0.0.1:22/ HTTP/1.1\r\n\r\n"):
+                  "GET http://127.0.0.1:22/ HTTP/1.1\r\n\r\n", f"GET http://{NAME}:{leon}/ HTTP/1.1\r\n\r\n"):
         got, s = ask(listen, other.encode())
         s.close()
         assert got.startswith(b"HTTP/1.1 403"), (other, got)

@@ -104,8 +104,9 @@ case (5, "scroll"):
   // in steps, as a trackpad sends them: one big jump can be read as a fling
   let step: Int32 = dy < 0 ? -20 : 20
   // each at X,Y itself: during a take `keypost wiggle` moves the pointer to the edge meanwhile
-  for _ in 0..<(abs(dy) / 20) {
-    let e = CGEvent(scrollWheelEvent2Source: src, units: .pixel, wheelCount: 1, wheel1: step, wheel2: 0, wheel3: 0)!
+  let steps = Array(repeating: step, count: Int(abs(dy) / 20)) + (dy % 20 == 0 ? [] : [dy % 20])  // and the rest
+  for s in steps {
+    let e = CGEvent(scrollWheelEvent2Source: src, units: .pixel, wheelCount: 1, wheel1: s, wheel2: 0, wheel3: 0)!
     e.location = CGPoint(x: x, y: y)
     e.post(tap: .cghidEventTap)
     usleep(16_000)

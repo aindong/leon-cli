@@ -47,6 +47,7 @@ case "${1:-}" in
     # (ssh may not send Finder Apple events: its own ⌥⌘W closes every window, keys are allowed)
     open -a Finder && sleep 1 && keypost combo cmd+alt+w && sleep 0.5
     pkill -f '[k]it/bin/tailscaled.py' 2>/dev/null || true
+    rm -f "$sock" # the last stage's: the wait below is then for the new one
     nohup python3 "$kit/bin/tailscaled.py" "$sock" >/tmp/tailscaled.log 2>&1 &
     for _ in $(seq 50); do [ -S "$sock" ] && break; sleep 0.1; done
     [ -S "$sock" ] || { echo "web: the LocalAPI stand-in didn't start (/tmp/tailscaled.log)" >&2; exit 1; }

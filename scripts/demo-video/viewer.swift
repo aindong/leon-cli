@@ -43,10 +43,9 @@ final class Delegate: NSObject, NSApplicationDelegate, NSTextFieldDelegate, WKNa
     let rect = NSRect(x: frame.minX, y: screen.height - frame.minY - h, width: w, height: h)
     let config = WKWebViewConfiguration()
     config.websiteDataStore = .nonPersistent()
-    if #available(macOS 14.0, *) {
-      let at = NWEndpoint.hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: proxy)!)
-      config.websiteDataStore.proxyConfigurations = [ProxyConfiguration(httpCONNECTProxy: at)]
-    }
+    // macOS 14's proxy setting: run-demo.sh push builds the viewer for macOS 14, so it is always set
+    let at = NWEndpoint.hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: proxy)!)
+    config.websiteDataStore.proxyConfigurations = [ProxyConfiguration(httpCONNECTProxy: at)]
     web = WKWebView(frame: .zero, configuration: config)
     web.navigationDelegate = self
     web.setValue(false, forKey: "drawsBackground")  // dark while the page loads, not a white flash

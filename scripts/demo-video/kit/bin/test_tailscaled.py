@@ -26,10 +26,17 @@ with tempfile.TemporaryDirectory() as d:
     sock = os.path.join(d, "ts", "tailscaled.sock")
     p = subprocess.Popen([sys.executable, os.path.join(here, "tailscaled.py"), sock], stdout=subprocess.DEVNULL)
     try:
-        for _ in range(100):
-            if os.path.exists(sock):
+        for _ in range(100):  # listening, not only bound: a connection gets through
+            try:
+                c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                c.connect(sock)
+                c.close()
                 break
-            time.sleep(0.05)
+            except OSError:
+                assert p.poll() is None, "tailscaled.py exited"
+                time.sleep(0.05)
+        else:
+            raise AssertionError("tailscaled.py never listened")
         assert os.stat(os.path.dirname(sock)).st_mode & 0o077 == 0, "the socket's dir is private"
         line, st = get(sock, "/localapi/v0/status?peers=false")
         assert line == "HTTP/1.0 200 OK", line

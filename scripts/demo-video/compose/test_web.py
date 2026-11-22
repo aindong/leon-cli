@@ -126,6 +126,20 @@ class WebTest(unittest.TestCase):
             vo_place("web", c, 60.0, lengths)
         self.assertIn("web-3.mp3", str(e.exception))
 
+    def test_a_take_too_short_for_a_piece_says_which(self):
+        # the marks run to 33 s: a 30 s recording ends before the phone's piece (CodeRabbit #103)
+        with self.assertRaises(SystemExit) as e:
+            pieces("web-short", None, 30.0, load_cue(take()))
+        self.assertIn("5 phone", str(e.exception))
+
+    def test_srt_leaves_out_captions_after_the_take(self):
+        path = take(captions=[(1.0, 6.0, "In the take."), (61.0, 63.0, "After it.")])
+        with tempfile.TemporaryDirectory() as d:
+            srt("web", path, None, 60.0, f"{d}/web.srt")
+            text = Path(f"{d}/web.srt").read_text()
+        self.assertIn("In the take.", text)
+        self.assertNotIn("After it.", text)  # no reversed interval for a caption past the end
+
     def test_the_web_scenes_mark_every_piece_of_the_short_cut(self):
         scenes = (HERE.parent / "scenes-web.sh").read_text()
         for m, *_ in WEB_CUT:

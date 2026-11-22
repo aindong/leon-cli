@@ -130,7 +130,7 @@ case "${1:-}" in
     cp -R "$here/kit" "$work/kit"
     find "$work/kit" -name __pycache__ -prune -exec rm -rf {} +
     swiftc -O -target arm64-apple-macos13 "$here/keypost.swift" -o "$work/kit/bin/keypost"
-    swiftc -O -target arm64-apple-macos13 "$here/viewer.swift" -o "$work/kit/bin/viewer" \
+    swiftc -O -target arm64-apple-macos14 "$here/viewer.swift" -o "$work/kit/bin/viewer" \
       -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$here/viewer.plist"
     # the popup's git log: the VM has no developer tools, and Apple's git needs only system libraries
     cp "$(xcrun -f git)" "$work/kit/bin/git"
@@ -257,9 +257,12 @@ case "${1:-}" in
     git -C "$repo" archive "$rev" | tar -xm -C "$src" # -m: now as mtime, so cargo rebuilds what an older REV changed
     # its own target dir (kept between retakes, so a later commit builds incrementally); the
     # export has no .git, so the commit goes in by hand for `leon --version`
-    (cd "$src" && LEON_GIT_HASH=${rev:0:12} cargo build --release -p leon --target-dir "$work/cargo")
-    "$src/scripts/bundle.sh" --bin "$work/cargo/release/leon" --out "$work/app/Leon.app"
-    DEMO_APP=$work/app/Leon.app "$0" push
+    # the web demo's app has leon's test seam (as `webapp` builds it); the launch video's is plain
+    seam=() app=$work/app/Leon.app
+    [ -z "${DEMO_SCENES:-}" ] || seam=(--config 'profile.release.package.leon-hosts.debug-assertions=true') app=$work/web-app/Leon.app
+    (cd "$src" && LEON_GIT_HASH=${rev:0:12} cargo build --release -p leon --target-dir "$work/cargo" "${seam[@]}")
+    "$src/scripts/bundle.sh" --bin "$work/cargo/release/leon" --out "$app"
+    DEMO_APP=$app "$0" push
     for n in 1 2 3; do # a take stops early now and then (exit 3): the state it used is spent, so setup again
       "$0" setup
       rc=0

@@ -73,6 +73,9 @@ def web_pieces(mode, duration, cue, end):
     frames = WEB_FRAMES.get(mode, [None] * len(WEB_CUT))
     out = [("take", marks[m] + a, min(duration, marks[m] + a + d), f, (c, sm))
            for (m, a, d, c, sm), f in zip(WEB_CUT, frames)]
+    short = [m for (m, *_), p in zip(WEB_CUT, out) if p[2] <= p[1]]
+    if short:
+        sys.exit(f"compose: the recording ends before the short cut's piece of {', '.join(short)}")
     return out + [("card", "end", WEB_END, WEB_END_LINES)]
 
 
@@ -125,7 +128,7 @@ def web_srt_rows(ps, cue):
             rows.append((t, t + p[2] - p[1], *p[4]))
         else:  # the whole take: its captions, from its start
             rows += [(t + max(c["vt"], p[1]) - p[1], t + min(c["vuntil"], p[2]) - p[1], c["text"], c.get("small", ""))
-                     for c in cue if c["type"] == "caption" and c["vuntil"] > p[1]]
+                     for c in cue if c["type"] == "caption" and c["vuntil"] > p[1] and c["vt"] < p[2]]
         t += p[2] - p[1]
     return rows
 
