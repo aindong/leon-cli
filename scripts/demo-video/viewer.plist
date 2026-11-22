@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- viewer.swift's Info.plist, linked into it (run-demo.sh push): the page is plain http on the
+     made-up tailnet, which App Transport Security would block in a web view by default -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>org.example.leon-demo-viewer</string>
+  <key>CFBundleName</key>
+  <string>Browser</string>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+  </dict>
+</dict>
+</plist>

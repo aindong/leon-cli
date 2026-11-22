@@ -18,6 +18,11 @@
 #                 stopped early is filmed again from setup, up to 3 tries)
 #   check         the projects' tests in the VM
 #   stop          stop the VM
+#   webapp        the web demo's Leon.app (DEMO_SCENES=web): leon-hosts with debug assertions, so
+#                 leon's test seam LEON_TEST_TAILNET is in it (kit/web.sh); never a release build
+# DEMO_SCENES=web films the web demo instead (scenes-web.sh: Leon.app and the web page side by
+# side): setup, take, cue and render then use its scenes, and render makes renders/web.mp4,
+# web-short.mp4, web.gif and their posters. Push its app first: DEMO_APP=$DEMO_WORK/web-app/Leon.app.
 # Files go to $DEMO_WORK (default target/demo-video). The one-time VM setup (Setup Assistant,
 # the TCC grants for sshd, the devbox account, the ssh key) is in README.md next to this script.
 set -euo pipefail
@@ -104,7 +109,9 @@ mark() {
   fi
   cue "\"type\": \"mark\", \"name\": $(jstr "$*")"
 }
-. "$here/scenes.sh" # scene1 … scene12
+# scene1 … sceneN, N=SCENES (12 for the launch video), SECS the take's seconds
+SCENES=12 SECS=117
+. "$here/scenes${DEMO_SCENES:+-$DEMO_SCENES}.sh"
 
 case "${1:-}" in
   boot)
@@ -123,9 +130,12 @@ case "${1:-}" in
     cp -R "$here/kit" "$work/kit"
     find "$work/kit" -name __pycache__ -prune -exec rm -rf {} +
     swiftc -O -target arm64-apple-macos13 "$here/keypost.swift" -o "$work/kit/bin/keypost"
+    swiftc -O -target arm64-apple-macos13 "$here/viewer.swift" -o "$work/kit/bin/viewer" \
+      -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$here/viewer.plist"
     # the popup's git log: the VM has no developer tools, and Apple's git needs only system libraries
     cp "$(xcrun -f git)" "$work/kit/bin/git"
     app=${DEMO_APP:-$repo/target/release/Leon.app}
+    [ -z "${DEMO_SCENES:-}" ] || app=${DEMO_APP:-$work/web-app/Leon.app} # the web demo needs its seam
     [ "$(basename "$app")" = Leon.app ] && [ -x "$app/Contents/MacOS/leon" ] ||
       { echo "run-demo: no Leon.app at $app (scripts/bundle.sh, or DEMO_APP)" >&2; exit 1; }
     COPYFILE_DISABLE=1 tar -C "$(dirname "$app")" -cf - Leon.app |
@@ -137,6 +147,12 @@ case "${1:-}" in
     ip >"$work/.ip"
     g prefs
     g reset
+    if [ -n "${DEMO_SCENES:-}" ]; then # the web demo: its own stage, windowed, no terminal
+      w stop
+      w stage
+      echo "setup: ready; check it with: $0 shot setup"
+      exit 0
+    fi
     g stage
     g terminal # the attach scene's terminal, on the desktop before the app goes full screen
     sleep 1
@@ -144,9 +160,9 @@ case "${1:-}" in
     sleep 2
     echo "setup: ready; check it with: $0 shot setup" ;;
   take)
-    range=${2:-1-12}
+    range=${2:-1-$SCENES}
     from=${range%-*} to=${range#*-}
-    secs=${TAKE_SECS:-117}
+    secs=${TAKE_SECS:-$SECS}
     # screencapture hangs when it is started in the background inside the VM, so it runs in the
     # foreground of its own ssh session, and that session is in the background here
     ssh $(ssh_opts) "demo@$(cat "$work/.ip")" "rm -f ~/take.mov; screencapture -v -V $secs -x ~/take.mov </dev/null 2>~/take.err; echo \"screencapture: exit \$? \$(cat ~/take.err)\" >&2" &
@@ -183,7 +199,7 @@ case "${1:-}" in
     # macOS's recording dot (top right) and the parked pointer's sliver (right edge) are there
     ffmpeg -loglevel error -y -i "$work/take-raw.mov" -vf crop=2848:1602:0:9,fps=60,scale=1920:1080:flags=lanczos \
       -c:v libx264 -crf 16 -pix_fmt yuv420p "$work/take.mp4"
-    python3 "$here/cut.py" "$work/take.mp4" "$work/take-cut.mp4"
+    [ -n "${DEMO_SCENES:-}" ] || python3 "$here/cut.py" "$work/take.mp4" "$work/take-cut.mp4" # the launch video's ⌘Q
     echo "take: $work/take.mp4, $work/take-cut.mp4; beats: $work/take-beats.txt" ;;
   cue) # cue BEATS: rebuild an earlier take's cue file from its beats file, sending nothing
     anchor=${2:-$work/take-beats.txt}
@@ -193,7 +209,7 @@ case "${1:-}" in
     # the lead `take` measured stays: it is the video's, not the script's
     lead=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readline())["lead"])' "$cuefile" 2>/dev/null) || lead=1.5
     printf '{"t": 0, "type": "take", "lead": %s, "width": 2880, "height": 1620}\n' "$lead" >"$cuefile"
-    for ((n = 1; n <= 12; n++)); do "scene$n"; done
+    for ((n = 1; n <= SCENES; n++)); do "scene$n"; done
     echo "cue: $cuefile ($(wc -l <"$cuefile" | tr -d ' ') lines, rebuilt from $anchor)" ;;
   render)
     venv=$work/venv
@@ -202,8 +218,26 @@ case "${1:-}" in
       python3 -m venv "$venv"
       "$venv/bin/pip" install -q -r "$here/compose/requirements.txt"
     fi
-    cut=$(python3 "$here/cut.py" --print "$work/take.mp4") # the reopen's windowed seconds, A:B
     mkdir -p "$work/renders"
+    if [ -n "${DEMO_SCENES:-}" ]; then
+      r=$work/renders
+      for m in web web-short; do
+        nice -n 10 "$venv/bin/python" "$here/compose/compose.py" "$m" "$work/take-raw.mov" "$work/take-cue.jsonl" "$r/$m.mp4"
+        # its poster on the website's demo page: two thirds in, the side by side
+        long=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$r/$m.mp4")
+        ffmpeg -loglevel error -y -ss "$(python3 -c "print(round($long * 0.65, 2))")" -i "$r/$m.mp4" -frames:v 1 -q:v 3 "$r/$m.jpg"
+      done
+      # the GIF for the changelog and the README: the short cut, at most 1.5 MB, the widest that fits
+      for width in 960 840 720 640; do
+        ffmpeg -loglevel error -y -i "$r/web-short.mp4" -vf \
+          "fps=12,scale=$width:-1:flags=lanczos,mpdecimate,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
+          -loop 0 "$r/web.gif"
+        [ "$(wc -c <"$r/web.gif")" -le 1500000 ] && break
+      done
+      echo "render: $r/web.mp4, web-short.mp4, web.gif ($(($(wc -c <"$r/web.gif") / 1024)) KB, ${width}px), posters"
+      exit 0
+    fi
+    cut=$(python3 "$here/cut.py" --print "$work/take.mp4") # the reopen's windowed seconds, A:B
     nice -n 10 "$venv/bin/python" "$here/compose/compose.py" main "$work/take-raw.mov" "$work/take-cue.jsonl" \
       "$work/renders/leon-demo-main.mp4" --cut="$cut"
     nice -n 10 "$venv/bin/python" "$here/compose/compose.py" square "$work/take-raw.mov" "$work/take-cue.jsonl" \
@@ -230,7 +264,12 @@ case "${1:-}" in
     done
     "$0" render
     echo "retake: $rev filmed and rendered in $work/renders" ;;
+  webapp)
+    (cd "$repo" && LEON_GIT_HASH=$(git rev-parse --short=12 HEAD) cargo build --release -p leon \
+      --target-dir "$work/cargo-web" --config 'profile.release.package.leon-hosts.debug-assertions=true')
+    "$repo/scripts/bundle.sh" --bin "$work/cargo-web/release/leon" --out "$work/web-app/Leon.app"
+    echo "webapp: $work/web-app/Leon.app (push it: DEMO_APP=$work/web-app/Leon.app $0 push)" ;;
   check) ip >"$work/.ip"; g check ;;
   stop) tart stop "$vm" ;;
-  *) sed -n '2,23s/^# \{0,1\}//p' "$0"; exit 2 ;;
+  *) sed -n '2,28s/^# \{0,1\}//p' "$0"; exit 2 ;;
 esac

@@ -3,8 +3,9 @@ the cue file's first line (`lead`); prints it.
 
 `run-demo.sh take` starts the recorder, waits 1.5 s and starts the clock, but the recorder's own
 start varies (0 to 1.5 s seen in one VM, one evening): a fixed lead puts every zoom, caption and
-click up to 1.5 s off. The screen is still until scene 2's ⌘N opens a session, so the first
-frame that changes is that key's: lead = when it shows in the video - when the cue sent it.
+click up to 1.5 s off. The screen is still until the take's first key (the launch video's ⌘N opens
+a session; the web demo types a command into a shell), so the first frame that changes is that key's:
+lead = when it shows in the video - when the cue sent it.
 """
 import json
 import subprocess
@@ -30,12 +31,12 @@ def first_change(raw, until=12.0, fps=30):
 def main():
     raw, cue_path = sys.argv[1:3]
     rows = [json.loads(line) for line in open(cue_path) if line.strip()]
-    sent = next(r["t"] for r in rows if r["type"] == "key" and r["combo"] == "cmd+n")
+    sent = next(r["t"] for r in rows if r["type"] in ("key", "type"))
     seen = first_change(raw)
     if seen is None:
         sys.exit(f"lead.py: nothing changes in the first 12 s of {raw}")
     lead = round(seen - sent, 3)
-    if not -0.5 <= lead <= 3.0:  # not ⌘N's frame: something else moved; keep the cue as it is
+    if not -0.5 <= lead <= 3.0:  # not that key's frame: something else moved; keep the cue as it is
         sys.exit(f"lead.py: a lead of {lead} s is not believable (first change at {seen:.2f} s)")
     rows[0]["lead"] = lead
     with open(cue_path, "w") as f:

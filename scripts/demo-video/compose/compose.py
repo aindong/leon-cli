@@ -3,6 +3,7 @@
   compose.py main   RAW CUE OUT.mp4 [--cut=A:B] [--frames=F0:F1] [--workers=N] [--blur] [--vo=DIR]
   compose.py square RAW CUE OUT.mp4 [--frames=F0:F1] [--workers=N] [--vo=DIR]
   compose.py stills MODE RAW CUE OUTDIR [--cut=A:B] T...
+  compose.py web|web-short RAW CUE OUT.mp4 [--frames=F0:F1] [--workers=N]
 
 main: 16:9 1920x1080 at 60 fps: a cold open (COLD seconds of the 50-tab overview, cut straight to the
 empty state; a title card instead when the cue has no "5 overview" mark), the take (with the stretch A..B of video time cut
@@ -12,7 +13,7 @@ with rounded corners and a shadow. Writes OUT.srt beside it. square: 1080x1080, 
 (SQUARE_CUT below), each piece framed on its focus region, dissolving into the next. Both get a
 silent stereo track, or with --vo=DIR (or LEON_DEMO_VO) a voice-over from DIR's clips: main-NN.mp3,
 one a scene (VO_SCENES), and square.mp3; mono voice in both channels, AAC 48 kHz, -16 LUFS. --frames renders only those output frames (for checking a
-stretch); --blur turns on motion blur for the camera's moves (off by default: it ghosts terminal
+stretch); web and web-short: the web demo's (web.py); --blur turns on motion blur for the camera's moves (off by default: it ghosts terminal
 text); --workers splits the frames over N processes (default 4). stills writes single frames at
 output times T, as PNGs, to check a look.
 """
@@ -28,6 +29,7 @@ from PIL import Image
 
 from draw import card, ease
 from frame import BASE, FPS, MAIN, SQUARE, SRC_H, SRC_W, Renderer, fit, load_cue
+from web import web_pieces, web_srt_rows
 
 # ---------------------------------------------------------------- the timeline
 
@@ -61,6 +63,8 @@ SQUARE_CUT = [
 def pieces(mode, cut, duration, cue=()):
     """the output, as pieces: ("card", kind, dur) or ("take", start, end, fixed_region, caption);
     main's cold open is a take piece whose caption is the string cold"""
+    if mode in ("web", "web-short"):
+        return web_pieces(mode, duration, cue, END)
     if mode == "main":
         a, b = cut if cut else (duration, duration)
         # from just after the overview opens (its cards fade in) to COLD later, or ESC_MARGIN before
@@ -220,6 +224,8 @@ def piece_frame(R, L, p, pt, src, out_t):
     if p[3] is not None:  # square: framed on the piece's region, its own caption
         cam = fit(p[3], L.vw / L.vh, max_zoom=BASE[2] / L.vw)
         return R.frame(src, t, pt, fixed=cam, captions=[(0, p[2] - p[1], p[4][0], p[4][1])])
+    if p[4] is not None:  # web-short: the camera on the take's zooms, the piece's own caption
+        return R.frame(src, t, pt, captions=[(0, p[2] - p[1], p[4][0], p[4][1])])
     return R.frame(src, t, out_t)
 
 
@@ -242,7 +248,7 @@ def last_frame(R, L, raw, p, out_t):
 def render_chunk(args):
     mode, raw, cue_path, f0, f1, cut, duration, out, blur = args
     os.nice(10)
-    L = MAIN if mode == "main" else SQUARE
+    L = SQUARE if mode == "square" else MAIN
     cue = load_cue(cue_path)
     R = Renderer(L, cue, blur)
     ps = pieces(mode, cut, duration, cue)
@@ -277,7 +283,10 @@ def srt(mode, cue_path, cut, duration, out):
         ms = int(round(s * 1000))
         return f"{ms // 3600000:02}:{ms // 60000 % 60:02}:{ms // 1000 % 60:02},{ms % 1000:03}"
     rows = []
-    if mode == "main":
+    if mode in ("web", "web-short"):
+        cue = load_cue(cue_path)
+        rows = web_srt_rows(pieces(mode, cut, duration, cue), cue)
+    elif mode == "main":
         a, b = cut if cut else (duration, duration)
         cue = load_cue(cue_path)
         head = pieces(mode, cut, duration, cue)[0]
@@ -300,7 +309,7 @@ def srt(mode, cue_path, cut, duration, out):
 
 def stills(mode, raw, cue_path, outdir, times, cut=None):
     """single output frames as PNGs, at output times (seconds), for checking the look"""
-    L = MAIN if mode == "main" else SQUARE
+    L = SQUARE if mode == "square" else MAIN
     cue = load_cue(cue_path)
     R = Renderer(L, cue)
     duration = seconds(raw)
