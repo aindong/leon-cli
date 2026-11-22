@@ -18,7 +18,7 @@ LAYOUTS = {"square": SQUARE, "web-square": SQUARE, "web-vertical": VERTICAL}
 # it follows the take's own beats (scripts/demo-video/scenes-web.sh)
 WEB_CUT = [
     ("5 blocked", 1.6, 1.6, "Your Mac, and leon in a browser.", ""),  # a first frame that shows both
-    ("2 settings", 2.8, 3.0, "Turn on the web page.", "Settings · Tailscale"),
+    ("2 settings", 2.8, 3.0, "Turn on the web page.", "Settings · Server"),
     ("3 laptop", 0.6, 3.2, "Open it on your other machine.", ""),
     ("4 typing", 0.6, 3.6, "Type from anywhere on your tailnet.", ""),
     ("5 blocked", 4.4, 3.4, "Answer your agents from the browser.", ""),
@@ -26,9 +26,9 @@ WEB_CUT = [
 ]
 # the square and vertical cuts' framing of each WEB_CUT piece, in raw pixels: [x, y, w, h], one
 # region the camera holds; or ((x, y, w), (x, y, w)), two windows' tops stacked, the app over the
-# page (kit/web.sh puts the app at 16,38 pt and the page at 728,38 pt, each 696 x 756 pt)
-STACK = ((32, 76, 1392), (1456, 76, 1392))
-WEB_FRAMES = [STACK, [400, 120, 2080, 1400], STACK, STACK, STACK, [2000, 76, 800, 1512]]
+# page (kit/web.sh puts the app at 8,38 pt, 720 pt wide, and the page at 736,38 pt, 688 pt wide)
+STACK = ((16, 76, 1440), (1472, 76, 1376))
+WEB_FRAMES = [STACK, [1000, 740, 1300, 880], STACK, STACK, STACK, [2000, 76, 800, 1512]]
 WEB_END = 2.5
 WEB_HEAD = 0.3  # the web cut starts this long before the take's first mark
 

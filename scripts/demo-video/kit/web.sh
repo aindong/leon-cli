@@ -12,7 +12,8 @@
 # demo's Leon.app is built with leon's debug-only seam (run-demo.sh webapp), LEON_TEST_TAILNET,
 # which points it at tailscaled.py: it answers every whois with "laptop", another of the owner's
 # machines, and lets 127.0.0.1 stand in for the tailnet. Host, Origin and the token are checked
-# as ever: the viewer opens the page by its MagicDNS name, which /etc/hosts maps to 127.0.0.1.
+# as ever: the viewer opens 127.0.0.1, an address the server answers to (Settings shows the
+# MagicDNS name; the VM can't resolve it without root).
 set -euo pipefail
 kit=$HOME/kit
 d=$HOME/leon-demo
@@ -23,20 +24,29 @@ export LEON_TEST_TAILNET="{\"localapi\": \"$sock\", \"loopback\": true}"
 export PATH=$kit/bin:$HOME/python/bin:$HOME/leon/target/release/Leon.app/Contents/MacOS:/usr/bin:/bin:/usr/sbin:/sbin
 export SHELL=/bin/zsh
 app=$HOME/leon/target/release/Leon.app
-name=leon-demo.example-tailnet.ts.net
 app_pid() { pgrep -fx "$app/Contents/MacOS/leon" || true; }
 
 case "${1:-}" in
   stage)
+    # a clone of the shared VM can restore another Leon.app at login (its window and its server)
+    # and Finder's windows: neither belongs in the shot
+    for p in $(pgrep -f 'Leon.app/Contents/MacOS/leon' || true); do
+      [[ "$(ps -o command= -p "$p")" == "$app/"* ]] || kill "$p" 2>/dev/null || true
+    done
+    # a click on the wallpaper must not reveal the desktop (it hides every window and shows the
+    # widgets): the banner's close button below is clicked whether or not the banner came
+    if [ "$(defaults read com.apple.WindowManager EnableStandardClickToShowDesktop 2>/dev/null)" != 0 ]; then
+      defaults write com.apple.WindowManager EnableStandardClickToShowDesktop -bool false
+      killall WindowManager 2>/dev/null || true
+      sleep 1
+    fi
+    # (ssh may not send Finder Apple events: its own ⌥⌘W closes every window, keys are allowed)
+    open -a Finder && sleep 1 && keypost combo cmd+alt+w && sleep 0.5
     pkill -f '[k]it/bin/tailscaled.py' 2>/dev/null || true
     nohup python3 "$kit/bin/tailscaled.py" "$sock" >/tmp/tailscaled.log 2>&1 &
     for _ in $(seq 50); do [ -S "$sock" ] && break; sleep 0.1; done
     [ -S "$sock" ] || { echo "web: the LocalAPI stand-in didn't start (/tmp/tailscaled.log)" >&2; exit 1; }
-    # the made-up name, here: the clone's admin account adds the line once (its password is the
-    # Tart image's own)
-    grep -q " $name\$" /etc/hosts ||
-      ssh devbox "echo admin | sudo -S sh -c 'echo \"127.0.0.1 $name\" >> /etc/hosts'" >/dev/null 2>&1 ||
-      echo "web: no /etc/hosts line for $name: the viewer opens 127.0.0.1" >&2
+    leon config set font.size 13 >/dev/null # two windows side by side: half the screen each
     leon server start --restore=false >/dev/null
     w=$HOME/work
     leon new shelf-api -c "$w/shelf-api" >/dev/null
@@ -51,21 +61,27 @@ case "${1:-}" in
 import json, os, sys
 p = sys.argv[1]
 s = json.load(open(p)) if os.path.exists(p) else {"tab_style": "sidebar", "pane_headers": True, "sidebar_width": 200}
-s.update(window={"x": 16, "y": 38, "w": 696, "h": 756}, display=1)
+s.update(window={"x": 8, "y": 38, "w": 720, "h": 756}, display=1)  # 720: its narrowest
 json.dump(s, open(p, "w"))' "$d/state/app.json"
     open --env LEON_RUNTIME_DIR="$LEON_RUNTIME_DIR" --env LEON_STATE_DIR="$LEON_STATE_DIR" \
       --env LEON_CONFIG="$LEON_CONFIG" --env LEON_TAILSCALE="$LEON_TAILSCALE" \
       --env LEON_TEST_TAILNET="$LEON_TEST_TAILNET" --env PATH="$PATH" --env SHELL=/bin/zsh "$app"
     for _ in $(seq 50); do [ -n "$(app_pid)" ] && break; sleep 0.1; done
     sleep 2
-    keypost park
+    # macOS says "App Running in Background" for a new Leon.app, and the banner stays: its close
+    # button shows on hover (top right of the screen); then the keys go to the app's shell
+    keypost move 1200 80; sleep 0.8; keypost click 1084 48; sleep 0.5
+    open "$app" # in front again (Finder was, for its ⌥⌘W)
+    sleep 1
+    keypost click 612 288
     echo "web: staged, app pid $(app_pid)" ;;
 
   viewer)
-    url=$(leon server status --json | python3 -c 'import json,sys; w=json.load(sys.stdin)["tailnet"]["web"]; print(w[0] if w else "")')
+    # the address on 127.0.0.1 (the VM can't resolve the made-up MagicDNS name without root)
+    url=$(leon server status --json | python3 -c 'import json,sys; print(next((u for u in json.load(sys.stdin)["tailnet"]["web"] if "//127.0.0.1:" in u), ""))')
     [ -n "$url" ] || { echo "web: the page isn't served (Settings: Tailscale, Web page)" >&2; exit 1; }
-    grep -q " $name\$" /etc/hosts || url=${url/$name/127.0.0.1}
-    if [ "${2:-}" = phone ]; then geo="1000 38 400 756"; else geo="728 38 696 756"; fi
+    # the page beside the app, 728 high under its title bar (viewer.swift zooms it to fit)
+    if [ "${2:-}" = phone ]; then geo="1000 38 400 728"; else geo="736 38 688 728"; fi
     nohup "$kit/bin/viewer" "$url" $geo >/tmp/viewer.log 2>&1 &
     sleep 2
     keypost park

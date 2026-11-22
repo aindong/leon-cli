@@ -3,8 +3,9 @@ the cue file's first line (`lead`); prints it.
 
 `run-demo.sh take` starts the recorder, waits 1.5 s and starts the clock, but the recorder's own
 start varies (0 to 1.5 s seen in one VM, one evening): a fixed lead puts every zoom, caption and
-click up to 1.5 s off. The screen is still until the take's first key (the launch video's ⌘N opens
-a session; the web demo types a command into a shell), so the first frame that changes is that key's:
+click up to 1.5 s off. The screen is still until the take's first shortcut with a modifier (the launch video's ⌘N opens
+a session; the web demo's ⌘, opens Settings, its typing and Return before it are too small a change to count), so
+the first frame that changes is that shortcut's:
 lead = when it shows in the video - when the cue sent it.
 """
 import json
@@ -31,7 +32,7 @@ def first_change(raw, until=12.0, fps=30):
 def main():
     raw, cue_path = sys.argv[1:3]
     rows = [json.loads(line) for line in open(cue_path) if line.strip()]
-    sent = next(r["t"] for r in rows if r["type"] in ("key", "type"))
+    sent = next(r["t"] for r in rows if r["type"] == "key" and "+" in r["combo"])
     seen = first_change(raw)
     if seen is None:
         sys.exit(f"lead.py: nothing changes in the first 12 s of {raw}")

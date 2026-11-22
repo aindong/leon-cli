@@ -238,13 +238,12 @@ leon with debug assertions in `leon-hosts` only, which compiles in `LEON_TEST_TA
 `kit/bin/tailscaled.py` answers its status and whois calls for a made-up tailnet, naming every
 caller "laptop", another of the owner's machines. A release build has no code that reads the
 seam (the `update_release_build` test checks), and this build is never published. Nothing about
-admission is bypassed: `admit`, the Host check, Origin and the token run as they ship, and the
-viewer opens the page by its MagicDNS name, which `kit/web.sh stage` maps to 127.0.0.1 in the
-VM's `/etc/hosts` (through the VM's admin account; it falls back to 127.0.0.1, which leon also
-answers to).
+admission is bypassed: `admit`, the Host check, Origin and the token run as they ship. The
+viewer opens the page at 127.0.0.1, an address leon answers to (the VM can't resolve the made-up
+MagicDNS name without root); Settings shows the MagicDNS address.
 
-`viewer.swift` is "the browser": one window, a read-only address line and the page, so no other
-product's window is in the shot. Clicks are in points on the VM's screen; scenes-web.sh's
+`viewer.swift` is "the browser": one window and the page, so no other product's window is in the
+shot. It has no address line: 127.0.0.1 would read as "this machine". Clicks are in points on the VM's screen; scenes-web.sh's
 variables at its top hold the ones measured from VNC shots of a setup (`run-demo.sh shot`).
 `compose.py web` renders the whole take, `web-short` the pieces in `compose/web.py`'s `WEB_CUT`,
 each found by its scene's mark, and `web-square` and `web-vertical` the same pieces at 1:1 and
