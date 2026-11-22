@@ -7,7 +7,9 @@ of [the architecture](../architecture.md); the ssh path it sits beside is in [Ho
 
 - **Off by default, the local tailscaled's word, no embedded node.** `serve_tailscale` (a setting
   in init.lua) turns it on. The server asks the tailscaled already running on the machine, over
-  its LocalAPI, and only `status?peers=false` and `whois` (never a change). leon doesn't embed a
+  its LocalAPI, and only `status?peers=false` and `whois` (never a change). The one other read is
+  the app's Connect menu: `status` with its peers (at most 8 MiB, `leon_hosts::peers`), kept in
+  memory only, listing just the machines of this machine's own user that are untagged and not itself. leon doesn't embed a
   Tailscale node (tsnet is Go only, and a second node would need its own login and keys).
 - **Finding the LocalAPI** (`leon_hosts::localapi`). Linux: `/var/run/tailscale/tailscaled.sock`
   (or `/run/…`); the open-source macOS daemon: `/var/run/tailscaled.socket`. A socket's peer must

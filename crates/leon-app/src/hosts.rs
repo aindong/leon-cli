@@ -240,9 +240,12 @@ impl Hosts {
     pub fn retry_now(&mut self, i: usize) {
         let wake = self.wake.clone();
         let Some(m) = self.machines.get_mut(i).filter(|m| !m.is_local() && m.remote.is_none()) else { return };
-        if m.attempt.lock().unwrap_or_else(PoisonError::into_inner).running {
+        // one running, or one that ended and `poll` hasn't picked up: a second would replace its link
+        let a = m.attempt.lock().unwrap_or_else(PoisonError::into_inner);
+        if a.running || a.done.is_some() {
             return;
         }
+        drop(a);
         (m.retry_at, m.backoff) = (None, BACKOFF.0);
         Self::spawn(m, wake);
     }

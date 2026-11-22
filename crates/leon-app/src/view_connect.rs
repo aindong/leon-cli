@@ -77,7 +77,7 @@ impl Workspace {
     /// Above the footer's Connect button, or under the titlebar's first button with the sidebar hidden.
     fn connect_anchor(&self, window: &Window) -> Bounds<Pixels> {
         let target = px(crate::icons::TOOLBAR_TARGET);
-        match self.sidebar {
+        match self.places().sidebar.is_some() {
             true => {
                 let bottom = window.viewport_size().height;
                 Bounds { origin: point(px(8.), bottom - px(30.)), size: size(target, px(30.)) }
@@ -159,7 +159,11 @@ impl Workspace {
         // a machine that is already a host (by any of its endpoints) is listed there, not here
         let reaches = |o: &Owned| {
             let ends = known.iter().flat_map(|h| h.endpoints.iter().filter_map(|e| e.parse::<Endpoint>().ok()));
-            ends.into_iter().any(|e| e.host.trim_end_matches('.').eq_ignore_ascii_case(&o.dns))
+            let mut ends = ends.into_iter();
+            ends.any(|e| {
+                let at = e.host.trim_end_matches('.');
+                at.eq_ignore_ascii_case(&o.dns) || at.eq_ignore_ascii_case(o.name())
+            }) || known.iter().any(|h| h.label.eq_ignore_ascii_case(o.name()))
         };
         let owned: Vec<&Owned> = self.term.connect.tailnet.iter().flatten().filter(|o| !reaches(o)).collect();
         if !owned.is_empty() {

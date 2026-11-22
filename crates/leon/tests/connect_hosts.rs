@@ -11,7 +11,7 @@ mod app;
 mod support;
 
 use app::*;
-use gpui::{Entity, TestAppContext, VisualTestContext};
+use gpui::{px, Entity, TestAppContext, VisualTestContext};
 use leon_app::hosts::HostState;
 use leon_app::view::Workspace;
 use serde_json::json;
@@ -61,8 +61,13 @@ fn known_hosts_with_their_state(cx: &mut TestAppContext) {
     assert!(!labels.contains(&"This Mac".to_string()), "This Mac isn't a host to connect to: {labels:?}");
     cx.simulate_keystrokes("escape");
 
-    // a connected one: go to it
+    // a connected one: go to it, its group folded open again
+    let fold = at(cx, "host-1").expect("devbox's label");
+    cx.simulate_click(gpui::point(fold.origin.x + px(4.), fold.origin.y + px(4.)), gpui::Modifiers::none());
+    let folded = |cx: &mut VisualTestContext| ws.read_with(cx, |ws, _| ws.host_rows()[1].collapsed);
+    assert!(folded(cx), "folded first");
     choose(&ws, cx, "host:devbox");
+    assert!(!folded(cx), "choosing it opens its group");
     assert_eq!(ws.read_with(cx, |ws, _| ws.session_id()), Some(remote_sid.clone()), "its session is selected");
 
     // an unreachable one: try again now, not at the backoff's end

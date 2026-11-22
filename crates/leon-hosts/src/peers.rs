@@ -43,6 +43,9 @@ fn plain(dns: &str) -> Option<String> {
 /// missing or of the wrong type is left out.
 pub fn parse(body: &[u8]) -> Result<(Me, Vec<Owned>), String> {
     let me = localapi::parse_status(body)?;
+    if me.tagged {
+        return Ok((me, Vec::new())); // a tagged machine has no person's machines to reach (`admit`)
+    }
     let v: Value = serde_json::from_slice(body).map_err(|_| "can't read Tailscale's status: not JSON".to_string())?;
     let peers = v.get("Peer").and_then(Value::as_object).into_iter().flat_map(|p| p.values());
     let mut out: Vec<Owned> = peers
@@ -96,5 +99,7 @@ mod tests {
         assert!(parse(b"not json").is_err());
         let none = r#"{"BackendState":"Running","Self":{"ID":"n","UserID":7},"User":{"7":{"LoginName":"o"}}}"#;
         assert_eq!(parse(none.as_bytes()).unwrap().1, []);
+        let tagged = STATUS.replacen(r#""UserID":7,"DNSName""#, r#""UserID":7,"Tags":["tag:x"],"DNSName""#, 1);
+        assert_eq!(parse(tagged.as_bytes()).unwrap().1, [], "a tagged machine lists none");
     }
 }

@@ -31,10 +31,21 @@ fn the_owners_machines_from_the_localapi(cx: &mut TestAppContext) {
         "d": peer("n4", 8, "theirs.example-tailnet.ts.net.", true, json!(null)),
         "e": peer("nself", 7, "mac.example-tailnet.ts.net.", true, json!(null)),
         "f": peer("n6", 7, "known.example-tailnet.ts.net.", true, json!(null)),
+        "g": peer("n7", 7, "short.example-tailnet.ts.net.", true, json!(null)),
+        "h": peer("n8", 7, "named.example-tailnet.ts.net.", true, json!(null)),
     });
     fake.set_status(st);
     std::env::set_var("LEON_TEST_TAILNET", fake.seam());
-    let (ws, cx) = open(cx, &h, vec![host("known", "tailnet://known.example-tailnet.ts.net")], None);
+    let (ws, cx) = open(
+        cx,
+        &h,
+        vec![
+            host("known", "tailnet://known.example-tailnet.ts.net"),
+            host("short", "ssh://unreachable-box"),
+            host("box3", "tailnet://named"),
+        ],
+        None,
+    );
 
     act(&ws, cx, "client.connect", None);
     let ids = |cx: &mut gpui::VisualTestContext| -> Vec<String> {
@@ -51,7 +62,7 @@ fn the_owners_machines_from_the_localapi(cx: &mut TestAppContext) {
     assert_eq!(
         tailnet,
         ["tailnet:devbox.example-tailnet.ts.net", "tailnet:laptop.example-tailnet.ts.net"],
-        "only the owner's other untagged machines that aren't hosts, online first"
+        "only the owner's other untagged machines that aren't hosts (by name or label), online first"
     );
     let labels: Vec<String> = ws
         .read_with(cx, |ws, cx| ws.connect_menu().unwrap().read(cx).items().iter().map(|i| i.label.clone()).collect());
