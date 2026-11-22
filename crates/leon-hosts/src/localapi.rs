@@ -233,7 +233,7 @@ fn mac_app(dir: &Path) -> Result<Option<Api>, String> {
 }
 
 /// GET `path` with HTTP/1.0 (a plain body that ends at the close): the body of a 200, at most `most` bytes.
-fn get(path: &str, most: usize) -> Result<Vec<u8>, String> {
+pub(crate) fn get(path: &str, most: usize) -> Result<Vec<u8>, String> {
     let end = Instant::now() + DEADLINE;
     let down = |e: std::io::Error| format!("Tailscale's LocalAPI isn't answering: {e}");
     let mut auth = String::new();

@@ -8,6 +8,15 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
 
 ## Since 0.1.0: the detail
 
+### A sidebar footer to connect
+
+#### Added
+- A footer pinned under the sidebar's list: Connect on the left, Settings on the right.
+- Connect (⌘⇧K, the palette's "Connect to a Machine…") lists your hosts with their state, your own
+  untagged machines on the tailnet from the local Tailscale client's status (added as
+  `tailnet://NAME`), Add a host…, and this Mac's web page with its QR code
+  ([remote-hosts.md](remote-hosts.md#connect-from-the-sidebars-footer)).
+
 ### The web page's address and the agent skill in Settings
 
 - **Settings → Server → Tailscale** is two parts. *Tailscale access* has its switch and status,

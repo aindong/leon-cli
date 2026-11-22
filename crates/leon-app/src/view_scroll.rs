@@ -56,6 +56,8 @@ pub(super) struct TermUi {
     pub(super) card: super::link_card::CardUi,
     /// Closing and renaming tabs and sessions (view_rows.rs): an inline rename, a row's menu.
     pub(super) rows: super::sidebar::rows::RowsUi,
+    /// The Connect popover (view_connect.rs).
+    pub(super) connect: super::connect::ConnectUi,
 }
 
 #[derive(Debug, Clone, Copy)]

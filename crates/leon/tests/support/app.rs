@@ -33,6 +33,8 @@ pub fn hosted() -> Hosted {
     }
     std::env::set_var("LEON_RUNTIME_DIR", r.local.dir.path());
     std::env::set_var("LEON_STATE_DIR", r.local.state_dir());
+    // never this machine's tailscaled (the Connect menu asks its LocalAPI): a test with a fake sets its own
+    std::env::set_var("LEON_TEST_TAILNET", r#"{"localapi": "/nonexistent/tailscaled.sock"}"#);
     let dir = tempfile::Builder::new().permissions(std::fs::Permissions::from_mode(0o700)).tempdir().unwrap();
     let local = Rc::new(embedded::start_at(dir.path().join("server.sock")).unwrap());
     Hosted { r, local, dir }

@@ -11,7 +11,9 @@ use crate::glass::Glass;
 use crate::hosts::HostState;
 
 /// The actions whose shortcuts the sections' tooltips show.
-const TIPPED: [&str; 11] = [
+const TIPPED: [&str; 13] = [
+    "client.connect",
+    "client.settings",
     "client.overview.toggle",
     "client.palette.toggle",
     "client.sidebar.activity.toggle",
