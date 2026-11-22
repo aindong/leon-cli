@@ -4,6 +4,7 @@
 //   keypost click X Y: click at X,Y points and park again at once, so no frame shows the pointer
 //   keypost wiggle SECS: keep the parked pointer stepping on the right edge for SECS (see below)
 //   keypost move X Y: the pointer to X,Y points and left there (a hover); rclick X Y: a right click
+//   keypost scroll X Y DY: scroll DY points (negative: down the page) at X,Y, then park
 // Real key codes on a US layout: GPUI's query fields ignore a key event's Unicode string.
 import CoreGraphics
 import Foundation
@@ -93,6 +94,23 @@ case (4, "move"), (4, "rclick"):
     CGEvent(mouseEventSource: src, mouseType: type, mouseCursorPosition: at, mouseButton: .right)!.post(tap: .cghidEventTap)
     usleep(8_000)
   }
+case (5, "scroll"):
+  guard let x = Double(a[2]), let y = Double(a[3]), let dy = Int32(a[4]) else { print("keypost: scroll X Y DY"); exit(2) }
+  // a real move first: the app scrolls what is under the pointer it last saw
+  CGWarpMouseCursorPosition(CGPoint(x: x, y: y))
+  CGEvent(mouseEventSource: src, mouseType: .mouseMoved, mouseCursorPosition: CGPoint(x: x, y: y), mouseButton: .left)!
+    .post(tap: .cghidEventTap)
+  usleep(50_000)
+  // in steps, as a trackpad sends them: one big jump can be read as a fling
+  let step: Int32 = dy < 0 ? -20 : 20
+  // each at X,Y itself: during a take `keypost wiggle` moves the pointer to the edge meanwhile
+  for _ in 0..<(abs(dy) / 20) {
+    let e = CGEvent(scrollWheelEvent2Source: src, units: .pixel, wheelCount: 1, wheel1: step, wheel2: 0, wheel3: 0)!
+    e.location = CGPoint(x: x, y: y)
+    e.post(tap: .cghidEventTap)
+    usleep(16_000)
+  }
+  park()
 case (3, "wiggle"):
   // the parked pointer steps 4 pt up and down the right edge (in the strip the render crops off)
   // for SECS: a frame every 0.2 s, so the recorder never sees a still screen after a pane closes
@@ -104,5 +122,5 @@ case (3, "wiggle"):
   }
   park()
 default:
-  print("usage: keypost combo KEYS | key NAME | type TEXT | park | click X Y | move X Y | rclick X Y | wiggle SECS"); exit(2)
+  print("usage: keypost combo KEYS | key NAME | type TEXT | park | click X Y | move X Y | rclick X Y | scroll X Y DY | wiggle SECS"); exit(2)
 }

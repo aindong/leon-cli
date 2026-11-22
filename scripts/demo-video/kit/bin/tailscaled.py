@@ -4,7 +4,7 @@ It answers the two calls leon makes, `status?peers=false` and `whois`, on a Unix
 leon's own tests' fake does (crates/leon/tests/support/localapi.rs). leon finds it only through
 the debug-only seam LEON_TEST_TAILNET, which the demo's own build has
 (scripts/demo-video/run-demo.sh webapp); a release build has no code that reads it. The tailnet
-is made up: this machine is leon-demo.example-tailnet.ts.net, signed in as demo@example.com,
+is made up: this machine is studio-mac.example-tailnet.ts.net, signed in as demo@example.com,
 and every caller is "laptop", another of that owner's machines. So the page in the viewer counts
 as another machine, as it would over a real tailnet, while leon's admit, Host, Origin and token
 checks run unchanged.
@@ -19,7 +19,7 @@ OWNER, USER = "demo@example.com", 7
 STATUS = {
     "BackendState": "Running",
     "Self": {"ID": "nleondemo", "UserID": USER, "TailscaleIPs": ["127.0.0.1"], "Tags": None,
-             "DNSName": "leon-demo.example-tailnet.ts.net.", "OS": "macOS"},
+             "DNSName": "studio-mac.example-tailnet.ts.net.", "OS": "macOS"},
     "User": {str(USER): {"ID": USER, "LoginName": OWNER}},
 }
 WHOIS = {

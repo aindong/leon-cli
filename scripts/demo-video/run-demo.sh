@@ -229,7 +229,7 @@ case "${1:-}" in
         ffmpeg -loglevel error -y -ss "$(python3 -c "print(round($long * 0.65, 2))")" -i "$r/$m.mp4" -frames:v 1 -q:v 3 "$r/$m.jpg"
       done
       # the GIF for the changelog and the README: the short cut, at most 1.5 MB, the widest that fits
-      for try in 12:960 12:840 10:840 10:720 10:640 8:640; do
+      for try in 12:960 12:840 10:840 10:720 10:640 8:640 8:560 6:560; do
         ffmpeg -loglevel error -y -i "$r/web-short.mp4" -vf \
           "fps=${try%:*},scale=${try#*:}:-1:flags=lanczos,mpdecimate,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
           -loop 0 "$r/web.gif"

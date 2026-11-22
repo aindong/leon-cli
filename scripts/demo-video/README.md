@@ -20,7 +20,7 @@ moments every time, driven over ssh. Nothing touches the host's own leon, screen
 | `cut.py` | Finds the second where the app reopens windowed after ⌘Q, so the edit can drop it. |
 | `lead.py` | Measures how far the raw take runs ahead of the script's clock, into the cue file. |
 | `compose/` | The compositor: `compose.py` (timeline, render, CLI), `frame.py` (layouts, camera, one frame), `draw.py` (gradient, keycaps, pointer, wordmark, cards), `test_compose.py`, `requirements.txt`. |
-| `scenes-web.sh`, `kit/web.sh`, `kit/bin/tailscaled.py`, `viewer.swift` | The web demo ([below](#the-web-demo-leonapp-beside-the-web-page)). |
+| `scenes-web.sh`, `kit/web.sh`, `kit/bin/tailscaled.py`, `kit/bin/proxy.py`, `viewer.swift` | The web demo ([below](#the-web-demo-leonapp-beside-the-web-page)). |
 | `frames.sh` | Contact sheets of a video at given seconds, for checking a take or a render frame by frame. |
 
 Everything a take or a render writes goes to `$DEMO_WORK`, by default `target/demo-video/`,
@@ -238,12 +238,16 @@ leon with debug assertions in `leon-hosts` only, which compiles in `LEON_TEST_TA
 `kit/bin/tailscaled.py` answers its status and whois calls for a made-up tailnet, naming every
 caller "laptop", another of the owner's machines. A release build has no code that reads the
 seam (the `update_release_build` test checks), and this build is never published. Nothing about
-admission is bypassed: `admit`, the Host check, Origin and the token run as they ship. The
-viewer opens the page at 127.0.0.1, an address leon answers to (the VM can't resolve the made-up
-MagicDNS name without root); Settings shows the MagicDNS address.
+admission is bypassed: `admit`, the Host check, Origin and the token run as they ship. The VM
+can't resolve the made-up MagicDNS name (`studio-mac.example-tailnet.ts.net`; `/etc/hosts` needs
+root), so the viewer sends its requests through `kit/bin/proxy.py`, which tunnels them unchanged
+to leon's port on 127.0.0.1 and refuses anything else: leon sees the page's own Host and Origin.
+The listener can only bind an address the VM has, so Settings' "Serving on" line names
+127.0.0.1; the short cuts frame Settings' Web page part (the address, Copy, the QR code) without it.
 
-`viewer.swift` is "the browser": one window and the page, so no other product's window is in the
-shot. It has no address line: 127.0.0.1 would read as "this machine". Clicks are in points on the VM's screen; scenes-web.sh's
+`viewer.swift` is "the browser": one window with an address bar and the page, so no other
+product's window is in the shot. The take clicks Copy beside the address in Settings, pastes it
+into the empty address bar and presses Return. Clicks are in points on the VM's screen; scenes-web.sh's
 variables at its top hold the ones measured from VNC shots of a setup (`run-demo.sh shot`).
 `compose.py web` renders the whole take, `web-short` the pieces in `compose/web.py`'s `WEB_CUT`,
 each found by its scene's mark, and `web-square` and `web-vertical` the same pieces at 1:1 and

@@ -42,7 +42,7 @@ class WebTest(unittest.TestCase):
             self.assertEqual(p[0], "take")
             self.assertAlmostEqual(p[1], marks[m] + off)
             self.assertAlmostEqual(p[2] - p[1], dur)
-            self.assertIsNone(p[3])  # the camera follows the take's zooms
+            self.assertIs(p[3], WEB_FRAMES["web-short"][WEB_CUT.index((m, off, dur, cap, small))])
             self.assertEqual(p[4], (cap, small))
         self.assertEqual(ps[-1][:2], ("card", "end"))
         total = len(frame_plan(ps)) / 60

@@ -18,17 +18,17 @@ LAYOUTS = {"square": SQUARE, "web-square": SQUARE, "web-vertical": VERTICAL}
 # it follows the take's own beats (scripts/demo-video/scenes-web.sh)
 WEB_CUT = [
     ("5 blocked", 1.6, 1.6, "Your Mac, and leon in a browser.", ""),  # a first frame that shows both
-    ("2 settings", 2.8, 3.0, "Turn on the web page.", "Settings · Server"),
-    ("3 laptop", 0.6, 3.2, "Open it on your other machine.", ""),
+    ("2 settings", 7.4, 2.8, "Turn on the web page.", "then Copy its address"),
+    ("3 laptop", 2.6, 4.0, "Open it on your other machine.", "paste the address"),
     ("4 typing", 0.6, 3.6, "Type from anywhere on your tailnet.", ""),
     ("5 blocked", 4.4, 3.4, "Answer your agents from the browser.", ""),
-    ("6 phone", 1.0, 2.0, "Or from your phone.", ""),
+    ("6 phone", 1.0, 1.6, "Or from your phone.", ""),
 ]
 # the square and vertical cuts' framing of each WEB_CUT piece: regions of the raw frame (pixels,
 # x y w h), each shown whole at the frame's width, one under the other, scaled down to fit. Two:
 # the app over the page (kit/web.sh puts the app at 8,38 pt, 720 pt wide, the page at 736,38 pt,
 # 688 pt wide), their tops; one: Settings' switches and address, or the phone-sized page
-SETTINGS = ((1000, 740, 1300, 880),)
+SETTINGS = ((1010, 720, 1250, 640),)  # scrolled: the Web page switch, the address, Copy, the QR
 PHONE = ((2000, 76, 800, 1512),)
 WEB_FRAMES = {
     "web-square": [((16, 76, 1440, 700), (1472, 76, 1376, 670))] * 6,
@@ -36,6 +36,9 @@ WEB_FRAMES = {
 }
 for frames in WEB_FRAMES.values():
     frames[1], frames[5] = SETTINGS, PHONE
+# 16:9 follows the take's zooms, but Settings is the Web page part alone there too: a 16:9 camera
+# can't leave out the "Serving on" line above it (the seam's 127.0.0.1)
+WEB_FRAMES["web-short"] = [None, SETTINGS, None, None, None, None]
 WEB_END = 2.5
 WEB_HEAD = 0.3  # the web cut starts this long before the take's first mark
 

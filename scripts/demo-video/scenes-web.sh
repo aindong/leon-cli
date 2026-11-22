@@ -13,11 +13,14 @@ w() {
 SERVER_DOWNS=${SERVER_DOWNS:-7}  # Settings' sidebar: Down presses from General to Server (Tailscale access, Web page)
 SERVE_X=${SERVE_X:-1104} SERVE_Y=${SERVE_Y:-423} # "Let my other machines on Tailscale connect"'s switch
 WEB_X=${WEB_X:-1104} WEB_Y=${WEB_Y:-589}   # "Web page"'s switch, 30 pt lower once the first is on
-SETTINGS_ZOOM=${SETTINGS_ZOOM:-"1000 740 1300 880"} # raw pixels: Settings' Tailscale access and Web page
+SETTINGS_ZOOM=${SETTINGS_ZOOM:-"1010 760 1260 560"} # raw pixels: Settings' two switches
+WEB_ZOOM=${WEB_ZOOM:-"1010 740 1250 610"}           # the Web page part once scrolled: address, Copy, QR
+SCROLL_DY=${SCROLL_DY:--200} # Settings' content scrolled to its end: the whole QR code on screen
+COPY_X=${COPY_X:-915} COPY_Y=${COPY_Y:-465}  # the address's Copy button, after that scroll
 APP_SHELL_X=${APP_SHELL_X:-612} APP_SHELL_Y=${APP_SHELL_Y:-288}   # the app's shell pane
 PAGE_SHELL_X=${PAGE_SHELL_X:-1310} PAGE_SHELL_Y=${PAGE_SHELL_Y:-288} # the page's shell pane
-PAGE_BLOCKED_X=${PAGE_BLOCKED_X:-835} PAGE_BLOCKED_Y=${PAGE_BLOCKED_Y:-274} # the page's blocked row in Activity
-PAGE_AGENT_X=${PAGE_AGENT_X:-1066} PAGE_AGENT_Y=${PAGE_AGENT_Y:-288} # the page's agent pane
+PAGE_BLOCKED_X=${PAGE_BLOCKED_X:-840} PAGE_BLOCKED_Y=${PAGE_BLOCKED_Y:-320} # the page's blocked row in Activity
+PAGE_AGENT_X=${PAGE_AGENT_X:-1070} PAGE_AGENT_Y=${PAGE_AGENT_Y:-300} # the page's agent pane
 
 scene1() { # your Mac: tests in a shell, an agent at work
   mark "1 your mac"
@@ -28,17 +31,21 @@ scene1() { # your Mac: tests in a shell, an agent at work
 }
 scene2() { # Settings, Server: Tailscale access, and the web page on; its address and QR
   at 7; mark "2 settings"; k combo cmd+, # the first shortcut: lead.py measures the video's lead on it
-  caption "Turn on the web page." 15.6 "Settings · Server"
-  at 7.6; zoom $SETTINGS_ZOOM 15.6
+  caption "Turn on the web page." 16.9 "then Copy its address"
+  at 7.6; zoom $SETTINGS_ZOOM 14.6
   at 7.9
   for ((i = 0; i < SERVER_DOWNS; i++)); do k key down; done
-  at 9.4; k click "$SERVE_X" "$SERVE_Y"
-  at 10.8; k click "$WEB_X" "$WEB_Y" # the address and the QR code appear under it
-  at 15.8; k key esc
+  at 8.8; k click "$SERVE_X" "$SERVE_Y"
+  at 9.8; k click "$WEB_X" "$WEB_Y" # the address and the QR code appear under it, within 5 s
+  at 14.8; k scroll 1100 500 "$SCROLL_DY"; zoom $WEB_ZOOM 16.9
+  at 15.6; k click "$COPY_X" "$COPY_Y" # the address, copied
+  at 17; k key esc
 }
 scene3() { # your laptop: the address in a browser; the same sessions, live
-  at 16.4; mark "3 laptop"; w viewer
-  caption "Open it on your other machine." 23.4 "the same sessions, live"
+  at 17.4; mark "3 laptop"; w viewer # a browser beside the app, its address bar empty
+  caption "Open it on your other machine." 23.4 "paste the address"
+  at 20.2; k combo cmd+v
+  at 21; k key return
 }
 scene4() { # typing both ways
   at 24; mark "4 typing"; k click "$PAGE_SHELL_X" "$PAGE_SHELL_Y"

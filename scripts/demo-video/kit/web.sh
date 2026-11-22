@@ -3,17 +3,18 @@
 # The launch demo's guest.sh does the rest (reset, prefs, key): this adds the web page's parts.
 #   stage        the made-up tailnet (tailscaled.py), leon's server with two sessions (shelf-api's
 #                agent and a shell, status-page's watcher), and the app on the left half
-#   viewer [phone]  "your laptop": the page in kit/bin/viewer on the right half (phone: phone-sized),
-#                at the first address Settings shows (server.status's tailnet.web)
+#   viewer [phone]  "your other machine": kit/bin/viewer on the right half, its address bar empty
+#                for the take to paste the address Settings copied; phone: phone-sized, the page open
 #   unviewer     close the viewer
 #   go NAME      let the agent go on: its start (no NAME) or a named beat (ask)
-#   stop         the viewer and the stand-in gone (guest.sh reset does the app and the servers)
+#   stop         the viewer, the proxy and the stand-in gone (guest.sh reset does the app and the servers)
 # The browser must be another machine (docs/architecture/web.md: admit refuses this one). The
 # demo's Leon.app is built with leon's debug-only seam (run-demo.sh webapp), LEON_TEST_TAILNET,
 # which points it at tailscaled.py: it answers every whois with "laptop", another of the owner's
 # machines, and lets 127.0.0.1 stand in for the tailnet. Host, Origin and the token are checked
-# as ever: the viewer opens 127.0.0.1, an address the server answers to (Settings shows the
-# MagicDNS name; the VM can't resolve it without root).
+# as ever: the viewer opens the page by its made-up MagicDNS name (studio-mac.example-tailnet.ts.net,
+# from tailscaled.py) through kit/bin/proxy.py, which the VM needs because it can't resolve that
+# name (/etc/hosts needs root); the proxy passes each request on unchanged to leon's port here.
 set -euo pipefail
 kit=$HOME/kit
 d=$HOME/leon-demo
@@ -46,6 +47,7 @@ case "${1:-}" in
     nohup python3 "$kit/bin/tailscaled.py" "$sock" >/tmp/tailscaled.log 2>&1 &
     for _ in $(seq 50); do [ -S "$sock" ] && break; sleep 0.1; done
     [ -S "$sock" ] || { echo "web: the LocalAPI stand-in didn't start (/tmp/tailscaled.log)" >&2; exit 1; }
+    pbcopy </dev/null # the take copies the address from Settings: nothing from before
     leon config set font.size 13 >/dev/null # two windows side by side: half the screen each
     leon server start --restore=false >/dev/null
     w=$HOME/work
@@ -77,12 +79,17 @@ json.dump(s, open(p, "w"))' "$d/state/app.json"
     echo "web: staged, app pid $(app_pid)" ;;
 
   viewer)
-    # the address on 127.0.0.1 (the VM can't resolve the made-up MagicDNS name without root)
-    url=$(leon server status --json | python3 -c 'import json,sys; print(next((u for u in json.load(sys.stdin)["tailnet"]["web"] if "//127.0.0.1:" in u), ""))')
-    [ -n "$url" ] || { echo "web: the page isn't served (Settings: Tailscale, Web page)" >&2; exit 1; }
-    # the page beside the app, 728 high under its title bar (viewer.swift zooms it to fit)
-    if [ "${2:-}" = phone ]; then geo="1000 38 400 728"; else geo="736 38 688 728"; fi
-    nohup "$kit/bin/viewer" "$url" $geo >/tmp/viewer.log 2>&1 &
+    # the first address Settings shows: the MagicDNS name's, then the port leon serves it on
+    read -r url port < <(leon server status --json | python3 -c 'import json,sys; t=json.load(sys.stdin)["tailnet"]; print((t["web"] or [""])[0], t["port"])')
+    [[ "$url" == http*://*.ts.net:* ]] || { echo "web: the page isn't served by its MagicDNS name (Settings: Server, Web page)" >&2; exit 1; }
+    host=${url#*://}; host=${host%%:*}
+    pkill -f '[k]it/bin/proxy.py' 2>/dev/null || true
+    nohup python3 "$kit/bin/proxy.py" 7399 "$host" "$port" >/tmp/proxy.log 2>&1 &
+    sleep 0.5
+    # beside the app, 728 high under its title bar (viewer.swift zooms the page to fit); the main
+    # one starts blank, for the take to paste the address into
+    if [ "${2:-}" = phone ]; then geo="1000 38 400 728"; how=; else geo="736 38 688 728"; how=blank; fi
+    nohup "$kit/bin/viewer" "$url" $geo 7399 $how >/tmp/viewer.log 2>&1 &
     sleep 2
     keypost park
     echo "web: viewer at $url" ;;
@@ -94,6 +101,7 @@ json.dump(s, open(p, "w"))' "$d/state/app.json"
   stop)
     pkill -f '[k]it/bin/viewer' 2>/dev/null || true
     pkill -f '[k]it/bin/tailscaled.py' 2>/dev/null || true
+    pkill -f '[k]it/bin/proxy.py' 2>/dev/null || true
     rm -f "$kit"/go* ;;
 
   *) sed -n '2,10s/^# \{0,1\}//p' "$0"; exit 2 ;;
