@@ -14,8 +14,9 @@ The Settings window has a control for every setting in the table below, in secti
 `font`, `cursor_shader`), Terminal (`copy_on_select`, `link_card`, `repeat_time`, `hint_patterns`, `scrollback`) and Notifications. Its search
 field finds a setting by its label or by its name here (`fade_inactive_panes`). A setting init.lua
 sets by code, not with a literal value, shows read-only there, with the line to change. Two more
-sections are read-only: Shortcuts lists every key the app binds, with Edit in init.lua to change
-them, and Agents shows what `leon skill status` says. Remote Hosts lists the hosts `leon hosts`
+sections hold no settings: Shortcuts lists every key the app binds, with Edit in init.lua to change
+them, and Agents shows what `leon skill status` says, with buttons to install, update or remove the
+skill ([agents.md](../agents.md#set-it-up-once)). Remote Hosts lists the hosts `leon hosts`
 does, with each one's state, and adds, renames and removes them. Server shows This Mac's server
 (how long it has run, its sessions, blocks and log) and stops or restarts it; each asks first,
 since every program in every session ends.

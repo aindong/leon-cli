@@ -227,16 +227,19 @@ impl Workspace {
         Some(Notice { text: format!("Cursor shader: {why}"), actions: vec![Act::Dismiss] })
     }
 
-    /// The notice to show: the update's, else the cursor shader's failure.
+    /// The notice to show: the update's, else the agent skill's, else the cursor shader's failure.
     pub(super) fn notice(&self) -> Option<Notice> {
-        self.updates.notice().or_else(|| self.cursor_shader_notice())
+        self.updates.notice().or_else(|| self.skill_notice()).or_else(|| self.cursor_shader_notice())
     }
 
-    /// Dismiss the notice shown: the update's, else the cursor shader's.
+    /// Dismiss the notice shown: the update's, else the agent skill's, else the cursor shader's.
     pub(super) fn dismiss_notice(&mut self) {
-        match self.updates.notice() {
-            Some(_) => self.updates.dismiss(),
-            None => self.shader.dismissed = true,
+        if self.updates.notice().is_some() {
+            self.updates.dismiss();
+        } else if self.skill_notice().is_some() {
+            self.skill.notice = None;
+        } else {
+            self.shader.dismissed = true;
         }
     }
 

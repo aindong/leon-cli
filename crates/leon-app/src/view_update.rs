@@ -56,6 +56,7 @@ impl Workspace {
                 Act::Copy(_) => ("update-copy", "Copy", true),
                 Act::Restart => ("update-restart", "Restart", true),
                 Act::AppManagement => ("update-settings", "Open System Settings", true),
+                Act::SkillUpdate => ("skill-update", "Update", true),
                 Act::ReleasePage => ("update-page", "Release Page", false),
                 Act::Dismiss => ("update-dismiss", "Dismiss", false),
             };
@@ -119,6 +120,7 @@ impl Workspace {
             Act::Copy(text) => cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.clone())),
             Act::AppManagement => cx.open_url(APP_MANAGEMENT),
             Act::ReleasePage => cx.open_url(RELEASES),
+            Act::SkillUpdate => self.update_agent_skill(cx),
             Act::Dismiss => self.dismiss_notice(),
         }
         cx.notify();
@@ -142,6 +144,7 @@ fn palette_row(act: &Act) -> Option<(&'static str, &'static str)> {
         Act::Copy(_) => ("client.update.copy", "Copy the Update Command"),
         Act::Restart => ("client.update.restart", "Restart to Finish the Update"),
         Act::AppManagement => ("client.update.settings", "Open App Management Settings"),
+        Act::SkillUpdate => ("client.update.agent_skill", "Update the Agent Skill"),
         Act::ReleasePage => ("client.update.page", "Open the Release Page"),
         Act::Dismiss => ("client.update.dismiss", "Dismiss the Update Notice"),
     })

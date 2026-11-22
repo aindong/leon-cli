@@ -8,7 +8,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use leon_update::{Check, Config, Method, Release, Target};
-use serde::{Deserialize, Serialize};
+
+#[path = "updates_saved.rs"]
+mod saved;
+use saved::{save, Saved};
 
 /// How long the app waits between two looks of its own.
 pub const DAY: u64 = 24 * 60 * 60;
@@ -80,6 +83,8 @@ pub enum Act {
     Restart,
     /// Open System Settings at App Management.
     AppManagement,
+    /// Update the agents' skill.
+    SkillUpdate,
     /// Open the release page, to update by hand.
     ReleasePage,
     Dismiss,
@@ -144,17 +149,6 @@ impl Phase {
 /// random read-only copy under `AppTranslocation`, which no update can replace.
 pub fn translocated(root: &Path) -> bool {
     root.components().any(|c| c.as_os_str() == "AppTranslocation")
-}
-
-/// What `updates.json` keeps across launches.
-#[derive(Serialize, Deserialize, Default)]
-struct Saved {
-    /// When the last look of the app's own began, in seconds since the epoch.
-    checked_at: Option<u64>,
-    /// The version whose notice was dismissed.
-    dismissed: Option<String>,
-    /// The version that last ran: a launch of another one says it was updated.
-    seen: Option<String>,
 }
 
 struct Inner {
@@ -297,6 +291,17 @@ impl Updater {
             i.phase = Phase::Idle;
             i.generation += 1;
         }
+    }
+
+    /// True once per version: the agent skill's notice may show.
+    pub fn skill_notice_once(&self) -> bool {
+        let (mut i, version) = (self.lock(), Some(env!("CARGO_PKG_VERSION").to_string()));
+        let once = i.saved.skill_notice != version;
+        if once {
+            i.saved.skill_notice = version;
+            save(self.store.as_deref(), &i.saved);
+        }
+        once
     }
 
     /// What the window shows now.
@@ -449,26 +454,6 @@ fn set(inner: &Mutex<Inner>, wake: &Wake, phase: Phase) {
         i.generation += 1;
     }
     wake();
-}
-
-/// Write `updates.json` (0600, through a temp file and a rename) where the server keeps its
-/// state; nothing when there is no store or no state dir yet.
-fn save(store: Option<&Path>, saved: &Saved) {
-    use std::io::Write;
-    use std::os::unix::fs::OpenOptionsExt;
-    let Some(path) = store else { return };
-    let write = || -> std::io::Result<()> {
-        let dir = path.parent().filter(|d| d.is_dir()).ok_or_else(|| std::io::Error::other("no state dir"))?;
-        leon_core::paths::ensure_private_dir(dir)?;
-        let tmp = path.with_extension("json.tmp");
-        let _ = std::fs::remove_file(&tmp);
-        let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
-        f.write_all(&serde_json::to_vec(saved).map_err(std::io::Error::other)?)?;
-        std::fs::rename(&tmp, path)
-    };
-    if let Err(e) = write() {
-        eprintln!("leon: can't save {}: {e}", path.display());
-    }
 }
 
 fn lock(m: &Mutex<Inner>) -> MutexGuard<'_, Inner> {

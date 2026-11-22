@@ -114,7 +114,7 @@ pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
             }
             Ok(())
         }
-        ServerCmd::Status => {
+        ServerCmd::Status { qr } => {
             let mut c = crate::hosts::server(cli, false)?.connect(false)?;
             let st = c.call("server.status", json!({}))?;
             if cli.json {
@@ -146,9 +146,27 @@ pub(crate) fn server(cli: &Cli, cmd: &ServerCmd) -> Result<(), Fail> {
                 if let Some(r) = t["last_refusal"].as_object() {
                     println!("tailnet  last refused {}: {}", text(&r["peer"]), text(&r["reason"]));
                 }
+                if *qr {
+                    print_qr(t["web"].as_array().and_then(|w| w.first()).map(text));
+                }
             }
             Ok(())
         }
+    }
+}
+
+/// `--qr`: the web page's URL as a QR code, white on black on a terminal (so a phone reads it
+/// whatever the terminal's colours), or why there is none.
+fn print_qr(url: Option<String>) {
+    use std::io::IsTerminal;
+    let Some(url) = url else {
+        return eprintln!(
+            "leon: no QR code: the web page isn't served (serve_tailscale and serve_web on, and serving)"
+        );
+    };
+    match leon_app::qr::terminal_lines(&url, std::io::stdout().is_terminal()) {
+        Some(lines) => println!("\n{}", lines.join("\n")),
+        None => eprintln!("leon: no QR code: the address is too long for one"),
     }
 }
 
