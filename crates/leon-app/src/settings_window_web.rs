@@ -239,7 +239,7 @@ impl SettingsWindow {
 /// `url`'s QR code, painted (R7): the field, then each run of dark modules, on whole points.
 fn qr_code(url: &str, t: &Theme) -> Option<gpui::Div> {
     let m = qr::modules(url)?;
-    let (field, module) = qr::colours(t.bg, t.title);
+    let (field, module) = qr::colours(t);
     let (side, runs) = (m.len() + 2 * qr::QUIET, qr::runs(&m));
     let paint = move |b: Bounds<gpui::Pixels>, _: (), window: &mut Window, _: &mut App| {
         let unit = (QR_SIDE / side as f32).floor().max(1.);

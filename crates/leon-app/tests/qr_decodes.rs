@@ -81,7 +81,7 @@ fn too_long_a_text_has_no_code() {
 #[test]
 fn the_colours_are_dark_on_light_with_contrast_in_every_theme() {
     for (name, t) in leon_core::theme::BUILTIN {
-        let (field, module) = colours(t.bg, t.title);
+        let (field, module) = colours(&t);
         let c = leon_core::theme::contrast(field, module);
         assert!(c >= MIN_CONTRAST, "{name}: {c}");
         assert!(
@@ -90,7 +90,10 @@ fn the_colours_are_dark_on_light_with_contrast_in_every_theme() {
         );
         assert!((field, module) == (t.bg, t.title) || (field, module) == (t.title, t.bg), "{name}: its own colours");
     }
-    let (light, dark) = (leon_core::theme::LIGHT.bg, leon_core::theme::DARK.bg);
-    assert_eq!(colours(0x777777, 0x888888), (light, dark), "too close: Parchment and Coal");
-    assert!(leon_core::theme::contrast(light, dark) >= MIN_CONTRAST);
+    // a theme whose title is its background: its own pair with the most contrast (text on Coal)
+    let mut flat = leon_core::theme::DARK;
+    flat.title = flat.bg;
+    let (field, module) = colours(&flat);
+    assert_eq!((field, module), (flat.fg, flat.bg), "the theme's own colours");
+    assert!(leon_core::theme::contrast(field, module) >= MIN_CONTRAST);
 }
