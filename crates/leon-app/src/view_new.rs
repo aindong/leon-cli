@@ -158,6 +158,7 @@ impl Workspace {
             check_for_updates: None,
             updates_looked: None,
             shader: Default::default(),
+            skill: Default::default(),
             wake,
             _wakes: wakes,
             _clocks: clocks,

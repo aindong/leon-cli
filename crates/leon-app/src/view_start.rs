@@ -80,6 +80,10 @@ impl Workspace {
         ws.echo.show = echo::show_now;
         let store = leon_core::paths::state_dir().map(|d| d.join("updates.json"));
         ws.enable_updates(store, Arc::new(leon_update::Target::running));
+        // the app runs as `leon app`: its own binary says whether an agent's skill is out of date
+        if let Some(leon) = std::env::current_exe().ok().filter(|e| e.file_name().is_some_and(|n| n == "leon")) {
+            ws.check_agent_skill(leon, cx);
+        }
         crate::notify::prepare();
         ws
     }

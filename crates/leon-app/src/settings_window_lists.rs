@@ -1,5 +1,5 @@
-//! The Settings window's read-only lists: the keymap's shortcuts and the agents' skill
-//! (`leon skill status`).
+//! The Settings window's Shortcuts: the keymap's bindings, read-only, and the button that opens
+//! init.lua.
 
 use super::sections::matches;
 use super::*;
@@ -47,58 +47,6 @@ fn shortcut_rows(km: &Keymap) -> Vec<ShortcutRow> {
         .collect()
 }
 
-/// One agent's skill, from `leon skill status`.
-#[derive(Debug, Clone, PartialEq)]
-pub struct AgentRow {
-    /// `claude` or `codex`.
-    pub agent: String,
-    /// current, outdated, missing, foreign or unreadable.
-    pub status: String,
-    /// Where its SKILL.md goes.
-    pub skill: String,
-    /// The command that sets it up, unless it is set up.
-    pub setup: Option<String>,
-}
-
-impl AgentRow {
-    fn name(&self) -> &str {
-        match self.agent.as_str() {
-            "claude" => "Claude Code",
-            "codex" => "Codex",
-            other => other,
-        }
-    }
-
-    fn state(&self) -> &str {
-        match self.status.as_str() {
-            "current" => "Set up",
-            "outdated" => "Set up by an older leon",
-            "missing" => "Not set up",
-            "foreign" => "Has a skill named leon that leon didn't install",
-            "unreadable" => "Its files can't be read",
-            other => other,
-        }
-    }
-
-    pub(super) fn matches(&self, q: &str) -> bool {
-        matches(q, &[&self.agent, self.name(), self.state(), "agents skill"])
-    }
-}
-
-/// `leon --json skill status`'s output, one row per agent.
-pub fn parse_agents(out: &str) -> Result<Vec<AgentRow>, String> {
-    let v: Value = serde_json::from_str(out).map_err(|e| format!("leon skill status said something else: {e}"))?;
-    let list = v.as_array().ok_or("leon skill status didn't list agents")?;
-    list.iter()
-        .map(|a| {
-            let agent = a["agent"].as_str().ok_or("an agent without a name")?.to_string();
-            let status = a["status"].as_str().ok_or("an agent without a status")?.to_string();
-            let setup = (status != "current").then(|| format!("leon skill setup --agent {agent}"));
-            Ok(AgentRow { skill: a["skill"]["path"].as_str().unwrap_or_default().to_string(), agent, status, setup })
-        })
-        .collect()
-}
-
 /// `path` as a `file://` URL, with what a URL can't hold percent-encoded.
 fn file_url(path: &Path) -> String {
     let mut url = String::from("file://");
@@ -117,11 +65,6 @@ impl SettingsWindow {
         self.shortcuts.clone()
     }
 
-    /// `leon skill status`, once read.
-    pub fn agents(&self) -> Option<Result<Vec<AgentRow>, String>> {
-        self.agents.clone()
-    }
-
     /// Ask the server for its keymap (init.lua's bindings over the defaults).
     pub(super) fn read_shortcuts(&mut self, cx: &mut Context<Self>) {
         let server = self.server.clone();
@@ -136,35 +79,6 @@ impl SettingsWindow {
                 })
                 .ok();
             }
-        })
-        .detach();
-    }
-
-    /// Run `leon --json skill status` with the binary `leon`, off the UI thread.
-    pub fn read_agents(&mut self, leon: PathBuf, cx: &mut Context<Self>) {
-        self.agents = None;
-        cx.spawn(async move |this, cx| {
-            let read = cx
-                .background_executor()
-                .spawn(async move {
-                    let out = std::process::Command::new(&leon)
-                        .args(["--json", "skill", "status"])
-                        .stdin(std::process::Stdio::null())
-                        .output()
-                        .map_err(|e| format!("can't run {}: {e}", leon.display()))?;
-                    if !out.status.success() {
-                        return Err(format!(
-                            "leon skill status failed: {}",
-                            String::from_utf8_lossy(&out.stderr).trim()
-                        ));
-                    }
-                    parse_agents(&String::from_utf8_lossy(&out.stdout))
-                })
-                .await;
-            this.update(cx, |sw, cx| {
-                sw.agents = Some(read);
-                cx.notify();
-            })
         })
         .detach();
     }
@@ -233,58 +147,6 @@ impl SettingsWindow {
                             .font_family("Menlo")
                             .child(r.action.clone().unwrap_or_else(|| "Lua function".into())),
                     ),
-            );
-        }
-        out
-    }
-
-    /// Agents' first line, and what came of reading the skill's state.
-    pub(super) fn agents_intro(&self, t: &Theme) -> gpui::Div {
-        let state = match &self.agents {
-            None => Some(("Reading leon skill status…".to_string(), t.muted)),
-            Some(Err(e)) => Some((e.clone(), t.error)),
-            Some(Ok(_)) => None,
-        };
-        Self::label(
-            t,
-            "leon's skill teaches a coding agent to drive leon",
-            "The same as leon skill status says; leon skill setup sets an agent up (docs/agents.md)",
-            false,
-        )
-        .children(state.map(|(s, c)| div().text_size(px(SECONDARY_TEXT)).text_color(rgb(c)).child(s)))
-    }
-
-    /// The agents at `rows`: each with its state and, unless it is set up, the command that does.
-    pub(super) fn agent_rows(&self, rows: &[usize], t: &Theme) -> gpui::Div {
-        let mut out = div().flex().flex_col().gap(px(12.));
-        let Some(Ok(list)) = &self.agents else { return out };
-        let home = std::env::var_os("HOME").map(PathBuf::from);
-        for a in rows.iter().filter_map(|i| list.get(*i)) {
-            let ok = a.setup.is_none();
-            out = out.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(div().text_color(rgb(t.title)).child(a.name().to_string()))
-                            .child(
-                                div().text_color(rgb(if ok { t.done } else { t.muted })).child(a.state().to_string()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(SECONDARY_TEXT))
-                            .text_color(rgb(t.muted))
-                            .child(home_relative(Path::new(&a.skill), home.as_deref())),
-                    )
-                    .children(a.setup.clone().map(|cmd| {
-                        div().font_family("Menlo").text_size(px(SECONDARY_TEXT)).text_color(rgb(t.text)).child(cmd)
-                    })),
             );
         }
         out

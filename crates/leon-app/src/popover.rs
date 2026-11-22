@@ -245,6 +245,9 @@ impl Render for Popover {
             .text_size(px(UI_TEXT))
             .text_color(rgb(t.text))
             .children(text)
+            .children(self.qr.as_deref().and_then(|url| crate::settings_window::web::qr_code(url, t)).map(|code| {
+                div().debug_selector(|| sel("popover-qr".into())).flex().justify_center().pb(px(6.)).child(code)
+            }))
             .children(items)
     }
 }

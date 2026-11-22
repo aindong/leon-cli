@@ -29,7 +29,9 @@ which set the agent's block's state (see [agents.md](../agents.md#the-status-hoo
 
 ### `leon skill status`
 
-Show each agent's install: current, outdated, missing, foreign or unreadable.
+Show each agent's install: current, outdated, missing, foreign or unreadable. With `--json`,
+each agent's entry also has `found`: whether the agent is on this machine (its config dir exists
+or its program is on PATH, as setup decides).
 
 - `--agent claude|codex`: only this agent.
 

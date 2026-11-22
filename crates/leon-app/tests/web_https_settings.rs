@@ -16,6 +16,7 @@ fn enter(cx: &mut VisualTestContext, field: &'static str, input: &str) {
 fn the_https_fields_write_the_paths(cx: &mut TestAppContext) {
     let (o, mut cx) = open_settings(cx, "");
     click(&mut cx, "section-server");
+    click(&mut cx, "web-https"); // the files sit under HTTPS (optional)
     enter(&mut cx, "web-cert-field", "relative.crt");
     let refused = text(&o.config);
     cx.simulate_keystrokes("escape");

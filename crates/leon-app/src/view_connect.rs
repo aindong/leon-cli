@@ -195,7 +195,7 @@ impl Workspace {
             "web-settings" => self.open_settings(cx),
             "web" => {
                 let url = web_url(self.term.connect.web.as_ref()).unwrap_or_default();
-                let note = "Open it on a phone or another machine on your Tailscale.".to_string();
+                let note = crate::settings_window::web::QR_NOTE.to_string();
                 self.open_connect(vec![url.clone(), note], Some(url), window, cx);
             }
             id => {

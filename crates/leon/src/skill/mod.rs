@@ -184,12 +184,18 @@ fn overall(parts: &[State]) -> State {
     }
 }
 
+/// The agent is on this machine: its home dir exists or its program is on PATH, as setup decides.
+fn found(agent: Agent) -> bool {
+    target(agent, false).is_ok_and(|(dir, _)| dir.is_dir()) || on_path(agent.name()).is_some()
+}
+
 fn status_of(t: &Target) -> Value {
     let skill = skill_state(&t.skill);
     let hook = t.hook.as_ref().map(|p| (p, hook_state(&hooks::read(p), t.agent)));
     let parts: Vec<State> = std::iter::once(skill).chain(hook.map(|(_, s)| s)).collect();
     json!({
         "agent": t.agent.name(),
+        "found": found(t.agent),
         "status": overall(&parts).as_str(),
         "skill": { "path": t.skill, "state": skill.as_str() },
         "hook": hook.map(|(p, s)| json!({ "path": p, "state": s.as_str() })),
@@ -499,27 +505,4 @@ fn change_all(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_stub_shares_the_guides_front_matter() {
-        let s = stub();
-        let front = |t: &str| t.split("\n---\n").next().map(str::to_string);
-        assert_eq!(front(&s), front(GUIDE));
-        assert!(s.lines().any(|l| l == MARKER));
-        assert!(s.contains("leon skill show"));
-        assert!(s.lines().any(|l| l == "name: leon"));
-    }
-
-    #[test]
-    fn overall_state() {
-        use State::*;
-        assert_eq!(overall(&[Current, Current]), Current);
-        assert_eq!(overall(&[Current]), Current);
-        assert_eq!(overall(&[Missing, Missing]), Missing);
-        assert_eq!(overall(&[Current, Missing]), Outdated);
-        assert_eq!(overall(&[Foreign, Current]), Foreign);
-        assert_eq!(overall(&[Foreign, Unreadable]), Unreadable);
-    }
-}
+mod tests;

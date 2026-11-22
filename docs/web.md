@@ -24,6 +24,13 @@ Open that URL in a browser on another of your machines. `serve_web` does nothing
 Use the MagicDNS name or one of the machine's Tailscale addresses (`http://100.x.y.z:7297/`). The
 short name (`http://devbox:7297/`) is refused on purpose; see below.
 
+Or do it in the app: Settings → Server has two switches, **Tailscale access** and, under its own
+**Web page** heading, "Open my sessions in a browser on my other devices". With Tailscale access off,
+the web page part offers to turn it on too. While the page is served, Settings shows its address
+with a **Copy** button and a **QR code**: point a phone's camera at it to open the page there. This
+Mac's own browser is refused, so open it on another device. In a terminal, `leon server status --qr`
+draws the same QR code.
+
 ## Using the page
 
 - **Typing** goes to the focused pane (the one with the amber edge; click a pane to focus it).
@@ -127,7 +134,9 @@ tell leon where the two files are. leon only reads them: it never runs `tailscal
 asks Tailscale for a certificate. Making one is your call: it needs HTTPS turned on for your
 tailnet in Tailscale's admin console, and it puts the machine's name in public certificate logs.
 
-On a Mac:
+On a Mac (with the Tailscale app from the App Store or tailscale.com, which puts no `tailscale` on
+your PATH, run `/Applications/Tailscale.app/Contents/MacOS/Tailscale cert …` instead; the command
+`leon server status` and Settings show already names the one you have):
 
 ```text
 mkdir -p ~/.config/leon/certs

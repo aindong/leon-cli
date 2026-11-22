@@ -17,6 +17,20 @@ features that shipped in 0.1.0 keep their heading here, with their detail in
   `tailnet://NAME`), Add a host…, and this Mac's web page with its QR code
   ([remote-hosts.md](remote-hosts.md#connect-from-the-sidebars-footer)).
 
+### The web page's address and the agent skill in Settings
+
+- **Settings → Server → Tailscale** is two parts. *Tailscale access* has its switch and status,
+  with the port and tags under *Advanced*. *Web page* has its own switch; it offers to turn on
+  Tailscale access when that is off, and while the page is served it shows the address with
+  *Copy*, a QR code to open it on a phone, the other addresses, and what is wrong with HTTPS. The
+  certificate files sit under *HTTPS (optional)*, with the command that makes them.
+- **`leon server status --qr`** draws the same QR code in the terminal ([docs/cli/server.md](cli/server.md)).
+- **The `tailscale cert` command** leon prints names the Mac app's binary when no `tailscale` is
+  on PATH ([docs/web.md](web.md#https)).
+- **Settings → Agents** installs, updates and removes the skill for Claude Code and Codex, and a
+  notice says once per version when an agent's skill is out of date ([docs/agents.md](agents.md#set-it-up-once)).
+  `leon skill status --json` says whether each agent is `found`.
+
 ### A key's echo shown at once
 
 #### Changed

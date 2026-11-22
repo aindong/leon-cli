@@ -39,7 +39,11 @@ with the text each terminal shows (in the private state dir, 0600).
 
 Show whether a server runs; exit 4 if not. When [serving over
 Tailscale](hosts.md#serve-over-tailscale) is on, a `tailnet` line says where it serves or why
-it stopped, and another the last connection it refused.
+it stopped, and another the last connection it refused. With the [web page](../web.md) on, a
+`web` line gives its address.
+
+- `--qr`: also draw the web page's address as a QR code (in half-block characters), to open it
+  on a phone. On a terminal it is drawn white on black, so it scans in light and dark themes.
 
 ### `leon server proxy`
 

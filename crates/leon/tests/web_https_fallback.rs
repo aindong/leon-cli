@@ -73,7 +73,7 @@ fn the_command_given_works_for_a_user_on_linux() {
     if cfg!(target_os = "linux") {
         assert!(e.contains("sudo tailscale cert") && e.contains("sudo chown"), "{e}");
     } else {
-        assert!(e.contains("tailscale cert --cert-file"), "{e}");
+        assert!(e.contains(" cert --cert-file"), "{e}"); // tailscale, or the Mac app's binary
     }
     let doc = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/web.md")).unwrap();
     assert!(doc.contains("sudo chown") && doc.contains("--operator"), "docs/web.md gives the Linux steps");

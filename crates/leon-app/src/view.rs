@@ -237,6 +237,8 @@ pub struct Workspace {
     updates_looked: Option<Instant>,
     /// The cursor shader init.lua names, and the window's overlay for it.
     shader: cursor_shader_view::ShaderUi,
+    /// The agent skill's out-of-date notice (view_skill.rs).
+    skill: skill_view::SkillUi,
     /// Wakes the window from another thread (view_feed.rs).
     wake: Arc<dyn Fn() + Send + Sync>,
     _wakes: Task<()>,
@@ -350,6 +352,8 @@ mod scroll;
 mod select;
 #[path = "view_sidebar.rs"]
 mod sidebar;
+#[path = "view_skill.rs"]
+mod skill_view;
 #[path = "view_stats.rs"]
 mod stats;
 #[path = "view_switch.rs"]

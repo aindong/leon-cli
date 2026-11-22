@@ -25,6 +25,8 @@ use crate::look::Look;
 use crate::remote::Remote;
 use crate::theme::{Theme, SECONDARY_TEXT, UI_TEXT};
 
+#[path = "settings_window_agents.rs"]
+mod agents;
 #[path = "settings_window_glass.rs"]
 mod glass_ui;
 #[path = "settings_window_hosts.rs"]
@@ -45,10 +47,14 @@ mod shader;
 mod tailscale;
 #[path = "settings_window_theme.rs"]
 mod theme_picker;
+#[path = "settings_window_web.rs"]
+pub(crate) mod web;
 
-pub use lists::{parse_agents, AgentRow, ShortcutRow};
+pub use crate::agent_skill::{parse_agents, AgentRow};
+pub use lists::ShortcutRow;
 pub use sections::Section;
 pub use server::{running_for, stop_warning, ServerInfo};
+pub use web::{web_state, WebState};
 
 /// Monospaced families the font control steps through, when installed (init.lua takes any).
 // shortcut: a fixed list, not every installed monospace font; upgrade with a text field.
@@ -120,6 +126,7 @@ pub struct SettingsWindow {
     shortcuts: Vec<ShortcutRow>,
     /// `leon skill status`, once read (Err: why it couldn't be).
     agents: Option<Result<Vec<AgentRow>, String>>,
+    agents_ui: agents::AgentsUi,
     /// This Mac's server, once asked (Err: why it didn't answer).
     server_info: Option<Result<server::ServerInfo, String>>,
     /// The main window's hosts, followed while it is open.
@@ -138,6 +145,7 @@ pub struct SettingsWindow {
     renders: usize,
     /// `server.status`'s `tailnet`, fetched every 2 s (settings_window_tailscale.rs).
     tailnet: Option<Value>,
+    open: web::Open,
     focus: FocusHandle,
     _appearance: Subscription,
     _activation: Subscription,
@@ -226,6 +234,7 @@ impl SettingsWindow {
             web_key: patterns::TextField::new(cx),
             shortcuts: Vec::new(),
             agents: None,
+            agents_ui: Default::default(),
             server_info: None,
             hosts: Vec::new(),
             rename: hosts::RenameField::new(cx),
@@ -238,6 +247,7 @@ impl SettingsWindow {
             handle: window.window_handle(),
             renders: 0,
             tailnet: None,
+            open: web::Open::default(),
             focus,
             _appearance: appearance,
             _activation: activation,
