@@ -31,7 +31,7 @@ with a **Copy** button and a **QR code**: point a phone's camera at it to open t
 Mac's own browser is refused, so open it on another device. In a terminal, `leon server status --qr`
 draws the same QR code.
 
-![Leon.app on the left; on the right, the page on another machine: turned on in Settings, typed in from both sides, an agent's permission prompt answered from the browser](images/whats-new/0.2.1/web.gif)
+![Open it anywhere: the page's address copied from Settings, pasted into a browser on another machine that shows the same session, and an agent's question answered from the browser, then from a phone](images/whats-new/0.2.1/web.gif)
 
 The full video is on the website's [demo page](https://aindong.github.io/leon-cli/demo/).
 

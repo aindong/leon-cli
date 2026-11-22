@@ -263,7 +263,10 @@ the top of `scenes-web.sh` hold the ones measured from VNC shots of a setup (`ru
 The cuts show the VM's own screen edge to edge, no brand frame, with each caption a small opaque
 pill near the bottom. `compose/web.py` has the short cut's pieces (`WEB_CUT`, each found by its
 scene's mark) and their framing at 1:1 and 9:16 (`WEB_FRAMES`: a region the camera holds, or the
-two windows stacked); `LEON_DEMO_SRC` tells the compositor the take's size.
+two windows stacked); `LEON_DEMO_SRC` tells the compositor the take's size. A voice-over goes
+on a rendered cut without rendering it again: `compose/web.py vo MODE VIDEO CUE VO_DIR OUT` places
+`WEB_VO`'s clips on the cut's beats (it stops if one would talk over the next), mixes them to
+-16 LUFS and copies the picture. The clips are made with ElevenLabs and never go in git.
 
 ## Licences of what it uses
 

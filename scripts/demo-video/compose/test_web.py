@@ -6,7 +6,7 @@ from pathlib import Path
 
 from compose import END, frame_plan, pieces, srt
 from frame import load_cue
-from web import VERTICAL, WEB16, WEB4K, WEB_CUT, WEB_FRAMES, WEB_SQUARE, layout, stacked
+from web import VERTICAL, WEB16, WEB4K, WEB_CUT, WEB_FRAMES, WEB_SQUARE, WEB_VO, layout, stacked, vo_place
 from frame import Renderer
 from PIL import Image
 
@@ -65,7 +65,7 @@ class WebTest(unittest.TestCase):
                 self.assertIsInstance(f, (list, tuple))
                 for x, y, w, h in regions:
                     self.assertTrue(0 <= x and x + w <= 3840 and 0 <= y and y + h <= 2160, (x, y, w, h))
-                if isinstance(f, tuple):  # stacked edge to edge: they fill the frame, nothing behind
+                if isinstance(f, tuple) and len(f) > 1:  # stacked edge to edge: they fill the frame
                     self.assertAlmostEqual(sum(L.vw * h / w for _, _, w, h in f), L.vh, delta=4)
         self.assertIs(layout("web-short"), WEB16)
         self.assertIs(layout("web-4k"), WEB4K)
@@ -85,6 +85,11 @@ class WebTest(unittest.TestCase):
         self.assertGreater(bottom[2], bottom[0])  # the page under it
         self.assertGreater(img.getpixel((540, 959))[0], 150)  # edge to edge: the app right to the seam
         self.assertGreater(img.getpixel((540, 961))[2], 150)  # and the browser right after it
+        # one region narrower than the frame: the screen around it behind, blurred and dark, no
+        # brand gradient (whose corners are brown)
+        one = stacked(R, src, 5.0, 0.5, ((2200, 1000, 1240, 620),), (0, 2, "Caption", ""))
+        top = one.getpixel((540, 100))
+        self.assertTrue(top[2] > top[0] and max(top) < 120, top)  # the right half's blue, darkened
 
     def test_a_take_without_a_mark_of_the_cut_says_which(self):
         c = [r for r in load_cue(take()) if r.get("name") != "3 browser"]
@@ -103,6 +108,23 @@ class WebTest(unittest.TestCase):
         self.assertIn("00:00:00,800 --> 00:00:05,800\nYour Mac: an agent at work.", text)
         self.assertIn(WEB_CUT[0][3], short)
         self.assertTrue(short.startswith("1\n00:00:00,000 --> "))
+
+    def test_the_voice_over_lands_on_its_beats_and_never_overlaps(self):
+        c = load_cue(take())
+        lengths = {clip: 1.5 for clip, *_ in WEB_VO["web"] + WEB_VO["web-short"]}
+        full = vo_place("web", c, 60.0, lengths)
+        marks = {r["name"]: r["vt"] for r in c if r["type"] == "mark"}
+        start = pieces("web", None, 60.0, c)[0][1]
+        self.assertAlmostEqual(full[0][1], marks["1 your mac"] - start + WEB_VO["web"][0][2])
+        for (_, s, e), (_, s2, _) in zip(full, full[1:]):
+            self.assertLess(e, s2)
+        short = vo_place("web-short", c, 60.0, lengths)
+        self.assertEqual([x[0] for x in short], [x[0] for x in WEB_VO["web-short"]])
+        self.assertAlmostEqual(short[0][1], 0.15)  # the hook's line on the opening frame
+        lengths["web-3.mp3"] = 30.0  # a clip that would talk over the next one stops the render
+        with self.assertRaises(SystemExit) as e:
+            vo_place("web", c, 60.0, lengths)
+        self.assertIn("web-3.mp3", str(e.exception))
 
     def test_the_web_scenes_mark_every_piece_of_the_short_cut(self):
         scenes = (HERE.parent / "scenes-web.sh").read_text()
