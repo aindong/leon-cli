@@ -24,11 +24,18 @@ WEB_CUT = [
     ("5 blocked", 4.4, 3.4, "Answer your agents from the browser.", ""),
     ("6 phone", 1.0, 2.0, "Or from your phone.", ""),
 ]
-# the square and vertical cuts' framing of each WEB_CUT piece, in raw pixels: [x, y, w, h], one
-# region the camera holds; or ((x, y, w), (x, y, w)), two windows' tops stacked, the app over the
-# page (kit/web.sh puts the app at 8,38 pt, 720 pt wide, and the page at 736,38 pt, 688 pt wide)
-STACK = ((16, 76, 1440), (1472, 76, 1376))
-WEB_FRAMES = [STACK, [1000, 740, 1300, 880], STACK, STACK, STACK, [2000, 76, 800, 1512]]
+# the square and vertical cuts' framing of each WEB_CUT piece: regions of the raw frame (pixels,
+# x y w h), each shown whole at the frame's width, one under the other, scaled down to fit. Two:
+# the app over the page (kit/web.sh puts the app at 8,38 pt, 720 pt wide, the page at 736,38 pt,
+# 688 pt wide), their tops; one: Settings' switches and address, or the phone-sized page
+SETTINGS = ((1000, 740, 1300, 880),)
+PHONE = ((2000, 76, 800, 1512),)
+WEB_FRAMES = {
+    "web-square": [((16, 76, 1440, 700), (1472, 76, 1376, 670))] * 6,
+    "web-vertical": [((16, 76, 1440, 1080), (1472, 76, 1376, 1032))] * 6,
+}
+for frames in WEB_FRAMES.values():
+    frames[1], frames[5] = SETTINGS, PHONE
 WEB_END = 2.5
 WEB_HEAD = 0.3  # the web cut starts this long before the take's first mark
 
@@ -41,7 +48,7 @@ def web_pieces(mode, duration, cue, end):
     missing = [m for m, *_ in WEB_CUT if m not in marks]
     if missing:
         sys.exit(f"compose: the short cut needs the take's marks; the cue has no mark {', '.join(missing)}")
-    frames = WEB_FRAMES if mode in ("web-square", "web-vertical") else [None] * len(WEB_CUT)
+    frames = WEB_FRAMES.get(mode, [None] * len(WEB_CUT))
     out = [("take", marks[m] + a, min(duration, marks[m] + a + d), f, (c, sm))
            for (m, a, d, c, sm), f in zip(WEB_CUT, frames)]
     return out + [("card", "end", WEB_END)]
@@ -52,15 +59,19 @@ def layout(mode):
 
 
 def stacked(R, src, t, pt, regions, caption):
-    """one frame of two windows' tops, one over the other, each the viewport's width: the caption
-    above, the keycaps below (no pointer: it would need a place in each half)"""
+    """one frame of the regions, one under another, each the viewport's width (all scaled down
+    together when they don't fit) and centred: the caption above, the keycaps below (no pointer:
+    it would need a place in each region)"""
     L, gap = R.L, 16
-    sh = (L.vh - gap) // 2
+    sizes = [(L.vw, L.vw * h / w) for _, _, w, h in regions]
+    k = min(1.0, (L.vh - gap * (len(regions) - 1)) / sum(h for _, h in sizes))
+    sizes = [(round(w * k), round(h * k)) for w, h in sizes]
+    y = L.vy + (L.vh - sum(h for _, h in sizes) - gap * (len(regions) - 1)) // 2
     img = R.bg.copy()
-    mask = rounded_mask(L.vw, sh, L.radius)
-    for i, (x, y, w) in enumerate(regions):
-        box = (x, y, x + w, y + w * sh / L.vw)
-        img.paste(src.resize((L.vw, sh), Image.Resampling.LANCZOS, box=box), (L.vx, L.vy + i * (sh + gap)), mask)
+    for (x0, y0, w, h), (sw, sh) in zip(regions, sizes):
+        view = src.resize((sw, sh), Image.Resampling.LANCZOS, box=(x0, y0, x0 + w, y0 + h))
+        img.paste(view, (L.vx + (L.vw - sw) // 2, y), rounded_mask(sw, sh, L.radius))
+        y += sh + gap
     img = img.convert("RGBA")
     R.draw_keys(img, t)
     R.draw_caption(img, pt, [caption])

@@ -59,5 +59,6 @@ scene5() { # the agent asks; both Activity lists show it; the person answers fro
 }
 scene6() { # the same page, phone-sized, as if from the QR code
   at 47; mark "6 phone"; w unviewer; w viewer phone
+  at 47.8; zoom 1960 60 880 1540 55.6 # the phone-sized page
   caption "Or from your phone." 55.6 "the QR code in Settings opens it"
 }

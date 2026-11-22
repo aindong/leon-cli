@@ -221,7 +221,7 @@ def piece_frame(R, L, p, pt, src, out_t):
     t = p[1] + pt
     if p[4] == "cold":  # the take as it is: its caption and keycap belong to the story, later
         return R.frame(src, t, out_t, captions=[], keys=False, show_cursor=False)
-    if p[3] is not None and len(p[3]) == 2:  # web-square, web-vertical: two windows stacked
+    if isinstance(p[3], tuple):  # web-square, web-vertical: regions, one under another (web.py)
         return stacked(R, src, t, pt, p[3], (0, p[2] - p[1], *p[4]))
     if p[3] is not None:  # square: framed on the piece's region, its own caption
         cam = fit(p[3], L.vw / L.vh, max_zoom=BASE[2] / L.vw)

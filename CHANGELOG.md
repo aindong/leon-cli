@@ -34,6 +34,8 @@ fields it doesn't know. The full policy is in
 
 - Settings shows the web page's address with Copy and a QR code (also `leon server status --qr`), and installs or updates the agent skill, with a notice when it is out of date ([detail](docs/changelog-detail.md#the-web-pages-address-and-the-agent-skill-in-settings)).
 
+  ![Leon.app beside the web page on another machine: turned on in Settings, typed in from both sides, an agent's permission prompt answered from the browser](docs/images/whats-new/0.2.1/web.gif)
+
 ## [0.2.0] - 2026-11-20
 
 leon is a terminal multiplexer for people who run several terminal programs and coding agents at

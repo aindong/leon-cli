@@ -55,7 +55,11 @@ class WebTest(unittest.TestCase):
             ps = pieces(mode, None, 60.0, c)
             self.assertIs(layout(mode), L)
             self.assertEqual([p[:3] for p in ps[:-1]], [p[:3] for p in short[:-1]])  # the same pieces
-            self.assertEqual([p[3] for p in ps[:-1]], WEB_FRAMES)
+            self.assertEqual([p[3] for p in ps[:-1]], WEB_FRAMES[mode])
+            for regions in WEB_FRAMES[mode]:
+                self.assertIsInstance(regions, tuple)  # compose.py tells them from a camera region so
+                for x, y, w, h in regions:
+                    self.assertTrue(0 <= x and x + w <= 2880 and 0 <= y and y + h <= 1620, (x, y, w, h))
         self.assertIs(layout("web-short"), MAIN)
         self.assertEqual((VERTICAL.W, VERTICAL.H), (1080, 1920))
 
@@ -63,12 +67,15 @@ class WebTest(unittest.TestCase):
         src = Image.new("RGB", (2880, 1620), (200, 0, 0))
         src.paste((0, 0, 200), (1440, 0, 2880, 1620))  # the right half, the page, blue
         R = Renderer(VERTICAL, load_cue(take()))
-        img = stacked(R, src, 5.0, 0.5, WEB_FRAMES[0], (0, 2, "Caption", ""))
+        img = stacked(R, src, 5.0, 0.5, WEB_FRAMES["web-vertical"][0], (0, 2, "Caption", ""))
         self.assertEqual(img.size, (1080, 1920))
         top = img.getpixel((540, VERTICAL.vy + 400))
         bottom = img.getpixel((540, VERTICAL.vy + VERTICAL.vh - 200))
         self.assertGreater(top[0], top[2])  # the app on top
         self.assertGreater(bottom[2], bottom[0])  # the page under it
+        one = stacked(R, src, 5.0, 0.5, ((2000, 76, 800, 1512),), (0, 2, "Caption", ""))
+        self.assertEqual(one.getpixel((540, 960))[2], 200)  # one tall region, scaled to fit, centred
+        self.assertNotEqual(one.getpixel((40, 960))[2], 200)  # narrower than the frame: background beside it
 
     def test_a_take_without_a_mark_of_the_cut_says_which(self):
         c = [r for r in load_cue(take()) if r.get("name") != "4 typing"]
